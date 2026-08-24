@@ -1,0 +1,155 @@
+/**
+ * Phase 0 acceptance criterion: a query as user A cannot read user B's rows.
+ *
+ * INVARIANT: RLS is on for every table — CLAUDE.md #10
+ */
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+
+let alice: TestUser;
+let bob: TestUser;
+let bobWorkoutId: string;
+let systemExerciseId: string;
+let hiddenAchievementId: string;
+
+beforeAll(async () => {
+  const admin = adminClient();
+
+  [alice, bob] = await Promise.all([createTestUser('alice'), createTestUser('bob')]);
+
+  // System catalogue content: user_id NULL, readable by everyone.
+  const exercise = await admin
+    .from('exercises')
+    .insert({
+      slug: `back-squat-${Date.now()}`,
+      name: 'Back Squat',
+      primary_muscle: 'quadriceps',
+      movement_pattern: 'squat',
+      source: 'custom',
+    })
+    .select('id')
+    .single();
+  if (exercise.error) throw new Error(exercise.error.message);
+  systemExerciseId = exercise.data.id;
+
+  const hidden = await admin
+    .from('achievements')
+    .insert({
+      slug: `hidden-fixture-${Date.now()}`,
+      name: 'Secret Badge',
+      description: 'Should never reach a client.',
+      predicate: 'false',
+      tier: 'hidden',
+      hidden: true,
+    })
+    .select('id')
+    .single();
+  if (hidden.error) throw new Error(hidden.error.message);
+  hiddenAchievementId = hidden.data.id;
+
+  const bobWorkout = await bob.client
+    .from('workouts')
+    .insert({ user_id: bob.id, local_date: '2026-08-24', status: 'completed', notes: 'bob only' })
+    .select('id')
+    .single();
+  if (bobWorkout.error) throw new Error(bobWorkout.error.message);
+  bobWorkoutId = bobWorkout.data.id;
+
+  await alice.client
+    .from('workouts')
+    .insert({ user_id: alice.id, local_date: '2026-08-24', status: 'completed' });
+
+  await bob.client.from('llm_calls').insert({
+    user_id: bob.id,
+    stage: 'planner',
+    attempt: 1,
+    status: 'ok',
+    models_requested: ['x/y'],
+    latency_ms: 10,
+    cost_credits: 0.001,
+  });
+});
+
+afterAll(async () => {
+  await Promise.all([deleteTestUser(alice), deleteTestUser(bob)]);
+});
+
+describe('cross-user isolation', () => {
+  it('shows alice only her own workouts', async () => {
+    const { data, error } = await alice.client.from('workouts').select('id, user_id');
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+    expect(data![0]!.user_id).toBe(alice.id);
+  });
+
+  it('returns nothing when alice asks for bob by id', async () => {
+    const { data, error } = await alice.client.from('workouts').select('id').eq('id', bobWorkoutId);
+    // RLS filters rather than errors: the row simply is not there.
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+  });
+
+  it('shows alice none of bob llm_calls rows', async () => {
+    const { data } = await alice.client.from('llm_calls').select('id');
+    expect(data).toEqual([]);
+  });
+
+  it('stops alice writing a row owned by bob', async () => {
+    const { error } = await alice.client
+      .from('workouts')
+      .insert({ user_id: bob.id, local_date: '2026-08-24', status: 'completed' });
+    expect(error).not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('leaves bob rows untouched when alice updates or deletes', async () => {
+    await alice.client.from('workouts').update({ notes: 'hijacked' }).eq('id', bobWorkoutId);
+    await alice.client.from('workouts').delete().eq('id', bobWorkoutId);
+
+    const { data } = await bob.client.from('workouts').select('notes').eq('id', bobWorkoutId);
+    expect(data).toHaveLength(1);
+    expect(data![0]!.notes).toBe('bob only');
+  });
+
+  it('stops a user erasing their own spend to reset the budget', async () => {
+    // WHY: llm_calls has select and insert policies only. Without this, the
+    //      weekly budget check reads a table the user can empty.
+    await bob.client.from('llm_calls').delete().neq('id', crypto.randomUUID());
+    const { data } = await bob.client.from('llm_calls').select('id');
+    expect(data).toHaveLength(1);
+  });
+});
+
+describe('catalogue visibility', () => {
+  it('shows system content to every user', async () => {
+    for (const user of [alice, bob]) {
+      const { data } = await user.client.from('exercises').select('id').eq('id', systemExerciseId);
+      expect(data).toHaveLength(1);
+    }
+  });
+
+  it('never sends a hidden achievement definition to a client', async () => {
+    // PLAN.md phase 5 requires this; enforcing it in the policy means no future
+    // endpoint can leak them by forgetting a filter.
+    const { data } = await alice.client
+      .from('achievements')
+      .select('id')
+      .eq('id', hiddenAchievementId);
+    expect(data).toEqual([]);
+  });
+});
+
+describe('anonymous access', () => {
+  it('reaches no rows at all', async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const { ANON_KEY, SUPABASE_URL } = await import('./helpers');
+    const anon = createClient(SUPABASE_URL, ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    for (const table of ['users', 'workouts', 'sets', 'exercises', 'llm_calls']) {
+      const { data } = await anon.from(table).select('*').limit(1);
+      expect(data ?? [], `anon reached ${table}`).toEqual([]);
+    }
+  });
+});

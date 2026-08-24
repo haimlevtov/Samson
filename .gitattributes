@@ -1,0 +1,8 @@
+# WHY: the working copy is Windows and CI is Ubuntu. Without this, git converts
+# to CRLF on checkout here while Prettier's default endOfLine is lf, so
+# `npm run format:check` passes locally and fails in CI on the same commit.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary

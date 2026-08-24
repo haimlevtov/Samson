@@ -1,0 +1,74 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Phase 0 acceptance criterion: this job passes with no secrets configured.
+  # WHY: no `env:` block and no `secrets` reference anywhere below. If a future
+  #      change needs a secret here, something has grown a hidden dependency on
+  #      the network — fix that rather than adding the secret.
+  verify:
+    name: typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+
+  # RLS and migration tests need a real Postgres, so they run apart from the
+  # secret-free job above rather than weakening it.
+  db:
+    name: migrations and RLS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Proves `npm run migrate` rebuilds the schema from zero: the stack starts
+      # empty and every migration is applied in order.
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Write local connection details
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "SUPABASE_DB_URL=$DB_URL"
+          } >> .env.local
+
+      - name: Rebuild the schema from zero
+        run: npm run migrate
+
+      - run: npm run test:db
+
+      - name: Fail if generated types are stale
+        run: |
+          supabase gen types typescript --local > src/db/types.ts
+          git diff --exit-code src/db/types.ts
