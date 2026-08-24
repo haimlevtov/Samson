@@ -1,0 +1,52 @@
+name: keepalive
+
+# WHY: Supabase pauses free-tier projects after a week of inactivity, and the
+#      restore is slow enough to ruin a demo. One request a day is enough to
+#      keep it awake. PLAN.md lists this under phase 0 for exactly that reason.
+on:
+  schedule:
+    # 06:17 UTC. Deliberately not on the hour, when Actions is most contended
+    # and scheduled runs are most likely to be delayed or dropped.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: keep the project awake
+    runs-on: ubuntu-latest
+    steps:
+      # Touches Postgres directly, so it works before Vercel is connected and
+      # keeps working if the deployment is ever down.
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::warning::SUPABASE_URL secret is not set; nothing to ping yet."
+            exit 0
+          fi
+
+          # RLS denies the anon role, so a 401 is a success here: the request
+          # reached Postgres, which is the entire point.
+          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/exercises?select=id&limit=1")
+
+          echo "Supabase responded $status"
+          case "$status" in
+            2*|4*) exit 0 ;;
+            *) echo "::error::Supabase unreachable (HTTP $status)"; exit 1 ;;
+          esac
+
+      # Optional: also exercises the deployed app end to end once Vercel is
+      # connected. Set APP_HEALTH_URL to https://<deployment>/api/health.
+      - name: Ping the deployed app
+        env:
+          APP_HEALTH_URL: ${{ secrets.APP_HEALTH_URL }}
+        run: |
+          if [ -z "$APP_HEALTH_URL" ]; then
+            echo "APP_HEALTH_URL not set; skipping."
+            exit 0
+          fi
+          curl -sS --fail --max-time 30 "$APP_HEALTH_URL" && echo
