@@ -27,8 +27,8 @@ cp .env.example .env.local
 Fill `.env.local` from the Supabase dashboard (Project settings → API keys):
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://mqcnpuupzknwpvhkbpci.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable key>
+SUPABASE_URL=https://mqcnpuupzknwpvhkbpci.supabase.co
+SUPABASE_ANON_KEY=<publishable key>
 SUPABASE_SERVICE_ROLE_KEY=<secret key — the seeder needs it to create users>
 ```
 
@@ -110,12 +110,19 @@ Live at **https://samson-fit.vercel.app**, auto-deployed from `main`.
 Vercel → Settings → Environment Variables. Copy the first two straight out of
 your working `.env.local` so they cannot drift:
 
-| Variable                        | Required | Notes                                      |
-| ------------------------------- | -------- | ------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | Without it every page 500s                 |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | Publishable/anon key — safe in the browser |
-| `OPENROUTER_API_KEY`            | not yet  | Nothing calls a model until phase 2        |
-| `OPENROUTER_APP_URL`            | optional | Attribution on the OpenRouter dashboard    |
+| Variable             | Required | Notes                                   |
+| -------------------- | -------- | --------------------------------------- |
+| `SUPABASE_URL`       | yes      | Without it every page 500s              |
+| `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                    |
+| `OPENROUTER_API_KEY` | not yet  | Nothing calls a model until phase 2     |
+| `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard |
+
+**WHY no `NEXT_PUBLIC_` prefix:** nothing client-side touches Supabase. The only
+client component is the rest timer, and it has no database access — every query
+runs in a Server Component, a server action, or `proxy.ts`. The anon key would be
+safe to expose (the `anon` role has no policy and no DML grant on any table, both
+asserted in `tests/db/schema-invariants.test.ts`), but there is no reason to ship
+a value the browser never reads.
 
 **Never set `SUPABASE_SERVICE_ROLE_KEY` in Vercel.** It bypasses RLS, no request
 path uses it, and `tests/unit/invariants.test.ts` asserts it never appears under

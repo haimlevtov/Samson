@@ -22,11 +22,11 @@ function required(name: string, env: Env): string {
 }
 
 export function supabaseUrl(env: Env = process.env): string {
-  return required('NEXT_PUBLIC_SUPABASE_URL', env);
+  return required('SUPABASE_URL', env);
 }
 
 export function supabaseAnonKey(env: Env = process.env): string {
-  return required('NEXT_PUBLIC_SUPABASE_ANON_KEY', env);
+  return required('SUPABASE_ANON_KEY', env);
 }
 
 /**

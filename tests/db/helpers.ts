@@ -13,8 +13,8 @@ import type { Database } from '../../src/db/types';
 
 config({ path: '.env.local', quiet: true });
 
-export const SUPABASE_URL = process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? 'http://127.0.0.1:54321';
-export const ANON_KEY = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ?? '';
+export const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321';
+export const ANON_KEY = process.env['SUPABASE_ANON_KEY'] ?? '';
 export const SERVICE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
 export const DB_URL =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
