@@ -2,6 +2,8 @@
 
 Gamified strength-training app with an LLM coach. Class project.
 
+- `docs/FRAMING.md` — the problem, the stakeholders, the three definitions of
+  done, and the assumptions list. Read when a decision is disputed.
 - `docs/PRD.md` — what the product is, who it is for, and what each surface owes
   them. Read before designing anything a user will see.
 - `docs/PLAN.md` — the current phase and its acceptance criteria. Read before

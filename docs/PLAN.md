@@ -209,3 +209,30 @@ Both are self-contained. Cut either without breaking anything above.
   half-filled achievement wall. Never rely on live logging on stage.
 - Wake the Supabase project the day before.
 - `npm run seed` must rebuild everything from zero in under a minute.
+
+---
+
+## Beyond this plan — direction, not commitment
+
+Nothing here is scheduled. It is written down so that decisions made during the
+phases above do not quietly foreclose it.
+
+**Samson is a multiplayer idea shipped single-player.** The class project is a
+single-player showcase. If it proves worth continuing, the social layer is the
+obvious next product: leaderboards, guilds, shared challenges, comparing a PR
+against people whose training you can see.
+
+**What that will cost, stated now rather than discovered later.** Every table is
+restricted to `user_id = auth.uid()`, and no policy anywhere permits a
+cross-user read — see `docs/adr/0002-catalogue-user-id.md`. That is correct for
+a single-player app and it is not a mistake to undo, but it means social
+features are real work rather than an additive feature flag. They need either
+policies scoped to a group the viewer belongs to, or `SECURITY DEFINER`
+aggregate views that expose a ranking without exposing the rows behind it.
+Invariant #10 survives either way; the effort is in choosing which.
+
+**Re-engagement has no channel.** Push notifications are on the out-of-scope
+list above, which is right for one demo. But XP is the retention mechanism, and
+without notifications it only fires once the user has already decided to open
+the app. A streak that nobody is reminded of is a scoreboard, not a habit. Any
+serious attempt at retention starts here.

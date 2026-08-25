@@ -1,0 +1,185 @@
+# Samson — Framing
+
+The four deliverables of project framing, produced by a reverse interview
+conducted on 25/08/2026. Written in pencil: revise as the work teaches more.
+
+The interview record and the two lists it produced are at the bottom. The second
+list — the assumptions — is the part worth reading twice.
+
+---
+
+## 1. Problem statement
+
+> People who live in front of screens — gamers, anime and film fans, the
+> chronically online — abandon training. Not for lack of information: there is
+> more of that than anyone needs. They abandon it because nothing about training
+> rewards them the way the things they already love do. It stays a chore, and
+> chores lose.
+
+Several different solutions fit this problem, which is the test of whether it is
+a problem statement rather than a solution wearing one. A social app, a game
+with real-world inputs, a habit tracker, a human coach, and a companion that
+knows your history would all be reasonable attempts.
+
+Samson's attempt: a coach with a personality that reacts to what you actually
+did, wrapped in a progression system that pays out for turning up.
+
+## 2. Stakeholder list
+
+| Stakeholder                      | Stake                                                                                                                                                 |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The user**                     | Nerds, gamers, screen-heavy. Any training experience, from never lifted to daily scientific bodybuilding — the segment is cultural, not experiential. |
+| **Haim**                         | Sole developer, sole maintainer, and the first tester.                                                                                                |
+| **The course instructor**        | Approves it. Grades how well the agent was directed, not the app that ships — and only what can be opened and verified.                               |
+| **The beta crowd**               | Later, unnamed. Their absence is why the product definition of done is deferred.                                                                      |
+| **The user's body**              | Does not use the app and cannot complain to it. Bears the cost of a plan that overreaches.                                                            |
+| **Model and platform providers** | OpenRouter is metered; Supabase and Vercel free tiers have limits that a runaway loop can reach.                                                      |
+
+The fifth entry is the one most easily left off, and slide 20's test is that
+nobody should discover themselves on the list too late. It is the reason
+invariant #4 exists (XP from adherence, never volume — volume-scaled rewards pay
+people to get hurt), the reason the safety critic runs on a different model from
+the planner, and the reason the diet floor is clamped in code.
+
+## 3. Definition of done
+
+The interview surfaced that there are **three** of these, they are not the same,
+and only one is being optimised for right now.
+
+### Course — the one that governs, and the deadline that binds
+
+What the instructor can open and verify: the artifact trail (spec, plan, ADR,
+diff, test, eval result per phase), the token ledger analysis, and the
+adversarial taxonomy. Judged on direction of the agent, not on the app.
+
+### Prototype — the target, ~2 weeks from 25/08/2026
+
+**"It coaches."** Observable, and two people could not disagree about it:
+
+1. A model generates a training block from a real seeded history — not a fixture
+2. A _different_ model rejects an unsafe one with structured reasons, and the
+   retry loop is visible
+3. The accepted plan is delivered in a persona's voice, recognisably in character
+4. Every call above appears as a row in `llm_calls` with tokens and cost
+
+This requires phases 2 and 3. Phase 2 has not started.
+
+### Product — deferred
+
+Whether it makes training feel less like a chore. Unobservable in this project's
+lifetime: no users, no retention curve, no second cohort. Deferred to beta, and
+explicitly _not_ what the next two weeks are judged against.
+
+## 4. Out-of-scope
+
+Entries earn a place only if someone could reasonably have expected them.
+
+| Excluded                                                                 | Why it could have been expected                                                                                                                                                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Social — leaderboards, guilds, friends, shared PRs**                   | The audience is gamers and the retention mechanic is XP. Every game they play is social. Samson is a multiplayer idea shipped single-player for the showcase; direction recorded at the end of `PLAN.md`. |
+| **Push notifications**                                                   | The standard re-engagement mechanic in this category. Without it XP only fires once the user has already opened the app.                                                                                  |
+| **Native mobile app**                                                    | Phone-first is a requirement; a native app is not. It is a web app that must work well on a phone.                                                                                                        |
+| **Real-time sync**                                                       | Multi-device training logs are a reasonable expectation of a fitness app.                                                                                                                                 |
+| Caching layers, queues, payments, containers, multi-region, load testing | Infrastructure nobody expected here. Listed in `PLAN.md` for completeness.                                                                                                                                |
+
+---
+
+## The interview
+
+Conducted per Module 6: one focused question at a time, pressing on vague
+answers rather than accepting them.
+
+**Q1 — What is it fundamentally for?** Offered two readings: a training app
+where the LLM architecture is a means, or a trustworthy-LLM demonstration where
+training is the vehicle. Pressed twice: first that "gamified" is a category and
+not a mechanism, and that invariant #4's weekly XP ceiling fits a motivation
+engine with a governor on it; then whether the mechanism is the points or the
+character.
+
+> **Answer:** A gamified training app for modern youth, making training engaging
+> rather than a chore, with an AI coach as the user's "right arm". The two
+> mechanisms do different jobs: **the AI acquires — "when someone hears about a
+> personal AI trainer they want to try it" — and the XP retains.**
+
+**Q2 — Who, precisely?** Pressed on an apparent contradiction: "get into fitness"
+implies beginners, but three of the five seeded archetypes are established
+lifters. Then pressed again, on `PLAN.md` filing the entire cultural layer under
+"safe to cut down if time runs short."
+
+> **Answer:** Nerds — gamers, anime, film and TV fans, people who spend a lot of
+> time in front of screens. A nerd may be a complete beginner or deeply invested
+> in scientific bodybuilding and training daily. **Phase 5 is not cut, only
+> sequenced last.**
+
+The premise of the press was wrong and the answer corrected it: the segmentation
+axis is cultural, not experiential, which is precisely why the archetypes span
+experience levels.
+
+**Q3 — How would anyone know it had worked?** Noted that every acceptance
+criterion in `PLAN.md` is an engineering criterion, all of which can pass while
+the product is joyless, and that three different definitions of done were in play.
+
+> **Answer:** Haim is the first tester; a wider beta comes later.
+
+**Q4 — What are you choosing to leave out?** Observed that the existing
+out-of-scope list is infrastructure nobody expected, and that the expectable
+omission — social — was not on it at all, nor was any replacement for push
+notifications as a re-engagement channel.
+
+> **Answer:** Multiplayer as an idea; single-player for the class showcase;
+> possibly shipped wider later.
+
+**Q5 — Which constraints, and which did you only assume?**
+
+> **Answer:** More than two weeks, ideally a working prototype sooner.
+> **Phone-first, and it must work on the web too.**
+
+**Q6 — What could someone observe to prove the work is done?** Offered three
+readings of "working prototype": it logs and measures (done today), it plans
+(phase 2), or it coaches (phases 2 + 3).
+
+> **Answer: (c) — it coaches.**
+
+---
+
+## The assumptions list
+
+Every decision made during phases 0 and 1 where nothing was said. Each is a
+silence that now has to be a choice. **Load-bearing** marks the ones that change
+the product if wrong.
+
+### Numbers invented outright
+
+| Assumption                                                             | Where                 |                                                                  |
+| ---------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| Secondary muscles receive 0.5 of a set's tonnage                       | `tonnage.ts`          | **Load-bearing** — phase 2 volume caps are expressed against it  |
+| Epley is withheld above 12 reps                                        | `e1rm.ts`             | **Load-bearing** — decides when the app admits it does not know  |
+| ACWR is uncoupled, 7 days over 28, bands at 0.8 / 1.3 / 1.5            | `acwr.ts`             | **Load-bearing** — the critic will gate plans on this            |
+| Bodyweight movements contribute zero tonnage                           | `tonnage.ts`          | **Load-bearing** — a bodyweight-only user shows a flat zero line |
+| Warm-ups are excluded from tonnage and can never set a PR              | `tonnage.ts`, `pr.ts` |                                                                  |
+| Adherence is shown over a 4-week window                                | `workouts/page.tsx`   |                                                                  |
+| Default LLM budget is $0.50 per user per week                          | `config.ts`           | **Load-bearing** — a low cap silently truncates phase 2 evals    |
+| 3 attempts, 60s timeout, 500ms backoff                                 | `config.ts`           |                                                                  |
+| Rest defaults to 120s, presets 60/90/120/180                           | `RestTimer.tsx`       |                                                                  |
+| Model per stage: flash-lite normalizer, sonnet-5 planner, flash critic | `models.ts`           | **Load-bearing** — this is the cost structure                    |
+
+### Product behaviour never discussed
+
+- **Detraining costs 65% of accumulated progress** after a layoff (`archetypes.ts`). Invented, then tuned when a test proved the first value invisible.
+- **Every archetype's parameters** — weeks of history, days per week, adherence rate, starting loads, progression increments, and their timezones (Jerusalem, Berlin, New York, London).
+- **Which exercise categories count as programmable** — strength, powerlifting, olympic, strongman, plyometrics. Stretching and cardio are filtered out of every planner candidate list.
+- **The canonical equipment vocabulary** and which source names collapse onto which tag.
+- **Movement patterns for ~30 compound lifts**, curated by keyword; everything else is left NULL.
+- **`samson-demo-fixture`** as the password for every seeded account, published on the live sign-in page.
+- The **visual system** — violet `#6c4df6`, light theme, 16px radius. Three directions were offered and one chosen; every specific value is mine.
+- All **hint copy** explaining reps, RPE, adherence, streak, tonnage and ACWR.
+
+### Method assumptions, now known to conflict with the course
+
+- **I wrote every test for my own code.** Lesson 7 names this failure directly — _"the agent writes the code, then writes its tests. It writes them by reading the code"_ — and prescribes separating the author of the tests from the author of the code, showing the second only the specification.
+- **The PRD sits outside `CLAUDE.md`**, referenced rather than inlined, on token-cost grounds. The lesson 7 pipeline slide says specs and PRD go _into_ `Claude.md`.
+- **No design step ran before the UI was built.** Lesson 5 specifies four things an interface specification must contain — user flow, information hierarchy, interaction model, and feedback with its bad states. None were written. The design rework already requested traces directly to this.
+- **Desktop-first.** A 1000px shell, data tables, a form that collapses only below 760px. Now known to be backwards: the answer to Q5 was phone-first.
+- **No hooks.** Invariants are advised in `CLAUDE.md` and checked by tests and lint. Lesson 6: _"a file advises; a hook enforces."_
+- **No subagents, ever.** Lessons 8 and 14–15 cover multi-agent decomposition; the one use that clearly earns its keep here — an independent test author — was not used.
+- **Branch per phase, merged to `main`.** Never discussed.
