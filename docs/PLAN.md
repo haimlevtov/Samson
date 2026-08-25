@@ -9,7 +9,8 @@ Each phase is written as a brief. Hand one to an agent in plan mode, review the
 plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
-**Current phase: 0**
+**Current phase: 2** — phases 0 and 1 are complete; see `docs/plans/` for the
+plan and recorded outcome of each.
 
 ---
 

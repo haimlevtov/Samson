@@ -18,7 +18,9 @@
     "test:coverage": "vitest run --coverage",
     "seed": "tsx scripts/seed.ts",
     "catalogue:fetch": "tsx scripts/fetch-catalogue.ts",
-    "inspect:seed": "tsx scripts/inspect-archetypes.ts"
+    "inspect:seed": "tsx scripts/inspect-archetypes.ts",
+    "db:push": "supabase db push",
+    "db:types:hosted": "supabase gen types typescript --linked > src/db/types.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

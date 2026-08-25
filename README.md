@@ -6,43 +6,75 @@ Deterministic code computes all numbers. The LLM interprets them, plans within
 validated bounds, and speaks in a persona. It never calculates.
 
 - `CLAUDE.md` — the ten invariants. Read first.
-- `docs/PLAN.md` — phases and acceptance criteria. **Current phase: 0.**
+- `docs/PLAN.md` — phases and acceptance criteria. **Current phase: 2.**
 - `docs/plans/` — the agent plan for each phase, as approved.
 - `docs/adr/` — decisions and the reasoning behind them.
 
 ## Prerequisites
 
-Node 22+, Docker Desktop (running), and the [Supabase CLI](https://supabase.com/docs/guides/cli).
+Node 22+ and the [Supabase CLI](https://supabase.com/docs/guides/cli). Docker is
+optional — see below.
 
-## Setup
+## Setup (hosted, no Docker)
+
+This is the default. The hosted free-tier project already has the full schema.
 
 ```bash
 npm install
 cp .env.example .env.local
-supabase start
 ```
 
-`supabase start` prints the local URL and keys. Put them in `.env.local`, then
-add an [OpenRouter](https://openrouter.ai/keys) key if you want to make real
-model calls — everything except `npm run smoke:llm` works without one.
+Fill `.env.local` from the Supabase dashboard (Project settings → API keys):
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://mqcnpuupzknwpvhkbpci.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable key>
+SUPABASE_SERVICE_ROLE_KEY=<secret key — the seeder needs it to create users>
+```
+
+Then:
 
 ```bash
-npm run migrate     # rebuild the schema from zero
+npm run seed        # five synthetic users, ~1s
 npm run dev         # http://localhost:3000
+```
+
+Add an [OpenRouter](https://openrouter.ai/keys) key too if you want real model
+calls — everything except `npm run smoke:llm` works without one.
+
+New migrations go to the hosted project with `npm run db:push`, after
+`supabase link --project-ref mqcnpuupzknwpvhkbpci` once.
+
+## Setup (local stack)
+
+Only worth it when you need to reset the schema repeatedly or run
+`npm run test:db`, which requires a direct Postgres connection. Docker's WSL2 VM
+holds several GB while it runs.
+
+```bash
+supabase start                 # prints the local URL and keys for .env.local
+npm run migrate && npm run seed
+```
+
+**Stop it when you are done** — `supabase stop` alone reclaims almost nothing:
+
+```bash
+supabase stop && wsl --shutdown
 ```
 
 ## Scripts
 
-| Command                                 | What it does                                         |
-| --------------------------------------- | ---------------------------------------------------- |
-| `npm test`                              | Unit tests. No database, no network, no API key.     |
-| `npm run test:db`                       | RLS and schema tests against the local stack.        |
-| `npm run migrate`                       | `supabase db reset` — rebuilds the schema from zero. |
-| `npm run seed`                          | Five synthetic users with 8+ weeks of history.       |
-| `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.    |
-| `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.           |
-| `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI. |
-| `npm run typecheck` / `lint` / `format` | The rest of what CI checks.                          |
+| Command                                 | What it does                                                |
+| --------------------------------------- | ----------------------------------------------------------- |
+| `npm test`                              | Unit tests. No database, no network, no API key.            |
+| `npm run test:db`                       | RLS and schema tests against the local stack.               |
+| `npm run migrate`                       | `supabase db reset` — local stack only, rebuilds from zero. |
+| `npm run db:push`                       | Applies new migrations to the hosted project.               |
+| `npm run seed`                          | Five synthetic users with 8+ weeks of history.              |
+| `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.           |
+| `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.                  |
+| `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI.        |
+| `npm run typecheck` / `lint` / `format` | The rest of what CI checks.                                 |
 
 After changing a migration, regenerate the types or CI will fail:
 

@@ -67,6 +67,18 @@ Repetitive extensions have skills in `.claude/skills/`. Use them:
 - `add-progression` — new node in an exercise progression tree
 - `add-pipeline-stage` — new LLM stage, schema, token budget, fixture
 
+## Local environment — leave nothing running
+
+Development targets the **hosted** Supabase project. Docker's WSL2 VM costs
+~9 GB on this machine and makes it unusable while it runs.
+
+- **Stop everything you start, in the turn you start it.** Dev servers,
+  containers, background jobs. Never end a turn with a process still alive.
+- If Docker was started at all, `supabase stop && wsl --shutdown` before
+  finishing. `supabase stop` alone reclaims almost nothing.
+- Prefer the hosted project over a local stack. Only start Docker when a task
+  genuinely cannot run against hosted, say so first, and stop it afterwards.
+
 ## Out of scope
 
 Do not build: caching layers, queues, real-time sync, push notifications,
