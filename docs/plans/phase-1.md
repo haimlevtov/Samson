@@ -156,3 +156,53 @@ test, which will now also cover the `user_equipment` table.
 - If time compresses, the inspection views are worth more than the entry forms —
   they are what an acceptance criterion actually depends on.
 - Docker must be running for stages 2–4. Stage 1 needs nothing.
+
+---
+
+## Outcome — 2026-08-25
+
+| Acceptance criterion                                                               | Status                                                                                                        |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Metrics engine has near-total unit coverage and runs in milliseconds               | **Verified.** 100% lines and functions, 93.7% branches, thresholds enforced in CI. 137 unit tests in ~490 ms. |
+| `npm run seed` produces a demoable database in under a minute from an empty schema | **Verified.** 0.8 s. 873 exercises, 268 workouts, 1,879 sets across five users.                               |
+| Every synthetic user's metrics look plausible on manual inspection                 | **Verified**, and it caught a real bug — see below.                                                           |
+
+### What manual inspection caught
+
+Progression was advancing on calendar weeks rather than completed sessions, so
+the inconsistent user reached a heavier squat than the diligent beginner while
+completing 19 sessions to their 32. Every archetype was quietly converging on
+the same curve. A phase 2 planner developed against that data would have looked
+correct while being wrong. Fixed, and pinned by a test that compares the two
+users' final e1RM.
+
+This is the criterion earning its place: no unit test was going to notice it,
+because each archetype passed its own assertions in isolation.
+
+### Deviations from the plan
+
+1. **A `category` column was added alongside `user_equipment`.** The source
+   catalogue mixes strength work with stretching and cardio, and filtering that
+   out belongs in the same SQL pass as the equipment filter rather than in a
+   prompt that can be argued with.
+2. **`normaliseEquipment` maps a missing value to `bodyweight`, not `other`.**
+   77 source records omit equipment and are overwhelmingly unloaded movements;
+   `other` would have hidden them from every equipment filter.
+3. **Squat is matched before the olympic keywords.** "Front Squat (Clean Grip)"
+   came out as a hinge. Regression test added.
+4. **A throwaway inspection script became `npm run inspect:seed`.** It is the
+   fastest way to exercise the third acceptance criterion, so it stayed.
+
+### Verified end to end in the browser
+
+Signed in as Noa, started a session, logged 87.5 kg × 5 — e1RM rendered 102.1
+(87.5 × 1.1667) and tonnage 438 kg. Signed in as Yossi: 245 candidate exercises,
+**zero** containing a barbell, against Noa's 400 which include them. Every one of
+Yossi's best sets sits at exactly 30 kg, the dumbbell ceiling.
+
+### Still open
+
+- Phase 0's live gateway call still needs an OpenRouter key, and the phase 0 PR
+  has never been opened, so CI has still not run.
+- The rest timer's zero cue is a synthesised beep behind a single function,
+  ready for phase 3 to replace with a persona audio clip.
