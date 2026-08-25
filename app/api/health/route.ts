@@ -17,9 +17,10 @@ async function probeDatabase(): Promise<Probe> {
   try {
     const supabase = createAnonClient();
     const { error } = await supabase.from('exercises').select('id', { head: true, count: 'exact' });
-    // error.code is not always populated, so fall back to the message rather
-    // than letting the key vanish from the response.
-    return { database: 'reachable', detail: error ? (error.code ?? error.message) : null };
+    // WHY `||` and not `??`: PostgREST returns an empty-string code for some
+    // permission errors, which `??` passes straight through. An empty detail on
+    // the one endpoint you check when a deploy is broken is worse than useless.
+    return { database: 'reachable', detail: error ? error.code || error.message : null };
   } catch (cause) {
     return { database: 'unreachable', detail: cause instanceof Error ? cause.message : 'unknown' };
   }
