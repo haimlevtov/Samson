@@ -1,16 +1,35 @@
+/*
+ * Samson visual system.
+ *
+ * Everything is a token. Phase 3 adds personas and phase 4 adds XP, streaks and
+ * badges, so the palette lives here rather than in components — a future change
+ * of register should be this file and nothing else.
+ */
 :root {
-  --bg: #0e1116;
-  --surface: #161b22;
-  --surface-2: #1c232c;
-  --border: #2b333d;
-  --text: #e6edf3;
-  --muted: #8b97a5;
-  --accent: #f0883e;
-  --accent-dim: #b3612a;
-  --good: #3fb950;
-  --warn: #d29922;
-  --bad: #f85149;
-  --radius: 8px;
+  --bg: #f5f4fb;
+  --surface: #ffffff;
+  --surface-2: #f2effc;
+  --border: #e5e0f2;
+  --border-strong: #d5cdea;
+
+  --text: #1c1a2e;
+  --muted: #6a6786;
+
+  --accent: #6c4df6;
+  --accent-strong: #5734e2;
+  --accent-soft: #ece6fe;
+
+  --good: #16a34a;
+  --good-soft: #dcfce7;
+  --warn: #d97706;
+  --warn-soft: #fef3c7;
+  --bad: #dc2626;
+  --bad-soft: #fee2e2;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(28, 26, 46, 0.05), 0 10px 30px -18px rgba(28, 26, 46, 0.35);
+  --shadow-lift: 0 2px 4px rgba(28, 26, 46, 0.06), 0 18px 40px -20px rgba(28, 26, 46, 0.45);
 }
 
 * {
@@ -19,44 +38,53 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 420px at 12% -8%, var(--accent-soft), transparent 60%), var(--bg);
   color: var(--text);
   font:
-    15px/1.5 ui-sans-serif,
+    15px/1.55 ui-sans-serif,
     system-ui,
     -apple-system,
     'Segoe UI',
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-strong);
   text-decoration: none;
+  font-weight: 600;
 }
 a:hover {
   text-decoration: underline;
 }
 
 .shell {
-  max-width: 960px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 24px 20px 64px;
+  padding: 28px 20px 80px;
 }
 
 header.top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 16px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
 }
-
 header.top h1 {
-  font-size: 20px;
-  margin: 0;
-  letter-spacing: -0.01em;
+  font-size: 26px;
+  margin: 0 0 2px;
+  letter-spacing: -0.02em;
+}
+
+h2.section {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 32px 0 12px;
 }
 
 .muted {
@@ -66,37 +94,308 @@ header.top h1 {
   font-size: 13px;
 }
 
+.label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
 }
 
 .grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 .grid.cols-4 {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ---- stat tiles ------------------------------------------------------- */
 
 .stat {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 16px;
-}
-.stat .label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
 }
 .stat .value {
-  font-size: 24px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  margin-top: 4px;
+  margin: 2px 0 2px;
+}
+
+/* ---- timers ----------------------------------------------------------- */
+
+.timer-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.timer-card {
+  display: grid;
+  gap: 12px;
+}
+.timer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.timer-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.timer.done {
+  color: var(--good);
+}
+
+/* ---- controls --------------------------------------------------------- */
+
+input,
+select,
+button {
+  font: inherit;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+
+input,
+select {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  padding: 9px 11px;
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  border: 1.5px solid var(--accent);
+  padding: 9px 16px;
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--accent-strong);
+  transition:
+    transform 0.06s ease,
+    box-shadow 0.06s ease;
+}
+button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+/* A small press. Cheap, and it makes the thing feel like a game rather than a form. */
+button:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 var(--accent-strong);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+button.secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+  box-shadow: 0 2px 0 var(--border-strong);
+  font-weight: 600;
+}
+button.secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.chip {
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: none;
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.chip:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.chip-on {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+/* ---- set entry form --------------------------------------------------- */
+
+.set-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.set-form label,
+.set-form .f-exercise {
+  min-width: 0; /* lets grid children shrink instead of overflowing the card */
+}
+
+.f-exercise {
+  grid-column: span 12;
+}
+.f-num {
+  grid-column: span 6;
+}
+.f-check {
+  grid-column: span 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  padding-bottom: 9px;
+}
+.f-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.f-submit {
+  grid-column: span 6;
+}
+.f-submit button {
+  width: 100%;
+}
+
+@media (min-width: 760px) {
+  .f-exercise {
+    grid-column: span 12;
+  }
+  .f-num {
+    grid-column: span 2;
+  }
+  .f-check {
+    grid-column: span 2;
+  }
+  .f-submit {
+    grid-column: span 2;
+  }
+}
+
+/* ---- searchable exercise picker --------------------------------------- */
+
+.combo {
+  position: relative;
+}
+.combo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift);
+}
+.combo-list li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  box-shadow: none;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.combo-list li button:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.combo-list li button:active {
+  transform: none;
+}
+.combo-empty {
+  padding: 10px;
+}
+
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 6px 6px 12px;
+}
+.chosen-name {
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finish-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+@media (max-width: 560px) {
+  .finish-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- tables ----------------------------------------------------------- */
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 table {
@@ -107,112 +406,98 @@ table {
 th,
 td {
   text-align: left;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 th {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 700;
 }
-tr:last-child td {
+tbody tr:last-child td {
   border-bottom: none;
 }
-
-input,
-select,
-button {
-  font: inherit;
-  color: var(--text);
+tbody tr:hover td {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-input:focus,
-select:focus {
-  outline: 2px solid var(--accent-dim);
-  outline-offset: 1px;
 }
 
-button {
-  cursor: pointer;
-  background: var(--accent);
-  color: #14181d;
-  border-color: var(--accent);
-  font-weight: 600;
-}
-button:hover {
-  background: var(--accent-dim);
-  border-color: var(--accent-dim);
-  color: var(--text);
-}
-button.secondary {
-  background: var(--surface-2);
-  color: var(--text);
-  border-color: var(--border);
-  font-weight: 500;
-}
-
-.row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
+/* ---- badges and bars --------------------------------------------------- */
 
 .badge {
   display: inline-block;
   font-size: 12px;
-  padding: 2px 8px;
+  font-weight: 700;
+  padding: 3px 10px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  background: var(--surface-2);
   color: var(--muted);
 }
 .badge.completed {
   color: var(--good);
-  border-color: var(--good);
+  background: var(--good-soft);
 }
 .badge.skipped {
   color: var(--bad);
-  border-color: var(--bad);
+  background: var(--bad-soft);
 }
 .badge.rest {
   color: var(--warn);
-  border-color: var(--warn);
+  background: var(--warn-soft);
 }
-.badge.pr {
-  color: #14181d;
-  background: var(--accent);
-  border-color: var(--accent);
-  font-weight: 700;
-}
-
-.error {
-  color: var(--bad);
-  font-size: 14px;
-}
-
-.timer {
-  font-variant-numeric: tabular-nums;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.timer.done {
-  color: var(--accent);
+.badge.in_progress {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
 }
 
 .bar {
-  height: 6px;
+  height: 10px;
   background: var(--surface-2);
-  border-radius: 3px;
+  border-radius: 999px;
   overflow: hidden;
 }
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--accent);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #a78bfa);
+  transition: width 0.25s ease;
+}
+
+.error {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+code {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 0.9em;
+}
+
+/* ---- weekly tonnage chart --------------------------------------------- */
+
+.tonnage {
+  display: grid;
+  gap: 10px;
+}
+.tonnage-row {
+  display: grid;
+  grid-template-columns: 84px 1fr 86px;
+  gap: 12px;
+  align-items: center;
+}
+.tonnage-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+@media (max-width: 520px) {
+  .tonnage-row {
+    grid-template-columns: 70px 1fr 70px;
+    gap: 8px;
+  }
 }

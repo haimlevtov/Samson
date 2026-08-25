@@ -90,25 +90,21 @@ export default async function WorkoutsPage() {
         </div>
       </div>
 
-      <h2 style={{ fontSize: 15, marginTop: 32 }}>Weekly tonnage</h2>
-      <div className="card grid" style={{ gap: 8 }}>
+      <h2 className="section">Weekly tonnage</h2>
+      <div className="card tonnage">
         {weekly.slice(-12).map(([week, value]) => (
-          <div key={week} className="row" style={{ gap: 12 }}>
-            <span className="muted small" style={{ width: 88 }}>
-              {week}
-            </span>
-            <span className="bar" style={{ flex: 1 }}>
+          <div key={week} className="tonnage-row">
+            <span className="muted small">{week}</span>
+            <span className="bar">
               <span style={{ width: `${(value / peak) * 100}%` }} />
             </span>
-            <span className="small" style={{ width: 80, textAlign: 'right' }}>
-              {kg(value)}
-            </span>
+            <span className="small tonnage-value">{kg(value)}</span>
           </div>
         ))}
         {weekly.length === 0 ? <p className="muted small">No sets logged yet.</p> : null}
       </div>
 
-      <h2 style={{ fontSize: 15, marginTop: 32 }}>Best estimated 1RM</h2>
+      <h2 className="section">Best estimated 1RM</h2>
       <div className="card">
         <table>
           <thead>
@@ -139,7 +135,7 @@ export default async function WorkoutsPage() {
         </table>
       </div>
 
-      <h2 style={{ fontSize: 15, marginTop: 32 }}>Sessions</h2>
+      <h2 className="section">Sessions</h2>
       <div className="card">
         <table>
           <thead>

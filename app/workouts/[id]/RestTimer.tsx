@@ -39,7 +39,26 @@ function format(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number }) {
+/**
+ * Set by the parent when a set is logged, to start rest without a second click.
+ * `nonce` exists so that two consecutive sets with the same rest length still
+ * restart the clock — the seconds alone would not change and the effect would
+ * not re-run.
+ */
+export interface RestTrigger {
+  seconds: number;
+  nonce: number;
+}
+
+const PRESETS = [60, 90, 120, 180] as const;
+
+export function RestTimer({
+  defaultSeconds = 120,
+  trigger,
+}: {
+  defaultSeconds?: number;
+  trigger?: RestTrigger | null;
+}) {
   const [target, setTarget] = useState(defaultSeconds);
   const [remaining, setRemaining] = useState(defaultSeconds);
   const [running, setRunning] = useState(false);
@@ -52,6 +71,14 @@ export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number })
    */
   const deadlineRef = useRef<number | null>(null);
   const firedRef = useRef(false);
+
+  const startFor = useCallback((seconds: number) => {
+    firedRef.current = false;
+    deadlineRef.current = Date.now() + seconds * 1000;
+    setTarget(seconds);
+    setRemaining(seconds);
+    setRunning(true);
+  }, []);
 
   useEffect(() => {
     if (!running) return;
@@ -73,12 +100,13 @@ export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number })
     return () => window.clearInterval(id);
   }, [running]);
 
-  const start = useCallback(() => {
-    firedRef.current = false;
-    deadlineRef.current = Date.now() + target * 1000;
-    setRemaining(target);
-    setRunning(true);
-  }, [target]);
+  // Auto-start when the parent logs a set.
+  const lastNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!trigger || trigger.nonce === lastNonce.current) return;
+    lastNonce.current = trigger.nonce;
+    startFor(trigger.seconds);
+  }, [trigger, startFor]);
 
   const stop = useCallback(() => {
     setRunning(false);
@@ -92,27 +120,25 @@ export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number })
   }, [stop, target]);
 
   const done = remaining <= 0 && !running;
+  const progress = running || done ? 1 - Math.max(0, remaining) / Math.max(1, target) : 0;
 
   return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+    <div className="card timer-card">
+      <div className="timer-head">
         <div>
-          <div className="label muted small" style={{ textTransform: 'uppercase' }}>
-            Rest
-          </div>
+          <div className="label">Rest</div>
           <div className={`timer ${done ? 'done' : ''}`} aria-live="polite">
             {done ? 'Go' : format(remaining)}
           </div>
         </div>
 
-        <div className="row">
-          {[60, 90, 120, 180].map((s) => (
+        <div className="timer-controls">
+          {PRESETS.map((s) => (
             <button
               key={s}
               type="button"
-              className="secondary"
+              className={`chip ${target === s ? 'chip-on' : ''}`}
               aria-pressed={target === s}
-              style={target === s ? { borderColor: 'var(--accent)' } : undefined}
               onClick={() => {
                 setTarget(s);
                 if (!running) setRemaining(s);
@@ -126,7 +152,7 @@ export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number })
               Pause
             </button>
           ) : (
-            <button type="button" onClick={start}>
+            <button type="button" onClick={() => startFor(target)}>
               Start
             </button>
           )}
@@ -134,6 +160,10 @@ export function RestTimer({ defaultSeconds = 120 }: { defaultSeconds?: number })
             Reset
           </button>
         </div>
+      </div>
+
+      <div className="bar" aria-hidden="true">
+        <span style={{ width: `${Math.min(100, progress * 100)}%` }} />
       </div>
     </div>
   );

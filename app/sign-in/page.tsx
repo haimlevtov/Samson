@@ -43,11 +43,11 @@ export default async function SignInPage({
       <div className="card" style={{ maxWidth: 420 }}>
         <form action={signIn} className="grid">
           <label className="grid" style={{ gap: 4 }}>
-            <span className="small muted">Email</span>
+            <span className="label">Email</span>
             <input name="email" type="email" required defaultValue="beginner@samson.test" />
           </label>
           <label className="grid" style={{ gap: 4 }}>
-            <span className="small muted">Password</span>
+            <span className="label">Password</span>
             <input name="password" type="password" required defaultValue="samson-demo-fixture" />
           </label>
           {error ? <p className="error">{error}</p> : null}
@@ -55,7 +55,7 @@ export default async function SignInPage({
         </form>
       </div>
 
-      <h2 style={{ fontSize: 15, marginTop: 32 }}>Seeded accounts</h2>
+      <h2 className="section">Seeded accounts</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
         All use the password <code>samson-demo-fixture</code>. Run{' '}
         <code>npm run migrate &amp;&amp; npm run seed</code> if they are missing.

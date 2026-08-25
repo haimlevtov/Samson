@@ -124,6 +124,8 @@ export interface LoggedSet {
 }
 
 export interface WorkoutDetail {
+  /** ISO instant the session began, for the elapsed timer. Null until started. */
+  startedAt: string | null;
   id: string;
   localDate: string;
   status: WorkoutStatus;
@@ -135,7 +137,7 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
   const { data, error } = await db
     .from('workouts')
     .select(
-      'id, local_date, status, notes, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, exercises(name))'
+      'id, local_date, status, notes, started_at, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, exercises(name))'
     )
     .eq('id', workoutId)
     .maybeSingle();
@@ -157,6 +159,7 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
 
   return {
     id: data.id,
+    startedAt: data.started_at,
     localDate: data.local_date,
     status: data.status as WorkoutStatus,
     notes: data.notes,
