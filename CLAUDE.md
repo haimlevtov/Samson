@@ -9,7 +9,7 @@ Gamified strength-training app with an LLM coach. Class project.
 - `docs/PLAN.md` — the current phase and its acceptance criteria. Read before
   building.
 
-Both are referenced rather than inlined: this file loads on every turn, so it
+These are referenced rather than inlined: this file loads on every turn, so it
 carries only the rules that must never be skimmed. Everything else is fetched
 when it is relevant.
 
