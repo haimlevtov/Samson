@@ -79,21 +79,59 @@ history takes months to accumulate. Do not defer it.
 The highest-unknown phase. If something is going to break the timeline, it is
 this, and it needs to break now.
 
+The arrangement is the **evaluator-optimizer** pattern: one agent produces, a
+second judges, the first revises until the work passes. It suits work where
+quality outweighs speed, which this is.
+
 **Build**
 
 - Planner: given metrics, goal, equipment profile, and available days, emits a
   validated training block
-- Safety critic, on a different model from the planner: enforces weekly volume
-  cap, deload cadence, injury exclusions, equipment availability. Rejects with
-  structured reasons; planner retries; hard cap of 3 loops
+- **Deterministic rule checks — `src/planner/rules.ts`.** Weekly volume increase
+  against cap, deload cadence, injured-joint exclusion, equipment availability
+  and per-item load ceilings. Pure functions over the plan, unit-tested, run on
+  every plan **regardless of what the critic model says**.
+- Safety critic, on a different model from the planner: judges what the rules
+  cannot — is this sensible training for this person. Rejects with structured
+  reasons; planner retries; hard cap of 3 loops
 - Golden eval set: ~30 synthetic histories with property-based assertions
 - Prompt structured static-first, dynamic-last, so the cache prefix holds
+- **Coordination design — `docs/adr/0004-planner-critic.md`**, written before any
+  agent runs. Names the pattern and where it applies; each agent's role, input,
+  output and boundary; how work passes between them; what happens when one
+  fails; what the arrangement costs and buys.
+
+**WHY the rules are code and not the critic's opinion.** Schema validation is a
+form check: it catches a malformed plan and nothing else. A plan prescribing
+twenty sets of squats is schema-valid. A model asked to enforce a volume cap
+will usually enforce it and will sometimes produce a fluent, confident,
+well-formed answer that does not — and no shape check can tell the difference.
+The cap is arithmetic, so it is arithmetic that enforces it. The critic model
+adds judgement on top of a deterministic floor; it does not replace the floor.
+
+**AI-NOTE:** if a rule can be expressed as a comparison against a number, it
+belongs in `rules.ts`. Only send to the critic what genuinely requires reading
+the plan as a whole.
+
+**Handoffs carry structure, never prose.** The critic receives the plan as data
+and returns rejection reasons as data. Flattening either to prose loses the
+shape and the next stage has to guess it back — occasionally wrong, always
+silently. This is also the mechanism that makes phase 3's "the persona cannot
+alter a number" testable.
+
+**On repeated failure, escalate rather than repeat.** A schema failure that
+survives one corrective retry should move to a stronger model rather than asking
+the same one again. The cost of that escalation is exactly what the cascade
+analysis is measuring.
 
 **Acceptance criteria**
 
 - Every golden case produces a schema-valid plan within the retry cap
 - Property assertions hold across all cases: volume increase within cap, no
   unavailable equipment, deload present by week 5, injured joints absent
+- **Every rule in `rules.ts` has a test that fails a plan violating it**, and a
+  plan that passes the rules but is rejected by the critic is recorded as such —
+  the two rejection sources are never conflated in the ledger
 - Cache hit rate measured and recorded in the report notes
 - Cost per plan generation recorded per model tried
 
@@ -202,6 +240,30 @@ Both are self-contained. Cut either without breaking anything above.
 - **Artifact trail**: spec, agent plan, ADR, diff, test, eval result for each
   phase. For a course grading agentic development, this trail is the
   submission.
+
+### The merge gate
+
+Defined here, before the work, because a standard invented afterwards bends to
+fit the work it is meant to judge. Nothing enters `main` without it, every time.
+
+Cheap gates run first and need nobody present — typecheck, lint, format, unit
+tests, the DB suite. Attention is never spent on work the tests already reject.
+The human gate sits last, at the merge boundary.
+
+At that boundary a change presents a **merge-readiness pack**, and each item is
+shown by evidence rather than asserted:
+
+|                         | Evidence                                                               |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Functional completeness | The acceptance criterion it claims to satisfy, and how it was observed |
+| Sound verification      | What the tests actually assert — not a coverage figure                 |
+| Engineering hygiene     | Typecheck, lint, format, migrations applied from zero                  |
+| Rationale               | Why this approach, and what was rejected                               |
+| Audit trail             | Plan, ADR if a decision was made, and the diff                         |
+
+**Coverage is not evidence.** It records which lines ran, never whether anything
+was checked. The 95% threshold in `vitest.config.ts` is a smoke alarm, not a
+verification gate, and must not be cited as one.
 
 ## Demo preparation
 
