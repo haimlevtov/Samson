@@ -28,6 +28,8 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      # Enforces the metrics-engine coverage thresholds in vitest.config.ts.
+      - run: npm run test:coverage
 
   # RLS and migration tests need a real Postgres, so they run apart from the
   # secret-free job above rather than weakening it.
