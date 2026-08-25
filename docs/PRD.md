@@ -1,0 +1,221 @@
+# Samson — Product Specification
+
+A living document. Every feature carries a status: **Built**, **Specified** (agreed,
+not yet implemented), or **Deferred** (cut unless time allows). Phases refer to
+`PLAN.md`.
+
+---
+
+## 1. Premise
+
+Strength-training software splits into two disappointing halves.
+
+Loggers record what you lifted and leave the interpretation to you — a
+spreadsheet with a nicer font. You end up being your own coach, which is fine if
+you already know how to programme and useless if you do not.
+
+AI coaches write plausible-sounding programmes that ignore what you actually
+did. The failure is structural, not a prompting problem: a language model asked
+what your training max is will produce a number that reads correctly and is
+wrong, and it will do so with the same confidence as when it is right. A user
+cannot tell the difference, and neither can the model.
+
+Samson's premise is that these are two different jobs and should be done by two
+different things.
+
+> **Deterministic code owns every number. The model owns interpretation,
+> selection within validated bounds, and voice.**
+
+The model never calculates your e1RM, your tonnage, your XP, or your calorie
+floor. It reads figures that arithmetic produced, decides what they mean, picks
+from a list that SQL already filtered, and says it in a voice you chose. When a
+number is wrong, it is a bug in code with a failing test — not a hallucination
+nobody can reproduce.
+
+---
+
+## 2. Who it is for
+
+The five synthetic users in `src/seed/archetypes.ts` are not test fixtures that
+happen to look like people. They are the product's user segments, written down
+first and used to develop against, because each one breaks the product in a
+different way.
+
+| Segment                       | Situation                             | What the product owes them                                           |
+| ----------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| **Beginner** (Noa)            | Linear progression is working         | Do not overthink it. Add weight, stay out of the way.                |
+| **Plateaued** (Dan)           | Trains hard, no progress in six weeks | Notice it before he does, and change one specific thing.             |
+| **Returning** (Maya)          | Five weeks off, coming back           | Do not resume at the old load. Rebuild deliberately.                 |
+| **Equipment-limited** (Yossi) | Dumbbells that stop at 30 kg          | Never prescribe something he physically cannot do.                   |
+| **Inconsistent** (Tom)        | Makes about half his sessions         | His problem is adherence, not volume. More work is the wrong answer. |
+
+The last two are the ones most products get wrong. A plan that assumes a full
+rack is worthless to Yossi, and a plan that adds volume for Tom mistakes his
+problem entirely.
+
+---
+
+## 3. Product principles
+
+These are the ten engineering invariants in `CLAUDE.md` restated as promises to
+the user. They are the same rules; this is what they mean from the outside.
+
+1. **The coach never invents a number.** Every figure you see was computed and
+   unit-tested. If the coach quotes it, you can trust it.
+2. **Rest is part of the plan.** Scheduled rest maintains your streak and earns
+   the same credit as training. Progress comes from adherence, never from
+   volume, because volume-scaled rewards pay people to overtrain.
+3. **The plan respects the room you train in.** Equipment you do not own is
+   filtered out in the database before the coach ever sees a candidate list.
+4. **Personality changes delivery, never content.** Switching coach voice cannot
+   change a single number in your plan. This is enforced by test, not by prompt.
+5. **Safety limits are not negotiable by conversation.** No phrasing, persona, or
+   request moves a volume cap or a calorie floor. Attempts are blocked and
+   logged.
+6. **Your data is yours.** Row-level security is on for every table; a query as
+   one user cannot reach another user's rows, and the application never holds a
+   credential that could bypass it.
+
+---
+
+## 4. How it works, as the user experiences it
+
+```
+what you say  →  normalizer  →  metrics engine  →  planner  →  safety critic  →  persona  →  you
+                    (LLM)          (code)          (LLM)       (LLM + rules)     (LLM)
+```
+
+- **Normalizer** turns "three by five at sixty, last one was a grind" into
+  validated set data. It reads language; it does not do arithmetic.
+- **Metrics engine** computes e1RM, tonnage, adherence, PRs and training load.
+  Pure functions, no model, near-total test coverage.
+- **Planner** receives those numbers plus your goal, equipment and available
+  days, and emits a training block chosen from a pre-filtered candidate list.
+- **Safety critic** runs on a _different model_ from the planner and rejects
+  plans with structured reasons — volume caps, deload cadence, injury
+  exclusions. The planner retries, at most three times. A critic sharing the
+  planner's weights shares its blind spots.
+- **Persona layer** changes only how the finished plan is delivered.
+
+---
+
+## 5. Surfaces
+
+### 5.1 Logging — **Built** (phase 1)
+
+Start a session, pick an exercise, record weight, reps, RPE and whether it was a
+warm-up. A rest timer starts on its own when a set is logged and counts down
+from a stored deadline, so a locked phone does not lose it. A session timer
+counts from when you actually began.
+
+The exercise picker searches 873 catalogue exercises, filtered in SQL to
+equipment you own — Yossi sees 245, none of them requiring a barbell.
+
+_Deliberate omission:_ tonnage counts external load only. A bodyweight pull-up
+contributes zero, because imputing bodyweight would silently rewrite months of
+history every time your weight changed.
+
+### 5.2 Insight — **Built** (phase 1)
+
+Adherence over four weeks, current streak, weekly tonnage, and acute:chronic
+workload ratio. Best estimated 1RM per lift, with the estimate withheld above 12
+reps where the Epley formula stops being trustworthy — a blank is more honest
+than a confident wrong number.
+
+Every figure carries a "?" explaining what it measures and how it is computed,
+because "acute:chronic 1.23" means nothing to someone who has not met the term.
+
+### 5.3 Coaching — **Specified** (phase 2)
+
+Given your history, goal, equipment and available days, produce a training block
+that survives the safety critic. Acceptance: every case in a ~30-history golden
+set yields a schema-valid plan within the retry cap; volume increases stay under
+cap; no unavailable equipment appears; a deload lands by week five; injured
+joints are absent.
+
+_This is the highest-unknown part of the product._ It is scheduled early
+specifically so that if it does not work, there is still time to change course.
+
+### 5.4 Voice — **Specified** (phase 3)
+
+Three coach personas at launch: the Rival, the Analyst, and one of the Sergeant
+or the Old Master. Each is a database row — system prompt, TTS voice, intensity,
+humour tier, banned phrases — not a code branch.
+
+Personas may not alter any number in the plan they receive, asserted by test. A
+tone override forces a gentler register when an injury or a run of missed
+sessions is flagged, regardless of which persona is selected. High-frequency
+cues (rest over, set logged, PR hit, last set) are precomputed audio, generated
+once when the persona is created.
+
+### 5.5 Progression and rewards — **Specified** (phases 4–5)
+
+XP from adherence with a weekly ceiling and diminishing returns. Streaks that
+count planned days, so scheduled rest sustains them. Achievements as database
+rows with SQL predicates — including hidden ones, whose definitions are never
+sent to the client, and calendar-triggered ones that fire on _your_ local date
+rather than the server's. Daily quests and weekly challenges from a validated
+pool. Progression trees for push, pull, legs and core.
+
+Every completion is verified server-side. Nothing can be granted from the
+client, and submitted loads face plausibility checks — an empty bar spammed for
+reps must not unlock a volume badge.
+
+### 5.6 Diet — **Deferred** (phase 6)
+
+Maintenance calories by equation, bounded adjustment, and a floor hard-clamped
+in code. The model explains the number; it never chooses it. Supplement answers
+are retrieval-only from a curated table with evidence grades and resolvable
+DOIs. Acceptance is adversarial: no prompt, persona or framing moves the floor,
+and every attempt is logged.
+
+### 5.7 Import — **Deferred** (phase 6)
+
+`.fit`, `.tcx`, `.gpx` and Apple Health XML. File import is the primary path and
+must demo without any native module. Health Connect and HealthKit only if a test
+device exists.
+
+---
+
+## 6. Non-goals
+
+Not built, and not by accident: caching layers, queues, real-time sync, push
+notifications, payments, containers, multi-region, load testing.
+
+This runs for one demo on free tiers. Scaling work is deferred explicitly rather
+than forgotten, and building it would consume the time the planner and the
+adversarial suite actually need.
+
+Also out of scope: social feeds, coach marketplaces, wearable-first tracking, and
+anything requiring a native app. Samson is a web app you open at the gym.
+
+---
+
+## 7. How success is judged
+
+Product criteria live in each phase's acceptance list in `PLAN.md`. Beyond those,
+the course grades the development process itself, which makes three things
+deliverables in their own right:
+
+- **Artifact trail** — spec, agent plan, ADR, diff, test and eval result per
+  phase. `docs/plans/` and `docs/adr/` are part of the submission, not
+  housekeeping.
+- **Token economics** — cost per user per week by pipeline stage, cache hit rate
+  over time, retry cost, and cascade saving measured against an
+  all-strong-model baseline. This is why `llm_calls` was built before the first
+  agent: the data cannot be reconstructed afterwards.
+- **Adversarial taxonomy** — what got through, not just what was blocked.
+  Injection in workout notes, jailbreaks against the critic, fabricated
+  achievements via the normalizer, unsafe deficit requests.
+
+---
+
+## 8. Known risks
+
+| Risk                                                          | Standing                                                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| The planner/critic loop may not converge within the retry cap | Scheduled early on purpose, so failure is discoverable while there is time to change approach                                  |
+| The token ledger is empty                                     | The gateway works and is tested, but no live call has run. Every day without a key is development-period data lost permanently |
+| The adversarial suite has not started                         | Specified as growing every phase; at zero after two. The injection surface already exists in workout notes                     |
+| Bodyweight is a single current value                          | Fine for tonnage, which excludes it. Phase 6's diet advisor needs a recent weight and may need a time series                   |
+| Free-tier Supabase pauses after a week idle                   | A daily cron pings the health endpoint. Wake the project the day before a demo regardless                                      |

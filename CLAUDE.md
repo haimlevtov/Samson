@@ -1,7 +1,15 @@
 # Samson — Agent Rules
 
 Gamified strength-training app with an LLM coach. Class project.
-Read `docs/PLAN.md` for the current phase and its acceptance criteria.
+
+- `docs/PRD.md` — what the product is, who it is for, and what each surface owes
+  them. Read before designing anything a user will see.
+- `docs/PLAN.md` — the current phase and its acceptance criteria. Read before
+  building.
+
+Both are referenced rather than inlined: this file loads on every turn, so it
+carries only the rules that must never be skimmed. Everything else is fetched
+when it is relevant.
 
 ## Architecture in one line
 
