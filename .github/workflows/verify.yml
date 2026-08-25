@@ -68,6 +68,24 @@ jobs:
       - name: Rebuild the schema from zero
         run: npm run migrate
 
+      # tests/db/candidates.test.ts asserts invariant #5 against the seeded
+      # archetypes — the home-gym user seeing no barbell lifts is the whole
+      # point of that suite, and it needs that user to exist.
+      #
+      # WHY it is timed: PLAN.md phase 1 requires the seed to finish in under a
+      # minute from an empty schema. Running it here means that stays true
+      # rather than being something measured once by hand.
+      - name: Seed synthetic users
+        run: |
+          start=$(date +%s)
+          npm run seed
+          elapsed=$(( $(date +%s) - start ))
+          echo "seed took ${elapsed}s"
+          if [ "$elapsed" -gt 60 ]; then
+            echo "::error::npm run seed took ${elapsed}s, over the 60s budget in PLAN.md phase 1"
+            exit 1
+          fi
+
       - run: npm run test:db
 
       - name: Fail if generated types are stale
