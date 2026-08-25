@@ -15,7 +15,7 @@ import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { callLLM, createGatewayDeps } from '../src/llm/gateway';
-import { MissingApiKeyError } from '../src/llm/config';
+import { MissingApiKeyError, readApiKey } from '../src/llm/config';
 import { createSupabaseLedger } from '../src/db/ledger';
 import { createUserClient, supabaseAnonKey, supabaseUrl } from '../src/db/client';
 import type { Database } from '../src/db/types';
@@ -80,13 +80,12 @@ async function ensureSmokeUser(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const accessToken = await ensureSmokeUser();
-  const db = createUserClient(accessToken);
-  const ledger = createSupabaseLedger(db);
-
-  let deps;
+  // WHY: the key check comes first, before anything touches Postgres. Running
+  //      this without a key is the common case, and it should say so rather
+  //      than failing on a Supabase connection and sending someone to debug
+  //      the wrong thing.
   try {
-    deps = createGatewayDeps(ledger);
+    readApiKey();
   } catch (cause) {
     if (cause instanceof MissingApiKeyError) {
       console.error(`\n${cause.message}\n`);
@@ -94,6 +93,11 @@ async function main(): Promise<void> {
     }
     throw cause;
   }
+
+  const accessToken = await ensureSmokeUser();
+  const db = createUserClient(accessToken);
+  const ledger = createSupabaseLedger(db);
+  const deps = createGatewayDeps(ledger);
 
   const {
     data: { user },
