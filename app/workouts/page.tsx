@@ -6,6 +6,8 @@ import { acwr, acwrBand } from '@/src/metrics/acwr';
 import { adherence, currentStreak } from '@/src/metrics/adherence';
 import { exerciseBests } from '@/src/metrics/pr';
 import { addDays } from '@/src/metrics/dates';
+import { displayDate, displayShortDate } from '@/src/ui/format';
+import { FieldHint } from '@/src/ui/FieldHint';
 import { tonnageByWeek, totalTonnage } from '@/src/metrics/tonnage';
 import { signOut } from '../sign-in/actions';
 import { startWorkout } from './actions';
@@ -44,7 +46,7 @@ export default async function WorkoutsPage() {
         <div>
           <h1>{user.displayName ?? user.email}</h1>
           <span className="muted small">
-            {user.timezone} · today is {today}
+            {user.timezone} · today is {displayDate(today)}
           </span>
         </div>
         <div className="row">
@@ -61,7 +63,14 @@ export default async function WorkoutsPage() {
 
       <div className="grid cols-4">
         <div className="stat">
-          <div className="label">Adherence · 4 wks</div>
+          <div className="label with-hint">
+            Adherence · 4 wks
+            <FieldHint title="Adherence">
+              Sessions you kept, out of those that have come due in the last four weeks. A scheduled
+              rest day counts as kept — resting on plan is following it. Sessions still in the
+              future count neither way.
+            </FieldHint>
+          </div>
           <div className="value">
             {last7.rate === null ? '—' : `${Math.round(last7.rate * 100)}%`}
           </div>
@@ -70,17 +79,38 @@ export default async function WorkoutsPage() {
           </div>
         </div>
         <div className="stat">
-          <div className="label">Streak</div>
+          <div className="label with-hint">
+            Streak
+            <FieldHint title="Streak">
+              Planned sessions kept in a row, counting back from today. Rest days keep it alive; a
+              skipped session breaks it. Days with nothing scheduled are stepped over, so training
+              every other day does not reset it.
+            </FieldHint>
+          </div>
           <div className="value">{streak}</div>
           <div className="muted small">rest days count</div>
         </div>
         <div className="stat">
-          <div className="label">This week</div>
+          <div className="label with-hint">
+            This week
+            <FieldHint title="Tonnage">
+              Total load moved: weight × reps, warm-ups excluded. Bodyweight movements count as zero
+              — there is no external load to measure, and estimating it would rewrite your past
+              numbers every time your weight changed.
+            </FieldHint>
+          </div>
           <div className="value">{thisWeek ? kg(thisWeek[1]) : '—'}</div>
           <div className="muted small">{kg(totalTonnage(history.sets))} all time</div>
         </div>
         <div className="stat">
-          <div className="label">Acute : chronic</div>
+          <div className="label with-hint">
+            Acute : chronic
+            <FieldHint title="Acute : chronic">
+              Your last 7 days of load divided by your last 28. Near 1.0 is steady, below 0.8 is a
+              deload, and above 1.5 is a sharp spike — the range most associated with injury. Blank
+              until a full 28 days sits behind you, because before that the number is meaningless.
+            </FieldHint>
+          </div>
           <div className="value">{load.ratio === null ? '—' : load.ratio.toFixed(2)}</div>
           <div className="muted small">
             {load.ratio === null
@@ -90,11 +120,17 @@ export default async function WorkoutsPage() {
         </div>
       </div>
 
-      <h2 className="section">Weekly tonnage</h2>
+      <h2 className="section with-hint">
+        Weekly tonnage
+        <FieldHint title="Weekly tonnage">
+          Load moved per week, Monday to Sunday. The bar is scaled against your heaviest week, so it
+          shows the shape of your training rather than an absolute amount.
+        </FieldHint>
+      </h2>
       <div className="card tonnage">
         {weekly.slice(-12).map(([week, value]) => (
           <div key={week} className="tonnage-row">
-            <span className="muted small">{week}</span>
+            <span className="muted small">{displayShortDate(week)}</span>
             <span className="bar">
               <span style={{ width: `${(value / peak) * 100}%` }} />
             </span>
@@ -104,7 +140,14 @@ export default async function WorkoutsPage() {
         {weekly.length === 0 ? <p className="muted small">No sets logged yet.</p> : null}
       </div>
 
-      <h2 className="section">Best estimated 1RM</h2>
+      <h2 className="section with-hint">
+        Best estimated 1RM
+        <FieldHint title="Estimated 1RM">
+          What your best set suggests you could lift once, using the Epley formula: weight × (1 +
+          reps ÷ 30). It is an estimate, not a test. Left blank above 12 reps, where the formula
+          stops being trustworthy.
+        </FieldHint>
+      </h2>
       <div className="card">
         <table>
           <thead>
@@ -121,7 +164,7 @@ export default async function WorkoutsPage() {
                 <td>{history.exercises.get(b.exerciseId)?.name ?? b.exerciseId}</td>
                 <td>{b.bestE1rm!.toFixed(1)} kg</td>
                 <td className="muted">{b.bestWeightKg} kg</td>
-                <td className="muted small">{b.bestE1rmDate}</td>
+                <td className="muted small">{displayDate(b.bestE1rmDate)}</td>
               </tr>
             ))}
             {topLifts.length === 0 ? (
@@ -150,7 +193,7 @@ export default async function WorkoutsPage() {
             {workouts.map((w) => (
               <tr key={w.id}>
                 <td>
-                  <Link href={`/workouts/${w.id}`}>{w.localDate}</Link>
+                  <Link href={`/workouts/${w.id}`}>{displayDate(w.localDate)}</Link>
                 </td>
                 <td>
                   <span className={`badge ${w.status}`}>{w.status.replace('_', ' ')}</span>

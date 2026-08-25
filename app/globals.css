@@ -501,3 +501,90 @@ code {
     gap: 8px;
   }
 }
+
+/* ---- field hints ------------------------------------------------------- */
+
+.with-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hint {
+  position: relative;
+  display: inline-flex;
+}
+
+.hint-btn {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: none;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.hint-btn:hover:not(:disabled),
+.hint-btn:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+.hint-btn:active:not(:disabled) {
+  transform: none;
+}
+
+.hint-bubble {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(280px, 70vw);
+  display: none;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift);
+  /* .label sets uppercase and letter-spacing; prose must opt out of both. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: normal;
+}
+.hint-bubble strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent-strong);
+}
+
+/* Hover for pointers, focus for keyboards, data-open for taps. */
+.hint:hover .hint-bubble,
+.hint:focus-within .hint-bubble,
+.hint-bubble[data-open] {
+  display: block;
+}
+
+/*
+ * On a phone the tiles are full width and the hint sits close to the left edge,
+ * where a centred bubble would hang off the screen. Pin it to the left instead
+ * and let it grow rightwards, which always has room.
+ */
+@media (max-width: 700px) {
+  .hint-bubble {
+    left: 0;
+    transform: none;
+    max-width: min(260px, 76vw);
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { logSet } from '../actions';
+import { FieldHint } from '@/src/ui/FieldHint';
 import { RestTimer, type RestTrigger } from './RestTimer';
 import { SessionTimer } from './SessionTimer';
 
@@ -168,15 +169,36 @@ export function SessionConsole({
             <input name="weightKg" type="number" step="0.5" min="0" inputMode="decimal" />
           </label>
 
-          <label className="f-num">
-            <span className="label">Reps</span>
-            <input name="reps" type="number" step="1" min="0" inputMode="numeric" />
-          </label>
+          <div className="f-num">
+            <span className="label with-hint">
+              <label htmlFor="field-reps">Reps</label>
+              <FieldHint title="Reps">
+                How many times you completed the movement in this set. Above 12 reps the e1RM
+                estimate is left blank — the Epley formula stops being trustworthy that high.
+              </FieldHint>
+            </span>
+            <input id="field-reps" name="reps" type="number" step="1" min="0" inputMode="numeric" />
+          </div>
 
-          <label className="f-num">
-            <span className="label">RPE</span>
-            <input name="rpe" type="number" step="0.5" min="1" max="10" inputMode="decimal" />
-          </label>
+          <div className="f-num">
+            <span className="label with-hint">
+              <label htmlFor="field-rpe">RPE</label>
+              <FieldHint title="RPE">
+                Rate of Perceived Exertion, 1–10: how hard the set felt. 10 means you could not have
+                done another rep, 9 means one more, 8 means two. Optional — leave it blank rather
+                than guess.
+              </FieldHint>
+            </span>
+            <input
+              id="field-rpe"
+              name="rpe"
+              type="number"
+              step="0.5"
+              min="1"
+              max="10"
+              inputMode="decimal"
+            />
+          </div>
 
           <label className="f-num">
             <span className="label">Rest s</span>

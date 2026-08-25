@@ -5,6 +5,7 @@ import { loadWorkout } from '@/src/db/training';
 import { availableExercises } from '@/src/db/exercises';
 import { epleyE1rm } from '@/src/metrics/e1rm';
 import { totalTonnage } from '@/src/metrics/tonnage';
+import { displayDate } from '@/src/ui/format';
 import { SessionConsole, type Candidate } from './SessionConsole';
 import { deleteSet, finishWorkout } from '../actions';
 
@@ -48,7 +49,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     <>
       <header className="top">
         <div>
-          <h1>{workout.localDate}</h1>
+          <h1>{displayDate(workout.localDate)}</h1>
           <span className="muted small">
             <span className={`badge ${workout.status}`}>{workout.status.replace('_', ' ')}</span> ·{' '}
             {working.length} working sets · {Math.round(tonnage).toLocaleString()} kg
