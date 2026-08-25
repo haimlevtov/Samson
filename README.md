@@ -105,18 +105,29 @@ tests/db/                Cross-user isolation and structural schema assertions.
 
 ## Deploying
 
-Connect this repo in the Vercel dashboard, then set:
+Live at **https://samson-fit.vercel.app**, auto-deployed from `main`.
 
-| Variable                        | Where it comes from                             |
-| ------------------------------- | ----------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project settings                       |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable/anon key                   |
-| `OPENROUTER_API_KEY`            | openrouter.ai/keys                              |
-| `OPENROUTER_APP_URL`            | your deployment URL (optional, for attribution) |
+Vercel → Settings → Environment Variables. Copy the first two straight out of
+your working `.env.local` so they cannot drift:
 
-The `keepalive` workflow needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` as GitHub
-Actions secrets, and optionally `APP_HEALTH_URL` pointing at
-`https://<deployment>/api/health`.
+| Variable                        | Required | Notes                                      |
+| ------------------------------- | -------- | ------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | yes      | Without it every page 500s                 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes      | Publishable/anon key — safe in the browser |
+| `OPENROUTER_API_KEY`            | not yet  | Nothing calls a model until phase 2        |
+| `OPENROUTER_APP_URL`            | optional | Attribution on the OpenRouter dashboard    |
+
+**Never set `SUPABASE_SERVICE_ROLE_KEY` in Vercel.** It bypasses RLS, no request
+path uses it, and `tests/unit/invariants.test.ts` asserts it never appears under
+`src/` or `app/` — CLAUDE.md #10. Only the seeder needs it, and the seeder runs
+on your machine.
+
+Vercel applies environment variables at build time, so **redeploy after adding
+them** — an existing deployment will not pick them up.
+
+The `keepalive` workflow needs GitHub Actions secrets: `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, and `APP_HEALTH_URL` set to
+`https://samson-fit.vercel.app/api/health`.
 
 ## Local notes
 
