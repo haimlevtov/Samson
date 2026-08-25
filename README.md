@@ -38,6 +38,9 @@ npm run dev         # http://localhost:3000
 | `npm test`                              | Unit tests. No database, no network, no API key.     |
 | `npm run test:db`                       | RLS and schema tests against the local stack.        |
 | `npm run migrate`                       | `supabase db reset` — rebuilds the schema from zero. |
+| `npm run seed`                          | Five synthetic users with 8+ weeks of history.       |
+| `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.    |
+| `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.           |
 | `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI. |
 | `npm run typecheck` / `lint` / `format` | The rest of what CI checks.                          |
 

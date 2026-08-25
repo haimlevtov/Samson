@@ -244,6 +244,7 @@ export type Database = {
       }
       exercises: {
         Row: {
+          category: string | null
           created_at: string
           id: string
           instructions: string | null
@@ -258,6 +259,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          category?: string | null
           created_at?: string
           id?: string
           instructions?: string | null
@@ -272,6 +274,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          category?: string | null
           created_at?: string
           id?: string
           instructions?: string | null
@@ -547,6 +550,42 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "workouts"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_equipment: {
+        Row: {
+          created_at: string
+          equipment_tag_id: string
+          max_load_kg: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          equipment_tag_id: string
+          max_load_kg?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          equipment_tag_id?: string
+          max_load_kg?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_equipment_equipment_tag_id_fkey"
+            columns: ["equipment_tag_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_equipment_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
           },
         ]
       }

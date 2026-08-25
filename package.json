@@ -15,7 +15,10 @@
     "test:db": "vitest run --config vitest.db.config.ts",
     "migrate": "supabase db reset",
     "smoke:llm": "tsx scripts/smoke-llm.ts",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "seed": "tsx scripts/seed.ts",
+    "catalogue:fetch": "tsx scripts/fetch-catalogue.ts",
+    "inspect:seed": "tsx scripts/inspect-archetypes.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

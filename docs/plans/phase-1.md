@@ -50,13 +50,13 @@ Pure functions over plain arrays. No Supabase types, no I/O, no clock except one
 passed in. This is what makes "near-total unit coverage, runs in milliseconds"
 achievable rather than aspirational.
 
-| Module | Contents |
-|---|---|
-| `e1rm.ts` | Epley: `w × (1 + reps/30)`. **Returns null above ~12 reps** rather than a confident wrong number — Epley drifts badly in that range, and a null the UI can hide beats a figure the coach will quote. |
-| `tonnage.ts` | Session, weekly, and by muscle group via `exercises.primary_muscle` / `secondary_muscles`. |
-| `adherence.ts` | Completed ÷ planned over a window, with `status = 'rest'` counting as adherent — invariant #4, rest days maintain streaks. |
-| `pr.ts` | Best e1RM and best weight-at-reps per exercise, **computed from set history, not stored**. A stored PR is a cache that can disagree with the log. |
-| `acwr.ts` | 7-day acute ÷ 28-day chronic, uncoupled. Thresholds stay config, not constants buried in a formula. |
+| Module         | Contents                                                                                                                                                                                             |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e1rm.ts`      | Epley: `w × (1 + reps/30)`. **Returns null above ~12 reps** rather than a confident wrong number — Epley drifts badly in that range, and a null the UI can hide beats a figure the coach will quote. |
+| `tonnage.ts`   | Session, weekly, and by muscle group via `exercises.primary_muscle` / `secondary_muscles`.                                                                                                           |
+| `adherence.ts` | Completed ÷ planned over a window, with `status = 'rest'` counting as adherent — invariant #4, rest days maintain streaks.                                                                           |
+| `pr.ts`        | Best e1RM and best weight-at-reps per exercise, **computed from set history, not stored**. A stored PR is a cache that can disagree with the log.                                                    |
+| `acwr.ts`      | 7-day acute ÷ 28-day chronic, uncoupled. Thresholds stay config, not constants buried in a formula.                                                                                                  |
 
 **Bodyweight decision, to be documented in `tonnage.ts`:** tonnage counts external
 load only, so a bodyweight pull-up contributes zero. The alternative — imputing
@@ -140,11 +140,11 @@ Reused: `createUserClient` and `Db` from `src/db/client.ts`, generated types fro
 
 ## Verification
 
-| Acceptance criterion | Proof |
-|---|---|
-| Metrics engine has near-total unit coverage and runs in milliseconds | `npm test -- --coverage` on `src/metrics/`, with the suite's own runtime asserted |
-| `npm run seed` produces a demoable database in under a minute from an empty schema | `npm run migrate && time npm run seed` |
-| Every synthetic user's metrics look plausible on manual inspection | Open each of the five seeded users in the running UI |
+| Acceptance criterion                                                               | Proof                                                                             |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Metrics engine has near-total unit coverage and runs in milliseconds               | `npm test -- --coverage` on `src/metrics/`, with the suite's own runtime asserted |
+| `npm run seed` produces a demoable database in under a minute from an empty schema | `npm run migrate && time npm run seed`                                            |
+| Every synthetic user's metrics look plausible on manual inspection                 | Open each of the five seeded users in the running UI                              |
 
 Plus the phase 0 suites stay green: `npm run test:db` for RLS, and the invariants
 test, which will now also cover the `user_equipment` table.
