@@ -16,6 +16,12 @@ Review code for REAL problems and present a cleanup plan. Never invent work — 
 when the user already ordered a review-then-act workflow, e.g. "review each PR then merge", the
 review verdict gates that action — no separate approval round).
 
+> **AI-NOTE — this skill arrived from another repository and was retargeted for Samson.**
+> Every rule below was checked against this codebase on 01/09/2026. If you are tempted to add a
+> rule here, verify the thing it names actually exists first — the original version flagged a
+> design system this project does not have. Samson's conventions live in `CLAUDE.md` and win
+> over anything stated here.
+
 ## Phase 1 — Determine scope
 
 - Named file → that file. Named directory/feature → its files **plus** the parent page/route
@@ -27,49 +33,65 @@ review verdict gates that action — no separate approval round).
 ## Phase 2 — Scan
 
 **Delegate first when the scope is a diff/PR or more than ~5 source files:** dispatch the
-project reviewer subagents in parallel and fold their findings into the plan — the routing in
-the agents in `.claude/agents/` are: `convention-compliance-reviewer` (any `src/`+`scripts/` TS),
+project reviewer subagents in parallel and fold their findings into the plan. The five agents in
+`.claude/agents/` route as: `convention-compliance-reviewer` (any `src/`+`scripts/` TS),
 `performance-reviewer` (data-layer/rendering/backend), `resilience-reviewer` (`src/db`,
-`app/api`, `scripts` — failure-path ownership, async lifecycle),
-`docs-sync-reviewer` (any coupled-doc surface), `security-reviewer` (`app/api`,
-`src/db, src/llm`, `supabase/`), and `bias-semantics-reviewer` (`src/metrics/`,
-`src/llm/config.ts` — threshold/rule coherence). For small scopes, check directly:
+`app/api`, `scripts/` — failure-path ownership, async lifecycle), `security-reviewer`
+(`app/api`, `src/db`, `src/llm`, `supabase/`), and `docs-sync-reviewer` (see Doc coupling —
+this project has no Documentation Map, so give it the three couplings below explicitly or it
+will report their absence as its only finding). For small scopes, check directly:
+
+**Invariant violations — check these first, they outrank style**
+
+See `CLAUDE.md` for the numbered list. Note that #2 and #10 are already enforced
+mechanically — `eslint.config.mjs` restricts OpenRouter literals and
+`tests/unit/invariants.test.ts` greps the tree for both — so spend review attention on the
+ones nothing catches automatically:
+
+- **A model producing a number the user sees** (#1). e1RM, tonnage, XP, streaks, calories
+  are deterministic code with tests. A figure originating in an LLM response is a bug.
+- **`fetch` to OpenRouter outside `src/llm/gateway.ts`** (#2), or a gateway path that can
+  return without writing an `llm_calls` row — including on failure and retry (#3).
+- **XP or rewards scaled by volume** rather than adherence (#4).
+- **A planner candidate list not pre-filtered in SQL** (#5).
+- **The service role key under `src/` or `app/`** (#10). `scripts/` is the sanctioned
+  exception; `tests/unit/invariants.test.ts` asserts the boundary.
+- **`new Date()` arithmetic on stored dates.** Dates are canonical strings; `src/metrics/dates.ts`
+  does string arithmetic on purpose, to avoid DST drift. Reintroducing `Date` math is a finding.
+- **Display-layer unit conversion done at rest** (#8) — kg/cm/seconds are stored canonical.
 
 **Dead code & hygiene**
 - Unused imports/symbols, unreachable code, commented-out blocks left behind
-- `console.log` debug leftovers (the sanctioned log surfaces are the `[data:OUTAGE]` /
-  `[data]` prefixes and script CLI output), TODO/FIXME with no tracked task
+- `console.log` debug leftovers. Script CLI output is sanctioned; `console.log` inside `src/`
+  or `app/` is not.
+- TODO/FIXME with no tracked task
 - Non-functional UI (a button with no handler, dead placeholder code)
+- Comments that restate the code, or that went stale against the code they sit on
+  (`CLAUDE.md` → Comment style). `INVARIANT:` / `WHY:` / `AI-NOTE:` tags are load-bearing —
+  never strip one; update it.
 
-**Design-system duplication** (inventory: `.interface-design/system.md` → Component patterns)
-- Hand-rolled equivalents of existing primitives: a raw styled `<a>`/`<Link>` where
-  `TextLink` fits (external links with `target` are the sanctioned exception — copy the
-  focus-ring classes), re-implemented load-more buttons, duplicated prose helpers
-  (`Em`/`List`/`Li` already have a known-drift chip — don't re-flag, reference it)
-- Hardcoded colors: hex is not lint-blocked here, but `rgba(...)` literals slip
-  through the regex — both belong in `app/globals.css` tokens (the single `:root` block)
-- Depth strategy is borders-only: any new `shadow-*` or `backdrop-blur` is a finding
+**Design system** — tokens live in the single `:root` block in `app/globals.css`
+- Hardcoded colors are a finding: hex **and** `rgba(...)` literals outside `:root` belong in
+  tokens. There is no lint rule catching either, so this needs eyes.
+- **Shadows are sanctioned here.** `--shadow` and `--shadow-lift` are deliberate depth tokens.
+  Using them is correct; a raw `box-shadow` literal that should have been a token is the
+  finding, not the shadow itself.
+- Duplicated markup: the same visual section in 2+ files in scope → propose ONE shared
+  extraction in `src/ui/`, not per-file fixes. That directory is deliberately small
+  (`FieldHint.tsx`, `format.ts`) — adding to it needs a second caller, not a hypothetical one.
 
 **Stack conventions**
-- Tunables belong in `src/llm/config.ts` — a script or component re-declaring a constant
-  locally is a finding (the `voyage-3` backfill bug class)
-- Scripts: `import "server-only"` guard, `process.loadEnvFile(".env.local")`, an `npm run`
-  entry in package.json, and a README mention
-- DB access goes through `src/db/training.ts` — new direct `.from()` calls outside it and
-  the known script exceptions (see `docs/maps/data-map.md`) need a reason
-- External fetches carry `AbortSignal.timeout`; client data fetches render an explicit
-  error/retry state, never a dead end
-
-**Cross-file duplication**
-- The same visual section or logic pattern in 2+ files in scope → propose ONE shared
-  extraction, not per-file fixes
-
-**Doc coupling**
-- If the scope touches schema, queries, pages, pipeline stages, scripts, env vars, AI call
-  sites, thresholds, or components — verify the coupled doc changed in the same diff, per
-  CLAUDE.md → Documentation Map (README, `docs/maps/*.md`, `.interface-design/system.md`,
-  spec supersession notes, `.env.example`, `docs/pre-launch-requirements.md`). A missing
-  update is a finding.
+- Tunables belong in `src/llm/config.ts` — a script or component re-declaring one locally is
+  a finding
+- Zod schemas are the single source of truth. A hand-written TS type that duplicates a schema
+  instead of `z.infer` is a finding.
+- Scripts: `config({ path: '.env.local', quiet: true })` from `dotenv`, an `npm run` entry in
+  `package.json`, and a header comment saying what it is for
+- DB access from the app goes through `src/db/training.ts` and the request-scoped RLS client
+  in `src/db/client.ts`. New direct `.from()` calls outside them need a reason.
+- External fetches carry a timeout; client data fetches render an explicit error/retry state,
+  never a dead end
+- Schema changes are migrations only, never hand-applied
 
 ## Phase 3 — Plan
 
@@ -94,9 +116,29 @@ When the plan HAS items, end with: **"Shall I apply all of these, or pick specif
 - Apply ONLY approved items. No refactoring beyond them, no docstrings/comments/type
   annotations on code you didn't change, no placeholder files, no error handling for
   scenarios that can't happen.
-- Verify with `npm run check` (tsc + vitest) and `npx eslint src scripts`; `npm run build`
-  when routes/pages changed.
-- Committing routed paths trips the SSDD review gate — reviewers must have run against the
-  exact staged diff (see CLAUDE.md → Review gate). Stage by path (`git add -A` is
-  guard-blocked); re-check `git status --short` before any commit that follows agent
-  activity.
+- Verify, and quote the output rather than asserting it passed:
+
+  ```
+  npm run typecheck && npm run lint && npm test
+  ```
+
+  Add `npm run test:db` when RLS, policies, or migrations were touched, and `npm run build`
+  when routes or pages changed.
+- **Coverage is not evidence** (`docs/PLAN.md` → The merge gate). The threshold in
+  `vitest.config.ts` records which lines ran, never whether anything was checked. Do not cite
+  it as verification.
+- Leave nothing running. If a dev server or Docker was started to check something, stop it in
+  the same turn (`CLAUDE.md` → Local environment).
+
+## Doc coupling
+
+This project has no Documentation Map; the coupling is small enough to state directly. If the
+scope touches one of these, the paired doc must change in the same diff:
+
+| Change | Must also update |
+| --- | --- |
+| A migration in `supabase/migrations/` | `src/db/types.ts` regenerated — CI fails on a stale diff |
+| A decision with a rejected alternative | A new ADR in `docs/adr/` |
+| Work completing a phase | The Outcome section of `docs/plans/phase-N.md` |
+
+A missing update is a finding.
