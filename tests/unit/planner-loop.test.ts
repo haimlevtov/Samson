@@ -67,9 +67,9 @@ function block(weeks: number, tonnagePerWeek: number, slug = ROW): TrainingBlock
           exercises: [
             {
               exercise_slug: slug,
-              sets: [
+              set_groups: [
                 {
-                  set_index: 0,
+                  count: 1,
                   weight_kg: tonnagePerWeek / 10,
                   reps: 10,
                   rpe: 8,

@@ -48,18 +48,21 @@ export function blockNumbers(block: TrainingBlock): Set<number> {
       add(session.exercises.length);
 
       for (const exercise of session.exercises) {
-        add(exercise.sets.length);
+        // Both are facts about the block: how many distinct schemes, and how
+        // many sets in total — "three sets" is describing it, not computing.
+        add(exercise.set_groups.length);
+        add(exercise.set_groups.reduce((n, g) => n + g.count, 0));
 
-        for (const set of exercise.sets) {
-          add(set.set_index + 1);
-          add(set.weight_kg);
-          add(set.reps);
-          add(set.rpe);
-          add(set.rest_seconds);
+        for (const group of exercise.set_groups) {
+          add(group.count);
+          add(group.weight_kg);
+          add(group.reps);
+          add(group.rpe);
+          add(group.rest_seconds);
           // Rest is commonly spoken in minutes. Only when it divides cleanly:
           // "two minutes" for 120 s is quoting, "1.75 minutes" would be doing
           // arithmetic out loud.
-          if (set.rest_seconds % 60 === 0) add(set.rest_seconds / 60);
+          if (group.rest_seconds % 60 === 0) add(group.rest_seconds / 60);
         }
       }
     }

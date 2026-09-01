@@ -10,6 +10,40 @@ validated bounds, and speaks in a persona. It never calculates.
 - `docs/plans/` — the agent plan for each phase, as approved.
 - `docs/adr/` — decisions and the reasoning behind them.
 
+## Checking that it works
+
+Everything below except the last command is **free** — no API key, no network,
+no database, no spend.
+
+```bash
+npm install
+npm run verify
+```
+
+`verify` runs typecheck, lint, format, the full test suite, and the golden-set
+evaluation twice: once with a compliant planner and once with `--naive`, a
+planner that breaks every rule. The second run is the interesting one — it must
+reject all thirty cases, and reject them by _arithmetic_, before the critic
+model is ever consulted.
+
+| What                                           | Command                                | Cost              |
+| ---------------------------------------------- | -------------------------------------- | ----------------- |
+| Everything that can be checked without a model | `npm run verify`                       | **free**          |
+| One real plan, end to end through both models  | `npm run demo:llm`                     | ~/usr/bin/bash.05 |
+| The full live golden set                       | `npm run eval:planner -- --live --all` | ~.50              |
+
+`demo:llm` is the cheap proof that real models are involved: one case, one
+planner call, one critic call, a hard /usr/bin/bash.15 abort, and the cost printed at the
+end. It needs `OPENROUTER_API_KEY` in `.env.local`.
+
+**Why the free path is the important one.** The deterministic floor — six rules
+in `src/planner/rules.ts` — is what makes the plans safe, and none of it needs
+a model to demonstrate. `npm run verify` proves the rules are jointly
+satisfiable on thirty real seeded histories, that a non-compliant block is
+rejected before any model judges it, and that the persona layer cannot alter a
+number. What a key buys is evidence about the _models_, which is a smaller
+question than it sounds.
+
 ## Prerequisites
 
 Node 22+ and the [Supabase CLI](https://supabase.com/docs/guides/cli). Docker is

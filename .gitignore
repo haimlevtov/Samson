@@ -16,3 +16,6 @@ supabase/.branches/
 
 # Subagent git worktrees (isolation: worktree)
 .claude/worktrees/
+
+# Throwaway edit scripts
+.tmp-*

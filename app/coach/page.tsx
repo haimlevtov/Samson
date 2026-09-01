@@ -78,11 +78,12 @@ export default async function CoachPage() {
                     </thead>
                     <tbody>
                       {session.exercises.map((exercise) => {
-                        const first = exercise.sets[0];
+                        const first = exercise.set_groups[0];
+                        const totalSets = exercise.set_groups.reduce((n, g) => n + g.count, 0);
                         return (
                           <tr key={exercise.exercise_slug}>
                             <td data-label="Exercise">{exercise.exercise_slug}</td>
-                            <td data-label="Sets">{exercise.sets.length}</td>
+                            <td data-label="Sets">{totalSets}</td>
                             <td data-label="Reps">{first?.reps ?? '—'}</td>
                             <td data-label="Weight">
                               {first?.weight_kg === null || first === undefined

@@ -6,6 +6,7 @@
  *      depends on the LedgerClient interface instead, so the unit suite runs
  *      with no database at all.
  */
+import { TIMEOUT_ASSUMED_COST_USD } from '../llm/config';
 import type { Db } from './client';
 import type { LedgerClient, LlmCallInsert } from '../llm/types';
 
@@ -23,14 +24,22 @@ export function createSupabaseLedger(db: Db): LedgerClient {
     async sumSpendSince(userId: string, since: Date): Promise<number> {
       const { data, error } = await db
         .from('llm_calls')
-        .select('cost_credits')
+        .select('cost_credits, status')
         .eq('user_id', userId)
         .gte('created_at', since.toISOString());
 
       if (error) throw new Error(`llm_calls spend query failed: ${error.message}`);
 
       // INVARIANT: deterministic code computes every number — CLAUDE.md #1.
-      return (data ?? []).reduce((total, row) => total + (row.cost_credits ?? 0), 0);
+      //
+      // WHY timeouts are charged an assumption — ADR 0007: a call that times out
+      // is still billed upstream, and writes cost_credits null because no
+      // response was ever read. The ledger stays truthful and this gate stays
+      // conservative; the estimate lives here and never in a row.
+      return (data ?? []).reduce((total, row) => {
+        if (row.cost_credits !== null) return total + row.cost_credits;
+        return row.status === 'timeout' ? total + TIMEOUT_ASSUMED_COST_USD : total;
+      }, 0);
     },
 
     async getWeeklyBudgetUsd(userId: string): Promise<number | null> {

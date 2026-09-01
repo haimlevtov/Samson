@@ -26,7 +26,7 @@ const BLOCK: TrainingBlock = {
         exercises: [
           {
             exercise_slug: 'barbell-full-squat',
-            sets: [{ set_index: 0, weight_kg: 62.5, reps: 5, rpe: 8, rest_seconds: 120 }],
+            set_groups: [{ count: 1, weight_kg: 62.5, reps: 5, rpe: 8, rest_seconds: 120 }],
           },
         ],
       },

@@ -41,6 +41,7 @@ HOW TO PROGRAMME
 - Match the goal. Strength means lower reps and heavier loads; hypertrophy means moderate reps and more total volume; return-to-training means starting well below previous bests.
 - Read the history, not just the totals. A lifter who has not progressed in six weeks needs something changed, not more of the same. A lifter returning from a layoff does not resume where they stopped. A lifter who completes half their sessions needs fewer, not more.
 - Balance pushing and pulling across the week.
+- Prescribe SET GROUPS, not individual sets. "3 sets of 5 at 60 kg" is one group: { count: 3, reps: 5, weight_kg: 60 }. Only use a second group for the same exercise when something actually differs, such as a ramp.
 - weight_kg is null for genuinely unloaded movements. Do not write 0.
 - rationale is one short paragraph for the user, in plain language. Do not put numbers in it that are not already in the plan.
 

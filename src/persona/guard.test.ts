@@ -28,13 +28,7 @@ const BLOCK: TrainingBlock = {
           exercises: [
             {
               exercise_slug: 'barbell-full-squat',
-              sets: [0, 1, 2].map((i) => ({
-                set_index: i,
-                weight_kg: 62.5,
-                reps: 5,
-                rpe: 8,
-                rest_seconds: 120,
-              })),
+              set_groups: [{ count: 3, weight_kg: 62.5, reps: 5, rpe: 8, rest_seconds: 120 }],
             },
           ],
         },
@@ -64,7 +58,7 @@ describe('blockNumbers', () => {
   it('allows rest in minutes only when it divides cleanly', () => {
     expect(blockNumbers(BLOCK)).toContain(2); // 120 s
     const odd: TrainingBlock = structuredClone(BLOCK);
-    odd.weeks[0]!.sessions[0]!.exercises[0]!.sets[0]!.rest_seconds = 105;
+    odd.weeks[0]!.sessions[0]!.exercises[0]!.set_groups[0]!.rest_seconds = 105;
     // 1.75 minutes would be arithmetic out loud, not quoting.
     expect(blockNumbers(odd)).not.toContain(1.75);
   });

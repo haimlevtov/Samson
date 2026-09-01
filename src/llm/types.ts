@@ -99,6 +99,14 @@ export interface CallOptions<T> {
   temperature?: number;
   maxAttempts?: number;
   timeoutMs?: number;
+  /**
+   * Extended thinking. Defaults to OFF — ADR 0007's Correction.
+   *
+   * Reasoning tokens come out of `maxTokens`, so a model left to think freely
+   * can spend the entire budget and return an empty answer with HTTP 200. If
+   * you enable this, raise `maxTokens` in the same change.
+   */
+  reasoning?: boolean;
 }
 
 export interface LlmResult<T> {

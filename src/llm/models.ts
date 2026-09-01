@@ -17,6 +17,18 @@ import type { LlmStage } from './types';
 /** Order is preference, not escalation: OpenRouter falls through only on error. */
 export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
   normalizer: ['google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash'],
+  /*
+   * MEASURED, 2026-09-01: google/gemini-2.5-flash CANNOT serve this stage and
+   * is kept only as a transport fallback that will fail fast. It rejects the
+   * training-block schema with HTTP 400, "the specified schema produces a
+   * constraint that has too many states for serving". Stripping every numeric
+   * bound and shrinking the array limits did not help — the four-level nesting
+   * itself defeats its constrained decoder.
+   *
+   * AI-NOTE: do not reach for a cheaper planner model without re-testing the
+   *          schema against it first. "Use Flash, it is 10x cheaper" is the
+   *          obvious cost lever and it is closed until the schema flattens.
+   */
   planner: ['anthropic/claude-sonnet-5', 'google/gemini-2.5-flash'],
   // INVARIANT: the critic runs on a different model from the planner — PLAN.md phase 2
   // WHY: a critic sharing the planner's weights shares its blind spots and

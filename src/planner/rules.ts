@@ -84,8 +84,9 @@ export function weekPrescribedTonnage(week: PlannedWeek): number {
   let total = 0;
   for (const session of week.sessions) {
     for (const exercise of session.exercises) {
-      for (const set of exercise.sets) {
-        if (set.weight_kg !== null) total += set.weight_kg * set.reps;
+      for (const group of exercise.set_groups) {
+        // MULTIPLY before summing: a group is `count` identical sets — ADR 0007.
+        if (group.weight_kg !== null) total += group.weight_kg * group.reps * group.count;
       }
     }
   }
@@ -108,8 +109,8 @@ function* eachPrescribedExercise(
   for (const week of orderedWeeks(block)) {
     for (const session of week.sessions) {
       for (const exercise of session.exercises) {
-        const weights = exercise.sets
-          .map((s) => s.weight_kg)
+        const weights = exercise.set_groups
+          .map((g) => g.weight_kg)
           .filter((w): w is number => w !== null);
         yield { week, slug: exercise.exercise_slug, weights };
       }

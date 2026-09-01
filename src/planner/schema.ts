@@ -36,21 +36,32 @@ export const trainingGoalSchema = z.enum([
 export type TrainingGoal = z.infer<typeof trainingGoalSchema>;
 
 /**
- * One prescribed set.
+ * One prescribed group of identical sets — "3×5 at 60 kg" is one of these.
+ *
+ * WHY grouped rather than one object per set — ADR 0007, and it is measured
+ * rather than argued: enumerating every set made a four-week block exceed
+ * 16,000 output tokens without finishing, at $0.185 per failed attempt. A ramp
+ * is still expressible as consecutive groups of `count: 1`.
  *
  * WHY `weight_kg` is nullable rather than absent for bodyweight work: tonnage
  * counts external load only (`src/metrics/tonnage.ts`), so an unloaded movement
  * genuinely has no weight rather than a weight of zero. Zero would be a claim.
+ *
+ * AI-NOTE: there is no `set_index`. Position in the array was already saying
+ *          the same thing, and the indices are generated when a block is
+ *          materialised into `sets` rows — the same job `insertSet()` does
+ *          when logging.
  */
-export const prescribedSetSchema = z.strictObject({
-  set_index: z.int().min(0).max(19),
+export const prescribedSetGroupSchema = z.strictObject({
+  /** How many identical sets this group prescribes. */
+  count: z.int().min(1).max(20),
+  reps: z.int().min(1).max(50),
   // INVARIANT: kilograms are canonical — CLAUDE.md #8. Display converts, not this.
   weight_kg: z.number().min(0).max(500).nullable(),
-  reps: z.int().min(1).max(50),
   rpe: z.number().min(1).max(10).nullable(),
   rest_seconds: z.int().min(0).max(900),
 });
-export type PrescribedSet = z.infer<typeof prescribedSetSchema>;
+export type PrescribedSetGroup = z.infer<typeof prescribedSetGroupSchema>;
 
 /**
  * AI-NOTE: exercises are referenced by `slug`, not by uuid. The model copies
@@ -59,21 +70,16 @@ export type PrescribedSet = z.infer<typeof prescribedSetSchema>;
  *          — which then looks like a hallucinated exercise rather than a typo.
  *          `equipment_available` in rules.ts resolves the slug against the
  *          candidate list and rejects anything that does not match.
- *
- * AI-NOTE — a known cost of this shape, recorded rather than churned. Every set
- *          is enumerated, so a four-week block is a few thousand output tokens
- *          and output is the expensive half. A `{ count, reps, weight_kg }`
- *          grouping would express "3×5 @ 60 kg" in one object and cut that by
- *          roughly three, at the price of making a ramping set harder to write
- *          and every tonnage calculation in rules.ts multiply before it sums.
- *          Deliberately not changed mid-phase: the rules tests were already
- *          being authored against this shape by a separate author, and
- *          invalidating that work costs more than the tokens do. Revisit before
- *          phase 3, with the measured cost in hand.
  */
 export const prescribedExerciseSchema = z.strictObject({
   exercise_slug: z.string().min(1).max(120),
-  sets: z.array(prescribedSetSchema).min(1).max(12),
+  /**
+   * Named `set_groups` and not `sets` on purpose — ADR 0007. Each entry is
+   * `count` sets, so every tonnage calculation multiplies before it sums, and
+   * a name that hid that would be exactly the stale naming CLAUDE.md's comment
+   * rules exist to prevent.
+   */
+  set_groups: z.array(prescribedSetGroupSchema).min(1).max(4),
 });
 export type PrescribedExercise = z.infer<typeof prescribedExerciseSchema>;
 
@@ -81,7 +87,7 @@ export const plannedSessionSchema = z.strictObject({
   /** Position within the training week, not a weekday. Scheduling is the app's job. */
   day_index: z.int().min(0).max(6),
   focus: z.string().min(1).max(60),
-  exercises: z.array(prescribedExerciseSchema).min(1).max(10),
+  exercises: z.array(prescribedExerciseSchema).min(1).max(8),
 });
 export type PlannedSession = z.infer<typeof plannedSessionSchema>;
 
@@ -93,12 +99,19 @@ export const plannedWeekSchema = z.strictObject({
    *            check for one without second-guessing what the planner intended.
    */
   is_deload: z.boolean(),
-  sessions: z.array(plannedSessionSchema).max(7),
+  sessions: z.array(plannedSessionSchema).max(6),
 });
 export type PlannedWeek = z.infer<typeof plannedWeekSchema>;
 
+/*
+ * AI-NOTE: the array bounds below are a COST CONTROL, not just validation.
+ *          Nested, they multiply: 12x7x10x6 was 5,040 possible leaf positions,
+ *          which both bloats a provider's constrained decoder and permits a
+ *          response far larger than anything useful. 8x6x8x4 is 1,536 and still
+ *          more than any real programme needs.
+ */
 export const trainingBlockSchema = z.strictObject({
-  weeks: z.array(plannedWeekSchema).min(1).max(12),
+  weeks: z.array(plannedWeekSchema).min(1).max(8),
   /** One paragraph, for the phase 3 persona layer to deliver. Never a number source. */
   rationale: z.string().min(1).max(800),
 });
