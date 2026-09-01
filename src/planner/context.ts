@@ -54,8 +54,14 @@ export interface ContextInput {
  *
  * AI-NOTE: it follows that this limit can be tuned freely for cost, but
  *          `RuleContext.candidates` must never be given the trimmed list.
+ *
+ * MEASURED, 2026-09-01: at 120 the planner prompt was ~13,000 tokens, of which
+ * ~12,000 was this list, and the prompt was 64% of the cost of a successful
+ * call ($0.039 of $0.061). At 40 it is ~4,500 tokens. A four-week block picks
+ * perhaps a dozen distinct movements; 120 was never buying selection quality,
+ * only tokens.
  */
-export const DEFAULT_CANDIDATE_LIMIT = 120;
+export const DEFAULT_CANDIDATE_LIMIT = 40;
 
 const ADHERENCE_WINDOW_DAYS = 28;
 

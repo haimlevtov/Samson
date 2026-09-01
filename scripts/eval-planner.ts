@@ -45,6 +45,37 @@ const LIVE = process.argv.includes('--live');
  * retries and escalates. This is how that half gets shown working.
  */
 const NAIVE = process.argv.includes('--naive');
+
+function numericFlag(name: string, fallback: number): number {
+  const i = process.argv.indexOf(name);
+  if (i === -1) return fallback;
+  const value = Number(process.argv[i + 1]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * How many cases a live run touches.
+ *
+ * WHY live defaults to five and not thirty — MEASURED, 2026-09-01: a full live
+ * run cost $2.54 and produced one accepted plan. Five cases is one per
+ * archetype, enough to see whether anything works at all, for about a sixth of
+ * the money. `--all` is the deliberate opt-in.
+ *
+ * Offline runs are free, so they always do the whole set.
+ */
+const CASE_LIMIT = process.argv.includes('--all')
+  ? Number.POSITIVE_INFINITY
+  : numericFlag('--limit', LIVE ? 5 : Number.POSITIVE_INFINITY);
+
+/**
+ * A hard ceiling, checked between cases, that aborts the run.
+ *
+ * WHY it exists: the per-user budget gate in the gateway is per user, so a run
+ * spanning five users can spend five budgets before any of them trips. This is
+ * the ceiling on the RUN. It is not a substitute for that gate; it is the thing
+ * that was missing when a single afternoon spent $4.30.
+ */
+const MAX_RUN_SPEND_USD = numericFlag('--max-spend', 0.75);
 const SEED_PASSWORD = 'samson-demo-fixture';
 
 // ---------------------------------------------------------------------------
@@ -194,7 +225,13 @@ async function main(): Promise<void> {
       }
       throw cause;
     }
-    console.log('LIVE — real models, real spend. Ctrl-C now if that was not intended.\n');
+    const planned = Math.min(cases.length, CASE_LIMIT);
+    console.log('LIVE — real models, real spend.');
+    console.log(
+      `  ${planned} of ${cases.length} case(s), aborting past ${MAX_RUN_SPEND_USD.toFixed(2)}.`
+    );
+    console.log('  --all runs every case, --limit N picks a count, --max-spend N raises the cap.');
+    console.log('  Ctrl-C now if that was not intended.\n');
   } else {
     console.log('OFFLINE — stub planner, no key, no spend.');
     console.log('This proves the machinery, not the model. Use --live to measure a model.\n');
@@ -203,7 +240,19 @@ async function main(): Promise<void> {
   const rows: Row[] = [];
   const sessions = new Map<string, LiveSession>();
 
+  let spent = 0;
+
   for (const golden of cases) {
+    if (rows.length >= CASE_LIMIT) break;
+
+    if (LIVE && spent >= MAX_RUN_SPEND_USD) {
+      console.log(
+        `\n\nStopped at ${spent.toFixed(4)}, over the ${MAX_RUN_SPEND_USD.toFixed(2)} run cap. ` +
+          `${rows.length} of ${cases.length} case(s) ran.`
+      );
+      break;
+    }
+
     let context;
     let deps;
 
@@ -247,6 +296,7 @@ async function main(): Promise<void> {
       : `offline-${golden.archetype.key}`;
 
     const result = await generatePlan(userId, context.plannerInput, context.ruleContext, deps);
+    spent += result.costCredits;
     rows.push(toRow(golden, result));
     process.stdout.write('.');
   }

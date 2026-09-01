@@ -79,7 +79,7 @@ export const prescribedExerciseSchema = z.strictObject({
    * a name that hid that would be exactly the stale naming CLAUDE.md's comment
    * rules exist to prevent.
    */
-  set_groups: z.array(prescribedSetGroupSchema).min(1).max(6),
+  set_groups: z.array(prescribedSetGroupSchema).min(1).max(4),
 });
 export type PrescribedExercise = z.infer<typeof prescribedExerciseSchema>;
 
@@ -87,7 +87,7 @@ export const plannedSessionSchema = z.strictObject({
   /** Position within the training week, not a weekday. Scheduling is the app's job. */
   day_index: z.int().min(0).max(6),
   focus: z.string().min(1).max(60),
-  exercises: z.array(prescribedExerciseSchema).min(1).max(10),
+  exercises: z.array(prescribedExerciseSchema).min(1).max(8),
 });
 export type PlannedSession = z.infer<typeof plannedSessionSchema>;
 
@@ -99,12 +99,19 @@ export const plannedWeekSchema = z.strictObject({
    *            check for one without second-guessing what the planner intended.
    */
   is_deload: z.boolean(),
-  sessions: z.array(plannedSessionSchema).max(7),
+  sessions: z.array(plannedSessionSchema).max(6),
 });
 export type PlannedWeek = z.infer<typeof plannedWeekSchema>;
 
+/*
+ * AI-NOTE: the array bounds below are a COST CONTROL, not just validation.
+ *          Nested, they multiply: 12x7x10x6 was 5,040 possible leaf positions,
+ *          which both bloats a provider's constrained decoder and permits a
+ *          response far larger than anything useful. 8x6x8x4 is 1,536 and still
+ *          more than any real programme needs.
+ */
 export const trainingBlockSchema = z.strictObject({
-  weeks: z.array(plannedWeekSchema).min(1).max(12),
+  weeks: z.array(plannedWeekSchema).min(1).max(8),
   /** One paragraph, for the phase 3 persona layer to deliver. Never a number source. */
   rationale: z.string().min(1).max(800),
 });

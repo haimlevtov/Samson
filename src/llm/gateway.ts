@@ -201,6 +201,7 @@ export async function callLLM<T>(
           retryable = true;
         } else {
           const content = envelope.choices?.[0]?.message?.content ?? '';
+          const truncated = envelope.choices?.[0]?.finish_reason === 'length';
 
           /*
            * Layer 4 runs BEFORE schema validation — ADR 0005 §4. A perfectly
@@ -229,6 +230,20 @@ export async function callLLM<T>(
             if (validation.ok) {
               row.status = 'ok';
               parsed = validation.value;
+            } else if (truncated) {
+              /*
+               * MEASURED, 2026-09-01: 13 planner calls hit max_tokens and
+               * returned unparseable JSON, at $0.088 each — 45% of that run's
+               * entire spend on nothing. Every retry truncated in the same
+               * place, because nothing about the request had changed.
+               *
+               * So a length-truncated response is NOT retryable. The answer is
+               * a smaller request or a larger ceiling, and both are decisions
+               * for a human rather than another identical attempt.
+               */
+              row.status = 'schema_invalid';
+              row.error = `response hit max_tokens (${options.maxTokens}) and was truncated; not retried — see the AI-NOTE in gateway.ts`;
+              retryable = false;
             } else {
               row.status = 'schema_invalid';
               row.error = validation.error.slice(0, 1000);

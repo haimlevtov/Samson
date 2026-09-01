@@ -37,6 +37,8 @@ export const openRouterResponseSchema = z.object({
     .array(
       z.object({
         message: z.object({ content: z.string().nullish() }).loose().optional(),
+        // Read by the gateway: "length" means the answer was cut off, and
+        // retrying an identical request truncates in the identical place.
         finish_reason: z.string().nullish(),
       })
     )
@@ -95,8 +97,24 @@ export function buildRequestBody(input: RequestBodyInput): Record<string, unknow
     // `model` is not required when `models` is present.
     models: [...input.models],
     messages: [
-      // Static first, dynamic last, so the cache prefix holds — PLAN.md phase 2.
-      { role: 'system', content: input.system },
+      /*
+       * Static first, dynamic last, so the cache prefix holds — PLAN.md phase 2.
+       *
+       * MEASURED, 2026-09-01: the cache hit rate over 484,340 prompt tokens was
+       * 0.0%. The static-first layout had been in place since phase 0 and was
+       * never actually caching anything, because Anthropic models bill caching
+       * from explicit `cache_control` breakpoints rather than automatically.
+       * The layout was right and the request was incomplete.
+       *
+       * AI-NOTE: the breakpoint goes on the LAST message that should be cached.
+       *          Everything before it is cached together, so putting it on the
+       *          system prompt caches exactly the part that never varies.
+       */
+      {
+        role: 'system',
+        content: input.system,
+        cache_control: { type: 'ephemeral' },
+      },
       ...input.messages,
     ],
     // INVARIANT: max_tokens is always set — CLAUDE.md #2
@@ -132,10 +150,50 @@ export function buildRequestBody(input: RequestBodyInput): Record<string, unknow
 }
 
 /**
- * Zod emits a $schema key that strict structured-output validators reject.
- * AI-NOTE: strip it here rather than at call sites — every stage needs it gone.
+ * Prepares a Zod-generated JSON schema for the wire.
+ *
+ * Two things are removed:
+ *
+ * 1. The `$schema` key, which strict structured-output validators reject.
+ * 2. Every scalar `minimum` / `maximum` / `exclusiveMinimum` /
+ *    `exclusiveMaximum`.
+ *
+ * WHY the bounds go — MEASURED, 2026-09-01: `google/gemini-2.5-flash` refuses
+ * the planner schema outright with "the specified schema produces a constraint
+ * that has too many states for serving … integers or numbers with
+ * minimum/maximum bounds". Every numeric bound multiplies the state space its
+ * constrained decoder has to build, and ours are nested four deep.
+ *
+ * Nothing is weakened by removing them. The SAME Zod schema validates the
+ * response when it comes back, so a value outside its range is still rejected —
+ * it is rejected locally instead of upstream. What changes is that a cheaper
+ * model becomes able to answer at all, and Sonnet builds a smaller decoder.
+ *
+ * AI-NOTE: array `minItems`/`maxItems` are deliberately KEPT. They bound the
+ *          size of the response rather than the value of a scalar, which is a
+ *          cost control, and they are what stops a model returning fifty weeks.
  */
 export function toStrictJsonSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const { $schema: _ignored, ...rest } = schema;
-  return rest;
+  return stripScalarBounds(rest) as Record<string, unknown>;
+}
+
+const SCALAR_BOUNDS = new Set([
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+]);
+
+function stripScalarBounds(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripScalarBounds);
+  if (node === null || typeof node !== 'object') return node;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (SCALAR_BOUNDS.has(key)) continue;
+    out[key] = stripScalarBounds(value);
+  }
+  return out;
 }
