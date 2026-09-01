@@ -78,6 +78,25 @@ export function candidatesFor(archetype: Archetype): ContextCandidate[] {
     }));
 }
 
+/**
+ * The vocabularies the whole catalogue uses, not just one user's candidates.
+ *
+ * WHY the distinction matters: all three `carry` exercises need `other`
+ * equipment, which no archetype owns, so `carry` is catalogue-valid yet absent
+ * from every candidate list. A vocabulary check against candidates would call
+ * that a defect; a check against the catalogue correctly does not.
+ */
+export function catalogueVocabulary(): { muscles: Set<string>; patterns: Set<string> } {
+  return {
+    muscles: new Set(catalogue().map((e) => e.primaryMuscle)),
+    patterns: new Set(
+      catalogue()
+        .map((e) => e.movementPattern)
+        .filter((p): p is string => p !== null)
+    ),
+  };
+}
+
 export interface GoldenCase {
   id: string;
   archetype: Archetype;

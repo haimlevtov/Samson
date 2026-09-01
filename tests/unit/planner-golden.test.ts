@@ -34,7 +34,7 @@ import {
 } from '../../src/planner/schema';
 import type { CallOptions, LlmResult } from '../../src/llm/types';
 import type { PlanRunInsert, PlanRunStore } from '../../src/planner/types';
-import { goldenCases, GOLDEN_AS_OF, type GoldenCase } from '../planner/golden';
+import { catalogueVocabulary, goldenCases, GOLDEN_AS_OF, type GoldenCase } from '../planner/golden';
 
 const CASES = goldenCases();
 
@@ -241,6 +241,38 @@ describe('golden set', () => {
       expect(result.iterations).toBe(1);
       expect(call).toBe(2);
       expect(written).toHaveLength(1);
+    }
+  );
+});
+
+/**
+ * WHY this suite exists: raised by the independent test author for
+ * src/planner/rules.ts, who noticed that `JOINT_LOADING` keys are hyphenated
+ * (`lower-back`) while the muscle names inside them are spaced (`lower back`),
+ * and that nothing checked either against the real catalogue.
+ *
+ * Both happen to be right today. The failure mode is that a typo here matches
+ * nothing and the rule silently stops protecting that joint — no error, no
+ * finding, just a plan that loads an injured back. The rules' own tests cannot
+ * catch it, because they supply their own candidates.
+ */
+describe('injury vocabulary against the real catalogue', () => {
+  const CANDIDATES = CASES.flatMap((c) => c.candidates);
+
+  it.each(Object.keys(JOINT_LOADING))('%s matches at least one real exercise', (joint) => {
+    const matched = CANDIDATES.filter((c) => loadsAnyInjured(c, [joint]));
+    expect(matched.length).toBeGreaterThan(0);
+  });
+
+  it.each(Object.entries(JOINT_LOADING))(
+    '%s names only muscles and patterns the catalogue actually uses',
+    (_joint, loading) => {
+      // Against the whole catalogue, not one user's candidates — see
+      // catalogueVocabulary for why those differ.
+      const { muscles, patterns } = catalogueVocabulary();
+
+      for (const muscle of loading.muscles) expect(muscles).toContain(muscle);
+      for (const pattern of loading.patterns) expect(patterns).toContain(pattern);
     }
   );
 });

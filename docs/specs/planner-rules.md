@@ -47,8 +47,17 @@ export function checkRules(block: TrainingBlock, context: RuleContext): RuleFind
 order listed above. It never short-circuits on the first failure: one round trip
 that reports three problems is worth three round trips that report one each.
 
-An empty array means the block passed. Each individual rule is also exported
-under its own name with the same `(block, context) => RuleFinding[]` signature.
+An empty array means the block passed. Each rule is also exported individually,
+with the same `(block, context) => RuleFinding[]` signature except where noted:
+
+| `RuleCode`               | Exported as                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `weekly_volume_increase` | `weeklyVolumeIncrease`                                                       |
+| `acwr_band`              | `acwrBandRule` — the plain name is taken by `acwrBand` in the metrics engine |
+| `deload_cadence`         | `deloadCadence(block)` — needs no context                                    |
+| `equipment_available`    | `equipmentAvailable`                                                         |
+| `load_ceiling`           | `loadCeiling`                                                                |
+| `injured_joint`          | `injuredJoint`                                                               |
 
 ### `RuleContext`
 
@@ -242,3 +251,36 @@ critic's, and `src/planner/schema.ts` holds its closed vocabulary of reasons.
 
 **AI-NOTE:** if a proposed rule can be written as a comparison against a number,
 it belongs here, where no model gets a vote. That boundary is ADR 0004.
+
+---
+
+## Known gaps in this specification
+
+Found by the independent test author working from this document, and recorded
+rather than quietly closed — an ambiguity nobody writes down gets resolved
+differently by each reader, and silently.
+
+**Week identity is stated once, for one rule.** "Weeks are identified by their
+`week_number` field, not by array position" appears under `deload_cadence`, but
+`weekly_volume_increase` ("the most recent _preceding_ non-deload week"),
+`acwr_band` ("week 1") and `equipment_available` ("the first week the slug
+appears in") all depend on it too. It applies to **every** rule. The
+implementation sorts by `week_number` throughout.
+
+**One exercise, two injured joints, one week** produces **one** finding, naming
+the first matching joint — consistent with "one finding per distinct (exercise,
+week) pair" and with `detail` being singular.
+
+**Block length for `deload_cadence` is cardinality** — the number of entries in
+`weeks` — while "among weeks 1 to 5" reads on `week_number`.
+
+**No week numbered 1** leaves `acwr_band` with nothing to measure, and it emits
+nothing.
+
+Still genuinely open, and untested:
+
+- `detail` content. Rules 5 and 6 fix what it must name, but the tests assert
+  only that it is non-empty, so those clauses have nothing behind them.
+- A `weight_kg` of exactly `0` — the tonnage definition covers `null`, not zero.
+- A `maxLoadKg` of `0`, duplicate slugs in `candidates`, a repeated
+  `week_number`.

@@ -102,7 +102,7 @@ plan regardless of what the critic says.
 | `weekly_volume_increase` | Week-over-week tonnage increase within cap                                     |
 | `acwr_band`              | Projected ratio not in `danger` — reuses `acwrBand` from `src/metrics/acwr.ts` |
 | `deload_cadence`         | A deload week present by week 5                                                |
-| `equipment_available`    | Every `exercise_id` appears in the candidate list                              |
+| `equipment_available`    | Every `exercise_slug` appears in the candidate list                            |
 | `load_ceiling`           | No prescribed weight above `user_equipment.max_load_kg`                        |
 | `injured_joint`          | No exercise loading a flagged joint                                            |
 
