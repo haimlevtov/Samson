@@ -1,7 +1,59 @@
 # ADR 0007 — Prescribe set groups, not individual sets
 
-**Status:** accepted, phase 2 (revision)
+**Status:** accepted, phase 2 (revision) — **amended, see "Correction" below**
 **Date:** 2026-09-01
+
+## Correction — the diagnosis below was wrong about the cause
+
+Everything measured in this ADR happened. The conclusion drawn from it did not
+follow, and the record is amended rather than rewritten so the mistake stays
+visible.
+
+**The block schema was not why the planner could not finish.** After grouping
+sets, the call still hit its ceiling. Reading the full usage breakdown rather
+than the summary showed why:
+
+```
+completion_tokens          6000
+completion_tokens_details.reasoning_tokens  6000     ← the entire budget
+content chars              0
+```
+
+`anthropic/claude-sonnet-5` is a reasoning model and OpenRouter routes it with
+extended thinking enabled by default. It was spending every token of
+`max_tokens` on reasoning and emitting no answer at all. The 16,000 tokens in
+the original measurement were 16,000 tokens of thinking, not an oversized block.
+
+With `reasoning: { enabled: false }`, the same request, same schema:
+
+```
+HTTP 200 in 28.1s      (was 158s, then a timeout)
+finish_reason  stop
+completion     3834 tokens, reasoning 0
+schema valid   true
+cost           $0.064
+```
+
+**What I got wrong:** I read `finish_reason: "length"` with a large
+`completion_tokens` and concluded the output was too big. Both facts were true
+and the inference was not. The usage object had `reasoning_tokens` in it the
+whole time; I did not look.
+
+**What survives:** the schema change is kept, on its own merits rather than the
+ones claimed below. Grouped sets are smaller, cheaper and a better description
+of how a programme is actually written, and 3,834 completion tokens is
+comfortably inside a 6,000 ceiling where the old shape would have been marginal.
+But it was not the fix, and this ADR must not be cited as though it were.
+
+**The real fix** is `reasoning: { enabled: false }` in `buildRequestBody`,
+applied to every stage by default. The failure mode is silent and total — a
+model that thinks until it runs out of budget returns HTTP 200 with an empty
+answer — so the default is off and enabling it is a per-call decision.
+
+The second finding below, about timed-out calls costing money the ledger never
+records, is unaffected and stands.
+
+---
 
 ## Context
 

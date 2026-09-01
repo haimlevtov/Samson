@@ -165,6 +165,7 @@ export async function callLLM<T>(
             schemaName: options.schemaName,
             jsonSchema,
             maxTokens: options.maxTokens,
+            ...(options.reasoning === undefined ? {} : { reasoning: options.reasoning }),
             ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
           })
         ),

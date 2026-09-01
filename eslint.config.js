@@ -12,6 +12,9 @@ export default tseslint.config(
       // Vendored skill tooling and subagent worktrees. Neither is project
       // source, and both carry their own tsconfig, which breaks root discovery.
       '.claude/**',
+      // Throwaway edit scripts. They live in the repo root only so they can
+      // resolve project imports, and they are deleted in the same turn.
+      '.tmp-*',
     ],
   },
   js.configs.recommended,

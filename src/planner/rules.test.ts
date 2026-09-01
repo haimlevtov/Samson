@@ -24,7 +24,12 @@ import { ACWR_HIGH_RISK } from '../metrics/acwr';
 import { DELOAD_REQUIRED_BY_WEEK, MAX_WEEKLY_TONNAGE_INCREASE, checkRules } from './rules';
 import { trainingBlockSchema } from './schema';
 import type { RuleCandidate, RuleCode, RuleContext, RuleFinding } from './rules';
-import type { PlannedSession, PrescribedExercise, PrescribedSet, TrainingBlock } from './schema';
+import type {
+  PlannedSession,
+  PrescribedExercise,
+  PrescribedSetGroup,
+  TrainingBlock,
+} from './schema';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -129,12 +134,20 @@ function candidate(over: Partial<RuleCandidate> & Pick<RuleCandidate, 'slug'>): 
   };
 }
 
-function set(weightKg: number | null, reps = 1): PrescribedSet {
-  return { set_index: 0, weight_kg: weightKg, reps, rpe: null, rest_seconds: 120 };
+/*
+ * One group of one set, so every call site below still reads as "a set".
+ *
+ * AI-NOTE: the schema moved from individual sets to set GROUPS in ADR 0007.
+ *          Only these three helpers changed; not one assertion in this file
+ *          did, which is the evidence that the change was a shape change and
+ *          not a behaviour change.
+ */
+function set(weightKg: number | null, reps = 1): PrescribedSetGroup {
+  return { count: 1, weight_kg: weightKg, reps, rpe: null, rest_seconds: 120 };
 }
 
-function exercise(slug: string, sets: PrescribedSet[]): PrescribedExercise {
-  return { exercise_slug: slug, sets: sets.map((s, i) => ({ ...s, set_index: i })) };
+function exercise(slug: string, sets: PrescribedSetGroup[]): PrescribedExercise {
+  return { exercise_slug: slug, set_groups: sets };
 }
 
 /**
@@ -146,9 +159,9 @@ function exercise(slug: string, sets: PrescribedSet[]): PrescribedExercise {
  * exactly rather than a float a whisker either side of it. Every term is exact
  * and the remainder is a representable difference by construction.
  */
-function fillerSets(tonnageKg: number): PrescribedSet[] {
+function fillerSets(tonnageKg: number): PrescribedSetGroup[] {
   if (tonnageKg === 0) return [set(0, 1)];
-  const sets: PrescribedSet[] = [];
+  const sets: PrescribedSetGroup[] = [];
   let remaining = tonnageKg;
   while (remaining > 500) {
     const reps = Math.min(10, Math.floor(remaining / 500));

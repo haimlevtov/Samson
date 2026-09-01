@@ -85,6 +85,8 @@ export interface RequestBodyInput {
   jsonSchema: Record<string, unknown>;
   maxTokens: number;
   temperature?: number;
+  /** Extended thinking. Off unless a stage asks — see buildRequestBody. */
+  reasoning?: boolean;
 }
 
 export function buildRequestBody(input: RequestBodyInput): Record<string, unknown> {
@@ -104,6 +106,21 @@ export function buildRequestBody(input: RequestBodyInput): Record<string, unknow
       type: 'json_schema',
       json_schema: { name: input.schemaName, strict: true, schema: input.jsonSchema },
     },
+    /*
+     * INVARIANT: extended thinking is OFF unless a stage explicitly asks.
+     *
+     * WHY, and it cost real money to learn — ADR 0007's Correction: reasoning
+     * tokens are drawn from the SAME max_tokens budget as the answer. A
+     * reasoning model given a hard problem will think until the budget is gone
+     * and then return HTTP 200, finish_reason "length", and an EMPTY answer.
+     * Every planner call did exactly that: 6000 completion tokens, 6000 of them
+     * reasoning, zero content. Nothing about that response looks like a
+     * misconfiguration — it looks like the model failing.
+     *
+     * AI-NOTE: if a stage ever turns this on, raise its max_tokens at the same
+     *          time. Reasoning does not get its own budget.
+     */
+    reasoning: { enabled: input.reasoning ?? false },
     provider: {
       // WHY: without this, a request can route to an endpoint that ignores
       //      response_format and returns prose, which then fails Zod validation

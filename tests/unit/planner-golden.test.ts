@@ -95,8 +95,8 @@ describe('golden set', () => {
       const tonnage = block.weeks
         .flatMap((w) => w.sessions)
         .flatMap((s) => s.exercises)
-        .flatMap((e) => e.sets)
-        .reduce((sum, set) => sum + (set.weight_kg ?? 0) * set.reps, 0);
+        .flatMap((e) => e.set_groups)
+        .reduce((sum, g) => sum + (g.weight_kg ?? 0) * g.reps * g.count, 0);
       expect(tonnage).toBeGreaterThan(0);
       // The assertion that matters: if this ever fails, some user can never be
       // given a plan at all, and no amount of prompt work would fix it.

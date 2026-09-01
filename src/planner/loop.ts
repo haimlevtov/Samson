@@ -12,7 +12,12 @@
  * no network and no database.
  */
 import { createHash } from 'node:crypto';
-import { CRITIC_MAX_TOKENS, MAX_PLAN_ITERATIONS, PLANNER_MAX_TOKENS } from '../llm/config';
+import {
+  CRITIC_MAX_TOKENS,
+  MAX_PLAN_ITERATIONS,
+  PLANNER_MAX_TOKENS,
+  PLANNER_TIMEOUT_MS,
+} from '../llm/config';
 import { ESCALATION_MODELS } from '../llm/models';
 import { SafetyBlockedError } from '../llm/safety';
 import { BudgetExceededError, LlmCallFailedError } from '../llm/types';
@@ -124,6 +129,7 @@ export async function generatePlan(
         system: PLANNER_SYSTEM,
         messages: [{ role: 'user', content: plannerUserMessage(attemptInput) }],
         maxTokens: PLANNER_MAX_TOKENS,
+        timeoutMs: PLANNER_TIMEOUT_MS,
         ...(escalating ? { models: ESCALATION_MODELS } : {}),
       });
       costCredits += planned.costCredits;

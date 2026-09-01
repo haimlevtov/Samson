@@ -77,13 +77,16 @@ export function compliantBlock(
         exercises: [
           {
             exercise_slug: candidate.slug,
-            sets: Array.from({ length: Math.min(perSession, 12) }, (_, i) => ({
-              set_index: i,
-              weight_kg: STUB_WEIGHT_KG,
-              reps: STUB_REPS,
-              rpe: 7,
-              rest_seconds: 120,
-            })),
+            // One group of N identical sets — the shape ADR 0007 moved to.
+            set_groups: [
+              {
+                count: Math.min(perSession, 20),
+                weight_kg: STUB_WEIGHT_KG,
+                reps: STUB_REPS,
+                rpe: 7,
+                rest_seconds: 120,
+              },
+            ],
           },
         ],
       });
@@ -119,7 +122,7 @@ export function naiveBlock(
         ...session,
         exercises: session.exercises.map((exercise) => ({
           exercise_slug: 'an-exercise-nobody-owns',
-          sets: exercise.sets.map((set) => ({ ...set, weight_kg: 400 })),
+          set_groups: exercise.set_groups.map((group) => ({ ...group, weight_kg: 400 })),
         })),
       })),
     })),
