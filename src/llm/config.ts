@@ -30,6 +30,15 @@ export const PLANNER_MAX_TOKENS = 16_000;
 export const CRITIC_MAX_TOKENS = 1_500;
 
 /**
+ * The persona returns prose only — an opening, a note per week, a closing —
+ * so it is small next to a block. Generous enough for a twelve-week plan.
+ */
+export const PERSONA_MAX_TOKENS = 2_000;
+
+/** Free text into one exercise and its sets. Small by construction. */
+export const NORMALIZER_MAX_TOKENS = 800;
+
+/**
  * Planner→rules→critic passes before a run is abandoned.
  * WHY a hard cap rather than "until it passes": an unbounded revision loop is
  * the failure mode the budget gate exists to catch, and catching it there means
