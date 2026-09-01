@@ -84,6 +84,8 @@ Development targets the **hosted** Supabase project. Docker's WSL2 VM costs
 
 - **Stop everything you start, in the turn you start it.** Dev servers,
   containers, background jobs. Never end a turn with a process still alive.
+- The `brainstorming` skill starts a background server with a **four-hour idle
+  timeout**. If it is used, run its `stop-server.sh` in the same turn.
 - If Docker was started at all, `supabase stop && wsl --shutdown` before
   finishing. `supabase stop` alone reclaims almost nothing.
 - Prefer the hosted project over a local stack. Only start Docker when a task
