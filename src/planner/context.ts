@@ -84,10 +84,43 @@ export function chronicWeeklyTonnage(sets: readonly SetRecord[], asOf: LocalDate
   return total / weeks;
 }
 
-/** The most recent week that has any work in it. Zero when there is none. */
-export function baselineWeeklyTonnage(sets: readonly SetRecord[]): number {
-  const byWeek = [...tonnageByWeek(sets).values()];
-  return byWeek[byWeek.length - 1] ?? 0;
+/** How many complete weeks the baseline averages over. */
+export const BASELINE_WEEKS = 4;
+
+/**
+ * What a normal training week currently weighs, in kg.
+ *
+ * WHY it excludes the week `asOf` falls inside — this was a real bug, found by
+ * comparing the caps against the seeded histories: the previous version took
+ * the most recent week whatever it was, and the most recent week is almost
+ * always PARTIAL. For the plateaued archetype the last four weeks read
+ * 9910, 9673, 9560, 3005 — the 3005 is two days, not a week. Every plan was
+ * then measured against a third of a training week, so a sensible week 1
+ * breached the 10% cap by roughly 200% and the loop rejected all thirty golden
+ * cases. The rule was right; it was being handed the wrong number.
+ *
+ * WHY a mean of four rather than the single last complete week: one light or
+ * missed week should not shrink the ceiling for the next block. The
+ * inconsistent archetype misses about half their sessions by design, and
+ * "10% more than the one week you happened to train least" is not a progression
+ * rule, it is a punishment. Four weeks also matches the chronic window ACWR
+ * already uses, so the two guards are measured over the same period.
+ *
+ * AI-NOTE: this returns 0 when there is no complete week, and `rules.ts` treats
+ *          a zero baseline as "no meaningful ratio" and emits nothing. A new
+ *          user is not capped at zero.
+ */
+export function baselineWeeklyTonnage(sets: readonly SetRecord[], asOf: LocalDate): number {
+  const currentWeek = startOfWeek(asOf);
+  const complete = [...tonnageByWeek(sets).entries()]
+    // The week containing asOf is still being lived and is short by definition.
+    .filter(([week]) => week < currentWeek)
+    .map(([, tonnage]) => tonnage);
+
+  if (complete.length === 0) return 0;
+
+  const recent = complete.slice(-BASELINE_WEEKS);
+  return recent.reduce((sum, tonnage) => sum + tonnage, 0) / recent.length;
 }
 
 function toRuleCandidate(candidate: ContextCandidate): RuleCandidate {
@@ -176,7 +209,7 @@ export function buildPlannerContext(input: ContextInput): {
       // on DEFAULT_CANDIDATE_LIMIT.
       candidates: input.candidates.map(toRuleCandidate),
       injuredJoints: input.injuredJoints,
-      baselineWeeklyTonnageKg: baselineWeeklyTonnage(input.sets),
+      baselineWeeklyTonnageKg: baselineWeeklyTonnage(input.sets, input.asOf),
       chronicWeeklyTonnageKg: chronicWeeklyTonnage(input.sets, input.asOf),
     },
   };

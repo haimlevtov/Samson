@@ -24,6 +24,8 @@ import { describe, expect, it } from 'vitest';
 import { buildPlannerContext } from '../../src/planner/context';
 import { generatePlan } from '../../src/planner/loop';
 import { checkRules, JOINT_LOADING } from '../../src/planner/rules';
+import { tonnageByWeek } from '../../src/metrics/tonnage';
+import { startOfWeek } from '../../src/metrics/dates';
 import {
   plannerInputSchema,
   trainingBlockSchema,
@@ -176,6 +178,86 @@ describe('injury vocabulary against the real catalogue', () => {
 
       for (const muscle of loading.muscles) expect(muscles).toContain(muscle);
       for (const pattern of loading.patterns) expect(patterns).toContain(pattern);
+    }
+  );
+});
+
+/**
+ * The check that would have caught the baseline bug, and did not exist.
+ *
+ * `compliantBlock` sizes its weeks FROM `ruleContext.baselineWeeklyTonnageKg`,
+ * so when that number was wrong the stub shrank with it and every assertion
+ * above still passed. Thirty green cases offline, and a live run rejected all
+ * thirty.
+ *
+ * This asserts the property that was actually violated, built from the
+ * archetype's OWN logged history and nothing derived from the caps: a week of
+ * the training this person already does must be allowed. A guard that forbids
+ * someone's current routine is not protecting them from a spike — it is
+ * refusing to let them train.
+ *
+ * AI-NOTE: do not rewrite this to size the block from ruleContext. Reading the
+ *          number under test is exactly what hid the bug the first time.
+ */
+describe('the caps admit what the user already does', () => {
+  const ONE_PER_ARCHETYPE = CASES.filter((c) => c.id.endsWith('/strength-3d'));
+
+  it.each(ONE_PER_ARCHETYPE.map((c) => [c.archetype.key, c] as const))(
+    '%s — a week matching their own recent training passes every rule',
+    (_key, golden) => {
+      const { ruleContext } = contextFor(golden);
+
+      // Their median COMPLETE week, computed here from the log.
+      const weekly = [...tonnageByWeek(golden.sets).entries()]
+        .filter(([week]) => week < startOfWeek(GOLDEN_AS_OF))
+        .map(([, tonnage]) => tonnage)
+        .sort((a, b) => a - b);
+      const typical = weekly[Math.floor(weekly.length / 2)] ?? 0;
+      expect(typical).toBeGreaterThan(0);
+
+      const usable = ruleContext.candidates.filter(
+        (c) => !loadsAnyInjured(c, ruleContext.injuredJoints)
+      );
+      expect(usable.length).toBeGreaterThan(0);
+
+      /*
+       * Spread over several exercises so no group exceeds the schema's cap of
+       * 20 sets, and respect each candidate's own ceiling — the home-gym
+       * dumbbells stop at 30 kg, and a fixture ignoring that would fail
+       * load_ceiling and say nothing about the volume rule under test.
+       */
+      const reps = 10;
+      const exercises = [];
+      let remaining = typical;
+
+      for (const candidate of usable.slice(0, 8)) {
+        if (remaining <= 0) break;
+        const caps = candidate.equipment
+          .map((e) => e.maxLoadKg)
+          .filter((c): c is number => c !== null);
+        const weight = caps.length > 0 ? Math.min(20, Math.min(...caps)) : 20;
+        const perSet = weight * reps;
+        const count = Math.min(20, Math.max(1, Math.round(remaining / perSet)));
+        remaining -= count * perSet;
+        exercises.push({
+          exercise_slug: candidate.slug,
+          set_groups: [{ count, reps, weight_kg: weight, rpe: 7, rest_seconds: 120 }],
+        });
+      }
+
+      const block = {
+        rationale: 'a week of what they already do',
+        weeks: [
+          {
+            week_number: 1,
+            is_deload: false,
+            sessions: [{ day_index: 0, focus: 'full body', exercises }],
+          },
+        ],
+      };
+
+      expect(trainingBlockSchema.safeParse(block).success).toBe(true);
+      expect(checkRules(block, ruleContext)).toEqual([]);
     }
   );
 });

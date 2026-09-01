@@ -318,9 +318,13 @@ async function main(): Promise<void> {
     }
     console.log(
       `\nCache hit rate: ${prompt === 0 ? 'n/a' : `${((cached / prompt) * 100).toFixed(1)}%`}` +
-        ` (${cached} cached of ${prompt} prompt tokens)`
+        ` (${cached} cached of ${prompt} prompt tokens, all time)`
     );
-    console.log(`Total spend: ${cost.toFixed(4)} USD across ${cases.length} runs.`);
+    // This run, from what the loop actually returned.
+    console.log(`This run: ${spent.toFixed(4)} across ${rows.length} case(s).`);
+    // The ledger, which spans every run these users have ever made — it is what
+    // the per-user budget gate reads, so it is the number that decides denials.
+    console.log(`Ledger total for these users, all time: ${cost.toFixed(4)}.`);
   }
 
   // In --naive mode rejection IS the expected outcome, so the exit code inverts:
@@ -342,6 +346,19 @@ async function main(): Promise<void> {
 
   if (rejected.length > 0) {
     console.log(`\n${rejected.length} case(s) did not reach an accepted plan.`);
+
+    /*
+     * A run can "fail" because the app refused to spend, which is the budget
+     * gate in src/llm/gateway.ts doing its job — invariant #3. Reading that as
+     * a broken planner would be exactly backwards, so it is named.
+     */
+    if (LIVE) {
+      console.log(
+        '\nIf a case shows 0 iterations and $0.00000, check the llm_calls rows: a\n' +
+          'budget_denied status means this user hit their weekly cap and nothing was\n' +
+          'spent. That is the gate working, not the planner failing.'
+      );
+    }
     process.exit(1);
   }
 }

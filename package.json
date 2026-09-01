@@ -21,7 +21,9 @@
     "inspect:seed": "tsx scripts/inspect-archetypes.ts",
     "db:push": "supabase db push",
     "db:types:hosted": "supabase gen types typescript --linked > src/db/types.ts",
-    "eval:planner": "tsx scripts/eval-planner.ts"
+    "eval:planner": "tsx scripts/eval-planner.ts",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run eval:planner && npm run eval:planner -- --naive",
+    "demo:llm": "tsx scripts/eval-planner.ts --live --limit 1 --max-spend 0.15"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
