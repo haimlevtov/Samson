@@ -9,8 +9,9 @@ Each phase is written as a brief. Hand one to an agent in plan mode, review the
 plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
-**Current phase: 2** — phases 0 and 1 are complete; see `docs/plans/` for the
-plan and recorded outcome of each.
+**Current phase: 4** — phases 0 to 3 are complete; see `docs/plans/` for the
+plan and recorded outcome of each. Phase 2 and phase 3 each carry one
+unmet criterion, both waiting on an OpenRouter key rather than on work.
 
 ---
 

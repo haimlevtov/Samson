@@ -50,6 +50,9 @@ export default async function WorkoutsPage() {
           </span>
         </div>
         <div className="row">
+          <Link href="/coach" className="chip">
+            Coach
+          </Link>
           <form action={startWorkout}>
             <button type="submit">Start workout</button>
           </form>

@@ -155,6 +155,77 @@ then log a set by typing a sentence.
 
 ---
 
-## Outcome
+## Outcome — 2026-09-01
 
-_Pending. Filled in when the phase meets its acceptance criteria._
+**Two of three acceptance criteria met. The third is named rather than dropped.**
+
+| Criterion                                                                                        | Status                     |
+| ------------------------------------------------------------------------------------------------ | -------------------------- |
+| Persona layer cannot alter any number in the plan it receives — asserted by test                 | ✅                         |
+| Tone override forces a gentler register on injury or missed-session flags, regardless of persona | ✅                         |
+| Drift eval scores recorded for all three personas                                                | ❌ **unmet — needs a key** |
+
+482 tests pass; typecheck, lint, format, `next build` and both eval modes clean.
+
+### What was built
+
+Both remaining stages, and both surfaces.
+
+- **The persona layer returns prose and never the block.** `deliveredPlanSchema`
+  has no numeric field, so the criterion is true structurally before any test
+  runs. Week notes are positional rather than numbered, because a
+  `week_number` would be a number the persona could get wrong.
+- **`assertNoInventedNumbers` catches what prose can still do.** Deliberately
+  strict: `937.5` is rejected even though 62.5 × 5 × 3 is exactly that.
+- **Three tone limits are code, not prompt** — the injury/adherence override,
+  the user's `humor_max_level` ceiling, and each row's `banned_phrases`.
+- **The normalizer transcribes and never computes,** and writes nothing until
+  the user confirms the interpretation it read back.
+- **One write path.** `logSet`'s insert moved to `insertSet()` in
+  `src/db/training.ts`; the form action and the normalizer both call it.
+
+### Verified in the browser, at 375×812
+
+Signed in as Dan (plateaued): `/coach` renders three personas read from the
+database, a four-week plan, and the planner's own rationale kept visually
+separate from the persona's words. Both rank-1 items stay above the fold, no
+element exceeds the viewport, and no tap target is under 44px.
+
+### What the browser caught that nothing else did
+
+**`'use server'` files may export async functions and nothing else.** Exporting
+`EMPTY_DELIVERY` and `EMPTY_PARSE` from the action modules type-checked, linted
+and passed 482 tests, then failed at module evaluation — taking `/workouts` to
+a 500 and every delivery POST with it. The constants moved to
+`app/coach/state.ts` and `app/workouts/parse-state.ts`.
+
+Worth recording precisely: the first browser check was too weak to see it. It
+asserted the path was `/workouts` and the width was 375, both of which an error
+page satisfies. Only reading the server log found it.
+
+### Deviations from the plan
+
+1. **Free-text entry is collapsed by default.** Open, it pushed "Log set" below
+   the fold, which `docs/specs/mobile-interface.md` §2 ranks 1. The form keeps
+   the fold; free text is one tap away.
+2. **The seeder orders candidates before building its demo plan.** The shared
+   `compliantBlock` stub takes whatever comes first, and in catalogue order
+   that is alphabetical — the first seeded plan was five sets of sit-ups and an
+   air bike. Rule-valid, and obviously not training. The seeder now interleaves
+   movement patterns, which leaves the stub and the golden suite untouched and
+   is honest about what it is: demo content, not planner output.
+3. **`SessionUser` gained `humorMaxLevel`.** ADR 0006's ceiling needs it, and
+   reading it in the page rather than the stage keeps the stage a pure function.
+
+### Still open
+
+- **The drift eval**, and with it the question ADR 0006 cannot answer offline:
+  does turn 80 still sound like turn 3.
+- **No persona has ever spoken.** Every delivery in the test suite is scripted.
+  Whether the Rival trips `scanOutput`'s demeaning check, and how often the
+  number guard rejects a harmless sentence, are both unknown.
+- **The number guard does not catch number words.** "Add ten kilos" passes,
+  because the guard is over digits. Recorded in `guard.test.ts` as a known gap.
+- Voice is `speechSynthesis`, not precomputed persona clips. ADR 0006 records
+  that reduction so the phase report does not claim the audio pipeline PLAN.md
+  described.

@@ -1,14 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { speak } from '@/src/ui/speak';
 
 /**
- * AI-NOTE: this is the only place the app signals that rest is over. Phase 3
- *          replaces it with a precomputed persona audio clip — "rest over" is
- *          named in PLAN.md as one of the high-frequency live events. Keep the
- *          cue behind this one function so that swap touches nothing else.
+ * The only place the app signals that rest is over.
+ *
+ * Phase 3 made the swap this note was left for, though not the way PLAN.md
+ * described: the voice is the browser's own speechSynthesis rather than a
+ * precomputed persona clip, because the only key this project has is for text —
+ * ADR 0006. The beep remains as the fallback, and it is not redundant: speech
+ * is unavailable on plenty of devices and silently doing nothing would be worse
+ * than a tone.
+ *
+ * AI-NOTE: still the single call site. If a real TTS provider is ever added,
+ *          this is the one function that changes.
  */
 function announceRestOver(): void {
+  if (speak('Rest over.')) return;
+
   try {
     const AudioCtor =
       window.AudioContext ??

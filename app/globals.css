@@ -923,3 +923,126 @@ code {
     max-width: min(280px, 70vw);
   }
 }
+
+/* ---- coach ------------------------------------------------------------- */
+
+.coach-actions {
+  margin-top: 12px;
+}
+.coach-actions button {
+  width: 100%;
+}
+
+/*
+ * The delivered prose. Visually distinct from the plan below it, because ADR
+ * 0006 keeps them apart on purpose: these are a model's words, those are
+ * checked numbers, and the user should be able to tell which is which.
+ */
+.delivered {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 10px;
+}
+.delivered p {
+  margin: 0;
+}
+.delivered .label {
+  margin-bottom: 2px;
+}
+
+.week-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.session-block {
+  display: grid;
+  gap: 6px;
+}
+
+@media (min-width: 560px) {
+  .coach-actions button {
+    width: auto;
+  }
+}
+
+/* ---- free-text set entry ----------------------------------------------- */
+
+.quick-log {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.quick-form {
+  display: grid;
+  gap: 8px;
+}
+
+/*
+ * What the app understood, before it writes anything. Deliberately set apart:
+ * this is a claim awaiting confirmation, not a logged fact.
+ */
+.parsed {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.parsed p {
+  margin: 0;
+}
+.parsed-sets {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+/* An anchor styled as a chip needs the box the button rule would have given it. */
+a.chip {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+@media (min-width: 560px) {
+  .quick-form {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+}
+
+/* The free-text entry is collapsed by default — mobile-interface.md §2 ranks
+   "Log set" above it, and open it pushed that action below the fold. */
+details.quick-log > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--tap);
+  cursor: pointer;
+  list-style: none;
+}
+details.quick-log > summary::-webkit-details-marker {
+  display: none;
+}
+details.quick-log > summary .label {
+  margin-bottom: 0;
+}
+details.quick-log > summary::after {
+  content: '+';
+  font-weight: 800;
+  color: var(--muted);
+}
+details.quick-log[open] > summary::after {
+  content: '−';
+}
+details.quick-log[open] > summary {
+  margin-bottom: 4px;
+}

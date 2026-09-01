@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { logSet } from '../actions';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { QuickLog } from './QuickLog';
 import { RestTimer, type RestTrigger } from './RestTimer';
 import { SessionTimer } from './SessionTimer';
 
@@ -101,6 +102,8 @@ export function SessionConsole({
         <SessionTimer startedAt={startedAt} />
         <RestTimer trigger={restTrigger} />
       </div>
+
+      <QuickLog workoutId={workoutId} />
 
       <h2 className="section">Add a set</h2>
       <div className="card">
