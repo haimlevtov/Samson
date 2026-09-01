@@ -17,7 +17,8 @@
  *          run in CI with no secrets.
  */
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ARCHETYPES, generateHistory, type Archetype } from '../../src/seed/archetypes';
 import { mulberry32 } from '../../src/seed/rng';
 import { PROGRAMMABLE_CATEGORIES } from '../../src/db/exercises';
@@ -45,11 +46,16 @@ export const GOLDEN_AS_OF = '2026-09-01';
 /** Fixed, so "the golden set" means the same 30 cases in every session. */
 const GOLDEN_SEED = 0x5a115f0;
 
+// WHY import.meta.url and not __dirname: package.json sets "type": "module".
+// Vitest shims __dirname, tsx running this from scripts/eval-planner.ts does
+// not — so the test suite passed while the eval script failed on the same line.
+const HERE = dirname(fileURLToPath(import.meta.url));
+
 let snapshot: Snapshot | null = null;
 
 function catalogue(): SnapshotExercise[] {
   snapshot ??= JSON.parse(
-    readFileSync(resolve(__dirname, '../../data/exercises.snapshot.json'), 'utf8')
+    readFileSync(resolve(HERE, '../../data/exercises.snapshot.json'), 'utf8')
   ) as Snapshot;
   return snapshot.exercises;
 }

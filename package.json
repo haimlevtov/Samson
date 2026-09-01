@@ -20,7 +20,8 @@
     "catalogue:fetch": "tsx scripts/fetch-catalogue.ts",
     "inspect:seed": "tsx scripts/inspect-archetypes.ts",
     "db:push": "supabase db push",
-    "db:types:hosted": "supabase gen types typescript --linked > src/db/types.ts"
+    "db:types:hosted": "supabase gen types typescript --linked > src/db/types.ts",
+    "eval:planner": "tsx scripts/eval-planner.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

@@ -213,13 +213,115 @@ and `npm run test:db` for the new table's RLS.
 
 ---
 
-## Outcome
+## Outcome — 2026-09-01
 
-_Pending. Filled in when the phase meets its acceptance criteria, per the
-Documentation coupling in `.claude/skills/cleanup/SKILL.md`._
+**Three of five acceptance criteria met. Two are not, and they are named rather
+than quietly dropped.**
 
-**AI-NOTE:** this file was committed **before** any phase 2 implementation code,
-deliberately. Phases 0 and 1 committed their plan in the same commit as the work
-it planned, which cannot demonstrate the ordering the course grades. `git log
---diff-filter=A -- docs/plans/phase-2.md` should precede every `src/planner/`
-commit. Keep it that way for later phases.
+| Criterion                                                                                        | Status                     |
+| ------------------------------------------------------------------------------------------------ | -------------------------- |
+| Golden cases produce a schema-valid plan within the retry cap                                    | ✅ 30/30, offline          |
+| Property assertions hold across all cases                                                        | ✅                         |
+| Every rule has a test that fails a violating plan; the two rejection sources are never conflated | ✅                         |
+| Cache hit rate measured and recorded                                                             | ❌ **unmet — needs a key** |
+| Cost per plan generation recorded per model tried                                                | ❌ **unmet — needs a key** |
+
+`npm run eval:planner --live` is written, wired and unrun. It signs in as each
+seeded archetype, runs the same thirty cases against real models, and reads the
+cache and cost figures back out of `llm_calls`. It needs `OPENROUTER_API_KEY`
+in `.env.local` and nothing else. Until it runs, the last two rows above stay
+red and no report may claim otherwise.
+
+### What was verified, and what that verification is worth
+
+377 tests pass; typecheck, lint and format are clean.
+
+- **The six rules are jointly satisfiable on all thirty histories.** This is the
+  phase's central risk retired. Had the volume cap, ACWR guard, deload
+  requirement, load ceilings and injury exclusions been mutually unsatisfiable
+  for any archetype, that user could never have been given a plan and no amount
+  of prompting would have fixed it.
+- **A block breaking every rule is rejected by arithmetic before the critic is
+  consulted** — 360 rules rejections, zero critic rejections, across
+  `--naive`. That is the ordering ADR 0004 specifies, shown rather than
+  asserted.
+- **The rejection sources never merge.** A rules finding never acquires a critic
+  vocabulary code and vice versa, exhaustion names the gate that failed, and a
+  budget denial is recorded as `failed` rather than as a rejection.
+
+**What none of it proves is that a model writes good training.** The stub
+planner satisfies the rules by construction. Reporting the green table as
+evidence of planner quality would be precisely the verification theatre the
+merge gate section of `docs/PLAN.md` warns against.
+
+### The separated test author
+
+`src/planner/rules.test.ts` was written by a subagent working in a git worktree
+at `ece24c6` — a commit containing the spec and the schema but not
+`rules.ts`. The separation was structural: the implementation was not on disk
+to read.
+
+All 55 cases passed on the first run. Read honestly that says the spec was
+precise enough for two readers to build the same thing, not that the tests are
+exhaustive — the author was explicit about which fixtures deliberately do not
+discriminate, and those are now recorded under "Known gaps" in the spec.
+
+Three findings came out of it that reading my own code would not have produced:
+the rule functions were never named in the spec, only their codes; week identity
+was stated under one rule and relied on by four; and the `JOINT_LOADING`
+vocabulary was checked against nothing, so a typo would have silently stopped
+protecting a joint rather than erroring.
+
+### Deviations from the plan
+
+1. **`plan_runs` was applied to hosted via the Supabase MCP server, not
+   `npm run db:push`.** The CLI is not linked and there is no `SUPABASE_DB_URL`
+   in `.env.local`. Applied as version `20260901115234`.
+2. **Local migration filenames now match applied remote versions.**
+   `user_equipment` was stamped `20260825080000` locally and
+   `20260825071917` remotely; a `db push` would have tried to apply it twice.
+3. **`src/db/types.ts` was hand-edited rather than regenerated wholesale.** The
+   committed file predates the wrapper format the current generator emits, so a
+   full regeneration would have produced a large unrelated diff. The
+   `plan_runs` block is the generator's own output, inserted in the file's
+   existing style. CI regenerates and diffs, so this is verified there and
+   nowhere else.
+4. **`CandidateExercise` gained an `equipment` field.** `load_ceiling` needs
+   per-item ceilings, and a rule that reaches back into the database is no
+   longer a pure function over the plan.
+5. **The eval harness gained `--naive`.** Without it the offline run only ever
+   sees compliant plans and never exercises rejection, retry or escalation.
+6. **Escalation guarantees no downgrade rather than an upgrade.** ADR 0004 calls
+   for a stronger model on the last iteration; every slug in `models.ts` was
+   verified against the provider's model list for structured-output support, and
+   inventing an unverified one would fail every escalated call at routing time.
+   `ESCALATION_MODELS` therefore drops the cheap fallback rather than adding a
+   higher tier. Recorded in `models.ts` so the phase report cannot claim a
+   cascade saving it did not measure.
+
+### Found on the way, none of it phase 2's doing
+
+- `npm run lint` and `npm run format:check` had been failing since the
+  superpowers skills landed in `b84f0f4` — 125 lint errors from vendored `.js`
+  under `.claude/skills`, and 48 unformatted vendored markdown files. Both
+  tools now ignore `.claude` and `.agents`.
+- An AI-NOTE in `schema.ts` named the model provider, which trips the
+  invariants grep for CLAUDE.md #2. The grep cannot tell a comment from a fetch,
+  and that bluntness is the point — the comment was reworded, not the check.
+- `tests/planner/golden.ts` used `__dirname` under `"type": "module"`.
+  Vitest shims it; `tsx` does not, so the suite passed while the eval script
+  failed on the same line.
+
+### Still open
+
+- The two measurement criteria above.
+- **The block schema enumerates every set individually**, so a four-week block
+  runs to a few thousand output tokens. A `{ count, reps, weight_kg }` grouping
+  would cut that by roughly three. Not changed mid-phase because the rules tests
+  were already being authored against this shape. Revisit before phase 3, with
+  the measured cost in hand.
+- **The critic has never rejected a real plan.** Every critic rejection so far
+  is scripted. Whether the closed vocabulary in `schema.ts` matches what a
+  model actually wants to say is unknown until the live run.
+- Phase 0's live gateway call is still unrun and the phase 0 and 1 PRs were
+  never opened, so CI has still never executed.

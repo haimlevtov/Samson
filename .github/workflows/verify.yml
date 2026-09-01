@@ -29,7 +29,25 @@ jobs:
       - run: npm run format:check
       - run: npm test
       # Enforces the metrics-engine coverage thresholds in vitest.config.ts.
+      # WHY this is not the verification gate: coverage records which lines ran,
+      # never whether anything was checked — docs/PLAN.md, "The merge gate".
       - run: npm run test:coverage
+
+      # The golden set, offline. No key, no database, no spend.
+      #
+      # The first run proves the six planner rules are jointly satisfiable on
+      # all thirty seeded histories: if they were not, some user could never be
+      # given a plan at all and no prompt work would fix it.
+      #
+      # The second feeds the loop a block that breaks every rule and asserts it
+      # is rejected — and rejected by arithmetic, before the critic is ever
+      # consulted. Without it the harness only ever sees compliant plans and
+      # never exercises the half of the loop that matters.
+      #
+      # AI-NOTE: neither run measures a model. Do not cite them as evidence of
+      #          planner quality — that needs eval:planner --live and a key.
+      - run: npm run eval:planner
+      - run: npm run eval:planner -- --naive
 
   # RLS and migration tests need a real Postgres, so they run apart from the
   # secret-free job above rather than weakening it.
