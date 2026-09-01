@@ -182,3 +182,54 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
       ),
   };
 }
+
+/**
+ * The only place a set is written.
+ *
+ * WHY it lives here rather than in the server action: phase 3 adds a second way
+ * to log a set — free text through the normalizer — and two write paths would be
+ * two definitions of what logging a set means. They would drift, and the one
+ * that drifted would be the one nobody was looking at.
+ *
+ * INVARIANT: user_id comes from the verified session, never a form field, and
+ *            RLS rejects any row whose user_id is not auth.uid() — CLAUDE.md #10.
+ */
+export interface SetToInsert {
+  workoutId: string;
+  exerciseId: string;
+  /** INVARIANT: canonical kilograms — CLAUDE.md #8. */
+  weightKg: number | null;
+  reps: number | null;
+  rpe: number | null;
+  restSeconds: number | null;
+  isWarmup: boolean;
+}
+
+export async function insertSet(db: Db, userId: string, set: SetToInsert): Promise<void> {
+  // The next index for this exercise within this session. Read rather than
+  // counted client-side so two tabs cannot collide on the unique constraint.
+  const { data: existing } = await db
+    .from('sets')
+    .select('set_index')
+    .eq('workout_id', set.workoutId)
+    .eq('exercise_id', set.exerciseId)
+    .order('set_index', { ascending: false })
+    .limit(1);
+
+  const nextIndex = (existing?.[0]?.set_index ?? -1) + 1;
+
+  const { error } = await db.from('sets').insert({
+    user_id: userId,
+    workout_id: set.workoutId,
+    exercise_id: set.exerciseId,
+    set_index: nextIndex,
+    weight_kg: set.weightKg,
+    reps: set.reps,
+    rpe: set.rpe,
+    rest_seconds: set.restSeconds,
+    is_warmup: set.isWarmup,
+    completed_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(`logging set: ${error.message}`);
+}

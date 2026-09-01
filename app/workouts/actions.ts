@@ -3,6 +3,14 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { insertSet } from '@/src/db/training';
+import { availableExercises } from '@/src/db/exercises';
+import { createSupabaseLedger } from '@/src/db/ledger';
+import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
+import { MissingApiKeyError } from '@/src/llm/config';
+import { parseEntry } from '@/src/normalizer/parse';
+import { normalizedSetSchema } from '@/src/normalizer/schema';
+import { EMPTY_PARSE, type ParseState } from './parse-state';
 
 /**
  * Every write in this file runs on the request-scoped, RLS-bound client.
@@ -54,33 +62,17 @@ export async function logSet(formData: FormData): Promise<void> {
     return Number.isFinite(value) ? value : null;
   };
 
-  // The next index for this exercise within this session. Read rather than
-  // counted client-side so two tabs cannot collide on the unique constraint.
-  const { data: existing } = await db
-    .from('sets')
-    .select('set_index')
-    .eq('workout_id', workoutId)
-    .eq('exercise_id', exerciseId)
-    .order('set_index', { ascending: false })
-    .limit(1);
-
-  const nextIndex = (existing?.[0]?.set_index ?? -1) + 1;
-
-  const { error } = await db.from('sets').insert({
-    user_id: user.id,
-    workout_id: workoutId,
-    exercise_id: exerciseId,
-    set_index: nextIndex,
-    // INVARIANT: stored canonically in kg — CLAUDE.md #8.
-    weight_kg: number('weightKg'),
+  // One write path, shared with the normalizer — see src/db/training.ts.
+  await insertSet(db, user.id, {
+    workoutId,
+    exerciseId,
+    weightKg: number('weightKg'),
     reps: number('reps'),
     rpe: number('rpe'),
-    rest_seconds: number('restSeconds'),
-    is_warmup: isWarmup,
-    completed_at: new Date().toISOString(),
+    restSeconds: number('restSeconds'),
+    isWarmup,
   });
 
-  if (error) throw new Error(`logging set: ${error.message}`);
   revalidatePath(`/workouts/${workoutId}`);
 }
 
@@ -116,4 +108,80 @@ export async function finishWorkout(formData: FormData): Promise<void> {
 
   revalidatePath('/workouts');
   redirect('/workouts');
+}
+
+/**
+ * Free-text set entry, step one: read it, do not write it.
+ *
+ * INVARIANT: nothing is stored until the user agrees — src/normalizer/schema.ts.
+ *            A misheard set corrupts every metric downstream and they would not
+ *            notice, so the interpretation comes back for confirmation and the
+ *            write is a separate, explicit action.
+ */
+export async function parseFreeText(
+  _previous: ParseState,
+  formData: FormData
+): Promise<ParseState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const text = String(formData.get('text') ?? '');
+
+  try {
+    // INVARIANT #5: the candidate list is equipment-filtered in SQL before the
+    // model sees it, exactly as the picker and the planner use it.
+    const candidates = await availableExercises(db, user.id);
+    const result = await parseEntry(
+      user.id,
+      text,
+      candidates.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
+      { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
+    );
+
+    return {
+      interpretation: result.entry.interpretation,
+      exerciseId: result.exerciseId,
+      exerciseName: result.exerciseName,
+      sets: result.entry.sets,
+      error: null,
+    };
+  } catch (cause) {
+    // Running without a key is the common case today; say so plainly rather
+    // than surfacing a transport error.
+    if (cause instanceof MissingApiKeyError) return { ...EMPTY_PARSE, error: cause.message };
+    return {
+      ...EMPTY_PARSE,
+      error: cause instanceof Error ? cause.message : 'Could not read that.',
+    };
+  }
+}
+
+/** Step two: write what was confirmed, through the one shared path. */
+export async function confirmParsedSets(formData: FormData): Promise<void> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const workoutId = String(formData.get('workoutId') ?? '');
+  const exerciseId = String(formData.get('exerciseId') ?? '');
+  const parsed: unknown = JSON.parse(String(formData.get('sets') ?? '[]'));
+
+  // Re-validated on the way in. The client is not trusted with the shape, even
+  // though it was this server that produced it a moment ago.
+  const sets = normalizedSetSchema.array().parse(parsed);
+
+  for (const set of sets) {
+    await insertSet(db, user.id, {
+      workoutId,
+      exerciseId,
+      weightKg: set.weight_kg,
+      reps: set.reps,
+      rpe: set.rpe,
+      restSeconds: null,
+      isWarmup: set.is_warmup,
+    });
+  }
+
+  revalidatePath(`/workouts/${workoutId}`);
 }

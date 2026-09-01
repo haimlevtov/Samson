@@ -19,6 +19,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ARCHETYPES, generateHistory, type Archetype } from '../src/seed/archetypes';
 import { mulberry32 } from '../src/seed/rng';
 import { supabaseUrl } from '../src/db/client';
+import { buildPlannerContext } from '../src/planner/context';
+import { candidatesFor } from '../tests/planner/golden';
+import { compliantBlock } from '../tests/planner/stub-planner';
 import type { Database } from '../src/db/types';
 
 config({ path: '.env.local', quiet: true });
@@ -155,6 +158,54 @@ async function seedCatalogue(admin: Admin, snapshot: Snapshot): Promise<Map<stri
   return exerciseBySlug;
 }
 
+/** Four weeks is long enough to show progression, short enough to read on a phone. */
+const PLAN_WEEKS = 4;
+
+/**
+ * Compound patterns first, so the seeded plan reads like training.
+ *
+ * WHY this is here and not in compliantBlock: that stub's only job is to satisfy
+ * the six rules in src/planner/rules.ts, and it does that by taking whatever
+ * candidates come first. In catalogue order that is alphabetical, which produced
+ * a demo plan of five sets of sit-ups and an air bike — rule-valid and obviously
+ * not a training block.
+ *
+ * Sorting here keeps the shared stub untouched and the golden suite unaffected.
+ * It is also honest about what it is: the seeder choosing plausible-looking demo
+ * content, not a planner choosing exercises. A real plan comes from
+ * src/planner/, and that needs a key.
+ */
+const PATTERN_RANK: Record<string, number> = {
+  squat: 0,
+  hinge: 1,
+  push: 2,
+  pull: 3,
+  carry: 4,
+  core: 5,
+  isolation: 6,
+};
+
+function plausibleFirst<T extends { movementPattern: string | null }>(candidates: T[]): T[] {
+  // Round-robin across patterns rather than sorting by them. Sorting put four
+  // squat variants in the same session, which is rule-valid and still reads as
+  // nonsense to anyone who lifts. Interleaving gives a session one of each.
+  const byPattern = new Map<number, T[]>();
+  for (const candidate of candidates) {
+    const rank = PATTERN_RANK[candidate.movementPattern ?? ''] ?? 9;
+    byPattern.set(rank, [...(byPattern.get(rank) ?? []), candidate]);
+  }
+
+  const groups = [...byPattern.entries()].sort(([a], [b]) => a - b).map(([, group]) => group);
+  const ordered: T[] = [];
+  for (let i = 0; ordered.length < candidates.length; i++) {
+    for (const group of groups) {
+      const next = group[i];
+      if (next !== undefined) ordered.push(next);
+    }
+  }
+  return ordered;
+}
+
 async function seedArchetype(
   admin: Admin,
   archetype: Archetype,
@@ -236,6 +287,53 @@ async function seedArchetype(
   });
 
   await insertBatched(admin, 'sets', rows, `sets for ${archetype.key}`);
+
+  /*
+   * One accepted plan per user, so /coach has something to render.
+   *
+   * WHY a stub block rather than a generated one: generating needs a key, and
+   * the demo has to work without one. This is the same compliantBlock the
+   * golden suite uses, so it satisfies all six rules in src/planner/rules.ts by
+   * construction — the row is marked accepted because it genuinely passes them,
+   * not as a shortcut.
+   *
+   * AI-NOTE: if compliantBlock ever stops satisfying the rules, the golden
+   *          suite fails first and loudly, before this row is ever written.
+   */
+  const { ruleContext } = buildPlannerContext({
+    goal: 'strength',
+    daysPerWeek: archetype.daysPerWeek,
+    blockWeeks: PLAN_WEEKS,
+    injuredJoints: [],
+    asOf: endDate,
+    workouts: history.map((w, i) => ({
+      id: `seed-${i}`,
+      localDate: w.localDate,
+      status: w.status,
+    })),
+    sets: history.flatMap((w) =>
+      w.sets.map((set) => ({
+        exerciseId: `ex-${set.exerciseSlug}`,
+        weightKg: set.weightKg,
+        reps: set.reps,
+        rpe: set.rpe,
+        isWarmup: set.isWarmup,
+        localDate: w.localDate,
+      }))
+    ),
+    candidates: plausibleFirst(candidatesFor(archetype)),
+  });
+
+  const { error: planError } = await admin.from('plan_runs').insert({
+    user_id: userId,
+    status: 'accepted',
+    iterations: 1,
+    block: compliantBlock(ruleContext, PLAN_WEEKS, archetype.daysPerWeek) as never,
+    rejections: [],
+    input_hash: 'seeded',
+  });
+  if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
+
   return { workouts: history.length, sets: rows.length };
 }
 

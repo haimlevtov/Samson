@@ -40,6 +40,12 @@ export interface SessionUser {
   displayName: string | null;
   timezone: string;
   unitPreference: string;
+  /**
+   * The user's own ceiling on persona humour — ADR 0006. Read here rather than
+   * inside the persona stage so the stage stays a pure function of its inputs
+   * and can be tested without a database.
+   */
+  humorMaxLevel: string;
 }
 
 /**
@@ -58,7 +64,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
 
   const { data: profile } = await db
     .from('users')
-    .select('display_name, timezone, unit_preference')
+    .select('display_name, timezone, unit_preference, humor_max_level')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -68,6 +74,9 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
     displayName: profile?.display_name ?? null,
     timezone: profile?.timezone ?? 'UTC',
     unitPreference: profile?.unit_preference ?? 'metric',
+    // 'cheeky' is the column default; the fallback matches it so a missing
+    // profile row behaves the same as a default one.
+    humorMaxLevel: profile?.humor_max_level ?? 'cheeky',
   };
 }
 
