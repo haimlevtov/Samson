@@ -31,4 +31,11 @@ alter default privileges in schema public
   grant select, insert, update, delete on tables to service_role;
 
 -- Explicitly revoke DML from anon, in case a default privilege ever adds it.
+--
+-- AI-NOTE: `on all tables` is a SNAPSHOT, not a standing rule — it covers only
+--          the tables that exist right now. The grants above are paired with
+--          `alter default privileges` so later migrations inherit them; this
+--          line was not, so every table created after this migration arrived
+--          with anon DML again. Migration 20260901145239 adds the missing
+--          default-privileges half. Do not add a revoke here without one.
 revoke select, insert, update, delete on all tables in schema public from anon;

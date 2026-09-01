@@ -37,7 +37,7 @@ export function SessionTimer({ startedAt }: { startedAt: string | null }) {
   }, [startedAt]);
 
   return (
-    <div className="card timer-card">
+    <div className="card timer-card timer-session">
       <div className="timer-head">
         <div>
           <div className="label">Session</div>

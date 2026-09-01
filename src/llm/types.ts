@@ -3,7 +3,21 @@ import type { z } from 'zod';
 export type LlmStage =
   'normalizer' | 'planner' | 'critic' | 'persona' | 'diet' | 'challenge' | 'smoke';
 
-export type LlmCallStatus = 'ok' | 'schema_invalid' | 'http_error' | 'timeout' | 'budget_denied';
+export type LlmCallStatus =
+  | 'ok'
+  | 'schema_invalid'
+  | 'http_error'
+  | 'timeout'
+  | 'budget_denied'
+  /**
+   * The model answered and the answer was rejected by the content checks in
+   * src/llm/safety.ts — ADR 0005.
+   *
+   * WHY a status rather than a silently discarded response: tokens were spent,
+   * so invariant #3 requires the row, and the adversarial taxonomy PLAN.md asks
+   * for is then countable from the ledger rather than reconstructed from memory.
+   */
+  | 'safety_blocked';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

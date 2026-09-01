@@ -149,7 +149,7 @@ export default async function WorkoutsPage() {
         </FieldHint>
       </h2>
       <div className="card">
-        <table>
+        <table className="table-cards">
           <thead>
             <tr>
               <th>Lift</th>
@@ -161,15 +161,21 @@ export default async function WorkoutsPage() {
           <tbody>
             {topLifts.map((b) => (
               <tr key={b.exerciseId}>
-                <td>{history.exercises.get(b.exerciseId)?.name ?? b.exerciseId}</td>
-                <td>{b.bestE1rm!.toFixed(1)} kg</td>
-                <td className="muted">{b.bestWeightKg} kg</td>
-                <td className="muted small">{displayDate(b.bestE1rmDate)}</td>
+                <td data-label="Lift">
+                  {history.exercises.get(b.exerciseId)?.name ?? b.exerciseId}
+                </td>
+                <td data-label="e1RM">{b.bestE1rm!.toFixed(1)} kg</td>
+                <td data-label="Best set" className="muted">
+                  {b.bestWeightKg} kg
+                </td>
+                <td data-label="When" className="muted small">
+                  {displayDate(b.bestE1rmDate)}
+                </td>
               </tr>
             ))}
             {topLifts.length === 0 ? (
               <tr>
-                <td colSpan={4} className="muted small">
+                <td data-label="" colSpan={4} className="muted small">
                   Nothing estimable yet — Epley needs a loaded set of 12 reps or fewer.
                 </td>
               </tr>
@@ -180,7 +186,7 @@ export default async function WorkoutsPage() {
 
       <h2 className="section">Sessions</h2>
       <div className="card">
-        <table>
+        <table className="table-cards">
           <thead>
             <tr>
               <th>Date</th>
@@ -192,14 +198,18 @@ export default async function WorkoutsPage() {
           <tbody>
             {workouts.map((w) => (
               <tr key={w.id}>
-                <td>
+                <td data-label="Date">
                   <Link href={`/workouts/${w.id}`}>{displayDate(w.localDate)}</Link>
                 </td>
-                <td>
+                <td data-label="Status">
                   <span className={`badge ${w.status}`}>{w.status.replace('_', ' ')}</span>
                 </td>
-                <td className="muted">{w.setCount || '—'}</td>
-                <td className="muted small">{w.notes ?? ''}</td>
+                <td data-label="Sets" className="muted">
+                  {w.setCount || '—'}
+                </td>
+                <td data-label="Notes" className="muted small">
+                  {w.notes ?? ''}
+                </td>
               </tr>
             ))}
           </tbody>

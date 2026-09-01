@@ -13,3 +13,6 @@ supabase/.temp/
 supabase/.branches/
 
 .DS_Store
+
+# Subagent git worktrees (isolation: worktree)
+.claude/worktrees/

@@ -51,6 +51,39 @@ function sourceFiles(): { path: string; rel: string; text: string }[] {
     .filter((f) => f.rel !== SELF && f.rel !== GENERATED);
 }
 
+describe('CLAUDE.md #11 — untrusted text never reaches the instruction channel', () => {
+  /*
+   * ADR 0005 §1. This is the layer that is a guarantee rather than a
+   * mitigation, and it was previously only an AI-NOTE on a database column —
+   * which is exactly why it needed to become a test. Nothing failed if someone
+   * ignored the comment.
+   */
+  it('builds no system prompt by interpolation or concatenation', () => {
+    // A `system:` property whose value contains ${...} or a + is a per-call
+    // string reaching the instruction channel. Static constants are fine.
+    const offenders = sourceFiles().flatMap((f) =>
+      f.text
+        .split('\n')
+        .map((line, i) => ({ line, n: i + 1 }))
+        .filter(({ line }) => /\bsystem:\s*[^,\n]*(?:\$\{|\s\+\s)/.test(line))
+        .map(({ n }) => `${f.rel}:${n}`)
+    );
+
+    expect(offenders, 'pass per-call text in messages, never in system — ADR 0005 §1').toEqual([]);
+  });
+
+  it('applies the safety preamble inside the gateway, not at call sites', () => {
+    // If this moves to call sites, a new stage can forget it — ADR 0005 §3.
+    const gateway = sourceFiles().find((f) => f.rel === 'src/llm/gateway.ts');
+    expect(gateway?.text).toContain('SAFETY_PREAMBLE');
+  });
+
+  it('scans every completion before returning it', () => {
+    const gateway = sourceFiles().find((f) => f.rel === 'src/llm/gateway.ts');
+    expect(gateway?.text).toContain('scanOutput');
+  });
+});
+
 describe('CLAUDE.md #2 — all LLM calls go through the gateway', () => {
   // WHY: duplicated from the ESLint rule on purpose. Lint can be silenced with
   //      an inline disable comment; this cannot.

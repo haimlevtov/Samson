@@ -9,6 +9,13 @@ Gamified strength-training app with an LLM coach. Class project.
 - `docs/PLAN.md` — the current phase and its acceptance criteria. Read before
   building.
 
+**The artifact trail is graded, and so is its order.** A phase plan goes in
+`docs/plans/phase-N.md`, a decision in `docs/adr/`, a written contract in
+`docs/specs/`. Plan-mode writes to `~/.claude/plans/` — that file is scratch, not
+an artifact. Copy it into `docs/plans/` and commit it **before** the code it
+plans, in its own commit. A plan committed alongside its implementation cannot
+show it came first.
+
 These are referenced rather than inlined: this file loads on every turn, so it
 carries only the rules that must never be skimmed. Everything else is fetched
 when it is relevant.
@@ -44,6 +51,11 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
    achievements evaluate against the user's local date, never server date.
 10. **RLS is on for every table.** Every table has `user_id`. Never bypass with
     the service role key in application code.
+11. **Untrusted text never reaches the instruction channel.** User notes and
+    third-party catalogue text go in `messages`, fenced and sanitised, never in
+    `system`. Every completion is scanned before it is returned. The gateway
+    applies both — see `docs/adr/0005-llm-safety.md`. The prompt-level conduct
+    rules are defence in depth, not the control.
 
 ## Conventions
 

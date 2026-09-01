@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { callLLM } from './gateway';
+import { SAFETY_PREAMBLE } from './safety';
 import { MissingApiKeyError, readApiKey } from './config';
 import { BudgetExceededError, LlmCallFailedError } from './types';
 import type { GatewayDeps, LedgerClient, LlmCallInsert } from './types';
@@ -133,8 +134,11 @@ describe('callLLM', () => {
     // Zod's $schema key is stripped: strict validators reject it.
     expect(body.response_format.json_schema.schema.$schema).toBeUndefined();
     expect(body.provider.require_parameters).toBe(true);
-    // Static prompt first so the cache prefix holds — PLAN.md phase 2.
-    expect(body.messages[0]).toEqual({ role: 'system', content: baseOptions.system });
+    // Static prompt first so the cache prefix holds — PLAN.md phase 2, and the
+    // safety preamble ahead of the stage's own text — ADR 0005 §3.
+    expect(body.messages[0].role).toBe('system');
+    expect(body.messages[0].content).toBe(SAFETY_PREAMBLE + baseOptions.system);
+    expect(body.messages[0].content.startsWith(SAFETY_PREAMBLE)).toBe(true);
   });
 
   it('retries a schema-invalid response and logs a row for the failed attempt', async () => {

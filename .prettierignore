@@ -2,3 +2,8 @@
 node_modules
 package-lock.json
 src/db/types.ts
+
+# Vendored skill and agent definitions. Third-party text, not our source — and
+# reformatting it would make every future upstream diff unreadable.
+.claude
+.agents

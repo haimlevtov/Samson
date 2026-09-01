@@ -425,6 +425,47 @@ export type Database = {
           },
         ]
       }
+      plan_runs: {
+        Row: {
+          block: Json | null
+          created_at: string
+          id: string
+          input_hash: string | null
+          iterations: number
+          rejections: Json
+          status: string
+          user_id: string
+        }
+        Insert: {
+          block?: Json | null
+          created_at?: string
+          id?: string
+          input_hash?: string | null
+          iterations: number
+          rejections?: Json
+          status: string
+          user_id: string
+        }
+        Update: {
+          block?: Json | null
+          created_at?: string
+          id?: string
+          input_hash?: string | null
+          iterations?: number
+          rejections?: Json
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       progression_nodes: {
         Row: {
           created_at: string

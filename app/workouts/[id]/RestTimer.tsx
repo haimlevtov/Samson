@@ -123,7 +123,7 @@ export function RestTimer({
   const progress = running || done ? 1 - Math.max(0, remaining) / Math.max(1, target) : 0;
 
   return (
-    <div className="card timer-card">
+    <div className="card timer-card timer-rest">
       <div className="timer-head">
         <div>
           <div className="label">Rest</div>
