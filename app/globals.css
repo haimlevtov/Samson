@@ -1,6 +1,12 @@
 /*
  * Samson visual system.
  *
+ * PHONE FIRST. The base stylesheet is the 375px phone; every media query is
+ * `min-width` and adds capability for wider screens. There are no `max-width`
+ * overrides, deliberately — see docs/specs/mobile-interface.md §3. A max-width
+ * override is a desktop design apologising, and it is how this file used to be
+ * written.
+ *
  * Everything is a token. Phase 3 adds personas and phase 4 adds XP, streaks and
  * badges, so the palette lives here rather than in components — a future change
  * of register should be this file and nothing else.
@@ -30,6 +36,13 @@
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(28, 26, 46, 0.05), 0 10px 30px -18px rgba(28, 26, 46, 0.35);
   --shadow-lift: 0 2px 4px rgba(28, 26, 46, 0.06), 0 18px 40px -20px rgba(28, 26, 46, 0.45);
+
+  /*
+   * INVARIANT: no interactive target smaller than this — mobile-interface.md §3.
+   * A control that looks smaller gets its target from padding, never by
+   * shrinking the hit area.
+   */
+  --tap: 44px;
 }
 
 * {
@@ -48,6 +61,9 @@ body {
     'Segoe UI',
     sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Nothing may scroll the page sideways. This is the single most common phone
+     layout failure and the reason tables become cards below. */
+  overflow-x: hidden;
 }
 
 a {
@@ -60,31 +76,39 @@ a:hover {
 }
 
 .shell {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 28px 20px 80px;
+  /* env() clears the home indicator on a notched phone. max() keeps a sane
+     floor on every device that reports zero. */
+  padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 
 header.top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 header.top h1 {
-  font-size: 26px;
+  font-size: 21px;
   margin: 0 0 2px;
   letter-spacing: -0.02em;
 }
+/* Measured at 23px tall before this — the only way back out of a session. */
+header.top a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
 
 h2.section {
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin: 32px 0 12px;
+  margin: 22px 0 10px;
 }
 
 .muted {
@@ -108,21 +132,31 @@ h2.section {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 14px;
   box-shadow: var(--shadow);
 }
 
 .grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
+
+/*
+ * The four stat tiles are not equal in rank — mobile-interface.md §2.
+ * Adherence and streak are the retention mechanic (CLAUDE.md #4); tonnage and
+ * acute:chronic are diagnostics. On a phone the first two get a full row each
+ * and the diagnostics share one.
+ */
 .grid.cols-4 {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.grid.cols-4 > :nth-child(-n + 2) {
+  grid-column: span 2;
 }
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -133,46 +167,71 @@ h2.section {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 13px 15px;
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 .stat .value {
-  font-size: 30px;
+  font-size: 27px;
   font-weight: 800;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  margin: 2px 0 2px;
+  margin: 2px 0;
 }
 
 /* ---- timers ----------------------------------------------------------- */
 
+/*
+ * Rest is rank 1 and the session clock is rank 4 — mobile-interface.md §2 — so
+ * on a phone they are not peers. Rest goes first and full width, which also
+ * costs less height than two columns did: at full width the four presets fit on
+ * one row instead of wrapping onto two.
+ *
+ * The session clock keeps its place in the DOM (it reads first on a desktop,
+ * left to right) and is reordered visually here rather than in the markup.
+ */
 .timer-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+.timer-rest {
+  order: -1;
+}
+/* Rank 4: present, checkable, not competing for attention. */
+.timer-session {
+  padding: 10px 12px;
+}
+.timer-session .timer {
+  font-size: 20px;
+}
+.timer-session .timer-head {
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .timer-card {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+  padding: 12px;
+  min-width: 0;
 }
 .timer-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 .timer-controls {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .timer {
   font-variant-numeric: tabular-nums;
-  font-size: 38px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 1.05;
@@ -191,12 +250,20 @@ button {
   border-radius: var(--radius-sm);
 }
 
+/*
+ * INVARIANT: 16px minimum on anything typed into — mobile-interface.md §3.
+ * Below 16px iOS Safari zooms the viewport on focus and never zooms back,
+ * which leaves the user pinch-scrolling a form mid-set. This is not a
+ * preference.
+ */
 input,
 select {
   width: 100%;
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
-  padding: 9px 11px;
+  padding: 11px;
+  font-size: 16px;
+  min-height: var(--tap);
 }
 input:focus,
 select:focus {
@@ -210,12 +277,15 @@ button {
   background: var(--accent);
   color: #fff;
   border: 1.5px solid var(--accent);
-  padding: 9px 16px;
+  padding: 11px 16px;
+  min-height: var(--tap);
   font-weight: 700;
   box-shadow: 0 2px 0 var(--accent-strong);
   transition:
     transform 0.06s ease,
     box-shadow 0.06s ease;
+  /* Stops a double tap zooming the page instead of pressing twice. */
+  touch-action: manipulation;
 }
 button:hover:not(:disabled) {
   background: var(--accent-strong);
@@ -247,8 +317,12 @@ button.secondary:hover:not(:disabled) {
   color: var(--muted);
   border: 1.5px solid var(--border-strong);
   box-shadow: none;
-  padding: 6px 11px;
-  font-size: 13px;
+  /* Visually small, but still a full target: the rest presets are pressed with
+     a thumb, between sets, while out of breath. */
+  padding: 8px 12px;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  font-size: 14px;
   font-weight: 700;
 }
 .chip:hover:not(:disabled) {
@@ -262,10 +336,15 @@ button.secondary:hover:not(:disabled) {
 
 /* ---- set entry form --------------------------------------------------- */
 
+/*
+ * Thumb order, not desk order — mobile-interface.md §3: exercise, then the two
+ * fields always filled (weight, reps) side by side, then the optional pair,
+ * then the toggle, then the action.
+ */
 .set-form {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   align-items: end;
 }
 .set-form label,
@@ -274,45 +353,44 @@ button.secondary:hover:not(:disabled) {
 }
 
 .f-exercise {
-  grid-column: span 12;
+  grid-column: span 2;
 }
 .f-num {
-  grid-column: span 6;
+  grid-column: span 1;
 }
 .f-check {
-  grid-column: span 6;
+  grid-column: span 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 10px;
+  min-height: var(--tap);
+  font-size: 15px;
   font-weight: 600;
-  padding-bottom: 9px;
 }
 .f-check input {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
   accent-color: var(--accent);
 }
+
+/*
+ * The action stays on screen while the form is. It is rank 1 and the whole
+ * reason the page is open; scrolling to find it between sets is the failure
+ * this pins shut. `--surface` matches the card it sits in, so there is no seam.
+ */
 .f-submit {
-  grid-column: span 6;
+  grid-column: span 2;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  padding: 8px 0 max(2px, env(safe-area-inset-bottom));
+  z-index: 10;
 }
 .f-submit button {
   width: 100%;
-}
-
-@media (min-width: 760px) {
-  .f-exercise {
-    grid-column: span 12;
-  }
-  .f-num {
-    grid-column: span 2;
-  }
-  .f-check {
-    grid-column: span 2;
-  }
-  .f-submit {
-    grid-column: span 2;
-  }
+  min-height: 50px;
+  font-size: 16px;
 }
 
 /* ---- searchable exercise picker --------------------------------------- */
@@ -329,8 +407,10 @@ button.secondary:hover:not(:disabled) {
   margin: 0;
   padding: 6px;
   list-style: none;
-  max-height: 320px;
+  /* Short enough that the field it belongs to stays visible above it. */
+  max-height: 45vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -338,17 +418,16 @@ button.secondary:hover:not(:disabled) {
 }
 .combo-list li button {
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+  display: grid;
+  gap: 2px;
   text-align: left;
   background: transparent;
   color: var(--text);
   border: none;
   box-shadow: none;
   font-weight: 500;
-  padding: 8px 10px;
+  padding: 9px 10px;
+  min-height: var(--tap);
   border-radius: 8px;
 }
 .combo-list li button:hover {
@@ -365,11 +444,12 @@ button.secondary:hover:not(:disabled) {
 .chosen {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: var(--accent-soft);
   border: 1.5px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 6px 6px 6px 12px;
+  min-height: var(--tap);
 }
 .chosen-name {
   font-weight: 700;
@@ -382,17 +462,10 @@ button.secondary:hover:not(:disabled) {
 
 .finish-form {
   display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-}
-@media (max-width: 560px) {
-  .finish-form {
-    grid-template-columns: 1fr;
-  }
+  gap: 10px;
 }
 
-/* ---- tables ----------------------------------------------------------- */
+/* ---- tables, which are cards on a phone -------------------------------- */
 
 .table-scroll {
   overflow-x: auto;
@@ -420,8 +493,79 @@ th {
 tbody tr:last-child td {
   border-bottom: none;
 }
-tbody tr:hover td {
-  background: var(--surface-2);
+
+/*
+ * Seven columns of nowrap cannot be made to fit 375px, so below the tablet
+ * breakpoint a `.table-cards` table stops being a table: each row is a card and
+ * each cell carries its column name from data-label.
+ *
+ * AI-NOTE: every td in a .table-cards table needs a data-label, or the cell
+ *          renders with no idea what it is. A cell whose label would be noise
+ *          (an action button) gets data-label="".
+ */
+.table-cards,
+.table-cards tbody,
+.table-cards tr,
+.table-cards td {
+  display: block;
+  width: 100%;
+}
+.table-cards thead {
+  display: none;
+}
+.table-cards tr {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.table-cards tr:last-child {
+  margin-bottom: 0;
+}
+.table-cards td {
+  border: none;
+  padding: 3px 0;
+  white-space: normal;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.table-cards td::before {
+  content: attr(data-label);
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.table-cards td[data-label='']::before {
+  content: none;
+}
+/*
+ * A link inside a card row is navigation — on /workouts it is the only way into
+ * a session — so it takes the whole right-hand side of the row and a full 44px
+ * of height. Measured at 79x23 before this, which is a miss waiting to happen
+ * with a thumb.
+ */
+.table-cards td a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  min-height: var(--tap);
+  margin: -6px 0;
+}
+
+/* An action cell fills the row rather than hugging the right edge. */
+.table-cards td[data-label=''] {
+  justify-content: stretch;
+  padding-top: 8px;
+}
+.table-cards td[data-label=''] > form,
+.table-cards td[data-label=''] button {
+  width: 100%;
 }
 
 /* ---- badges and bars --------------------------------------------------- */
@@ -486,20 +630,14 @@ code {
 }
 .tonnage-row {
   display: grid;
-  grid-template-columns: 84px 1fr 86px;
-  gap: 12px;
+  grid-template-columns: 62px 1fr 68px;
+  gap: 8px;
   align-items: center;
 }
 .tonnage-value {
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
-}
-@media (max-width: 520px) {
-  .tonnage-row {
-    grid-template-columns: 70px 1fr 70px;
-    gap: 8px;
-  }
 }
 
 /* ---- field hints ------------------------------------------------------- */
@@ -515,20 +653,36 @@ code {
   display: inline-flex;
 }
 
+/*
+ * Visually 20px so it stays a footnote, but the ::after gives it the full 44px
+ * target — mobile-interface.md §3. Shrinking the hit area to match the glyph is
+ * the mistake this avoids.
+ */
 .hint-btn {
-  width: 16px;
-  height: 16px;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
   padding: 0;
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--muted);
   border: 1.5px solid var(--border-strong);
   box-shadow: none;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   display: grid;
   place-items: center;
+}
+.hint-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--tap);
+  height: var(--tap);
+  transform: translate(-50%, -50%);
 }
 .hint-btn:hover:not(:disabled),
 .hint-btn:focus-visible {
@@ -544,10 +698,14 @@ code {
   position: absolute;
   z-index: 30;
   bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  /*
+   * Pinned left rather than centred: on a phone the hint sits near the screen
+   * edge, where a centred bubble hangs off it. Growing rightwards always has
+   * room.
+   */
+  left: 0;
   width: max-content;
-  max-width: min(280px, 70vw);
+  max-width: min(260px, 76vw);
   display: none;
   padding: 10px 12px;
   background: var(--surface);
@@ -576,15 +734,192 @@ code {
   display: block;
 }
 
-/*
- * On a phone the tiles are full width and the hint sits close to the left edge,
- * where a centred bubble would hang off the screen. Pin it to the left instead
- * and let it grow rightwards, which always has room.
- */
-@media (max-width: 700px) {
+/* =======================================================================
+ * Wider screens. Everything above is the phone; everything below is added
+ * capability, never a correction.
+ * ===================================================================== */
+
+@media (min-width: 560px) {
+  .set-form {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .f-exercise {
+    grid-column: span 4;
+  }
+  .f-check {
+    grid-column: span 2;
+  }
+  .f-submit {
+    grid-column: span 2;
+    /* Enough room for the action to sit inline, so it stops needing to stick. */
+    position: static;
+    padding: 0;
+  }
+  .f-submit button {
+    min-height: var(--tap);
+  }
+
+  .finish-form {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+}
+
+@media (min-width: 760px) {
+  .shell {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+  }
+
+  header.top {
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  header.top h1 {
+    font-size: 26px;
+  }
+
+  h2.section {
+    font-size: 13px;
+    margin: 32px 0 12px;
+  }
+
+  .card {
+    padding: 18px;
+  }
+
+  .grid {
+    gap: 14px;
+  }
+  .grid.cols-4 {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  .grid.cols-4 > :nth-child(-n + 2) {
+    grid-column: auto;
+  }
+
+  .stat {
+    padding: 16px 18px;
+  }
+  .stat .value {
+    font-size: 30px;
+  }
+
+  .timer-grid {
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  .timer-rest {
+    order: 0;
+  }
+  .timer-session {
+    padding: 18px;
+  }
+  .timer-session .timer {
+    font-size: 38px;
+  }
+  header.top a {
+    display: inline;
+    min-height: 0;
+  }
+  .timer-card {
+    padding: 18px;
+    gap: 12px;
+  }
+  .timer-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .timer {
+    font-size: 38px;
+  }
+
+  .set-form {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .f-exercise {
+    grid-column: span 12;
+  }
+  .f-num {
+    grid-column: span 2;
+  }
+  .f-check {
+    grid-column: span 2;
+  }
+  .f-submit {
+    grid-column: span 2;
+  }
+
+  .combo-list {
+    max-height: 320px;
+  }
+  .combo-list li button {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  /* Back to being a real table, with room for one. */
+  .table-cards {
+    display: table;
+  }
+  .table-cards thead {
+    display: table-header-group;
+  }
+  .table-cards tbody {
+    display: table-row-group;
+  }
+  .table-cards tr {
+    display: table-row;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .table-cards td {
+    display: table-cell;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    white-space: nowrap;
+  }
+  .table-cards td::before {
+    content: none;
+  }
+  .table-cards td a {
+    display: inline;
+    min-height: 0;
+    margin: 0;
+  }
+  .table-cards td[data-label=''] {
+    text-align: right;
+    padding-top: 10px;
+  }
+  .table-cards td[data-label=''] > form,
+  .table-cards td[data-label=''] button {
+    width: auto;
+  }
+  .table-cards tbody tr:last-child td {
+    border-bottom: none;
+  }
+  tbody tr:hover td {
+    background: var(--surface-2);
+  }
+
+  .tonnage-row {
+    grid-template-columns: 84px 1fr 86px;
+    gap: 12px;
+  }
+
   .hint-bubble {
-    left: 0;
-    transform: none;
-    max-width: min(260px, 76vw);
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(280px, 70vw);
   }
 }

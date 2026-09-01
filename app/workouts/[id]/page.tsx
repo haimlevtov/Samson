@@ -69,7 +69,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       <h2 className="section">Logged sets</h2>
       <div className="card">
         <div className="table-scroll">
-          <table>
+          <table className="table-cards">
             <thead>
               <tr>
                 <th>Exercise</th>
@@ -86,17 +86,25 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                 const estimate = s.isWarmup ? null : epleyE1rm(s.weightKg, s.reps);
                 return (
                   <tr key={s.id}>
-                    <td>
+                    <td data-label="Exercise">
                       {s.exerciseName}
                       {s.isWarmup ? <span className="badge"> warmup</span> : null}
                     </td>
-                    <td className="muted">{s.setIndex + 1}</td>
-                    <td>{s.weightKg === null ? '—' : `${s.weightKg} kg`}</td>
-                    <td>{s.reps ?? '—'}</td>
-                    <td className="muted">{s.rpe ?? '—'}</td>
+                    <td data-label="Set" className="muted">
+                      {s.setIndex + 1}
+                    </td>
+                    <td data-label="Weight">{s.weightKg === null ? '—' : `${s.weightKg} kg`}</td>
+                    <td data-label="Reps">{s.reps ?? '—'}</td>
+                    <td data-label="RPE" className="muted">
+                      {s.rpe ?? '—'}
+                    </td>
                     {/* Null above 12 reps: Epley stops being honest there. */}
-                    <td className="muted">{estimate === null ? '—' : estimate.toFixed(1)}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td data-label="e1RM" className="muted">
+                      {estimate === null ? '—' : estimate.toFixed(1)}
+                    </td>
+                    {/* Empty label: the action needs no column name, and the
+                        card layout keys off that to give it a full-width row. */}
+                    <td data-label="">
                       {editable ? (
                         <form action={deleteSet}>
                           <input type="hidden" name="setId" value={s.id} />
@@ -112,7 +120,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               })}
               {workout.sets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="muted small">
+                  <td data-label="" colSpan={7} className="muted small">
                     Nothing logged yet.
                   </td>
                 </tr>
