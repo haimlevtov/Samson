@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { insertSet } from '@/src/db/training';
 
 /**
  * Every write in this file runs on the request-scoped, RLS-bound client.
@@ -54,33 +55,17 @@ export async function logSet(formData: FormData): Promise<void> {
     return Number.isFinite(value) ? value : null;
   };
 
-  // The next index for this exercise within this session. Read rather than
-  // counted client-side so two tabs cannot collide on the unique constraint.
-  const { data: existing } = await db
-    .from('sets')
-    .select('set_index')
-    .eq('workout_id', workoutId)
-    .eq('exercise_id', exerciseId)
-    .order('set_index', { ascending: false })
-    .limit(1);
-
-  const nextIndex = (existing?.[0]?.set_index ?? -1) + 1;
-
-  const { error } = await db.from('sets').insert({
-    user_id: user.id,
-    workout_id: workoutId,
-    exercise_id: exerciseId,
-    set_index: nextIndex,
-    // INVARIANT: stored canonically in kg — CLAUDE.md #8.
-    weight_kg: number('weightKg'),
+  // One write path, shared with the normalizer — see src/db/training.ts.
+  await insertSet(db, user.id, {
+    workoutId,
+    exerciseId,
+    weightKg: number('weightKg'),
     reps: number('reps'),
     rpe: number('rpe'),
-    rest_seconds: number('restSeconds'),
-    is_warmup: isWarmup,
-    completed_at: new Date().toISOString(),
+    restSeconds: number('restSeconds'),
+    isWarmup,
   });
 
-  if (error) throw new Error(`logging set: ${error.message}`);
   revalidatePath(`/workouts/${workoutId}`);
 }
 
