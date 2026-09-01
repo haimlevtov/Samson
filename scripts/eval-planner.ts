@@ -76,6 +76,19 @@ const CASE_LIMIT = process.argv.includes('--all')
  * that was missing when a single afternoon spent $4.30.
  */
 const MAX_RUN_SPEND_USD = numericFlag('--max-spend', 0.75);
+
+/**
+ * Restrict the run to one archetype, e.g. --archetype home-gym.
+ *
+ * WHY it exists: the budget gate is per user, so a fixture user that has
+ * already spent its weekly cap will refuse every case belonging to it. Being
+ * able to point a demo at a user with headroom is the difference between
+ * showing the pipeline and showing a denial.
+ */
+const ARCHETYPE = (() => {
+  const i = process.argv.indexOf('--archetype');
+  return i === -1 ? null : (process.argv[i + 1] ?? null);
+})();
 const SEED_PASSWORD = 'samson-demo-fixture';
 
 // ---------------------------------------------------------------------------
@@ -211,7 +224,12 @@ function report(rows: Row[], live: boolean): void {
 }
 
 async function main(): Promise<void> {
-  const cases = goldenCases();
+  const cases = goldenCases().filter((c) => ARCHETYPE === null || c.archetype.key === ARCHETYPE);
+
+  if (cases.length === 0) {
+    console.error(`No cases for archetype "${ARCHETYPE}".`);
+    process.exit(1);
+  }
 
   if (LIVE) {
     // The key check comes first: running this without one is the common case
