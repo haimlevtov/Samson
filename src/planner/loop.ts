@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto';
 import { CRITIC_MAX_TOKENS, MAX_PLAN_ITERATIONS, PLANNER_MAX_TOKENS } from '../llm/config';
 import { ESCALATION_MODELS } from '../llm/models';
+import { SafetyBlockedError } from '../llm/safety';
 import { BudgetExceededError, LlmCallFailedError } from '../llm/types';
 import { CRITIC_SYSTEM, PLANNER_SYSTEM, criticUserMessage, plannerUserMessage } from './prompts';
 import { checkRules, type RuleContext, type RuleFinding } from './rules';
@@ -132,7 +133,13 @@ export async function generatePlan(
       // A budget denial or an exhausted schema retry is not a rejected plan. It
       // is the run failing, and conflating the two would put transport noise in
       // the rejection statistics.
-      if (cause instanceof BudgetExceededError || cause instanceof LlmCallFailedError) {
+      // A content block is not a rejected plan either: nothing was judged, the
+      // answer was refused before anyone read it — ADR 0005.
+      if (
+        cause instanceof BudgetExceededError ||
+        cause instanceof LlmCallFailedError ||
+        cause instanceof SafetyBlockedError
+      ) {
         return finish('failed', null, cause.message);
       }
       throw cause;
@@ -174,7 +181,11 @@ export async function generatePlan(
         lastSource = 'critic';
       }
     } catch (cause) {
-      if (cause instanceof BudgetExceededError || cause instanceof LlmCallFailedError) {
+      if (
+        cause instanceof BudgetExceededError ||
+        cause instanceof LlmCallFailedError ||
+        cause instanceof SafetyBlockedError
+      ) {
         return finish('failed', null, cause.message);
       }
       throw cause;

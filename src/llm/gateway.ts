@@ -30,6 +30,13 @@ import {
   toStrictJsonSchema,
 } from './openrouter';
 import {
+  SAFETY_PREAMBLE,
+  SafetyBlockedError,
+  safetyCorrection,
+  scanOutput,
+  type SafetyFinding,
+} from './safety';
+import {
   BudgetExceededError,
   LlmCallFailedError,
   type CallOptions,
@@ -70,7 +77,16 @@ export async function callLLM<T>(
   const models = modelsForStage(options.stage, options.models ?? modelOverrideFromEnv());
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const promptPrefixHash = hashPrefix(options.system);
+  /*
+   * INVARIANT: every stage carries the conduct and injection preamble — ADR 0005
+   *            §3. Prepended here rather than at call sites so that a new stage
+   *            cannot omit it, and first in the string so it sits inside the
+   *            cached prefix and costs almost nothing after the first call.
+   */
+  const system = SAFETY_PREAMBLE + options.system;
+  // Hashed AFTER prepending: the hash identifies the prompt actually sent, so
+  // editing the preamble correctly starts a new cache lineage in the ledger.
+  const promptPrefixHash = hashPrefix(system);
   const ledger: LlmCallInsert[] = [];
 
   const record = async (row: LlmCallInsert): Promise<void> => {
@@ -121,6 +137,9 @@ export async function callLLM<T>(
 
   const jsonSchema = toStrictJsonSchema(z.toJSONSchema(options.schema) as Record<string, unknown>);
   const messages: ChatMessage[] = [...options.messages];
+  // Kept across attempts so the terminal throw reports what was actually
+  // caught, rather than a code invented at the throw site.
+  let lastFindings: SafetyFinding[] = [];
   let costCredits = 0;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -141,7 +160,7 @@ export async function callLLM<T>(
         body: JSON.stringify(
           buildRequestBody({
             models,
-            system: options.system,
+            system,
             messages,
             schemaName: options.schemaName,
             jsonSchema,
@@ -181,24 +200,48 @@ export async function callLLM<T>(
           retryable = true;
         } else {
           const content = envelope.choices?.[0]?.message?.content ?? '';
-          const validation = safeParseJson(content, options.schema);
 
-          if (validation.ok) {
-            row.status = 'ok';
-            parsed = validation.value;
-          } else {
-            row.status = 'schema_invalid';
-            row.error = validation.error.slice(0, 1000);
+          /*
+           * Layer 4 runs BEFORE schema validation — ADR 0005 §4. A perfectly
+           * well-formed response that insults the user is still one that must
+           * not reach them, and shape says nothing about content.
+           */
+          const findings = scanOutput(content);
+
+          if (findings.length > 0) {
+            row.status = 'safety_blocked';
+            row.error = findings
+              .map((f) => `${f.code}: ${f.match}`)
+              .join('; ')
+              .slice(0, 1000);
             retryable = true;
-            // WHY: re-prompting with the validation error attached turns a
-            //      wasted retry into a targeted correction.
+            lastFindings = findings;
+            // Corrected the same way a schema failure is: say what was wrong and
+            // ask again, rather than spending a retry on the same question.
             correction = [
-              { role: 'assistant', content: content.slice(0, 2000) },
-              {
-                role: 'user',
-                content: `That response failed schema validation: ${validation.error}. Reply with JSON matching the schema exactly, and nothing else.`,
-              },
+              { role: 'assistant', content: content.slice(0, 500) },
+              { role: 'user', content: safetyCorrection(findings) },
             ];
+          } else {
+            const validation = safeParseJson(content, options.schema);
+
+            if (validation.ok) {
+              row.status = 'ok';
+              parsed = validation.value;
+            } else {
+              row.status = 'schema_invalid';
+              row.error = validation.error.slice(0, 1000);
+              retryable = true;
+              // WHY: re-prompting with the validation error attached turns a
+              //      wasted retry into a targeted correction.
+              correction = [
+                { role: 'assistant', content: content.slice(0, 2000) },
+                {
+                  role: 'user',
+                  content: `That response failed schema validation: ${validation.error}. Reply with JSON matching the schema exactly, and nothing else.`,
+                },
+              ];
+            }
           }
         }
       }
@@ -222,6 +265,16 @@ export async function callLLM<T>(
   }
 
   const last = ledger[ledger.length - 1];
+
+  /*
+   * A run that died on content is a different fact from one that died on
+   * transport, and the caller can act on the difference — src/planner/loop.ts
+   * records it rather than filing it under "the model broke".
+   */
+  if (last?.status === 'safety_blocked') {
+    throw new SafetyBlockedError(lastFindings);
+  }
+
   throw new LlmCallFailedError(
     `${options.stage} call failed after ${ledger.length} attempt(s): ${last?.status ?? 'unknown'} - ${last?.error ?? 'no detail'}`,
     ledger

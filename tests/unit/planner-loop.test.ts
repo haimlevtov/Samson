@@ -222,7 +222,14 @@ describe('generatePlan', () => {
 
     const retry = h.captured[1];
     expect(retry).toBeDefined();
-    const sent = JSON.parse(retry?.messages[0]?.content ?? '{}') as PlannerInput;
+
+    // The payload is fenced — ADR 0005 §2 — so assert the fence is there and
+    // then read the JSON inside it. Losing the fence would be a regression in
+    // the injection boundary, not a formatting detail.
+    const raw = retry?.messages[0]?.content ?? '';
+    expect(raw).toContain('SAMSON-UNTRUSTED');
+    const inner = raw.split('\n').slice(1, -1).join('\n');
+    const sent = JSON.parse(inner) as PlannerInput;
 
     expect(sent.prior_rejections).toHaveLength(1);
     expect(sent.prior_rejections[0]).toMatchObject({

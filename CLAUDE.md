@@ -51,6 +51,11 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
    achievements evaluate against the user's local date, never server date.
 10. **RLS is on for every table.** Every table has `user_id`. Never bypass with
     the service role key in application code.
+11. **Untrusted text never reaches the instruction channel.** User notes and
+    third-party catalogue text go in `messages`, fenced and sanitised, never in
+    `system`. Every completion is scanned before it is returned. The gateway
+    applies both — see `docs/adr/0005-llm-safety.md`. The prompt-level conduct
+    rules are defence in depth, not the control.
 
 ## Conventions
 

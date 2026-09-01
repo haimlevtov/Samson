@@ -12,6 +12,7 @@
  * Pure over plain shapes, like the metrics engine itself — the database read is
  * the caller's job, so this is testable without one.
  */
+import { MAX_FIELD_CHARS, sanitizeUntrusted } from '../llm/safety';
 import { acwr, acwrBand, DEFAULT_CHRONIC_DAYS } from '../metrics/acwr';
 import { adherence } from '../metrics/adherence';
 import { addDays, startOfWeek } from '../metrics/dates';
@@ -93,11 +94,18 @@ function toRuleCandidate(candidate: ContextCandidate): RuleCandidate {
   };
 }
 
+/*
+ * INVARIANT: catalogue text is untrusted — ADR 0005. `name` and
+ *            `primary_muscle` come from Free Exercise DB, which nobody on this
+ *            project reviewed line by line, and they are about to be put in
+ *            front of a model. Sanitised here, at the boundary where they enter
+ *            the payload, rather than trusted because they look harmless.
+ */
 function toSummary(candidate: ContextCandidate): CandidateSummary {
   return {
     slug: candidate.slug,
-    name: candidate.name,
-    primary_muscle: candidate.primaryMuscle,
+    name: sanitizeUntrusted(candidate.name, MAX_FIELD_CHARS),
+    primary_muscle: sanitizeUntrusted(candidate.primaryMuscle, MAX_FIELD_CHARS),
     movement_pattern: candidate.movementPattern,
     equipment: candidate.equipment.map((e) => ({ slug: e.slug, max_load_kg: e.maxLoadKg })),
   };

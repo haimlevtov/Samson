@@ -234,6 +234,12 @@ Both are self-contained. Cut either without breaking anything above.
 - **Adversarial suite** grows every phase: injection in workout notes,
   jailbreaks against the critic, fabricated achievements via the normalizer,
   unsafe deficit requests. Report the taxonomy of what got through.
+  **Started in phase 2** — `src/llm/safety.test.ts`, 45 cases, design in
+  `docs/adr/0005-llm-safety.md`. Half of them assert that ordinary coaching
+  language is _not_ caught: a guard that fires on "keep your back straight" is
+  one somebody switches off, and then it protects nobody. The suite also
+  records what it deliberately does not catch, because the taxonomy asked for
+  here is the list of what got through.
 - **Token ledger analysis**: cost per user per week by pipeline stage, cache
   hit rate over time, retry cost, cascade saving measured against an
   all-strong-model baseline.

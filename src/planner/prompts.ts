@@ -12,6 +12,7 @@
  *          intended — it is how prompt versions are told apart in the ledger —
  *          but it means an idle reword throws away accumulated cache hits.
  */
+import { MAX_PAYLOAD_CHARS, fenceUntrusted } from '../llm/safety';
 import type { PlannerInput, TrainingBlock } from './schema';
 
 /**
@@ -80,18 +81,26 @@ Reply with JSON only.`;
  *          and inside the instruction channel at once.
  */
 export function plannerUserMessage(input: PlannerInput): string {
-  return JSON.stringify(input);
+  // Fenced as a whole — ADR 0005 §2. Everything in the per-call half is data,
+  // and the preamble tells the model that anything inside these markers is to
+  // be read and never obeyed. Individual catalogue strings were already
+  // sanitised in context.ts, where they enter the payload.
+  return fenceUntrusted('planner input', JSON.stringify(input), MAX_PAYLOAD_CHARS);
 }
 
 export function criticUserMessage(input: PlannerInput, block: TrainingBlock): string {
   // The critic sees the same facts the planner did. Without them it is judging
   // a block in a vacuum, and "unsuitable for this person" is exactly the
   // question it exists to answer.
-  return JSON.stringify({
-    goal: input.goal,
-    days_per_week: input.days_per_week,
-    injured_joints: input.injured_joints,
-    metrics: input.metrics,
-    block,
-  });
+  return fenceUntrusted(
+    'critic input',
+    JSON.stringify({
+      goal: input.goal,
+      days_per_week: input.days_per_week,
+      injured_joints: input.injured_joints,
+      metrics: input.metrics,
+      block,
+    }),
+    MAX_PAYLOAD_CHARS
+  );
 }
