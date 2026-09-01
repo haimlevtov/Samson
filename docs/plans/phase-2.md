@@ -26,15 +26,15 @@ no key, no network and no database.
 What it does block is **measurement**, and that split is stated honestly here
 rather than discovered at the end:
 
-| Acceptance criterion | This phase |
-| --- | --- |
-| Golden cases produce a schema-valid plan within the retry cap | ✅ against a scripted model |
-| Property assertions hold across all cases | ✅ |
-| Every rule has a test that fails a violating plan; the two rejection sources are never conflated | ✅ |
-| Cache hit rate measured and recorded | ❌ **needs a key** |
-| Cost per plan generation recorded per model tried | ❌ **needs a key** |
+| Acceptance criterion                                                                             | This phase                  |
+| ------------------------------------------------------------------------------------------------ | --------------------------- |
+| Golden cases produce a schema-valid plan within the retry cap                                    | ✅ against a scripted model |
+| Property assertions hold across all cases                                                        | ✅                          |
+| Every rule has a test that fails a violating plan; the two rejection sources are never conflated | ✅                          |
+| Cache hit rate measured and recorded                                                             | ❌ **needs a key**          |
+| Cost per plan generation recorded per model tried                                                | ❌ **needs a key**          |
 
-The offline run proves the *machinery* — loop control, rule enforcement,
+The offline run proves the _machinery_ — loop control, rule enforcement,
 rejection routing, escalation, ledger writes. It proves nothing about whether a
 real model writes good training. Claiming otherwise would be exactly the
 verification theatre Lesson 8 names, so the phase-2 Outcome section will record
@@ -78,7 +78,7 @@ Decisions it records:
 - **Escalate rather than repeat.** The gateway already retries schema failures
   with the validation error attached. What it cannot do is change model: its
   `models` array is an OpenRouter fallback that triggers on transport errors, not
-  on a schema-invalid response. So the *loop* escalates, passing an explicit
+  on a schema-invalid response. So the _loop_ escalates, passing an explicit
   stronger `models` override on the final iteration.
 
 ### 2. `src/planner/schema.ts` — Zod first
@@ -97,14 +97,14 @@ per CLAUDE.md conventions. `z.infer` for every type; no hand-written duplicates.
 Pure functions over `(block, context)`, returning `RuleFinding[]`. Run on every
 plan regardless of what the critic says.
 
-| Rule | Gate |
-| --- | --- |
-| `weekly_volume_increase` | Week-over-week tonnage increase within cap |
-| `acwr_band` | Projected ratio not in `danger` — reuses `acwrBand` from `src/metrics/acwr.ts` |
-| `deload_cadence` | A deload week present by week 5 |
-| `equipment_available` | Every `exercise_id` appears in the candidate list |
-| `load_ceiling` | No prescribed weight above `user_equipment.max_load_kg` |
-| `injured_joint` | No exercise loading a flagged joint |
+| Rule                     | Gate                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `weekly_volume_increase` | Week-over-week tonnage increase within cap                                     |
+| `acwr_band`              | Projected ratio not in `danger` — reuses `acwrBand` from `src/metrics/acwr.ts` |
+| `deload_cadence`         | A deload week present by week 5                                                |
+| `equipment_available`    | Every `exercise_id` appears in the candidate list                              |
+| `load_ceiling`           | No prescribed weight above `user_equipment.max_load_kg`                        |
+| `injured_joint`          | No exercise loading a flagged joint                                            |
 
 **AI-NOTE for the implementer:** if a rule can be written as a comparison
 against a number, it belongs here. Only genuinely holistic judgement goes to the
@@ -190,13 +190,13 @@ Token budgets per stage go in `src/llm/config.ts`, not at call sites.
 
 ## Verification
 
-| Criterion | Proof |
-| --- | --- |
-| Schema-valid plan within the retry cap, all 30 cases | `npm run eval:planner` — offline, scripted model |
-| Property assertions hold | Same run: volume within cap, no unavailable equipment, deload by week 5, injured joints absent |
-| Every rule fails a violating plan | `npm test` — `rules.test.ts`, written from the spec by a separate author |
-| Rejection sources never conflated | `planner-loop.test.ts` asserts a rules rejection never writes a `critic` entry and vice versa |
-| Cache hit rate / cost per model | **Not met.** Recorded as unmet in the Outcome section. |
+| Criterion                                            | Proof                                                                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Schema-valid plan within the retry cap, all 30 cases | `npm run eval:planner` — offline, scripted model                                               |
+| Property assertions hold                             | Same run: volume within cap, no unavailable equipment, deload by week 5, injured joints absent |
+| Every rule fails a violating plan                    | `npm test` — `rules.test.ts`, written from the spec by a separate author                       |
+| Rejection sources never conflated                    | `planner-loop.test.ts` asserts a rules rejection never writes a `critic` entry and vice versa  |
+| Cache hit rate / cost per model                      | **Not met.** Recorded as unmet in the Outcome section.                                         |
 
 Plus the existing suites stay green: `npm run typecheck && npm run lint && npm test`,
 and `npm run test:db` for the new table's RLS.

@@ -36,7 +36,7 @@ export type RuleCode =
 
 export interface RuleFinding {
   code: RuleCode;
-  detail: string;        // human-readable, non-empty
+  detail: string; // human-readable, non-empty
   weekNumber: number | null;
 }
 
@@ -55,13 +55,13 @@ under its own name with the same `(block, context) => RuleFinding[]` signature.
 ```ts
 export interface CandidateEquipment {
   slug: string;
-  maxLoadKg: number | null;     // null = no ceiling on this item
+  maxLoadKg: number | null; // null = no ceiling on this item
 }
 
 export interface RuleCandidate {
   slug: string;
   name: string;
-  primaryMuscle: string;        // e.g. 'quadriceps', 'shoulders'
+  primaryMuscle: string; // e.g. 'quadriceps', 'shoulders'
   movementPattern: string | null; // 'push'|'pull'|'squat'|'hinge'|'carry'|'core'|'isolation'
   equipment: CandidateEquipment[];
 }
@@ -78,10 +78,10 @@ export interface RuleContext {
 
 ### Constants (exported)
 
-| Name | Value |
-| --- | --- |
+| Name                          | Value  |
+| ----------------------------- | ------ |
 | `MAX_WEEKLY_TONNAGE_INCREASE` | `0.10` |
-| `DELOAD_REQUIRED_BY_WEEK` | `5` |
+| `DELOAD_REQUIRED_BY_WEEK`     | `5`    |
 
 `acwr_band` uses `ACWR_HIGH_RISK` (`1.5`) imported from `src/metrics/acwr.ts`.
 
@@ -107,7 +107,7 @@ above the week it is measured against.
 non-deload week.** For the first non-deload week in the block, it is
 `context.baselineWeeklyTonnageKg`.
 
-*Why not simply the previous week:* returning to normal volume after a deload
+_Why not simply the previous week:_ returning to normal volume after a deload
 would otherwise register as a large spike every single time, and the rule would
 fire on correct programming.
 
@@ -155,7 +155,7 @@ some entry in `context.candidates`.
 - `weekNumber` is the first week the slug appears in.
 - Matching is exact and case-sensitive. A slug differing only in case is unknown.
 
-*Why this can fire at all:* the candidate list is filtered in SQL before the
+_Why this can fire at all:_ the candidate list is filtered in SQL before the
 model sees it, so a slug outside the list is the model inventing an exercise —
 which is exactly what invariant #5 exists to catch.
 
@@ -172,7 +172,7 @@ Determining the ceiling for one exercise:
 3. If there are none, the exercise is unlimited — emit nothing.
 4. Otherwise the ceiling is the **minimum** of them.
 
-*Why the minimum:* if any implement the movement needs is capped, that cap
+_Why the minimum:_ if any implement the movement needs is capped, that cap
 binds. Yossi's dumbbells stop at 30 kg regardless of what else is in the room.
 
 - A set with `weight_kg === null` is never a finding.
@@ -189,15 +189,15 @@ No exercise may load a joint listed in `context.injuredJoints`.
 An exercise loads a joint when **either** its `primaryMuscle` is in that joint's
 muscle set **or** its `movementPattern` is in that joint's pattern set:
 
-| Joint | Muscles | Patterns |
-| --- | --- | --- |
-| `knee` | quadriceps, hamstrings, calves | squat |
-| `hip` | glutes, hamstrings, adductors, abductors | hinge, squat |
-| `lower-back` | lower back | hinge, carry |
-| `shoulder` | shoulders, chest, lats, traps | — |
-| `elbow` | biceps, triceps, forearms | — |
-| `wrist` | forearms | carry |
-| `ankle` | calves | squat |
+| Joint        | Muscles                                  | Patterns     |
+| ------------ | ---------------------------------------- | ------------ |
+| `knee`       | quadriceps, hamstrings, calves           | squat        |
+| `hip`        | glutes, hamstrings, adductors, abductors | hinge, squat |
+| `lower-back` | lower back                               | hinge, carry |
+| `shoulder`   | shoulders, chest, lats, traps            | —            |
+| `elbow`      | biceps, triceps, forearms                | —            |
+| `wrist`      | forearms                                 | carry        |
+| `ankle`      | calves                                   | squat        |
 
 - A joint string outside this table is **ignored**, emitting nothing. It is not
   an error and not a finding.

@@ -40,12 +40,12 @@ candidates (SQL) → planner (LLM) → rules (code) → critic (LLM) → accepte
 
 ### Each participant
 
-| | Role | Input | Output | Boundary — what it may not do |
-| --- | --- | --- | --- | --- |
-| **Candidate query** | Decide what this user *can* do | `user_id` | Exercise list, equipment-filtered in SQL | Never ranks or programmes |
-| **Planner** (`claude-sonnet-5`) | Choose and arrange work | Metrics, goal, days, candidates, prior rejections | `TrainingBlock` | May not invent an exercise outside the candidate list; may not compute a metric |
-| **Rules** (`src/planner/rules.ts`) | Enforce every limit expressible as arithmetic | Block + context | `RuleFinding[]` | No judgement, no I/O, no model |
-| **Critic** (`gemini-2.5-flash`) | Judge what arithmetic cannot — is this sensible training *for this person* | Block + context | `CriticVerdict` | May not re-check what the rules already checked; cannot approve past a rule failure, because it never sees a plan that failed one |
+|                                    | Role                                                                       | Input                                             | Output                                   | Boundary — what it may not do                                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Candidate query**                | Decide what this user _can_ do                                             | `user_id`                                         | Exercise list, equipment-filtered in SQL | Never ranks or programmes                                                                                                         |
+| **Planner** (`claude-sonnet-5`)    | Choose and arrange work                                                    | Metrics, goal, days, candidates, prior rejections | `TrainingBlock`                          | May not invent an exercise outside the candidate list; may not compute a metric                                                   |
+| **Rules** (`src/planner/rules.ts`) | Enforce every limit expressible as arithmetic                              | Block + context                                   | `RuleFinding[]`                          | No judgement, no I/O, no model                                                                                                    |
+| **Critic** (`gemini-2.5-flash`)    | Judge what arithmetic cannot — is this sensible training _for this person_ | Block + context                                   | `CriticVerdict`                          | May not re-check what the rules already checked; cannot approve past a rule failure, because it never sees a plan that failed one |
 
 ### Rules run before the critic
 

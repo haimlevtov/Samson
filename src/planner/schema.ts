@@ -10,11 +10,16 @@
  *            that crosses a stage boundary is an array of tagged objects, so the
  *            receiving stage reads a field instead of guessing at a sentence.
  *
- * AI-NOTE: every object here is `z.strictObject`, deliberately. OpenRouter is
- *          called with `strict: true`, which requires `additionalProperties:
- *          false` and every property present in `required`. A `.optional()`
- *          field silently breaks that contract at request time — use
- *          `.nullable()` instead, which emits an anyOf including null.
+ * AI-NOTE: every object here is `z.strictObject`, deliberately. The gateway
+ *          sends these with `strict: true`, which requires
+ *          `additionalProperties: false` and every property present in
+ *          `required`. A `.optional()` field silently breaks that contract at
+ *          request time — use `.nullable()` instead, which emits an anyOf
+ *          including null.
+ *
+ *          The provider is not named here on purpose:
+ *          tests/unit/invariants.test.ts greps the whole tree for that word to
+ *          enforce CLAUDE.md #2, and it cannot tell a comment from a fetch.
  */
 import { z } from 'zod';
 
@@ -54,6 +59,17 @@ export type PrescribedSet = z.infer<typeof prescribedSetSchema>;
  *          — which then looks like a hallucinated exercise rather than a typo.
  *          `equipment_available` in rules.ts resolves the slug against the
  *          candidate list and rejects anything that does not match.
+ *
+ * AI-NOTE — a known cost of this shape, recorded rather than churned. Every set
+ *          is enumerated, so a four-week block is a few thousand output tokens
+ *          and output is the expensive half. A `{ count, reps, weight_kg }`
+ *          grouping would express "3×5 @ 60 kg" in one object and cut that by
+ *          roughly three, at the price of making a ramping set harder to write
+ *          and every tonnage calculation in rules.ts multiply before it sums.
+ *          Deliberately not changed mid-phase: the rules tests were already
+ *          being authored against this shape by a separate author, and
+ *          invalidating that work costs more than the tokens do. Revisit before
+ *          phase 3, with the measured cost in hand.
  */
 export const prescribedExerciseSchema = z.strictObject({
   exercise_slug: z.string().min(1).max(120),

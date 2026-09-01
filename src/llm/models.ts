@@ -28,6 +28,27 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
   smoke: ['google/gemini-2.5-flash-lite'],
 } as const;
 
+/**
+ * What the planner loop retries with after repeated rejection — ADR 0004,
+ * "escalate rather than repeat".
+ *
+ * WHY this is the planner array with the fallback removed rather than a higher
+ * tier: every slug in this file was verified against OpenRouter /models for
+ * structured-output support, and inventing an unverified one here would fail
+ * every escalated call at routing time — the worst possible moment, since
+ * escalation only happens on a run that is already struggling.
+ *
+ * So today this guarantees the last attempt is not served by a *weaker* model
+ * than the first, which is the half of the intent that can be honoured without
+ * a new slug.
+ *
+ * AI-NOTE: when a genuinely stronger model is verified the same way the note
+ *          above describes, put it here and say so in ADR 0004. Until then do
+ *          not pretend this is an upgrade — the phase report must not claim a
+ *          cascade saving it did not measure.
+ */
+export const ESCALATION_MODELS: readonly string[] = ['anthropic/claude-sonnet-5'];
+
 export function modelsForStage(stage: LlmStage, override?: readonly string[]): readonly string[] {
   if (override && override.length > 0) return override;
   return STAGE_MODELS[stage];

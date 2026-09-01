@@ -32,6 +32,21 @@ export interface CandidateExercise {
   movementPattern: string | null;
   isUnilateral: boolean;
   category: string | null;
+  /**
+   * The owned equipment this movement uses, with any per-item ceiling.
+   *
+   * WHY it is carried on the candidate rather than looked up later: the phase 2
+   * load_ceiling rule needs it, and a rule that has to reach back into the
+   * database is no longer a pure function over the plan.
+   *
+   * AI-NOTE: these are the tags the *user owns* that this exercise uses, not
+   *          every tag the exercise could use — the join is filtered by the
+   *          same .in() that selects the candidate. For this catalogue that is
+   *          the same thing: Free Exercise DB records one equipment value per
+   *          exercise. It stops being the same thing if a second source with
+   *          multi-equipment records is merged in.
+   */
+  equipment: { slug: string; maxLoadKg: number | null }[];
 }
 
 export interface CandidateOptions {
@@ -100,6 +115,8 @@ export async function availableExercises(
   const { data, error } = await query.order('name');
   if (error) throw new Error(`reading candidate exercises: ${error.message}`);
 
+  const byTagId = new Map(equipment.map((e) => [e.tagId, e]));
+
   return (data ?? []).map((row) => ({
     id: row.id,
     slug: row.slug,
@@ -109,5 +126,11 @@ export async function availableExercises(
     movementPattern: row.movement_pattern,
     isUnilateral: row.is_unilateral,
     category: row.category,
+    equipment: (row.exercise_equipment as unknown as { equipment_tag_id: string }[])
+      .map((link) => byTagId.get(link.equipment_tag_id))
+      .filter(
+        (e): e is { tagId: string; slug: string; maxLoadKg: number | null } => e !== undefined
+      )
+      .map((e) => ({ slug: e.slug, maxLoadKg: e.maxLoadKg })),
   }));
 }

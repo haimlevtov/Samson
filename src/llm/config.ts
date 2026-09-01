@@ -14,6 +14,29 @@ export const DEFAULT_WEEKLY_BUDGET_USD = 0.5;
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const DEFAULT_TIMEOUT_MS = 60_000;
 
+/**
+ * Per-stage output ceilings.
+ *
+ * INVARIANT: max_tokens is always set — CLAUDE.md #2. These are the values the
+ *            pipeline stages pass; there is no unbounded call path.
+ *
+ * WHY the planner ceiling is this large: a TrainingBlock enumerates every
+ * prescribed set individually, so a four-week block runs to a few thousand
+ * output tokens before the rationale. That is the dominant cost in the phase 2
+ * cascade analysis and it is a consequence of the schema shape — see the
+ * AI-NOTE on prescribedExerciseSchema in src/planner/schema.ts.
+ */
+export const PLANNER_MAX_TOKENS = 16_000;
+export const CRITIC_MAX_TOKENS = 1_500;
+
+/**
+ * Planner→rules→critic passes before a run is abandoned.
+ * WHY a hard cap rather than "until it passes": an unbounded revision loop is
+ * the failure mode the budget gate exists to catch, and catching it there means
+ * it has already been paid for.
+ */
+export const MAX_PLAN_ITERATIONS = 3;
+
 /** Backoff for transport failures. Deliberately short — a demo cannot wait. */
 export const RETRY_BASE_DELAY_MS = 500;
 
