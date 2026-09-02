@@ -15,7 +15,7 @@ import { ARCHETYPES, generateHistory, type Archetype, type GeneratedWorkout } fr
 import { mulberry32 } from './rng';
 import { adherence } from '../metrics/adherence';
 import { bestE1rm } from '../metrics/e1rm';
-import { daysBetween, startOfWeek } from '../metrics/dates';
+import { addDays, daysBetween, startOfWeek } from '../metrics/dates';
 import type { SetRecord, WorkoutRecord } from '../metrics/types';
 
 const END = '2026-08-24'; // a Monday
@@ -143,6 +143,84 @@ describe('every archetype', () => {
         archetype.key
       ).toBe(true);
     }
+  });
+
+  it('accounts for every day of a trained week, so a full week is possible', () => {
+    /*
+     * The gap this closes, recorded in docs/plans/phase-4.md: the seeder emitted
+     * one rest day a week, so a three-day archetype covered four days out of
+     * seven and "Seven for Seven" could not fire for anybody. It was verified
+     * during phase 4 by adding rest days to the dev database by hand.
+     *
+     * A programme is seven days long. Every day is trained, rested, or — if the
+     * archetype was scheduled and missed it — skipped.
+     */
+    for (const archetype of ARCHETYPES) {
+      const workouts = generate(archetype);
+      const byDate = new Map(workouts.map((w) => [w.localDate, w.status]));
+
+      const weeks = new Map<string, string[]>();
+      for (const w of workouts) {
+        const week = startOfWeek(w.localDate);
+        const bucket = weeks.get(week);
+        if (bucket) bucket.push(w.status);
+        else weeks.set(week, [w.status]);
+      }
+
+      for (const [week, statuses] of weeks) {
+        /*
+         * A layoff week is a genuine absence — the archetype stopped training
+         * altogether — and it holds nothing but skipped rows. Filling those in
+         * with rest days would hand `returning` an unbroken streak across the
+         * months it was away, which is the opposite of what that archetype
+         * exists to represent. Only weeks the programme was running are claimed.
+         */
+        const running = statuses.includes('completed') || statuses.includes('rest');
+        if (!running) continue;
+
+        // The final week is truncated at END.
+        if (addDays(week, 6) > END) continue;
+
+        // Walk the CALENDAR, not the map's own keys — asking a map about its
+        // keys would pass no matter how many days were missing.
+        const missing: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          const date = addDays(week, i);
+          if (!byDate.has(date)) missing.push(date);
+        }
+
+        expect(missing, `${archetype.key}, week of ${week}`).toEqual([]);
+      }
+    }
+  });
+
+  it('lets a consistent archetype reach seven kept days in a row', () => {
+    // The condition `first-full-week` actually tests for — seven consecutive
+    // days that are each completed or rest. Without it the achievement is
+    // unreachable from a fresh `npm run seed` and cannot be demoed.
+    const KEPT = new Set(['completed', 'rest']);
+
+    const longestKeptRun = (archetype: Archetype): number => {
+      const byDate = new Map(generate(archetype).map((w) => [w.localDate, w.status]));
+      const dates = [...byDate.keys()].sort();
+
+      let best = 0;
+      let run = 0;
+      let previous: string | null = null;
+
+      for (const date of dates) {
+        const consecutive = previous !== null && addDays(previous, 1) === date;
+        run = KEPT.has(byDate.get(date)!) ? (consecutive ? run + 1 : 1) : 0;
+        best = Math.max(best, run);
+        previous = date;
+      }
+      return best;
+    };
+
+    const runs = ARCHETYPES.map((a) => [a.key, longestKeptRun(a)] as const);
+    const reachable = runs.filter(([, run]) => run >= 7);
+
+    expect(reachable.length, `longest kept runs: ${JSON.stringify(runs)}`).toBeGreaterThan(0);
   });
 
   it('gives warmups no RPE and working sets an RPE in range', () => {
