@@ -365,8 +365,35 @@ model-authored prose stays inside it.
   findings are sent rather than the union of every iteration's, with a repeat
   count carrying the memory.
 
+### Measured — 2026-09-02, live
+
+```
+case                  status     iters  rules  critic     cost
+home-gym/strength-3d  accepted       2      5       0   0.09934
+```
+
+**The loop converges.** `home-gym` is the archetype whose dumbbells stop at
+30 kg — the one that produced the 32 kg repeat that started this. Attempt 1 was
+rejected by five rule findings; attempt 2 satisfied all five and was approved by
+the critic.
+
+Read against the run this replaces, the shape of the change is the whole
+argument: the same case previously spent three planner calls and returned
+nothing, having repeated a violation it had already been told about. It now
+takes two and returns a plan. Five corrections were applied at once, on the
+first attempt after they were sent — which is what "the model can read them now"
+looks like when it is true.
+
+One case is one case. It is not a claim about the acceptance rate across the
+golden set, which is still unmeasured live and costs roughly $3 to measure at
+thirty cases.
+
 ### Still unproven
 
-The fix is verified offline. Whether a real model now converges is a live
-measurement and has not been taken — one `npm run demo:llm` against a case that
-previously failed is the cheapest way to find out.
+- Acceptance rate across all thirty cases against real models.
+- Whether the `repeated` escalation does anything, since nothing repeated in
+  this run. That path is covered offline but has never fired live — and if it
+  never fires live, that is the better outcome.
+- Cache hit rate is 16.7% and drifting down, because ADR 0008 changed
+  `PLANNER_SYSTEM` and started a fresh lineage. Expected, and it recovers on
+  its own as calls accumulate on the new prefix.
