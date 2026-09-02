@@ -7,8 +7,8 @@
 // re-resolves transitives — including shipped native modules — up to a <7-day
 // batch release that no direct `npm install` named.
 //
-// Usage:   node .claude/skills/dependency-versioning/scripts/age-scan.js [gitRef]
-// Example: node .claude/skills/dependency-versioning/scripts/age-scan.js HEAD
+// Usage:   node .claude/skills/dependency-versioning/scripts/age-scan.cjs [gitRef]
+// Example: node .claude/skills/dependency-versioning/scripts/age-scan.cjs HEAD
 // Exit:    0 if no <7-day change, 1 if any version <7 days old.
 const fs = require('fs');
 const { execFileSync } = require('child_process');

@@ -23,8 +23,8 @@ The 7-day floor guards against *undiscovered* risk — a brand-new release hasn'
 community to surface a supply-chain compromise or a regression. A *known, already-fixed* CVE is the
 opposite kind of risk, so it wins. Everything below operationalizes those two sentences.
 
-Prizma runs no dead dependencies: every package in `package.json` must have an import somewhere in
-`src/`/`scripts/` (an unused dep is pure supply-chain surface — the `@supabase/ssr` lesson).
+Samson runs no dead dependencies: every package in `package.json` must have an import somewhere in
+`src/`, `app/`, `scripts/` or `tests/`. An unused dependency is pure supply-chain surface.
 
 ---
 
@@ -46,8 +46,12 @@ npm view <pkg> time --json     # every version + its publish date
 |---|---|---|
 | **Framework core** (`next`, `react`, `react-dom`) | move together, within the majors already adopted (Next 16 / React 19) | Next's release notes pin the React range; `npm info next@<v> peerDependencies` |
 | **Toolchain coupled to Next** (`eslint-config-next`, `@types/react*`, `typescript`) | track the framework bump in the same change | peerDependencies + typecheck |
-| **Tailwind 4 line** (`tailwindcss`, `@tailwindcss/postcss`) | same minor line together | release notes |
-| **Everything else** (`@anthropic-ai/sdk`, `@supabase/supabase-js`, `rss-parser`, `tsx`, `vitest`, …) | newest within the current **major**; a new major only with its migration notes read and the gauntlet green | changelog + gauntlet |
+| **Supabase pair** (`@supabase/supabase-js`, `@supabase/ssr`) | move together — `ssr` wraps `supabase-js` and pins a range against it | `npm info @supabase/ssr@<v> peerDependencies` |
+| **Everything else** (`zod`, `tsx`, `vitest`, `eslint`, `prettier`, `fast-check`, …) | newest within the current **major**; a new major only with its migration notes read and the gauntlet green | changelog + gauntlet |
+
+Samson has no Tailwind and no CSS framework — `app/globals.css` is hand-written,
+phone-first (`docs/specs/mobile-interface.md`). A styling dependency is a new
+decision, not a version bump.
 
 ---
 
@@ -83,7 +87,7 @@ hiding in the lockfile.
 So after **every** bump, scan the full transitive tree:
 
 ```bash
-node .claude/skills/dependency-versioning/scripts/age-scan.js HEAD
+node .claude/skills/dependency-versioning/scripts/age-scan.cjs HEAD
 ```
 
 For each `<7 DAYS` hit: pin the transitive to newest-safe via `package.json` → `overrides`, or
@@ -96,11 +100,12 @@ drop the hub bump that pulled it. Re-run until it reports **0 violations**.
 Each command proves a different dimension:
 
 ```bash
-node .claude/skills/dependency-versioning/scripts/peer-check.js   # declared peers, whole tree
-npm run check                                                     # code↔package API (tsc) + runtime on tested paths (vitest)
-npx eslint src scripts                                            # lint plugins still compatible
+node .claude/skills/dependency-versioning/scripts/peer-check.cjs   # declared peers, whole tree
+npm run typecheck                                                 # code↔package API still lines up
+npm test                                                          # runtime on every tested path, no key required
+npm run lint                                                      # lint plugins still compatible
 npm run build                                                     # the app actually builds — every import resolves through
-                                                                  # Turbopack/webpack; catches broken exports fields tsc can't see
+                                                                  # the bundler; catches broken exports fields tsc cannot see
 ```
 
 A green gauntlet means "compatible across these layers" — undeclared incompatibilities, `any`-typed
@@ -117,14 +122,14 @@ advisory's dependency path; only a shipped-dep advisory is a real pre-production
   reason, and the GHSA/CVE id when the security exception was used.
 - Anything **held** below npm-latest for the 7-day rule gets a revisit date (≈ today + 7) in
   the commit message, and its `overrides` pin removed when bumped later.
-- Package changes are routed (`package.json`) — the SSDD review gate will require
-  `performance-reviewer`; an unused-dep check is part of its lane.
+- A dependency change ships in its own commit, separate from the code that uses
+  it. `package.json` and `package-lock.json` move together, always.
 
 ## Quick reference
 
 ```bash
 npm view <pkg> time --json                                              # newest-safe target
 npm install <pkg>@<version>                                             # lockfile pins it
-node .claude/skills/dependency-versioning/scripts/age-scan.js HEAD      # must print 0 violations
-node .claude/skills/dependency-versioning/scripts/peer-check.js && npm run check && npx eslint src scripts && npm run build
+node .claude/skills/dependency-versioning/scripts/age-scan.cjs HEAD      # must print 0 violations
+node .claude/skills/dependency-versioning/scripts/peer-check.cjs && npm run verify && npm run build
 ```

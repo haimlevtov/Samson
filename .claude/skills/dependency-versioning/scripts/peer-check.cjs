@@ -4,7 +4,7 @@
 // Even without legacy-peer-deps, transitive peer drift can hide — this is the
 // authoritative "is everything mutually compatible" check.
 //
-// Usage:  node .claude/skills/dependency-versioning/scripts/peer-check.js
+// Usage:  node .claude/skills/dependency-versioning/scripts/peer-check.cjs
 // Exit:   0 if all satisfied, 1 if any real mismatch (excludes known-benign).
 const fs = require('fs');
 const root = process.cwd();
