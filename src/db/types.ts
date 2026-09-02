@@ -783,6 +783,13 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: string[]
       }
+      xp_totals: {
+        Args: { p_week_start: string }
+        Returns: {
+          lifetime: number
+          this_week: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

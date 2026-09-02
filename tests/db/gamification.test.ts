@@ -511,3 +511,240 @@ describe('a session that unlocks more than one achievement', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// "Rest is neutral" — the spec property, at the database level
+// ---------------------------------------------------------------------------
+
+describe('a rest day earns what a training day earns', () => {
+  it('pays a rest day at its position on the curve', async () => {
+    const user = await createTestUser('xp-rest');
+    try {
+      const admin = adminClient();
+
+      const insertWorkout = async (localDate: string, status: 'rest' | 'completed') => {
+        const { data } = await admin
+          .from('workouts')
+          .insert({ user_id: user.id, local_date: localDate, status })
+          .select('id')
+          .single();
+        return data!.id;
+      };
+
+      /*
+       * Awarded as each day resolves, which is how finishWorkout does it — the
+       * RPC derives position from how many kept days exist when it runs.
+       *
+       * The regression: the workout lookup required status 'completed' while
+       * the position count included 'rest', so a rest day paid nothing and
+       * still pushed every later session down the curve. Monday earned 0 and
+       * Tuesday earned 80, against the 100 + 80 = 180 that weeklyAwards() pays
+       * for the same week.
+       */
+      const monday = await insertWorkout('2026-10-05', 'rest');
+      const first = await user.client.rpc('award_session_xp', { p_workout_id: monday });
+      expect((first.data as { awarded: number }).awarded, 'a kept rest day earns').toBe(100);
+
+      const tuesday = await insertWorkout('2026-10-06', 'completed');
+      const second = await user.client.rpc('award_session_xp', { p_workout_id: tuesday });
+      expect((second.data as { awarded: number }).awarded).toBe(80);
+
+      const { data: rows } = await admin
+        .from('xp_events')
+        .select('amount')
+        .eq('user_id', user.id)
+        .eq('week_start', '2026-10-05');
+      const total = (rows ?? []).reduce((sum, r) => sum + r.amount, 0);
+      expect(total, 'the database and weeklyAwards() must agree on the week').toBe(180);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('still earns nothing for a day that has not resolved, or was skipped', async () => {
+    const user = await createTestUser('xp-unresolved');
+    try {
+      const admin = adminClient();
+
+      for (const status of ['planned', 'in_progress', 'skipped'] as const) {
+        const { data } = await admin
+          .from('workouts')
+          .insert({ user_id: user.id, local_date: '2026-10-12', status })
+          .select('id')
+          .single();
+
+        const { data: result } = await user.client.rpc('award_session_xp', {
+          p_workout_id: data!.id,
+        });
+        expect((result as { awarded: number }).awarded, `${status} must earn nothing`).toBe(0);
+      }
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The first-full-week predicate
+// ---------------------------------------------------------------------------
+
+describe('first-full-week', () => {
+  /** Seven consecutive kept days, the seventh a rest day. */
+  const KEPT_WEEK = [
+    ['2026-10-19', 'completed'],
+    ['2026-10-20', 'completed'],
+    ['2026-10-21', 'completed'],
+    ['2026-10-22', 'completed'],
+    ['2026-10-23', 'completed'],
+    ['2026-10-24', 'completed'],
+    ['2026-10-25', 'rest'],
+  ] as const;
+
+  async function seedWeek(userId: string, extra: readonly (readonly [string, string])[] = []) {
+    const admin = adminClient();
+    const { data } = await admin
+      .from('workouts')
+      .insert(
+        [...KEPT_WEEK, ...extra].map(([local_date, status]) => ({
+          user_id: userId,
+          local_date,
+          status,
+        }))
+      )
+      .select('id, local_date, status');
+    return data ?? [];
+  }
+
+  it('unlocks after seven consecutive kept days', async () => {
+    const user = await createTestUser('ach-week');
+    try {
+      const rows = await seedWeek(user.id);
+      const seventh = rows.find((r) => r.local_date === '2026-10-25')!;
+
+      const { data } = await user.client.rpc('award_session_xp', { p_workout_id: seventh.id });
+
+      // The seventh day is a rest day, so this also depends on the RPC awarding
+      // rest at all — before that it never ran the evaluator on one.
+      expect((data as { unlocked: string[] }).unlocked).toContain('first-full-week');
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('still unlocks when a later planned day exists', async () => {
+    const user = await createTestUser('ach-week-planned');
+    try {
+      /*
+       * The regression this exists for: the predicate anchored its window to
+       * max(local_date) over ALL workout rows with no status filter, while
+       * counting only kept ones. A single later row — a session the planner
+       * scheduled, or one skipped day — slid the window forward and left six
+       * kept days inside it, suppressing the achievement permanently.
+       */
+      const rows = await seedWeek(user.id, [['2026-10-28', 'planned']]);
+      const seventh = rows.find((r) => r.local_date === '2026-10-25')!;
+
+      const { data } = await user.client.rpc('award_session_xp', { p_workout_id: seventh.id });
+      expect((data as { unlocked: string[] }).unlocked).toContain('first-full-week');
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('does not unlock on six kept days', async () => {
+    const user = await createTestUser('ach-week-six');
+    try {
+      const admin = adminClient();
+      const { data: rows } = await admin
+        .from('workouts')
+        .insert(
+          KEPT_WEEK.slice(0, 6).map(([local_date, status]) => ({
+            user_id: user.id,
+            local_date,
+            status,
+          }))
+        )
+        .select('id, local_date');
+
+      const sixth = (rows ?? []).find((r) => r.local_date === '2026-10-24')!;
+      const { data } = await user.client.rpc('award_session_xp', { p_workout_id: sixth.id });
+
+      expect((data as { unlocked: string[] }).unlocked).not.toContain('first-full-week');
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Totals are summed by Postgres, and scoped by RLS
+// ---------------------------------------------------------------------------
+
+describe('xp_totals', () => {
+  it('sums in the database and counts only the calling user', async () => {
+    const [carol, dave] = await Promise.all([
+      createTestUser('xp-carol'),
+      createTestUser('xp-dave'),
+    ]);
+    try {
+      const admin = adminClient();
+
+      const { error } = await admin.from('xp_events').insert([
+        {
+          user_id: carol.id,
+          source: 'adherence',
+          amount: 100,
+          local_date: '2026-11-02',
+          week_start: '2026-11-02',
+        },
+        {
+          user_id: carol.id,
+          source: 'challenge',
+          amount: 40,
+          local_date: '2026-11-03',
+          week_start: '2026-11-02',
+        },
+        {
+          user_id: carol.id,
+          source: 'adherence',
+          amount: 60,
+          local_date: '2026-11-09',
+          week_start: '2026-11-09',
+        },
+        // Someone else's ledger, which must not appear in Carol's totals.
+        {
+          user_id: dave.id,
+          source: 'adherence',
+          amount: 250,
+          local_date: '2026-11-02',
+          week_start: '2026-11-02',
+        },
+      ]);
+      expect(error).toBeNull();
+
+      const { data, error: rpcError } = await carol.client.rpc('xp_totals', {
+        p_week_start: '2026-11-02',
+      });
+      expect(rpcError).toBeNull();
+
+      const totals = data?.[0];
+      expect(totals?.this_week, 'the week Carol asked about').toBe(140);
+      expect(totals?.lifetime, "Carol's whole ledger, and nobody else's").toBe(200);
+    } finally {
+      await Promise.all([deleteTestUser(carol), deleteTestUser(dave)]);
+    }
+  });
+
+  it('returns zeros rather than nulls for a user with no events', async () => {
+    const user = await createTestUser('xp-empty');
+    try {
+      const { data } = await user.client.rpc('xp_totals', { p_week_start: '2026-11-02' });
+
+      // A new user's progress screen renders 0, not "null XP".
+      expect(data?.[0]?.this_week).toBe(0);
+      expect(data?.[0]?.lifetime).toBe(0);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});

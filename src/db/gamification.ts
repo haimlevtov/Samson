@@ -58,22 +58,30 @@ export interface AssignedChallenge {
 export async function loadXpSummary(db: Db, asOf: LocalDate): Promise<XpSummary> {
   const weekStart = startOfWeek(asOf);
 
-  // RLS scopes both to the caller — CLAUDE.md #10, no user_id filter to forget.
-  const [{ data: week, error: weekErr }, { data: all, error: allErr }] = await Promise.all([
-    db.from('xp_events').select('amount').eq('week_start', weekStart),
-    db.from('xp_events').select('amount'),
-  ]);
+  /*
+   * Both sums are computed by Postgres — see migration 20260902100200.
+   *
+   * WHY not `select('amount')` and a reduce, which is what this used to do:
+   * PostgREST caps a response at 1000 rows by default, so a lifetime total
+   * added up in JavaScript silently truncates to the first page once a user has
+   * more events than that. No error, no warning — just a number that quietly
+   * stops growing and under-reports for the rest of the account's life.
+   *
+   * RLS scopes the function to the caller (CLAUDE.md #10), so there is still no
+   * user_id filter to forget.
+   */
+  const { data, error } = await db.rpc('xp_totals', { p_week_start: weekStart });
+  if (error) throw new Error(`loading xp totals: ${error.message}`);
 
-  if (weekErr) throw new Error(`loading weekly xp: ${weekErr.message}`);
-  if (allErr) throw new Error(`loading lifetime xp: ${allErr.message}`);
-
-  const thisWeek = (week ?? []).reduce((sum, row) => sum + row.amount, 0);
+  // A set-returning function comes back as rows; there is exactly one.
+  const totals = data?.[0];
+  const thisWeek = totals?.this_week ?? 0;
 
   return {
     thisWeek,
     remainingThisWeek: Math.max(0, WEEKLY_XP_CEILING - thisWeek),
     ceiling: WEEKLY_XP_CEILING,
-    lifetime: (all ?? []).reduce((sum, row) => sum + row.amount, 0),
+    lifetime: totals?.lifetime ?? 0,
   };
 }
 
