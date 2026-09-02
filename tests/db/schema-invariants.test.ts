@@ -43,8 +43,21 @@ beforeAll(async () => {
      * fails at authentication instead.
      */
     const code = (cause as { code?: string } | undefined)?.code;
-    const detail =
-      cause instanceof TypeError
+
+    /*
+     * Nothing after the @ means the value was cut short. dotenv reads one line
+     * at a time, so a connection string pasted across two lines keeps only as
+     * far as the newline — and a wrapped paste is the single most common way to
+     * get here, worth naming rather than leaving under "no stray line breaks".
+     */
+    const truncated = DB_URL.includes('@') && DB_URL.slice(DB_URL.lastIndexOf('@') + 1) === '';
+
+    const detail = truncated
+      ? 'The value stops at the @ — the host is missing entirely. That is a ' +
+        'connection string pasted across two lines: dotenv keeps only what is on ' +
+        'the first, so the host, port and database were dropped. Put the whole ' +
+        'string on one line in .env.local.'
+      : cause instanceof TypeError
         ? 'SUPABASE_DB_URL is not a parseable URL. The usual cause is an ' +
           'un-encoded character in the password: a / or : before the @ ends the ' +
           'authority early and the rest is read as a host and port. Percent-encode ' +
