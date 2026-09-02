@@ -327,10 +327,24 @@ Two of the four were closed on 2026-09-02, after the review below. The entries
 are kept rather than deleted, because what was missed and when is part of what
 this document is for.
 
-- **`schema-invariants.test.ts` does not run locally.** It connects to Postgres
-  directly at `127.0.0.1:54322`, which needs the local Docker stack. CI runs it;
-  a hosted-only workstation cannot. Pre-existing, not introduced here. **Still
-  open.**
+- ~~**`schema-invariants.test.ts` does not run locally**~~ — **closed.** It reads
+  `pg_catalog` directly, which PostgREST does not expose, so it needs a real
+  Postgres connection and defaulted to `127.0.0.1:54322` — the local Docker
+  stack this project otherwise avoids. Pointing `SUPABASE_DB_URL` at the hosted
+  **pooler** runs it against the real database instead; the direct-connection
+  host is IPv6-only and fails from most networks. `npm run test:db` now runs all
+  five files, 60 tests, on a workstation with no Docker at all.
+
+  Getting there cost three wrong diagnoses, which is the interesting part. The
+  first message never appeared, because `new Client()` parses the URL eagerly
+  and the construction sat outside the try. The second blamed the
+  `[YOUR-PASSWORD]` placeholder for an unparseable URL — reproducing it showed
+  brackets parse fine and fail at authentication with `28P01`. The third sent
+  the reader after percent-encoding when the real value had been truncated at
+  the `@` by a line wrap in `.env.local`, because dotenv keeps only what is on
+  one line. Each is now its own branch with its own message, and each was
+  reproduced deliberately rather than reasoned about.
+
 - ~~**The seeder produces one rest day per week**~~ — **closed.** It emitted one
   rest day at offset 5, so a three-day archetype covered four days of seven and
   "Seven for Seven" could not fire for anyone; it had been verified during the
