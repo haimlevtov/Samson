@@ -38,10 +38,37 @@ export interface RuleFinding {
   code: RuleCode;
   detail: string; // human-readable, non-empty
   weekNumber: number | null;
+  constraint: RuleConstraint; // the binding quantity, as a field
+}
+
+export interface RuleConstraint {
+  kind:
+    | 'max_weight_kg'        // this exercise may not be loaded above `limit`
+    | 'max_week_tonnage_kg'  // this week's prescribed tonnage is capped at `limit`
+    | 'deload_by_week'       // a deload week is required at or before `limit`
+    | 'unknown_slug'         // `exerciseSlug` is not in the candidate list
+    | 'forbidden_slug';      // `exerciseSlug` may not be prescribed at all
+  comparison: 'at_most' | 'below' | 'excluded';
+  exerciseSlug: string | null;
+  limit: number | null;
 }
 
 export function checkRules(block: TrainingBlock, context: RuleContext): RuleFinding[];
 ```
+
+### Why findings carry a constraint
+
+`detail` is prose for a human. `constraint` is the same fact for a machine: the
+one quantity or slug the planner must respect in order to stop failing this
+rule. ADR 0004 requires that handoffs between stages carry structure rather than
+sentences, and the rejection handoff was the last one still asking a model to
+parse a number back out of English. ADR 0008 has the measurement that forced it.
+
+`comparison` distinguishes the rules that permit their limit from the rules that
+do not: `weekly_volume_increase` fails above its cap (`at_most`), while
+`acwr_band` fails *at* the threshold (`below`). Collapsing the two would make a
+block that sits exactly on the ACWR limit look compliant. `excluded` carries no
+limit — the slug itself is the finding.
 
 `checkRules` runs **every** rule and returns all findings, in the `RuleCode`
 order listed above. It never short-circuits on the first failure: one round trip
