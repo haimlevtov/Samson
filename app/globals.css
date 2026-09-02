@@ -1046,3 +1046,175 @@ details.quick-log[open] > summary::after {
 details.quick-log[open] > summary {
   margin-bottom: 4px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Phase 4 — progress, badges and challenges
+ *
+ * Phone-first like everything else here: base rules are the narrow layout and
+ * the only breakpoints are min-width. See docs/specs/mobile-interface.md.
+ * ------------------------------------------------------------------------- */
+
+/* The XP meter, reused for challenge progress. */
+.xp-meter {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.xp-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  /* WHY a min-width: a 1% week would otherwise render as nothing at all, which
+     reads as "you earned no XP" rather than "you earned a little". */
+  min-width: 3px;
+}
+
+.badge-shelf {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .badge-shelf {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .badge-shelf {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.badge-card h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.badge-card p {
+  margin: 4px 0 0;
+}
+
+.rejected-row + .rejected-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.rejected-row ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.rejected-row code {
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+
+/* The unlock banner on /workouts. */
+.badge-reveal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-lift);
+}
+
+.badge-reveal-mark {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.4rem;
+}
+
+.badge-reveal-body {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.badge-reveal-body h2 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+.badge-reveal-body p {
+  margin: 0;
+}
+
+.badge-reveal-kicker {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+/* WHY this is not an animation by default: a badge that only announces itself
+   by moving is invisible to anyone who has asked the system to stop moving
+   things. The banner is legible with no motion at all; the pop is a bonus. */
+@media (prefers-reduced-motion: no-preference) {
+  .badge-reveal {
+    animation: badge-in 320ms ease-out;
+  }
+
+  @keyframes badge-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/*
+ * Chips used as LABELS rather than controls.
+ *
+ * `.chip` carries min-height/min-width of var(--tap) because most chips in this
+ * app are pressed with a thumb between sets. The tier and kind markers on a
+ * badge or challenge card are spans — nothing taps them — so the 44px floor
+ * only makes them collide with the meter underneath.
+ *
+ * WHY this is not "shrinking a tap target": a non-interactive label has no tap
+ * target to shrink. The 44px rule applies to things you press.
+ */
+.badge-card .chip,
+.badge-card .chip-on {
+  display: inline-block;
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.badge-card p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge-card .xp-meter {
+  margin-top: 8px;
+}

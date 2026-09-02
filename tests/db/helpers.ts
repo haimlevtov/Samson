@@ -16,6 +16,21 @@ config({ path: '.env.local', quiet: true });
 export const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321';
 export const ANON_KEY = process.env['SUPABASE_ANON_KEY'] ?? '';
 export const SERVICE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
+/**
+ * A raw Postgres connection, used only by `schema-invariants.test.ts` — the
+ * catalogue tables it reads are not exposed through PostgREST, so the Supabase
+ * client cannot answer "is RLS on for every table".
+ *
+ * Defaults to the local stack. To run against the hosted project instead, which
+ * is what a workstation without Docker has to do, put the pooler connection
+ * string in `.env.local`:
+ *
+ *   SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@<region>.pooler.supabase.com:6543/postgres
+ *
+ * Dashboard → Project Settings → Database → Connection string → URI. It is a
+ * database password rather than an API key, so it is not interchangeable with
+ * SUPABASE_SERVICE_ROLE_KEY and is not recoverable from the other values here.
+ */
 export const DB_URL =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 
@@ -31,6 +46,47 @@ export interface TestUser {
   id: string;
   email: string;
   client: Client;
+}
+
+/**
+ * The first request made with a freshly minted token, retried through a clock
+ * disagreement between the service that issued it and the one validating it.
+ *
+ * WHY this exists: GoTrue mints the access token and PostgREST validates it. If
+ * PostgREST's clock is a fraction of a second behind, the token's `iat` is in
+ * its future and the request is rejected with "JWT issued at future". It is
+ * transient — the same token works moments later — and it is not local clock
+ * skew: measured against the project's own HTTP Date header, this machine is
+ * within a second of the server.
+ *
+ * WHY it matters more than an ordinary flake: it lands on the very first
+ * RLS-scoped call each fixture makes, inside `beforeAll`, so it fails the
+ * whole FILE rather than one assertion. Observed roughly three times in a
+ * dozen runs against the hosted project, every one of which passed on a plain
+ * re-run — which is exactly the shape of failure that trains people to ignore
+ * a red CI.
+ *
+ * Only this error is retried. Anything else fails immediately, because a
+ * fixture that cannot be created is a real failure and burying it under
+ * retries is how a suite stops meaning anything.
+ */
+export async function throughClockSkew(
+  // PromiseLike, not Promise: a PostgrestFilterBuilder is thenable and is only
+  // turned into a Promise by awaiting it.
+  attempt: () => PromiseLike<{ error: { message: string } | null }>,
+  describe: string
+): Promise<void> {
+  const attempts = 5;
+  for (let n = 1; n <= attempts; n += 1) {
+    const { error } = await attempt();
+    if (!error) return;
+
+    const transient = /issued at future|not yet valid/i.test(error.message);
+    if (!transient || n === attempts) throw new Error(`${describe}: ${error.message}`);
+
+    // Short and increasing: the skew being waited out is sub-second.
+    await new Promise((resolve) => setTimeout(resolve, 200 * n));
+  }
 }
 
 /** Creates an auth user, signs it in, and returns an RLS-scoped client. */
@@ -59,9 +115,10 @@ export async function createTestUser(label: string): Promise<TestUser> {
     global: { headers: { Authorization: `Bearer ${signIn.data.session.access_token}` } },
   });
 
-  const profile = await client.from('users').insert({ user_id: data.user.id, timezone: 'UTC' });
-  if (profile.error)
-    throw new Error(`could not create profile for ${label}: ${profile.error.message}`);
+  await throughClockSkew(
+    () => client.from('users').insert({ user_id: data.user.id, timezone: 'UTC' }),
+    `could not create profile for ${label}`
+  );
 
   return { id: data.user.id, email, client };
 }

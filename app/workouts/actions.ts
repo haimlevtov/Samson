@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { insertSet } from '@/src/db/training';
+import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
@@ -106,8 +107,39 @@ export async function finishWorkout(formData: FormData): Promise<void> {
 
   if (error) throw new Error(`finishing workout: ${error.message}`);
 
+  /*
+   * XP and achievements — ADR 0009.
+   *
+   * INVARIANT: this call passes a workout id and nothing else. Everything it
+   *            writes, the RPC derives from rows already in the database. The
+   *            browser does not get to say how much a session was worth.
+   *
+   * WHY the failure is swallowed rather than thrown: the workout is already
+   * finished and saved at this point. Losing a reward is a disappointment;
+   * throwing here would show the user an error page for a session that was
+   * successfully recorded, and they would reasonably try to log it again.
+   */
+  let unlocked: string[] = [];
+  try {
+    const result = await awardSessionXp(db, workoutId);
+    unlocked = result.unlocked;
+  } catch (cause) {
+    console.error('award_session_xp failed', cause);
+  }
+
   revalidatePath('/workouts');
-  redirect('/workouts');
+  revalidatePath('/progress');
+
+  /*
+   * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".
+   *
+   * WHY a query parameter is safe here: it selects which badge to REVEAL, and
+   * the page renders it only after finding a matching row in this user's own
+   * achievement_events (scoped by RLS). A forged slug shows nothing, because
+   * the event has to exist. No schema change and no "seen" column.
+   */
+  const first = unlocked[0];
+  redirect(first === undefined ? '/workouts' : `/workouts?unlocked=${encodeURIComponent(first)}`);
 }
 
 /**

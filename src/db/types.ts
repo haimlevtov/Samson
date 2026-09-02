@@ -729,6 +729,7 @@ export type Database = {
           source: string
           user_id: string
           week_start: string
+          workout_id: string | null
         }
         Insert: {
           amount: number
@@ -739,6 +740,7 @@ export type Database = {
           source: string
           user_id: string
           week_start: string
+          workout_id?: string | null
         }
         Update: {
           amount?: number
@@ -749,6 +751,7 @@ export type Database = {
           source?: string
           user_id?: string
           week_start?: string
+          workout_id?: string | null
         }
         Relationships: [
           {
@@ -758,6 +761,13 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["user_id"]
           },
+          {
+            foreignKeyName: "xp_events_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -765,7 +775,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      award_session_xp: { Args: { p_workout_id: string }; Returns: Json }
+      evaluate_achievements: { Args: { p_user_id: string }; Returns: string[] }
+      xp_totals: {
+        Args: { p_week_start: string }
+        Returns: {
+          lifetime: number
+          this_week: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

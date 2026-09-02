@@ -404,10 +404,41 @@ export function generateHistory(
       earned += 1 / archetype.daysPerWeek;
     }
 
-    // INVARIANT: a scheduled rest day maintains a streak — CLAUDE.md #4.
-    // Seeding them means phase 4 has something to prove that against.
+    /*
+     * INVARIANT: a scheduled rest day maintains a streak — CLAUDE.md #4.
+     *
+     * WHY every non-training day, and not one token Saturday: a programme is
+     * seven days long, and the days it does not train are rest days rather than
+     * gaps. That is the whole content of "rest maintains a streak".
+     *
+     * Emitting a single rest day a week made the first consistency achievement
+     * unreachable from a fresh `npm run seed`: a three-day archetype covered
+     * offsets 0, 2, 4 and 5, so at most four of seven days were kept and
+     * "Seven for Seven" could not fire for anyone. It was verified during phase
+     * 4 by adding two rest days to the dev database BY HAND, which is a sign
+     * the fixture was wrong rather than the achievement.
+     *
+     * A day the archetype was scheduled to train and missed stays 'skipped'.
+     * Only unscheduled days become rest, so a low-adherence archetype still
+     * breaks its streak exactly as it should.
+     */
     if (!onLayoff) {
-      workouts.push({ localDate: addDays(weekStart, 5), status: 'rest', notes: null, sets: [] });
+      const trains = new Set(
+        Array.from(
+          { length: archetype.daysPerWeek },
+          (_, day) => weekdayForDay[day % weekdayForDay.length]!
+        )
+      );
+
+      for (let offset = 0; offset < 7; offset++) {
+        if (trains.has(offset)) continue;
+        workouts.push({
+          localDate: addDays(weekStart, offset),
+          status: 'rest',
+          notes: null,
+          sets: [],
+        });
+      }
     }
   }
 
