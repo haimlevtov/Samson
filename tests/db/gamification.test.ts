@@ -15,7 +15,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
-import { WEEKLY_XP_CEILING } from '../../src/gamification/xp';
+import {
+  STREAK_MILESTONES,
+  STREAK_MILESTONE_XP,
+  WEEKLY_XP_CEILING,
+} from '../../src/gamification/xp';
+import { currentStreak } from '../../src/metrics/adherence';
+import type { WorkoutStatus } from '../../src/metrics/types';
 
 let alice: TestUser;
 let bob: TestUser;
@@ -743,6 +749,175 @@ describe('xp_totals', () => {
       // A new user's progress screen renders 0, not "null XP".
       expect(data?.[0]?.this_week).toBe(0);
       expect(data?.[0]?.lifetime).toBe(0);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Streak milestones — the SQL copy must agree with the engine
+// ---------------------------------------------------------------------------
+
+describe('streak milestone XP', () => {
+  /** Inserts the workouts and awards only the last one, as finishWorkout would. */
+  async function seedAndAward(userId: string, days: readonly (readonly [string, string])[]) {
+    const admin = adminClient();
+    const { data: rows, error } = await admin
+      .from('workouts')
+      .insert(days.map(([local_date, status]) => ({ user_id: userId, local_date, status })))
+      .select('id, local_date, status');
+    expect(error).toBeNull();
+
+    const last = [...(rows ?? [])].sort((a, b) => (a.local_date < b.local_date ? 1 : -1))[0]!;
+    return { rows: rows ?? [], lastId: last.id, lastDate: last.local_date };
+  }
+
+  async function streakXp(userId: string): Promise<number> {
+    const { data } = await adminClient()
+      .from('xp_events')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('source', 'streak');
+    return (data ?? []).reduce((sum, r) => sum + r.amount, 0);
+  }
+
+  /** The engine's answer for the same fixture, so the two definitions are pinned. */
+  const engineStreak = (days: readonly (readonly [string, string])[], asOf: string): number =>
+    currentStreak(
+      days.map(([localDate, status], i) => ({
+        id: String(i),
+        localDate,
+        status: status as WorkoutStatus,
+      })),
+      asOf
+    );
+
+  it('pays a milestone when the seventh consecutive day is kept', async () => {
+    const user = await createTestUser('streak-seven');
+    try {
+      const days = [
+        ['2026-12-07', 'completed'],
+        ['2026-12-08', 'rest'],
+        ['2026-12-09', 'completed'],
+        ['2026-12-10', 'completed'],
+        ['2026-12-11', 'rest'],
+        ['2026-12-12', 'completed'],
+        ['2026-12-13', 'completed'],
+      ] as const;
+
+      expect(engineStreak(days, '2026-12-13'), 'the engine must see a 7 here').toBe(7);
+
+      const { lastId } = await seedAndAward(user.id, days);
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+
+      expect(await streakXp(user.id)).toBe(STREAK_MILESTONE_XP);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('agrees with the engine that off days do not reset a streak', async () => {
+    const user = await createTestUser('streak-alternate');
+    try {
+      /*
+       * The awkward case, and the reason the SQL counts ROWS rather than
+       * calendar days. currentStreak() skips days with nothing scheduled, so an
+       * every-other-day programme reaches seven kept sessions across thirteen
+       * calendar days. A calendar-day reading in SQL would score this 1 and
+       * quietly disagree with the number the UI is showing the same user.
+       */
+      const days = [
+        ['2026-12-01', 'completed'],
+        ['2026-12-03', 'completed'],
+        ['2026-12-05', 'completed'],
+        ['2026-12-07', 'completed'],
+        ['2026-12-09', 'completed'],
+        ['2026-12-11', 'completed'],
+        ['2026-12-13', 'completed'],
+      ] as const;
+
+      expect(engineStreak(days, '2026-12-13')).toBe(7);
+
+      const { lastId } = await seedAndAward(user.id, days);
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+
+      expect(await streakXp(user.id)).toBe(STREAK_MILESTONE_XP);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('pays nothing on a day that is not a milestone', async () => {
+    const user = await createTestUser('streak-six');
+    try {
+      const days = [
+        ['2026-12-08', 'completed'],
+        ['2026-12-09', 'completed'],
+        ['2026-12-10', 'completed'],
+        ['2026-12-11', 'completed'],
+        ['2026-12-12', 'completed'],
+        ['2026-12-13', 'completed'],
+      ] as const;
+
+      const streak = engineStreak(days, '2026-12-13');
+      expect(streak).toBe(6);
+      expect(STREAK_MILESTONES).not.toContain(streak);
+
+      const { lastId } = await seedAndAward(user.id, days);
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+
+      expect(await streakXp(user.id)).toBe(0);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('is broken by a skipped day, exactly as the engine breaks it', async () => {
+    const user = await createTestUser('streak-broken');
+    try {
+      const days = [
+        ['2026-12-05', 'completed'],
+        ['2026-12-06', 'completed'],
+        ['2026-12-07', 'completed'],
+        ['2026-12-08', 'completed'],
+        ['2026-12-09', 'completed'],
+        ['2026-12-10', 'completed'],
+        ['2026-12-11', 'skipped'],
+        ['2026-12-12', 'completed'],
+        ['2026-12-13', 'completed'],
+      ] as const;
+
+      // Nine kept-looking rows, but the skip resets it: only two count.
+      expect(engineStreak(days, '2026-12-13')).toBe(2);
+
+      const { lastId } = await seedAndAward(user.id, days);
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+
+      expect(await streakXp(user.id)).toBe(0);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it('pays a milestone once, however many times the award is replayed', async () => {
+    const user = await createTestUser('streak-replay');
+    try {
+      const days = [
+        ['2026-12-07', 'completed'],
+        ['2026-12-08', 'completed'],
+        ['2026-12-09', 'completed'],
+        ['2026-12-10', 'completed'],
+        ['2026-12-11', 'completed'],
+        ['2026-12-12', 'completed'],
+        ['2026-12-13', 'completed'],
+      ] as const;
+
+      const { lastId } = await seedAndAward(user.id, days);
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+      await user.client.rpc('award_session_xp', { p_workout_id: lastId });
+
+      expect(await streakXp(user.id)).toBe(STREAK_MILESTONE_XP);
     } finally {
       await deleteTestUser(user);
     }
