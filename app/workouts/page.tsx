@@ -9,23 +9,35 @@ import { addDays } from '@/src/metrics/dates';
 import { displayDate, displayShortDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { tonnageByWeek, totalTonnage } from '@/src/metrics/tonnage';
+import { loadUnlockedAchievements, loadXpSummary } from '@/src/db/gamification';
 import { signOut } from '../sign-in/actions';
 import { startWorkout } from './actions';
+import { BadgeReveal } from './BadgeReveal';
 
 export const dynamic = 'force-dynamic';
 
 const kg = (n: number) => `${Math.round(n).toLocaleString()} kg`;
 
-export default async function WorkoutsPage() {
+export default async function WorkoutsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ unlocked?: string }>;
+}) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const [history, workouts] = await Promise.all([loadHistory(db), listWorkouts(db)]);
+  const [history, workouts, badges, { unlocked }] = await Promise.all([
+    loadHistory(db),
+    listWorkouts(db),
+    loadUnlockedAchievements(db),
+    searchParams,
+  ]);
 
   // INVARIANT: every number below is computed by src/metrics, never by a model
   //            — CLAUDE.md #1. This page only formats them.
   const today = localDateFor(user.timezone);
+  const xp = await loadXpSummary(db, today);
   const last7 = adherence(history.workouts, { start: addDays(today, -27), end: today });
   const streak = currentStreak(history.workouts, today);
   const load = acwr(history.sets, today);
@@ -50,6 +62,9 @@ export default async function WorkoutsPage() {
           </span>
         </div>
         <div className="row">
+          <Link href="/progress" className="chip">
+            Progress
+          </Link>
           <Link href="/coach" className="chip">
             Coach
           </Link>
@@ -63,6 +78,8 @@ export default async function WorkoutsPage() {
           </form>
         </div>
       </header>
+
+      <BadgeReveal slug={unlocked} badges={badges} />
 
       <div className="grid cols-4">
         <div className="stat">
@@ -91,7 +108,9 @@ export default async function WorkoutsPage() {
             </FieldHint>
           </div>
           <div className="value">{streak}</div>
-          <div className="muted small">rest days count</div>
+          <div className="muted small">
+            <Link href="/progress">{xp.thisWeek} XP this week</Link>
+          </div>
         </div>
         <div className="stat">
           <div className="label with-hint">

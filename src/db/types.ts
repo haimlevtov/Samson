@@ -765,7 +765,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      award_session_xp: {
+        Args: {
+          p_workout_id: string
+        }
+        Returns: Json
+      }
+      evaluate_achievements: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: string[]
+      }
     }
     Enums: {
       [_ in never]: never
