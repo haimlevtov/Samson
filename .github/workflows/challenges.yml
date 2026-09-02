@@ -1,0 +1,55 @@
+name: challenges
+
+# The weekly challenge batch — PLAN.md phase 4.
+#
+# WHY GitHub Actions and not pg_cron or a queue: CLAUDE.md puts queues and
+# containers out of scope, the repo already runs a scheduled workflow
+# (keepalive.yml), and an Actions run leaves an inspectable log — which matters
+# here, because the job's whole output is "what was offered and what was
+# rejected, and why".
+on:
+  schedule:
+    # 05:23 UTC on Mondays, so a fresh pool is waiting at the start of the
+    # training week. Off the hour for the same reason keepalive.yml is: the
+    # top of the hour is when Actions is most contended and scheduled runs are
+    # most likely to be delayed or dropped.
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write the assignments (unchecked = dry run)'
+        type: boolean
+        default: false
+
+jobs:
+  generate:
+    name: generate and assign challenges
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # WHY the scheduled run applies but a manual one defaults to a dry run:
+      # the cron is the intended path and should do its job unattended, while a
+      # human poking the button is usually checking what it WOULD do.
+      - name: Generate challenges
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::Supabase secrets are not set; skipping."
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+            npm run challenges:generate -- --apply
+          else
+            npm run challenges:generate
+          fi

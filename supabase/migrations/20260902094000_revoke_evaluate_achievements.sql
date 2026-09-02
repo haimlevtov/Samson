@@ -1,0 +1,22 @@
+-- Samson 0018 — close the evaluator to signed-in clients
+--
+-- FOUND BY tests/db/gamification.test.ts, 2026-09-02. The comment on migration
+-- 20260902090000 claimed evaluate_achievements was "NOT granted to
+-- authenticated". It was.
+--
+-- Two things combined: Postgres grants EXECUTE on a new function to PUBLIC by
+-- default, and Supabase additionally grants it to `authenticated` through its
+-- default privileges. The original migration revoked from `public` and `anon`
+-- and stopped there, so a signed-in client could call it.
+--
+-- WHY that matters: evaluate_achievements answers "which achievements would
+-- fire for this user", which includes HIDDEN ones. The
+-- `achievements_read_visible` policy exists specifically to keep hidden
+-- definitions away from clients, and this function walked around it.
+--
+-- AI-NOTE: this is the second time on this project that revoking from `public`
+--          has failed to revoke from a Supabase role — see
+--          20260901145239_anon_revoke_default_privileges.sql, which is the same
+--          mistake for table grants. Revoking from `public` is never enough
+--          here; name every role.
+revoke all on function public.evaluate_achievements(uuid) from authenticated;

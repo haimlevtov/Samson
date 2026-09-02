@@ -205,3 +205,81 @@ both eval modes), `npm run test:db`, `npm run build`.
   `npm run db:push`, per the leave-nothing-running rule in `CLAUDE.md`.
 - `fast-check` goes through the `dependency-versioning` skill before install,
   not after.
+
+---
+
+## Outcome — 2026-09-02
+
+**All four acceptance criteria met.**
+
+| Criterion                                                    | Status | Proof                                                        |
+| ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| Property tests: XP monotonic, never exceeds the weekly cap   | ✅     | `fast-check`, 10,000 generated cases on the ceiling property |
+| A rejected challenge is inspectable — the validator logs why | ✅     | 14 rejections written with reasons; rendered on `/progress`  |
+| A badge visibly fires in the UI on unlock                    | ✅     | Browser at 375×812, real data, whole path                    |
+| No completion can be granted from the client                 | ✅     | `npm run test:db`, 28 passing                                |
+
+### What the phase actually cost
+
+Very little, because phase 0 had already built for it. The whole gamification
+schema existed, and its RLS policies were written with this phase's hardest
+criterion in mind — `xp_events` and `achievement_events` had read-only policies
+and no write policy at all, so "no completion can be granted from the client"
+was half-enforced before a line of phase 4 was written. `adherence()` and
+`currentStreak()` were built in phase 1 with comments naming phase 4 as their
+consumer.
+
+### Three things found by doing the work
+
+**A privilege escalation, found while planning.** `achievements.predicate` is
+SQL text in a table, and the phase 0 policy `achievements_write` lets any
+authenticated user insert their own achievement row. An evaluator that ran every
+predicate inside a `SECURITY DEFINER` function would have executed user-authored
+SQL with the definer's privileges — reachable by anyone who could sign up.
+Closed by scoping the evaluator to `user_id is null`, with a test that would
+catch its removal. [ADR 0009](../adr/0009-gamification-trust.md) §3.
+
+**A double-award, found in browser verification.** `award_session_xp` was
+idempotent for achievements — `achievement_events` carries
+`unique (user_id, achievement_id)` — but not for XP. A second call for the same
+completed workout returned `{"awarded": 64}` again, reachable by a double submit
+because the status update that precedes it is itself idempotent. Fixed as a
+database guarantee (`xp_events.workout_id` plus a partial unique index) rather
+than a check in the function, for the same reason the ceiling is a trigger.
+
+**A false claim in a comment, found by a test.** Migration 20260902090000 said
+`evaluate_achievements` was "NOT granted to authenticated". It was: Postgres
+grants `EXECUTE` to `PUBLIC` by default and Supabase adds `authenticated`, and
+the migration revoked only from `public` and `anon`. Since the function answers
+"which achievements would fire", including hidden ones, it walked around the
+`achievements_read_visible` policy. This is the **second** time on this project
+that revoking from `public` has failed to revoke from a Supabase role — the
+first was `20260901145239` for table grants.
+
+### Measured, live
+
+Signing in as the plateaued archetype and finishing a session awarded 64 XP —
+the third kept day of the week, per the diminishing curve — plus 75 for the
+unlock, and the banner fired. `/progress` showed 139 of 500. The challenge
+generator produced genuinely different results per user: the plateaued archetype
+had five weekly challenges rejected as `below_current_ability` ("already at 14
+against a target of 8 before starting"), while the beginner was offered them.
+
+### Known gaps
+
+- **`schema-invariants.test.ts` does not run locally.** It connects to Postgres
+  directly at `127.0.0.1:54322`, which needs the local Docker stack. CI runs it;
+  a hosted-only workstation cannot. Pre-existing, not introduced here.
+- **The seeder produces one rest day per week**, so no archetype reaches seven
+  kept days in a seven-day window and "Seven for Seven" is unreachable from a
+  fresh `npm run seed`. Two rest days were added by hand to the dev database to
+  verify the unlock path. The seeder should schedule the rest days a programme
+  actually contains; recorded rather than quietly patched.
+- **Streak milestone XP is computed and tested but never written.**
+  `streakAwards()` exists, is covered by a property test, and no caller invokes
+  it — `award_session_xp` awards adherence and achievement XP only. The
+  `xp_events.source` check constraint already accepts `'streak'`.
+- **Challenge completion is never paid out.** `evaluateChallenge` reports
+  progress and the UI renders it, but nothing transitions a challenge to
+  `completed` or awards its `reward_xp`. The validator half of the criterion is
+  met; the payout half is not built.

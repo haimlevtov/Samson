@@ -1186,3 +1186,35 @@ details.quick-log[open] > summary {
     }
   }
 }
+
+/*
+ * Chips used as LABELS rather than controls.
+ *
+ * `.chip` carries min-height/min-width of var(--tap) because most chips in this
+ * app are pressed with a thumb between sets. The tier and kind markers on a
+ * badge or challenge card are spans — nothing taps them — so the 44px floor
+ * only makes them collide with the meter underneath.
+ *
+ * WHY this is not "shrinking a tap target": a non-interactive label has no tap
+ * target to shrink. The 44px rule applies to things you press.
+ */
+.badge-card .chip,
+.badge-card .chip-on {
+  display: inline-block;
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.badge-card p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge-card .xp-meter {
+  margin-top: 8px;
+}
