@@ -775,14 +775,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      award_session_xp: {
-        Args: { p_workout_id: string }
-        Returns: Json
-      }
-      evaluate_achievements: {
-        Args: { p_user_id: string }
-        Returns: string[]
-      }
+      award_session_xp: { Args: { p_workout_id: string }; Returns: Json }
+      evaluate_achievements: { Args: { p_user_id: string }; Returns: string[] }
       xp_totals: {
         Args: { p_week_start: string }
         Returns: {
