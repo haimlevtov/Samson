@@ -256,6 +256,62 @@ the migration revoked only from `public` and `anon`. Since the function answers
 that revoking from `public` has failed to revoke from a Supabase role — the
 first was `20260901145239` for table grants.
 
+### Found by review afterwards — 2026-09-02
+
+A review of the finished branch produced fourteen findings that survived
+verification. All are fixed; the pattern in them is worth more than the list.
+
+**Three of the four acceptance criteria were met in the happy path and false in
+general.** "No sequence of sessions can breach the ceiling" was enforced by a
+`before insert` trigger, so an UPDATE walked past it — and `UPDATE` is granted
+to `authenticated` on every table by `20260824150321`. The same check read
+`sum(amount)` with no lock, so two concurrent writers each saw the same room
+under the cap and each took it: a _sequence_ stayed inside the ceiling, a _pair_
+did not. The criterion says "no sequence", and the code answered "no sequence
+via the intended path" — the exact distinction ADR 0009 §2 draws in prose, and
+then failed to implement.
+
+**The engine and the database disagreed about the same week.** `award_session_xp`
+required `status = 'completed'` to award while counting `('completed','rest')`
+for position, so a rest day paid nothing and still pushed later sessions down
+the curve — 0 + 80 where `weeklyAwards()` pays 100 + 80. The floor computed a
+different number than the policy, which makes it not a floor.
+
+**The one shipped achievement could not fire for most users.** Its predicate
+anchored a seven-day window to `max(local_date)` over all workout rows with no
+status filter, while counting only kept ones, so one skipped day — or any
+future session the planner schedules — slid the window forward and left six kept
+days inside it.
+
+**Validation was decorative in four places.** `target_unreachable` never fired
+for `distinct_exercises`, so a bodyweight user with two movements was offered
+five. `reward_out_of_band` compared only against the 500 ceiling, unreachable
+through a schema capped at 150, so a stale row carrying 300 validated clean. A
+missing RPE threshold was reported as `reward_out_of_band`, which names the
+wrong field in a column whose purpose is being read by a human. And `sessions`
+counted workout rows rather than days, so "three sessions this week" was
+finished in one afternoon.
+
+**Two plausibility holes, both in the range the check exists for.** Warmups
+counted toward challenges, so three empty-bar sets completed a three-movement
+challenge with no typo required. And Epley returns null above twelve reps, so
+`checkPlausibility` returned early and never judged a high-rep set at all —
+400 kg for 15 was accepted, which is precisely the "400 instead of 40" it was
+written to catch.
+
+**The fix for the double-award introduced a latent bug of its own.** The
+once-per-workout index was keyed on `(workout_id, source)`, which also covers
+achievement rows, so a session unlocking two achievements collided on the
+second. Because plpgsql rolls back a block's database work but keeps its
+variables, the slug was already in `unlocked` — the badge would have fired while
+the `achievement_events` row vanished. Latent only because one achievement
+exists.
+
+The through-line: nearly every finding is a guarantee that was stated correctly
+in prose and implemented for the path someone had in mind. The migrations and
+ADR 0009 §2 now carry the corrections inline rather than being edited to look
+right.
+
 ### Measured, live
 
 Signing in as the plateaued archetype and finishing a session awarded 64 XP —
@@ -267,19 +323,42 @@ against a target of 8 before starting"), while the beginner was offered them.
 
 ### Known gaps
 
+Two of the four were closed on 2026-09-02, after the review below. The entries
+are kept rather than deleted, because what was missed and when is part of what
+this document is for.
+
 - **`schema-invariants.test.ts` does not run locally.** It connects to Postgres
   directly at `127.0.0.1:54322`, which needs the local Docker stack. CI runs it;
-  a hosted-only workstation cannot. Pre-existing, not introduced here.
-- **The seeder produces one rest day per week**, so no archetype reaches seven
-  kept days in a seven-day window and "Seven for Seven" is unreachable from a
-  fresh `npm run seed`. Two rest days were added by hand to the dev database to
-  verify the unlock path. The seeder should schedule the rest days a programme
-  actually contains; recorded rather than quietly patched.
-- **Streak milestone XP is computed and tested but never written.**
-  `streakAwards()` exists, is covered by a property test, and no caller invokes
-  it — `award_session_xp` awards adherence and achievement XP only. The
-  `xp_events.source` check constraint already accepts `'streak'`.
+  a hosted-only workstation cannot. Pre-existing, not introduced here. **Still
+  open.**
+- ~~**The seeder produces one rest day per week**~~ — **closed.** It emitted one
+  rest day at offset 5, so a three-day archetype covered four days of seven and
+  "Seven for Seven" could not fire for anyone; it had been verified during the
+  phase by adding rest days to the dev database by hand, which was the tell.
+  Every day a programme does not train is now a rest day. Four of the five
+  archetypes reach kept runs of 30 to 58 days; `inconsistent` tops out at 6,
+  which is correct for a 0.5-adherence archetype. Layoff weeks are deliberately
+  left empty — filling them would hand `returning` an unbroken streak across the
+  months it was away.
+- ~~**Streak milestone XP is computed and tested but never written**~~ —
+  **closed** by `20260902110000_streak_milestone_xp.sql`. The award is derived
+  in the RPC, because XP can only be written by a definer function. That
+  duplicates `currentStreak()` and the milestone constants in SQL, which
+  `tests/db/gamification.test.ts` now pins — including the case where the two
+  definitions could most easily diverge: `currentStreak` skips days with nothing
+  scheduled, so an every-other-day programme reaches seven kept sessions across
+  thirteen calendar days, and a calendar-day reading in SQL would have scored
+  that 1 while the UI showed 7.
 - **Challenge completion is never paid out.** `evaluateChallenge` reports
   progress and the UI renders it, but nothing transitions a challenge to
   `completed` or awards its `reward_xp`. The validator half of the criterion is
-  met; the payout half is not built.
+  met; the payout half is not built. **Still open, and it needs a decision
+  first:** paying out requires deriving completion where XP can be written,
+  which means a second implementation of `evaluateChallenge` in SQL. The spec
+  explicitly warns against exactly that ("a separate quest evaluator would be a
+  second definition of what completion means, and the two would drift"). The
+  streak duplication above was accepted because it is one small query pinned by
+  a test; four challenge kinds over a rolling window is a different proposition.
+  The alternative — server-side TypeScript computing completion and an RPC that
+  accepts the result — moves the trust boundary that ADR 0009 §1 was written to
+  hold. Decide, record it, then build.
