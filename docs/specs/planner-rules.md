@@ -43,11 +43,11 @@ export interface RuleFinding {
 
 export interface RuleConstraint {
   kind:
-    | 'max_weight_kg'        // this exercise may not be loaded above `limit`
-    | 'max_week_tonnage_kg'  // this week's prescribed tonnage is capped at `limit`
-    | 'deload_by_week'       // a deload week is required at or before `limit`
-    | 'unknown_slug'         // `exerciseSlug` is not in the candidate list
-    | 'forbidden_slug';      // `exerciseSlug` may not be prescribed at all
+    | 'max_weight_kg' // this exercise may not be loaded above `limit`
+    | 'max_week_tonnage_kg' // this week's prescribed tonnage is capped at `limit`
+    | 'deload_by_week' // a deload week is required at or before `limit`
+    | 'unknown_slug' // `exerciseSlug` is not in the candidate list
+    | 'forbidden_slug'; // `exerciseSlug` may not be prescribed at all
   comparison: 'at_most' | 'below' | 'excluded';
   exerciseSlug: string | null;
   limit: number | null;
@@ -66,7 +66,7 @@ parse a number back out of English. ADR 0008 has the measurement that forced it.
 
 `comparison` distinguishes the rules that permit their limit from the rules that
 do not: `weekly_volume_increase` fails above its cap (`at_most`), while
-`acwr_band` fails *at* the threshold (`below`). Collapsing the two would make a
+`acwr_band` fails _at_ the threshold (`below`). Collapsing the two would make a
 block that sits exactly on the ACWR limit look compliant. `excluded` carries no
 limit — the slug itself is the finding.
 

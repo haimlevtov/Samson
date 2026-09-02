@@ -123,10 +123,22 @@ export function baselineWeeklyTonnage(sets: readonly SetRecord[], asOf: LocalDat
   return recent.reduce((sum, tonnage) => sum + tonnage, 0) / recent.length;
 }
 
+/*
+ * INVARIANT: catalogue text is untrusted — ADR 0005. `name` is sanitised here
+ *            and not merely in `toSummary`, because `load_ceiling` and
+ *            `injured_joint` interpolate it into a rejection `detail`, and
+ *            ADR 0008 sends rule details OUTSIDE the fence. The fence used to
+ *            contain whatever the catalogue held; nothing contains it now, so
+ *            the sanitisation has to happen at this boundary too.
+ *
+ * AI-NOTE: do not "simplify" this back to a passthrough. It looks redundant
+ *          next to toSummary and it is not — these two functions feed different
+ *          trust regions of the same request.
+ */
 function toRuleCandidate(candidate: ContextCandidate): RuleCandidate {
   return {
     slug: candidate.slug,
-    name: candidate.name,
+    name: sanitizeUntrusted(candidate.name, MAX_FIELD_CHARS),
     primaryMuscle: candidate.primaryMuscle,
     movementPattern: candidate.movementPattern,
     equipment: candidate.equipment,
@@ -202,7 +214,6 @@ export function buildPlannerContext(input: ContextInput): {
       injured_joints: input.injuredJoints,
       metrics: buildMetricsSummary(input),
       candidates: input.candidates.slice(0, limit).map(toSummary),
-      prior_rejections: [],
     },
     ruleContext: {
       // Deliberately the full list, never the trimmed one — see the AI-NOTE

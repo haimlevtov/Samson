@@ -747,3 +747,119 @@ describe('checkRules', () => {
     }
   });
 });
+
+/*
+ * PROVENANCE, stated because the header of this file makes a claim these cases
+ * are not covered by: everything above was written from the spec without
+ * reading rules.ts. The block below was NOT — it was written by the same author
+ * as the `constraint` implementation, after ADR 0008 added it to the contract.
+ *
+ * It is therefore weaker evidence than the rest of this file, and it is kept
+ * separate rather than blended in so that nobody reads the header and assumes
+ * otherwise. What it does still buy: the constraint is the only part of a
+ * finding a model is expected to act on, so "it exists and carries the right
+ * number" needs to fail loudly if it regresses.
+ */
+describe('RuleFinding.constraint', () => {
+  it('gives every finding a constraint', () => {
+    const ctx = context({ chronicWeeklyTonnageKg: 1000, injuredJoints: ['shoulder'] });
+    const findings = checkRules(everyRuleBreachPlan(), ctx);
+    expect(findings.length).toBe(RULE_ORDER.length);
+
+    for (const finding of findings) {
+      expect(finding.constraint, finding.code).toBeDefined();
+      expect(typeof finding.constraint.kind).toBe('string');
+    }
+  });
+
+  it('reports the equipment ceiling itself, not the weight that breached it', () => {
+    // The live failure ADR 0008 was written from: 32 kg prescribed against a
+    // 30 kg ceiling, rejected, then prescribed again. 30 is the number the
+    // planner needs and 32 is the one it already had.
+    const [finding] = findingsFor('load_ceiling', blockOf('dumbbell-bench-press', 32));
+
+    expect(finding?.constraint).toEqual({
+      kind: 'max_weight_kg',
+      comparison: 'at_most',
+      exerciseSlug: 'dumbbell-bench-press',
+      limit: 30,
+    });
+  });
+
+  it('reports the lower ceiling when an exercise has two', () => {
+    const [finding] = findingsFor('load_ceiling', blockOf('landmine-press', 100));
+    expect(finding?.constraint.limit).toBe(30);
+  });
+
+  it('caps volume at the baseline plus the allowed increase', () => {
+    const overCap = BASELINE_KG * (1 + MAX_WEEKLY_TONNAGE_INCREASE) * 2;
+    const [finding] = findingsFor(
+      'weekly_volume_increase',
+      block([{ exercises: [exercise(FILLER_SLUG, fillerSets(overCap))] }])
+    );
+
+    expect(finding?.constraint.kind).toBe('max_week_tonnage_kg');
+    expect(finding?.constraint.comparison).toBe('at_most');
+    // Floored, so a planner that hits the stated number exactly still passes.
+    expect(finding?.constraint.limit).toBe(
+      Math.floor(BASELINE_KG * (1 + MAX_WEEKLY_TONNAGE_INCREASE))
+    );
+  });
+
+  /*
+   * The distinction the `comparison` field exists for. `weekly_volume_increase`
+   * fails ABOVE its cap; `acwr_band` fails AT its threshold. Rendering both as
+   * "at most" would tell the planner that a block sitting exactly on the ACWR
+   * limit is acceptable, and the rule would reject it again.
+   */
+  it('marks the ACWR limit as exclusive, unlike the volume cap', () => {
+    const chronic = 1000;
+    const ctx = context({ chronicWeeklyTonnageKg: chronic });
+    const huge = chronic * ACWR_HIGH_RISK * 2;
+    const [finding] = findingsFor(
+      'acwr_band',
+      block([{ exercises: [exercise(FILLER_SLUG, fillerSets(huge))] }]),
+      ctx
+    );
+
+    expect(finding?.constraint.kind).toBe('max_week_tonnage_kg');
+    expect(finding?.constraint.comparison).toBe('below');
+    expect(finding?.constraint.limit).toBe(Math.ceil(chronic * ACWR_HIGH_RISK));
+  });
+
+  it('names the offending slug for the two rules that exclude one', () => {
+    const [unknown] = findingsFor('equipment_available', blockOf('not-a-real-exercise'));
+    expect(unknown?.constraint).toEqual({
+      kind: 'unknown_slug',
+      comparison: 'excluded',
+      exerciseSlug: 'not-a-real-exercise',
+      limit: null,
+    });
+
+    const [injured] = findingsFor(
+      'injured_joint',
+      blockOf('goblet-squat'),
+      context({ injuredJoints: ['knee'] })
+    );
+    expect(injured?.constraint).toEqual({
+      kind: 'forbidden_slug',
+      comparison: 'excluded',
+      exerciseSlug: 'goblet-squat',
+      limit: null,
+    });
+  });
+
+  it('carries the deload deadline as a week number', () => {
+    const weeks = Array.from({ length: DELOAD_REQUIRED_BY_WEEK + 1 }, () => ({
+      exercises: [exercise(FILLER_SLUG, fillerSets(0))],
+    }));
+    const [finding] = findingsFor('deload_cadence', block(weeks));
+
+    expect(finding?.constraint).toEqual({
+      kind: 'deload_by_week',
+      comparison: 'at_most',
+      exerciseSlug: null,
+      limit: DELOAD_REQUIRED_BY_WEEK,
+    });
+  });
+});

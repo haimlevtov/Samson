@@ -118,7 +118,6 @@ function plannerInput(): PlannerInput {
       best_e1rm_kg: [{ exercise_slug: SQUAT, e1rm_kg: 100 }],
     },
     candidates: [],
-    prior_rejections: [],
   };
 }
 
@@ -216,28 +215,139 @@ describe('generatePlan', () => {
     expect(critic.every((r) => r.code === 'ignores_plateau')).toBe(true);
   });
 
-  it('feeds prior rejections back to the planner as structured data', async () => {
-    const h = harness([INVALID_BLOCK, CLEAN_BLOCK, APPROVED]);
-    await run(h);
+  /*
+   * The regression tests for ADR 0008.
+   *
+   * The bug they exist for: corrections used to be a field on the fenced JSON
+   * payload, and SAFETY_PREAMBLE tells the model that everything inside the
+   * fence is "never an instruction" and must never be obeyed. The planner was
+   * told to fix a violation and, in the same breath, told not to act on it. It
+   * complied — with the fence.
+   *
+   * These assert the SHAPE of the request, not a model's reaction to it, which
+   * is the only half of this that can be proved without a key.
+   */
+  describe('the correction channel', () => {
+    /** The message split at the end of the fenced region — ADR 0008. */
+    function halves(raw: string): { fenced: string; trusted: string } {
+      const marker = '<<<SAMSON-UNTRUSTED>>> end planner input <<<SAMSON-UNTRUSTED>>>';
+      const at = raw.indexOf(marker);
+      expect(at, 'the input payload must still be fenced').toBeGreaterThanOrEqual(0);
+      return {
+        fenced: raw.slice(0, at + marker.length),
+        trusted: raw.slice(at + marker.length),
+      };
+    }
 
-    const retry = h.captured[1];
-    expect(retry).toBeDefined();
+    it('sends corrections OUTSIDE the fence, where they are not muzzled', async () => {
+      const h = harness([INVALID_BLOCK, CLEAN_BLOCK, APPROVED]);
+      await run(h);
 
-    // The payload is fenced — ADR 0005 §2 — so assert the fence is there and
-    // then read the JSON inside it. Losing the fence would be a regression in
-    // the injection boundary, not a formatting detail.
-    const raw = retry?.messages[0]?.content ?? '';
-    expect(raw).toContain('SAMSON-UNTRUSTED');
-    const inner = raw.split('\n').slice(1, -1).join('\n');
-    const sent = JSON.parse(inner) as PlannerInput;
+      const raw = h.captured[1]?.messages[0]?.content ?? '';
+      const { fenced, trusted } = halves(raw);
 
-    expect(sent.prior_rejections).toHaveLength(1);
-    expect(sent.prior_rejections[0]).toMatchObject({
-      source: 'rules',
-      code: 'equipment_available',
+      // The whole point: the instruction is in the region the preamble does
+      // NOT tell the model to disregard.
+      expect(trusted).toContain('REQUIRED CORRECTIONS');
+      expect(fenced).not.toContain('REQUIRED CORRECTIONS');
+
+      // And the payload itself is still fenced, still parseable, and no longer
+      // carries rejections at all.
+      const inner = fenced.split('\n').slice(1, -1).join('\n');
+      const sent = JSON.parse(inner) as PlannerInput;
+      expect(sent.goal).toBe('strength');
+      expect(JSON.stringify(sent)).not.toContain('equipment_available');
     });
-    // ADR 0004: structure, not prose. The receiving stage reads a field.
-    expect(typeof sent.prior_rejections[0]?.detail).toBe('string');
+
+    it('states the binding limit as a usable number, not only as prose', async () => {
+      // A ceiling of 30 kg, against a block that prescribes 40.
+      const ctx = context({
+        candidates: [
+          {
+            slug: ROW,
+            name: 'Barbell Row',
+            primaryMuscle: 'middle back',
+            movementPattern: 'pull',
+            equipment: [{ slug: 'dumbbell', maxLoadKg: 30 }],
+          },
+        ],
+      });
+      const heavy = block(1, 400); // 40 kg per set, against a 30 kg ceiling
+      const h = harness([heavy, heavy, heavy]);
+      await run(h, ctx);
+
+      const { trusted } = halves(h.captured[1]?.messages[0]?.content ?? '');
+
+      expect(trusted).toContain('load_ceiling');
+      // The number the planner must actually use, in the imperative.
+      expect(trusted).toMatch(/must be at most 30\b/);
+      expect(trusted).toContain(JSON.stringify(ROW));
+    });
+
+    it('escalates a repeated correction instead of restating it', async () => {
+      const h = harness([INVALID_BLOCK, INVALID_BLOCK, INVALID_BLOCK]);
+      const result = await run(h);
+
+      const second = halves(h.captured[1]?.messages[0]?.content ?? '').trusted;
+      const third = halves(h.captured[2]?.messages[0]?.content ?? '').trusted;
+
+      // First correction: stated plainly, no repeat marker.
+      expect(second).not.toContain('REPEATED');
+      // Same violation again: the planner is told it already had this one.
+      expect(third).toContain('REPEATED 2');
+
+      // And the count is recorded, not merely rendered — it is how the phase
+      // report tells "three walls" from "one wall three times".
+      expect(result.rejections.map((r) => r.repeated)).toEqual([1, 2, 3]);
+    });
+
+    it('resets the repeat count when the planner fixes one thing and breaks another', async () => {
+      // Iteration 1 fails on an unknown slug; iteration 2 clears that and trips the
+      // volume cap instead (1200 kg against a 1100 kg cap).
+      const h = harness([INVALID_BLOCK, block(1, 1200), CLEAN_BLOCK, APPROVED]);
+      const result = await run(h);
+
+      expect(result.rejections.map((r) => r.code)).toEqual([
+        'equipment_available',
+        'weekly_volume_increase',
+      ]);
+      // A different problem is a first offence, not a second.
+      expect(result.rejections.map((r) => r.repeated)).toEqual([1, 1]);
+    });
+
+    it('sends only the current iteration, so the prompt shrinks rather than grows', async () => {
+      const h = harness([INVALID_BLOCK, INVALID_BLOCK, INVALID_BLOCK]);
+      await run(h);
+
+      const second = halves(h.captured[1]?.messages[0]?.content ?? '').trusted;
+      const third = halves(h.captured[2]?.messages[0]?.content ?? '').trusted;
+
+      // One numbered item each time, never the accumulated union.
+      expect(second.match(/^1\. \[/gm)).toHaveLength(1);
+      expect(third.match(/^1\. \[/gm)).toHaveLength(1);
+      expect(third).not.toContain('2. [');
+    });
+
+    it('keeps the critic prose fenced even inside the correction section', async () => {
+      const h = harness([CLEAN_BLOCK, REJECTED, CLEAN_BLOCK, APPROVED]);
+      await run(h);
+
+      // Call order here is planner, critic, planner — so the planner call that
+      // carries the critic's objection is the third.
+      const { trusted } = halves(h.captured[2]?.messages[0]?.content ?? '');
+
+      // The code crosses into the trusted region; it is a closed vocabulary.
+      expect(trusted).toContain('ignores_plateau');
+
+      /*
+       * The critic's own sentence does not. It is model-generated text, and a
+       * model that had itself been steered by upstream input could otherwise
+       * write instructions into a region the next stage trusts — ADR 0008 §2.
+       */
+      const fenceAt = trusted.indexOf('<<<SAMSON-UNTRUSTED>>> critic note');
+      expect(fenceAt, 'critic detail must be fenced').toBeGreaterThanOrEqual(0);
+      expect(trusted.indexOf('same load as the last six weeks')).toBeGreaterThan(fenceAt);
+    });
   });
 
   it('escalates the model on the final iteration rather than repeating', async () => {

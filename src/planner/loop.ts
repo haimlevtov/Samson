@@ -49,14 +49,39 @@ export interface PlanRunResult {
 /**
  * Identifies the *question*, not the attempt.
  *
- * WHY prior_rejections are excluded: they change on every iteration while the
- * user, goal and history stay the same. Hashing them would give each iteration
- * a different identity and make "how many runs asked this same question" —
- * the comparison prompt versions are measured by — unanswerable.
+ * WHY the whole input hashes cleanly now: rejections used to live on
+ * `PlannerInput` and had to be stripped here, because they change on every
+ * iteration while the user, goal and history stay the same. ADR 0008 moved them
+ * out of the input entirely, so what remains is already the question — and the
+ * hash is unchanged for an unchanged question, which keeps it comparable with
+ * runs recorded before that change.
  */
 function hashInput(input: PlannerInput): string {
-  const { prior_rejections: _ignored, ...question } = input;
-  return createHash('sha256').update(JSON.stringify(question)).digest('hex').slice(0, 32);
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 32);
+}
+
+/**
+ * Identity of a *problem*, not of a report of one.
+ *
+ * WHY slug and week and not the detail string: the detail embeds measured
+ * numbers, so a planner that moves from 32 kg to 31 kg against a 30 kg ceiling
+ * would produce a different sentence for the same unfixed mistake and reset its
+ * own repeat count. The pair that must change for the problem to be fixed is
+ * the rule and the thing it fired on.
+ */
+function rejectionKey(r: Rejection): string {
+  return [r.source, r.code, r.constraint?.exerciseSlug ?? '', r.weekNumber ?? ''].join('|');
+}
+
+/** Carries each finding's consecutive-occurrence count forward — ADR 0008 §4. */
+function withRepeats(fresh: Rejection[], priorCounts: ReadonlyMap<string, number>): Rejection[] {
+  return fresh.map((r) => ({ ...r, repeated: (priorCounts.get(rejectionKey(r)) ?? 0) + 1 }));
+}
+
+function countsOf(rejections: readonly Rejection[]): Map<string, number> {
+  // Only this iteration's keys survive, so a finding the planner actually fixed
+  // drops back to zero instead of being reported as repeated forever.
+  return new Map(rejections.map((r) => [rejectionKey(r), r.repeated]));
 }
 
 function fromRules(findings: RuleFinding[]): Rejection[] {
@@ -65,6 +90,9 @@ function fromRules(findings: RuleFinding[]): Rejection[] {
     code: f.code,
     detail: f.detail,
     weekNumber: f.weekNumber,
+    constraint: f.constraint,
+    // Replaced by withRepeats before this leaves the iteration.
+    repeated: 1,
   }));
 }
 
@@ -80,6 +108,13 @@ export async function generatePlan(
   let costCredits = 0;
   let iterations = 0;
   let lastSource: Rejection['source'] | null = null;
+
+  // What the NEXT attempt is corrected with — this iteration's findings only,
+  // not the union of every iteration's. ADR 0008: the union grew the prompt on
+  // exactly the attempts that were already the most expensive, and told the
+  // planner nothing about which problems were still live.
+  let current: Rejection[] = [];
+  let priorCounts = new Map<string, number>();
 
   const finish = async (
     status: PlanRunStatus,
@@ -103,18 +138,6 @@ export async function generatePlan(
   for (let iteration = 1; iteration <= MAX_PLAN_ITERATIONS; iteration++) {
     iterations = iteration;
 
-    // Every rejection so far, as data. ADR 0004: handoffs carry structure —
-    // the planner reads fields, it does not parse a sentence back into one.
-    const attemptInput: PlannerInput = {
-      ...input,
-      prior_rejections: rejections.map((r) => ({
-        source: r.source,
-        code: r.code,
-        detail: r.detail,
-        week_number: r.weekNumber,
-      })),
-    };
-
     // Escalate rather than repeat — ADR 0004. Asking the same model the same
     // question a third time mostly buys a third copy of the same answer.
     const escalating = iteration === MAX_PLAN_ITERATIONS && rejections.length > 0;
@@ -127,7 +150,11 @@ export async function generatePlan(
         schema: trainingBlockSchema,
         schemaName: 'training_block',
         system: PLANNER_SYSTEM,
-        messages: [{ role: 'user', content: plannerUserMessage(attemptInput) }],
+        // INVARIANT: corrections are trusted text and travel OUTSIDE the fence
+        //            — ADR 0008. Putting them back inside the payload is the
+        //            bug this loop was fixed for: the safety preamble tells the
+        //            model never to obey anything fenced, and it obeys that.
+        messages: [{ role: 'user', content: plannerUserMessage(input, current, iteration) }],
         maxTokens: PLANNER_MAX_TOKENS,
         timeoutMs: PLANNER_TIMEOUT_MS,
         ...(escalating ? { models: ESCALATION_MODELS } : {}),
@@ -154,7 +181,11 @@ export async function generatePlan(
     // ---- Deterministic gate, always, regardless of what any model says ----
     const findings = checkRules(block, context);
     if (findings.length > 0) {
-      rejections.push(...fromRules(findings));
+      current = withRepeats(fromRules(findings), priorCounts);
+      priorCounts = countsOf(current);
+      // `rejections` still accumulates everything, because the run record is a
+      // measurement and must not lose the attempts nobody corrected on.
+      rejections.push(...current);
       lastSource = 'rules';
       continue;
     }
@@ -168,7 +199,7 @@ export async function generatePlan(
         schema: criticVerdictSchema,
         schemaName: 'critic_verdict',
         system: CRITIC_SYSTEM,
-        messages: [{ role: 'user', content: criticUserMessage(attemptInput, block) }],
+        messages: [{ role: 'user', content: criticUserMessage(input, block) }],
         maxTokens: CRITIC_MAX_TOKENS,
       });
       costCredits += verdict.costCredits;
@@ -176,14 +207,21 @@ export async function generatePlan(
       approved = verdict.data.approved;
 
       if (!approved) {
-        rejections.push(
-          ...verdict.data.reasons.map((r) => ({
+        current = withRepeats(
+          verdict.data.reasons.map((r) => ({
             source: 'critic' as const,
             code: r.code,
             detail: r.detail,
             weekNumber: r.week_number,
-          }))
+            // No constraint: the critic judges, it does not measure. Its detail
+            // is model-authored and stays fenced — ADR 0008 §2.
+            constraint: null,
+            repeated: 1,
+          })),
+          priorCounts
         );
+        priorCounts = countsOf(current);
+        rejections.push(...current);
         lastSource = 'critic';
       }
     } catch (cause) {
