@@ -305,3 +305,209 @@ describe('awards fire exactly once', () => {
     expect(rows ?? []).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The ceiling is a floor under UPDATE too, not only INSERT
+// ---------------------------------------------------------------------------
+
+describe('the ceiling survives an update, not just an insert', () => {
+  it('refuses an update that raises a row past the ceiling', async () => {
+    const admin = adminClient();
+    const week = '2026-08-03';
+
+    const { data: row, error: insertError } = await admin
+      .from('xp_events')
+      .insert({
+        user_id: alice.id,
+        source: 'adherence',
+        amount: 100,
+        local_date: week,
+        week_start: week,
+      })
+      .select('id')
+      .single();
+    expect(insertError).toBeNull();
+
+    /*
+     * The regression this exists for: the trigger fired `before insert` only,
+     * and UPDATE is granted to authenticated and service_role on every public
+     * table, so this was the one-line way past a guarantee the ADR calls
+     * permanent. Nothing about the amount below is reachable by inserting.
+     */
+    const { error } = await admin
+      .from('xp_events')
+      .update({ amount: WEEKLY_XP_CEILING * 10 })
+      .eq('id', row!.id);
+
+    expect(error, 'an update past the ceiling must be refused').not.toBeNull();
+    expect(error?.message).toMatch(/ceiling/i);
+  });
+
+  it('still allows an update that stays inside the ceiling', async () => {
+    const admin = adminClient();
+    const week = '2026-08-10';
+
+    const { data: row } = await admin
+      .from('xp_events')
+      .insert({
+        user_id: alice.id,
+        source: 'adherence',
+        amount: WEEKLY_XP_CEILING - 10,
+        local_date: week,
+        week_start: week,
+      })
+      .select('id')
+      .single();
+
+    /*
+     * Deliberately near the cap, because that is the only place the bug this
+     * guards against shows. The check has to exclude the row being updated from
+     * its own total: without that, correcting 490 to 495 is measured as
+     * 490 + 495 and refused, though the week would comfortably hold 495. Far
+     * from the ceiling the same bug is invisible, which is why this is not a
+     * 10-to-20 test.
+     */
+    const { error } = await admin
+      .from('xp_events')
+      .update({ amount: WEEKLY_XP_CEILING - 5 })
+      .eq('id', row!.id);
+
+    expect(error, 'a legitimate correction must still be allowed').toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "No SEQUENCE of sessions" has to mean concurrent ones too
+// ---------------------------------------------------------------------------
+
+describe('concurrent awards cannot each take the same remaining XP', () => {
+  it('clamps rather than races when several calls arrive at once', async () => {
+    const admin = adminClient();
+    const week = '2026-08-17';
+
+    // Leave exactly 50 XP of room, so every one of the calls below wants more
+    // than is left and only one of them can be right.
+    const { error: seedError } = await admin.from('xp_events').insert({
+      user_id: bob.id,
+      source: 'challenge',
+      amount: WEEKLY_XP_CEILING - 50,
+      local_date: week,
+      week_start: week,
+    });
+    expect(seedError).toBeNull();
+
+    const workouts = await Promise.all(
+      [0, 1, 2, 3, 4].map(async (offset) => {
+        const { data } = await admin
+          .from('workouts')
+          .insert({
+            user_id: bob.id,
+            local_date: `2026-08-${String(17 + offset).padStart(2, '0')}`,
+            status: 'completed',
+          })
+          .select('id')
+          .single();
+        return data!.id;
+      })
+    );
+
+    const results = await Promise.all(
+      workouts.map((id) => bob.client.rpc('award_session_xp', { p_workout_id: id }))
+    );
+
+    /*
+     * Two assertions, and the second is the interesting one. Without the
+     * advisory lock in award_session_xp the total still cannot exceed the
+     * ceiling — the trigger refuses the overshoot — but the losing calls come
+     * back as errors, and finishWorkout swallows those, so the user silently
+     * loses an award that the rules say should have been clamped to what was
+     * left.
+     */
+    for (const result of results) {
+      expect(result.error, 'a concurrent award must clamp, not fail').toBeNull();
+    }
+
+    const { data: rows } = await admin
+      .from('xp_events')
+      .select('amount')
+      .eq('user_id', bob.id)
+      .eq('week_start', week);
+    const total = (rows ?? []).reduce((sum, r) => sum + r.amount, 0);
+
+    expect(total).toBe(WEEKLY_XP_CEILING);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Two achievements in one session
+// ---------------------------------------------------------------------------
+
+describe('a session that unlocks more than one achievement', () => {
+  it('records every one of them', async () => {
+    const admin = adminClient();
+    const stamp = Date.now();
+    const slugs = [`probe-a-${stamp}`, `probe-b-${stamp}`];
+
+    /*
+     * System rows (user_id null), so the evaluator will run them — that is the
+     * whole point. A predicate of `(select true)` unlocks unconditionally, so
+     * one workout unlocks both.
+     *
+     * The regression this exists for: the first once-per-workout index was
+     * keyed on (workout_id, source), which made the SECOND achievement's XP
+     * insert collide. plpgsql rolls back a block's database work when its
+     * handler runs but keeps its variables, so the achievement came back in
+     * `unlocked` while its achievement_events row did not survive.
+     */
+    try {
+      const { error: seedError } = await admin.from('achievements').insert(
+        slugs.map((slug) => ({
+          user_id: null,
+          slug,
+          name: slug,
+          description: 'Fixture, always unlocks',
+          predicate: '(select true)',
+          tier: 'consistency',
+          humor_level: 'clean',
+          hidden: false,
+        }))
+      );
+      expect(seedError).toBeNull();
+
+      const { data: workout } = await admin
+        .from('workouts')
+        .insert({ user_id: alice.id, local_date: '2026-08-24', status: 'completed' })
+        .select('id')
+        .single();
+
+      const { data, error } = await alice.client.rpc('award_session_xp', {
+        p_workout_id: workout!.id,
+      });
+      expect(error).toBeNull();
+
+      const unlocked = (data as { unlocked: string[] }).unlocked;
+      expect(unlocked).toEqual(expect.arrayContaining(slugs));
+
+      // What the UI was told, and what the database kept, must be the same set.
+      const { data: ids } = await admin
+        .from('achievements')
+        .select('id')
+        .in('slug', slugs)
+        .is('user_id', null);
+      const { data: events } = await admin
+        .from('achievement_events')
+        .select('achievement_id')
+        .eq('user_id', alice.id)
+        .in(
+          'achievement_id',
+          (ids ?? []).map((row) => row.id)
+        );
+
+      expect(events ?? [], 'every reported unlock must be recorded').toHaveLength(slugs.length);
+    } finally {
+      // These are global content rows on a shared project. They do not outlive
+      // the test even if an assertion above fails.
+      await admin.from('achievements').delete().in('slug', slugs).is('user_id', null);
+    }
+  });
+});

@@ -38,9 +38,10 @@ into the browser no matter how carefully the caller behaved.
 
 ### 2. The weekly ceiling is a database trigger, not only application arithmetic
 
-`src/gamification/xp.ts` computes and clamps the award. A `before insert`
-trigger on `xp_events` **independently** refuses any row that would push
-`sum(amount)` for `(user_id, week_start)` past `WEEKLY_XP_CEILING`.
+`src/gamification/xp.ts` computes and clamps the award. A
+`before insert or update` trigger on `xp_events` **independently** refuses any
+row that would push `sum(amount)` for `(user_id, week_start)` past
+`WEEKLY_XP_CEILING`.
 
 This is the same shape as the planner in ADR 0004: the TypeScript is the policy,
 the database is the floor. In normal operation the trigger never fires, because
@@ -56,6 +57,26 @@ the intended path".
 
 The constant is defined once in TypeScript and asserted against the database in
 `tests/db/`, so the two cannot drift without a test failing.
+
+**Amended 2026-09-02, after review.** As first shipped this was a `before
+insert` trigger reading `sum(amount)` with no lock. Both gaps made the criterion
+false rather than merely under-enforced, and both are the same mistake — reading
+the guarantee as being about the intended path:
+
+- UPDATE is granted to `authenticated` and `service_role` on every public table
+  (`20260824150321_grants.sql`), so raising `xp_events.amount` never met the
+  trigger at all. The threat model two paragraphs above is "a bug, a migration,
+  a future RPC, or a careless admin script" — none of which only inserts.
+- Two concurrent writers each read the same total, each found room under the
+  cap, and each took it. A _sequence_ of sessions stayed inside the ceiling; a
+  _pair_ arriving together did not.
+
+`20260902095000` fires the trigger on UPDATE as well, excludes the row being
+updated from its own total, and takes a `pg_advisory_xact_lock` keyed on
+`(user_id, week_start)`. `20260902095200` takes that same lock inside
+`award_session_xp` before it reads, so a losing concurrent call clamps to what
+is left rather than raising into `finishWorkout`, which swallows the error and
+would have dropped the award silently.
 
 ### 3. Achievement predicates execute only for system-owned rows
 
