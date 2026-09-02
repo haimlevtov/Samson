@@ -101,3 +101,37 @@ only key this project has is for text. Persona voice is therefore tone and word
 choice, not timbre, and nothing is precomputed — a deliberate reduction of what
 PLAN.md phase 3 describes, recorded here so the phase report does not claim the
 audio pipeline that was planned.
+
+**Amended 2026-09-02, after a user report that every coach sounded the same.**
+The reduction above was true and the implementation was weaker still. Voices
+were selected by LANGUAGE alone, and `personas.tts_voice_id` — despite its
+name — holds a BCP-47 tag rather than a voice identity. Two consequences, and
+the second is the one that made the feature look broken:
+
+- `old-master` and `rival` are both seeded `en-GB`, so they resolved to the same
+  `SpeechSynthesisVoice` object. All that separated them was one step of
+  intensity: a 7% rate and 5% pitch difference, under what a listener hears as a
+  different speaker.
+- `pickVoice` falls back from an exact language match to the language prefix,
+  which is right — asking for en-GB on a US-only machine should speak American
+  English rather than fall silent. But it meant that on a device with no en-GB
+  voice installed, the Windows default, the `en-US` persona landed on that same
+  voice too. All three coaches converged on one.
+
+Meanwhile `docs/PRD.md` and `docs/PLAN.md` both promise each persona row carries
+a "TTS voice", and the UI labels the picker "Voice". The interface and the
+product docs promised something this note had already conceded was impossible.
+
+**What changed:** the language tag now narrows the field and a `variant` index
+picks a distinct voice within it, so three personas take three of the device's
+voices whenever it has three. This does not buy a persona a consistent timbre —
+which voice a coach gets still depends on what is installed, and a machine with
+one English voice still speaks with one — but it does mean choosing a different
+coach produces an audibly different speaker on any ordinary device. The claim in
+the first paragraph stands: nothing here is a recorded or synthesised persona
+voice. It is the device's voices, allocated so they do not collide.
+
+`tts_voice_id` keeps its misleading name for now; renaming a column is a
+migration and a type regeneration for a cosmetic gain. `src/ui/speak.ts` says
+what it actually holds, and `src/ui/speak.test.ts` pins the behaviour that was
+previously untested — which is why nothing caught this.
