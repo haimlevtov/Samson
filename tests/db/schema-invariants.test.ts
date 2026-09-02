@@ -13,7 +13,28 @@ let pg: Client;
 
 beforeAll(async () => {
   pg = new Client({ connectionString: DB_URL });
-  await pg.connect();
+  try {
+    await pg.connect();
+  } catch (cause) {
+    /*
+     * Deliberately still a failure, not a skip. These are the CLAUDE.md #10
+     * invariants — a suite that quietly passes when it cannot reach a database
+     * is worse than one that fails, because the first missing RLS policy would
+     * ship green.
+     *
+     * The message exists because the default is the local stack, and the most
+     * common reason to land here is a workstation running against the hosted
+     * project with no SUPABASE_DB_URL set. That is a one-line fix, and the raw
+     * ECONNREFUSED does not say so.
+     */
+    throw new Error(
+      `could not reach Postgres at ${DB_URL.replace(/:[^:@]*@/, ':***@')}. ` +
+        'These tests read pg_catalog directly, so they need a database connection ' +
+        'rather than the REST API. Either start the local stack, or set ' +
+        'SUPABASE_DB_URL to the hosted pooler connection string (see tests/db/helpers.ts).',
+      { cause }
+    );
+  }
 });
 
 afterAll(async () => {

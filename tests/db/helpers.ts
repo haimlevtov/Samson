@@ -16,6 +16,21 @@ config({ path: '.env.local', quiet: true });
 export const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321';
 export const ANON_KEY = process.env['SUPABASE_ANON_KEY'] ?? '';
 export const SERVICE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
+/**
+ * A raw Postgres connection, used only by `schema-invariants.test.ts` — the
+ * catalogue tables it reads are not exposed through PostgREST, so the Supabase
+ * client cannot answer "is RLS on for every table".
+ *
+ * Defaults to the local stack. To run against the hosted project instead, which
+ * is what a workstation without Docker has to do, put the pooler connection
+ * string in `.env.local`:
+ *
+ *   SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@<region>.pooler.supabase.com:6543/postgres
+ *
+ * Dashboard → Project Settings → Database → Connection string → URI. It is a
+ * database password rather than an API key, so it is not interchangeable with
+ * SUPABASE_SERVICE_ROLE_KEY and is not recoverable from the other values here.
+ */
 export const DB_URL =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 
