@@ -4,10 +4,27 @@
  *   npm run challenges:generate            report only, writes nothing
  *   npm run challenges:generate -- --apply  assigns and records rejections
  *
- * WHAT IT DOES: reads the unassigned pool (`challenges` rows with a null
- * user_id), validates every candidate against every user's real history with
- * the SAME validator the app uses (`src/gamification/challenge.ts`), assigns
- * what survives, and writes what does not — with its reasons.
+ * WHAT IT DOES, per user, in this order:
+ *
+ *   1. SETTLES finished challenges — `settleChallenges()` decides which are
+ *      complete using `evaluateChallenge`, the same function the progress
+ *      screen calls, and pays each out of what the week has left.
+ *   2. Reads the unassigned pool (`challenges` rows with a null user_id),
+ *      validates every candidate against that user's real history with the SAME
+ *      validator the app uses, assigns what survives, and writes what does not —
+ *      with its reasons.
+ *
+ * WHY settlement lives in a batch job and not in `finishWorkout`: paying out
+ * needs to write `xp_events`, which only a definer function may do. Such a
+ * function would have to either re-derive completion in SQL — a second
+ * definition of what completing a challenge means, which the spec explicitly
+ * warns against — or trust its caller. Trusting the caller means any signed-in
+ * client can invoke it for its own challenge and be paid without doing the
+ * work, which is the phase 4 criterion "no completion can be granted from the
+ * client" failing outright. A batch job has neither problem: it is server-side
+ * TypeScript using the one definition, and there is no endpoint to abuse. The
+ * cost is that payout lands on the next run rather than the moment the set is
+ * logged. ADR 0009 §4.
  *
  * INVARIANT: a rejected challenge is inspectable — PLAN.md phase 4. Rejected
  *            candidates are WRITTEN, with status 'rejected' and their reasons
@@ -31,7 +48,8 @@ import {
   type ChallengeContext,
   type ValidationReason,
 } from '../src/gamification/challenge';
-import { addDays } from '../src/metrics/dates';
+import { settleChallenges, type AssignedChallenge } from '../src/gamification/settlement';
+import { addDays, startOfWeek } from '../src/metrics/dates';
 import type { Database } from '../src/db/types';
 import type { LocalDate, SetRecord, WorkoutRecord } from '../src/metrics/types';
 
@@ -74,6 +92,7 @@ async function main(): Promise<void> {
   );
   console.log(`${pool?.length ?? 0} pool templates, ${users?.length ?? 0} users.\n`);
 
+  let settled = 0;
   let assigned = 0;
   let rejected = 0;
 
@@ -87,7 +106,7 @@ async function main(): Promise<void> {
         .from('sets')
         .select('exercise_id, weight_kg, reps, rpe, is_warmup, workouts!inner(local_date)')
         .eq('user_id', user.user_id),
-      db.from('challenges').select('slug').eq('user_id', user.user_id),
+      db.from('challenges').select('id, slug, spec, status').eq('user_id', user.user_id),
     ]);
 
     const context: ChallengeContext = {
@@ -114,6 +133,67 @@ async function main(): Promise<void> {
 
     const already = new Set((owned ?? []).map((c) => c.slug));
     const label = user.display_name ?? user.user_id.slice(0, 8);
+
+    /*
+     * Settle before generating.
+     *
+     * A challenge finished this week must be paid out of this week's allowance
+     * before any new one is offered, or the ceiling arithmetic is done against
+     * a ledger that is about to change.
+     */
+    const weekStart = startOfWeek(asOf);
+    const { data: weekXp } = await db
+      .from('xp_events')
+      .select('amount')
+      .eq('user_id', user.user_id)
+      .eq('week_start', weekStart);
+    // Summed here rather than in SQL, unlike loadXpSummary: one user's single
+    // week holds a handful of rows at most, because the ceiling is 500 and the
+    // smallest award is 10.
+    const awardedThisWeek = (weekXp ?? []).reduce((sum, row) => sum + row.amount, 0);
+
+    const assignedChallenges = (owned ?? []).flatMap((row): AssignedChallenge[] => {
+      const parsed = challengeSpecSchema.safeParse(row.spec);
+      // A row written by an older generator is untrusted input like any other.
+      if (!parsed.success) return [];
+      return [{ id: row.id, slug: row.slug, spec: parsed.data, status: row.status }];
+    });
+
+    for (const done of settleChallenges(assignedChallenges, context, awardedThisWeek)) {
+      settled += 1;
+      const short = done.awardXp < done.rewardXp ? ` (clamped from ${done.rewardXp})` : '';
+      console.log(
+        `  ${label} · ${done.slug}: completed ${done.progress}/${done.target}, ` +
+          `+${done.awardXp} XP${short}`
+      );
+      if (!APPLY) continue;
+
+      /*
+       * The status transition IS the idempotency guard. Filtering on the
+       * unresolved statuses inside the UPDATE means two overlapping runs cannot
+       * both pay: whichever commits second matches no row and writes no XP.
+       * Checking first and updating after would leave exactly that gap open.
+       */
+      const { data: won, error: settleErr } = await db
+        .from('challenges')
+        .update({ status: 'completed' })
+        .eq('id', done.id)
+        .in('status', ['offered', 'active'])
+        .select('id');
+      if (settleErr) throw new Error(`settling ${done.slug}: ${settleErr.message}`);
+      if ((won ?? []).length === 0) continue;
+
+      if (done.awardXp > 0) {
+        const { error: xpErr } = await db.from('xp_events').insert({
+          user_id: user.user_id,
+          source: 'challenge',
+          amount: done.awardXp,
+          local_date: asOf,
+          week_start: weekStart,
+        });
+        if (xpErr) throw new Error(`paying ${done.slug}: ${xpErr.message}`);
+      }
+    }
 
     for (const template of pool ?? []) {
       if (already.has(template.slug)) continue;
@@ -169,7 +249,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\n${assigned} offered, ${rejected} rejected.`);
+  console.log(`\n${settled} settled, ${assigned} offered, ${rejected} rejected.`);
   if (!APPLY) console.log('Nothing was written. Re-run with --apply.');
 }
 

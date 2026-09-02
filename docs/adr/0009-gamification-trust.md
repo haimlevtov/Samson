@@ -110,6 +110,47 @@ Enforced three ways, because a comment is not a control:
 3. The predicate is executed against a **single-row subquery scoped to the
    evaluating user**, so even a system predicate cannot read across users.
 
+### 4. Challenge payout is settled by a batch job, not by a request
+
+Added 2026-09-02. Challenges were generated, validated, assigned and rendered,
+and nothing ever completed one or paid its `reward_xp`.
+
+Paying out means writing `xp_events`, which only a `SECURITY DEFINER` function
+may do. That function has to decide whether the challenge is finished, and there
+are only two ways for it to know:
+
+- **Re-derive completion in SQL.** This is a second implementation of
+  `evaluateChallenge` — four challenge kinds over a rolling window, plus the
+  plausibility filter. `docs/specs/xp-and-challenges.md` warns against exactly
+  this: "a separate quest evaluator would be a second definition of what
+  completion means, and the two would drift." The weekly ceiling is duplicated
+  in SQL and that is tolerable, because it is one integer pinned by a test. So
+  is the streak, at one query. A whole evaluator is not the same bet.
+- **Trust the caller.** The RPC is granted to `authenticated`, so any signed-in
+  client could call it for one of their own challenges and be paid without doing
+  the work. That is not moving the trust boundary; it is removing it, and it
+  fails the phase criterion "no completion can be granted from the client"
+  directly.
+
+**Neither. Settlement runs in `scripts/generate-challenges.ts`, the batch job
+that already exists** — server-side TypeScript calling `evaluateChallenge`, the
+same function the progress surface calls, so there is one definition. It runs
+with the service role, which CLAUDE.md #10 permits in a batch job and forbids in
+application code, and it exposes no endpoint for a client to call.
+
+The idempotency guard is the status transition itself: the `UPDATE` filters on
+`status in ('offered','active')`, so two overlapping runs cannot both pay —
+whichever commits second matches no row. Checking first and updating after would
+leave precisely that gap open.
+
+**What this costs:** payout is not immediate. A challenge finished mid-session
+is paid on the next batch run rather than the moment the set is logged, so the
+completion banner cannot fire the way the achievement badge does. That is a real
+downgrade in feel and it is the price of not having a payout endpoint. If
+immediacy is wanted later, the honest way to buy it is the SQL re-derivation
+above, with a test pinning it against `evaluateChallenge` case by case — not a
+trusted RPC.
+
 ## Consequences
 
 **Custom user achievements are not a feature.** The `achievements_write` policy

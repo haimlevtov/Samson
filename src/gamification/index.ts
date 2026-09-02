@@ -8,3 +8,4 @@
 export * from './xp';
 export * from './plausibility';
 export * from './challenge';
+export * from './settlement';

@@ -349,16 +349,23 @@ this document is for.
   scheduled, so an every-other-day programme reaches seven kept sessions across
   thirteen calendar days, and a calendar-day reading in SQL would have scored
   that 1 while the UI showed 7.
-- **Challenge completion is never paid out.** `evaluateChallenge` reports
-  progress and the UI renders it, but nothing transitions a challenge to
-  `completed` or awards its `reward_xp`. The validator half of the criterion is
-  met; the payout half is not built. **Still open, and it needs a decision
-  first:** paying out requires deriving completion where XP can be written,
-  which means a second implementation of `evaluateChallenge` in SQL. The spec
-  explicitly warns against exactly that ("a separate quest evaluator would be a
-  second definition of what completion means, and the two would drift"). The
-  streak duplication above was accepted because it is one small query pinned by
-  a test; four challenge kinds over a rolling window is a different proposition.
-  The alternative — server-side TypeScript computing completion and an RPC that
-  accepts the result — moves the trust boundary that ADR 0009 §1 was written to
-  hold. Decide, record it, then build.
+- ~~**Challenge completion is never paid out**~~ — **closed**, with the decision
+  recorded as ADR 0009 §4. `src/gamification/settlement.ts` decides what is
+  finished by calling `evaluateChallenge` — the same function the progress
+  surface calls, so there is one definition — and applies the ceiling
+  cumulatively across a batch, so four completions at once cannot jointly breach
+  a cap that each of them individually fitted under.
+
+  It runs in `scripts/generate-challenges.ts` rather than in `finishWorkout`,
+  and the reasoning is the substance of the ADR: a definer function that paid
+  out would have to re-derive completion in SQL — the second evaluator the spec
+  warns against — or trust its caller, which lets any signed-in client be paid
+  for work it did not do. A batch job has neither problem and exposes no
+  endpoint. The idempotency guard is the status transition itself: the `UPDATE`
+  filters on `status in ('offered','active')`, so a second run matches no row.
+
+  **What it costs, recorded rather than glossed:** payout is not immediate. A
+  challenge finished mid-session pays on the next batch run, so the completion
+  cannot fire a banner the way a badge does. Buying that back honestly means the
+  SQL re-derivation, pinned case by case against `evaluateChallenge` — not a
+  trusted RPC.

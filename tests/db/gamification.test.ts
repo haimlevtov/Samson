@@ -923,3 +923,90 @@ describe('streak milestone XP', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Challenge settlement — the write path the batch job uses
+// ---------------------------------------------------------------------------
+
+describe('settling a challenge pays it exactly once', () => {
+  /*
+   * `settleChallenges()` decides WHICH challenges are finished and is unit
+   * tested offline. What cannot be tested offline is the guard that makes the
+   * payout safe: the status transition itself. Two overlapping batch runs, or
+   * one re-run after a crash between the update and the insert, must not pay
+   * twice — ADR 0009 §4.
+   */
+  it('lets only the first transition out of an unresolved status win', async () => {
+    const admin = adminClient();
+    const user = await createTestUser('settle');
+    try {
+      const { data: challenge, error } = await admin
+        .from('challenges')
+        .insert({
+          user_id: user.id,
+          slug: `settle-probe-${Date.now()}`,
+          kind: 'weekly',
+          spec: {
+            kind: 'sessions',
+            target: 1,
+            window_days: 7,
+            reward_xp: 40,
+            rpe_at_least: null,
+          },
+          status: 'offered',
+          window_start: '2027-01-04',
+          window_end: '2027-01-10',
+        })
+        .select('id')
+        .single();
+      expect(error).toBeNull();
+
+      const settle = () =>
+        admin
+          .from('challenges')
+          .update({ status: 'completed' })
+          .eq('id', challenge!.id)
+          .in('status', ['offered', 'active'])
+          .select('id');
+
+      const first = await settle();
+      const second = await settle();
+
+      expect(first.data ?? [], 'the first run settles it').toHaveLength(1);
+      expect(second.data ?? [], 'the second run must match no row').toHaveLength(0);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+
+  it("accepts 'challenge' as an XP source and holds it under the ceiling", async () => {
+    const admin = adminClient();
+    const user = await createTestUser('settle-xp');
+    try {
+      const week = '2027-01-04';
+
+      const ok = await admin.from('xp_events').insert({
+        user_id: user.id,
+        source: 'challenge',
+        amount: 40,
+        local_date: week,
+        week_start: week,
+      });
+      expect(ok.error, "'challenge' is a permitted source").toBeNull();
+
+      // The batch job clamps with applyCeiling before writing; the trigger is
+      // the floor under that, exactly as it is for the RPC.
+      const over = await admin.from('xp_events').insert({
+        user_id: user.id,
+        source: 'challenge',
+        amount: WEEKLY_XP_CEILING,
+        local_date: week,
+        week_start: week,
+      });
+      expect(over.error).not.toBeNull();
+      expect(over.error?.message).toMatch(/ceiling/i);
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});
