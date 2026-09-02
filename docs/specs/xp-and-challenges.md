@@ -143,8 +143,23 @@ export function checkPlausibility(
   is more than `PLAUSIBLE_E1RM_MULTIPLE` (1.5) times the user's best recorded
   e1RM for that exercise. With no history for the exercise, nothing is
   implausible: a first entry has nothing to contradict.
+
+  **Above `EPLEY_MAX_REPS` (12) the comparison is on raw load instead.** Epley
+  returns null past its cap, so the e1RM test cannot run — and a check that
+  goes quiet above 12 reps is blind in exactly the range where a "400 instead
+  of 40" typo hides. The same 1.5 multiple is applied to the heaviest weight
+  the user has ever moved for that exercise (`bestWeightKg`), which needs no
+  formula and is if anything more generous at high reps than at low.
+
 - **`impossible_volume`** — more than 100 reps in a single set.
 - **`nonsense_value`** — a negative weight or reps, or a weight above 500 kg.
+
+**Warmups are not implausible, and still earn nothing.** `checkPlausibility`
+returns no finding for a warmup — it is honest data and the user did nothing
+wrong — but `plausibleSets`, which is what every reward path reads, drops them.
+The two exclusions are separate on purpose: one is distrust, the other is simply
+that a warmup is not the work being rewarded. Without the second, three
+empty-bar sets on three movements complete a distinct-exercises challenge.
 
 **Why it is relative to the user's own history and not an absolute table:** an
 absolute ceiling either insults a strong lifter or waves through a beginner
@@ -190,17 +205,45 @@ A rejected candidate is written to `challenges` with `status: 'rejected'` and
 its reasons in `validation_reasons`. It is **not discarded**, because the phase
 criterion is that a rejected challenge is inspectable, and a dropped row is not.
 
-| Code                    | Meaning                                                               |
-| ----------------------- | --------------------------------------------------------------------- |
-| `target_unreachable`    | the target cannot fit in the window — 10 sessions in 3 days           |
-| `below_current_ability` | the user already does this without changing anything; not a challenge |
-| `reward_out_of_band`    | `reward_xp` outside 10..150, or above what the weekly ceiling can pay |
-| `window_mismatch`       | a `daily` challenge whose `window_days` is not 1                      |
-| `unknown_exercise`      | references a slug outside the user's candidate list                   |
+| Code                    | Meaning                                                                   |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `target_unreachable`    | the target cannot fit what bounds it — see below                          |
+| `below_current_ability` | the user already does this without changing anything; not a challenge     |
+| `reward_out_of_band`    | `reward_xp` outside 10..150                                               |
+| `window_mismatch`       | a `daily` challenge whose `window_days` is not 1                          |
+| `missing_threshold`     | a `sets_at_rpe` challenge with no `rpe_at_least` to measure against       |
+| `unknown_exercise`      | the user has no candidate exercises at all, so nothing could be performed |
 
 Each finding carries a `detail` naming the offending number, for the same reason
 `RuleConstraint` exists in the planner (ADR 0008): a human reads the detail, and
 anything acting on it reads the fields.
+
+**What bounds `target_unreachable`** differs by kind, and only two kinds have a
+bound at all:
+
+| Kind                 | Bound                                                    |
+| -------------------- | -------------------------------------------------------- |
+| `sessions`           | `window_days` — progress is counted per day              |
+| `streak_days`        | `window_days`                                            |
+| `distinct_exercises` | the size of the user's equipment-filtered candidate list |
+| `sets_at_rpe`        | none; a day holds any number of sets                     |
+
+The `distinct_exercises` bound is the one that matters in practice: without it a
+bodyweight-only user with two available movements is offered "five distinct
+movements this week" and nothing rejects it. The target is not hard, it is
+impossible.
+
+**`reward_out_of_band` is the band, not the ceiling.** `MAX_REWARD_XP` is 150
+and the weekly ceiling is 500, so any reward inside the band is payable and a
+ceiling comparison can never fire. Checking only the ceiling made the code
+unreachable through the schema and let a stale row carrying 300 validate clean.
+
+**`unknown_exercise` is narrower than its name.** `ChallengeSpec` carries no
+exercise field, so a spec cannot reference a slug at all and the original
+meaning — "references a slug outside the user's candidate list" — is not
+expressible. It currently means "the candidate list is empty". Either the spec
+shape grows an exercise field or this code should be retired; recorded here
+rather than left as a name that promises more than it does.
 
 ### Completion — `evaluateChallenge`
 
@@ -212,4 +255,11 @@ criterion, and `docs/adr/0009-gamification-trust.md` records how it is enforced
 rather than merely intended.
 
 Sets failing `checkPlausibility` are excluded from `progress` before it is
-compared with `target`.
+compared with `target`, and so are warmups — `progress` counts only what
+`plausibleSets` returns.
+
+**`sessions` counts distinct days, not workout rows.** `workouts` has no unique
+constraint on `(user_id, local_date)` and `startWorkout` inserts a row per call,
+so counting rows let three workouts in one afternoon complete "three sessions
+this week". Counting days is also what makes the `window_days` bound above true
+rather than merely assumed.

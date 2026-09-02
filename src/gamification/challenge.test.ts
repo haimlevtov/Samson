@@ -128,13 +128,55 @@ describe('validateCandidate', () => {
     expect(verdict.reasons.map((r) => r.code)).toContain('reward_out_of_band');
   });
 
-  it('rejects an rpe challenge with no threshold to measure', () => {
+  it('rejects a reward outside the band even when the ceiling could pay it', () => {
+    /*
+     * 300 is over MAX_REWARD_XP and comfortably under the weekly ceiling. The
+     * validator used to compare only against the ceiling, so this exact row —
+     * the stale-spec case the check exists for — validated clean.
+     */
+    const verdict = validateCandidate({ ...spec(), reward_xp: 300 }, 'weekly', context());
+
+    const reason = verdict.reasons.find((r) => r.code === 'reward_out_of_band');
+    expect(reason).toBeDefined();
+    expect(reason?.detail).toContain('300');
+    expect(reason?.detail).toContain(String(MAX_REWARD_XP));
+  });
+
+  it('rejects an rpe challenge with no threshold to measure, and says so', () => {
     const verdict = validateCandidate(
       spec({ kind: 'sets_at_rpe', rpe_at_least: null }),
       'weekly',
       context()
     );
-    expect(verdict.reasons.map((r) => r.code)).toContain('reward_out_of_band');
+
+    // Not `reward_out_of_band`: the reward is fine, the threshold is missing,
+    // and validation_reasons is read by humans.
+    expect(verdict.reasons.map((r) => r.code)).toContain('missing_threshold');
+    expect(verdict.reasons.map((r) => r.code)).not.toContain('reward_out_of_band');
+  });
+
+  it('rejects more distinct exercises than the user can actually train', () => {
+    // A bodyweight-only user: two movements available, five demanded.
+    const limited = context({ availableExerciseIds: [SQUAT, BENCH] });
+    const verdict = validateCandidate(
+      spec({ kind: 'distinct_exercises', target: 5 }),
+      'weekly',
+      limited
+    );
+
+    const reason = verdict.reasons.find((r) => r.code === 'target_unreachable');
+    expect(reason, 'an impossible target must not be offered').toBeDefined();
+    expect(reason?.detail).toContain('5');
+    expect(reason?.detail).toContain('2');
+  });
+
+  it('still offers a distinct-exercises target the candidate list can hold', () => {
+    const verdict = validateCandidate(
+      spec({ kind: 'distinct_exercises', target: 2 }),
+      'weekly',
+      context()
+    );
+    expect(verdict.ok).toBe(true);
   });
 
   it('reports every problem at once rather than stopping at the first', () => {
@@ -183,6 +225,23 @@ describe('evaluateChallenge', () => {
     expect(evaluateChallenge(spec({ target: 2 }), ctx).progress).toBe(1);
   });
 
+  it('counts a day once, however many sessions were started on it', () => {
+    /*
+     * Nothing in the schema stops several workout rows sharing a date, and
+     * `startWorkout` creates one per call. Counting rows meant "three sessions
+     * this week" was completed by starting and finishing three in one
+     * afternoon.
+     */
+    const ctx = context({
+      workouts: [
+        { ...workout('2026-09-06'), id: 'w-1' },
+        { ...workout('2026-09-06'), id: 'w-2' },
+        { ...workout('2026-09-06'), id: 'w-3' },
+      ],
+    });
+    expect(evaluateChallenge(spec({ target: 3 }), ctx).progress).toBe(1);
+  });
+
   it('counts distinct exercises, not sets', () => {
     const ctx = context({
       sets: [set(), set(), set({ exerciseId: BENCH })],
@@ -214,6 +273,44 @@ describe('evaluateChallenge', () => {
 
     // Only the bench set counts; the 400 kg squat is over 1.5x the established best.
     expect(evaluateChallenge(spec({ kind: 'distinct_exercises', target: 2 }), ctx).progress).toBe(
+      1
+    );
+  });
+
+  /*
+   * The other half of the plausibility boundary, and the cheaper exploit of the
+   * two: no typo required, just three empty-bar sets.
+   */
+  it('does not let warmups complete a distinct-exercises challenge', () => {
+    const ctx = context({
+      sets: [
+        set({ exerciseId: SQUAT, weightKg: 20, isWarmup: true }),
+        set({ exerciseId: BENCH, weightKg: 20, isWarmup: true }),
+        set({ exerciseId: 'press-id', weightKg: 20, isWarmup: true }),
+      ],
+    });
+    expect(evaluateChallenge(spec({ kind: 'distinct_exercises', target: 3 }), ctx).progress).toBe(
+      0
+    );
+  });
+
+  it('does not let warmups complete an rpe challenge', () => {
+    const ctx = context({
+      sets: [
+        set({ weightKg: 20, rpe: 9, isWarmup: true }),
+        set({ weightKg: 20, rpe: 9, isWarmup: true }),
+      ],
+    });
+    expect(
+      evaluateChallenge(spec({ kind: 'sets_at_rpe', target: 2, rpe_at_least: 8 }), ctx).progress
+    ).toBe(0);
+  });
+
+  it('still counts the working sets alongside warmups', () => {
+    const ctx = context({
+      sets: [set({ exerciseId: SQUAT, weightKg: 20, isWarmup: true }), set({ exerciseId: BENCH })],
+    });
+    expect(evaluateChallenge(spec({ kind: 'distinct_exercises', target: 1 }), ctx).progress).toBe(
       1
     );
   });

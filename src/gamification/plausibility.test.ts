@@ -108,12 +108,57 @@ describe('checkPlausibility', () => {
     const justUnder = Math.floor(((best * PLAUSIBLE_E1RM_MULTIPLE) / 1.1667) * 0.98);
     expect(checkPlausibility([set({ weightKg: justUnder })], HISTORY)).toEqual([]);
   });
+
+  /*
+   * The gap this closes: Epley stops at EPLEY_MAX_REPS (12) and setE1rm returns
+   * null past it, so every set above 12 reps left the function unjudged — the
+   * one range where a "400 instead of 40" typo was guaranteed to pass.
+   */
+  it('flags an absurd load that Epley cannot estimate', () => {
+    const [finding] = checkPlausibility([set({ weightKg: 400, reps: 15 })], HISTORY);
+
+    expect(finding?.code).toBe('exceeds_established_best');
+    expect(finding?.detail).toContain('400');
+    expect(finding?.detail).toContain('15');
+  });
+
+  it('leaves an honest high-rep set alone', () => {
+    // 60 kg for 20 is ordinary work against a 100 kg best, and no formula is
+    // needed to say so.
+    expect(checkPlausibility([set({ weightKg: 60, reps: 20 })], HISTORY)).toEqual([]);
+  });
+
+  it('says nothing about a high-rep set with no history to contradict it', () => {
+    expect(checkPlausibility([set({ weightKg: 400, reps: 15 })], [])).toEqual([]);
+  });
+
+  it('applies the same multiple above the rep cap as below it', () => {
+    const bestWeight = 100;
+    const justUnder = bestWeight * PLAUSIBLE_E1RM_MULTIPLE - 1;
+    const justOver = bestWeight * PLAUSIBLE_E1RM_MULTIPLE + 1;
+
+    expect(checkPlausibility([set({ weightKg: justUnder, reps: 15 })], HISTORY)).toEqual([]);
+    expect(checkPlausibility([set({ weightKg: justOver, reps: 15 })], HISTORY)).toHaveLength(1);
+  });
 });
 
 describe('plausibleSets', () => {
   it('returns only the sets that may earn a reward', () => {
     const sets = [set(), set({ weightKg: 400 }), set()];
     expect(plausibleSets(sets, HISTORY)).toHaveLength(2);
+  });
+
+  /*
+   * A warmup is trusted and still earns nothing — checkPlausibility says it is
+   * fine, and this says it does not count. Without the split, three empty-bar
+   * sets completed a three-movement challenge.
+   */
+  it('drops warmups even though nothing is wrong with them', () => {
+    const sets = [set(), set({ weightKg: 20, isWarmup: true })];
+
+    expect(checkPlausibility(sets, HISTORY)).toEqual([]);
+    expect(plausibleSets(sets, HISTORY)).toHaveLength(1);
+    expect(plausibleSets(sets, HISTORY)[0]?.isWarmup).toBe(false);
   });
 
   it('never returns more sets than it was given', () => {

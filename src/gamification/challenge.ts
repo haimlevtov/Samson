@@ -64,7 +64,18 @@ export type RejectionCode =
   | 'below_current_ability'
   | 'reward_out_of_band'
   | 'window_mismatch'
-  | 'unknown_exercise';
+  | 'unknown_exercise'
+  /**
+   * A spec that cannot be measured as written — today, only a `sets_at_rpe`
+   * challenge with no `rpe_at_least`.
+   *
+   * WHY it is not `reward_out_of_band`: it was reported under that code, which
+   * says the reward is wrong when the reward is fine and the threshold is
+   * missing. `validation_reasons` is written to the row precisely so a human
+   * can read why a candidate was rejected, and a wrong code makes that worse
+   * than silence.
+   */
+  | 'missing_threshold';
 
 export interface ValidationReason {
   code: RejectionCode;
@@ -78,16 +89,28 @@ export interface CandidateVerdict {
 }
 
 /**
- * A day cannot contain more than one session, so a `sessions` target above the
- * window length is arithmetically impossible rather than merely hard.
+ * The most this spec could reach in its window, or null when nothing bounds it.
+ *
+ * `sessions` and `streak_days` are both counted per DAY by `evaluateChallenge`,
+ * so a window of n days holds at most n of either. That is a property of the
+ * evaluator, not of reality — the schema permits several workout rows on one
+ * date and `startWorkout` creates one per call — which is why the two have to
+ * be read together. AI-NOTE: if `sessions` ever counts rows again, this bound
+ * becomes false and a same-day pair completes a multi-day challenge.
+ *
+ * `distinct_exercises` is bounded by what the user can actually train: their
+ * equipment-filtered candidate list. Without that bound a bodyweight-only user
+ * was offered "five distinct movements this week" against two available, and
+ * nothing rejected it — the target was unreachable, not merely hard.
  */
-function maxAchievable(spec: ChallengeSpec): number | null {
+function maxAchievable(spec: ChallengeSpec, context: ChallengeContext): number | null {
   switch (spec.kind) {
     case 'sessions':
     case 'streak_days':
       return spec.window_days;
-    // Volume-shaped targets have no hard ceiling from the window alone.
     case 'distinct_exercises':
+      return context.availableExerciseIds.length;
+    // A day holds any number of sets, so the window alone bounds nothing.
     case 'sets_at_rpe':
       return null;
   }
@@ -116,25 +139,36 @@ export function validateCandidate(
     });
   }
 
-  const ceiling = maxAchievable(spec);
+  const ceiling = maxAchievable(spec, context);
   if (ceiling !== null && spec.target > ceiling) {
     reasons.push({
       code: 'target_unreachable',
-      detail: `target ${spec.target} exceeds the ${ceiling} possible in a ${spec.window_days}-day window`,
+      detail:
+        spec.kind === 'distinct_exercises'
+          ? `target ${spec.target} exceeds the ${ceiling} exercises this user can train`
+          : `target ${spec.target} exceeds the ${ceiling} possible in a ${spec.window_days}-day window`,
     });
   }
 
-  if (spec.reward_xp > WEEKLY_XP_CEILING) {
+  /*
+   * WHY the band and not the weekly ceiling: MAX_REWARD_XP is 150 and the
+   * ceiling is 500, so any reward that clears the band is already payable and
+   * the ceiling comparison can never fire. Checking only the ceiling — as this
+   * did — meant `reward_out_of_band` was unreachable through the schema, and a
+   * stale row carrying 300 validated clean. The spec defines the code as
+   * "reward_xp outside 10..150", which is what this now measures.
+   */
+  if (spec.reward_xp < MIN_REWARD_XP || spec.reward_xp > MAX_REWARD_XP) {
     reasons.push({
       code: 'reward_out_of_band',
-      detail: `reward ${spec.reward_xp} exceeds the ${WEEKLY_XP_CEILING} weekly XP ceiling, so it could never be paid in full`,
+      detail: `reward ${spec.reward_xp} is outside the ${MIN_REWARD_XP}..${MAX_REWARD_XP} band (the weekly ceiling is ${WEEKLY_XP_CEILING})`,
     });
   }
 
   if (spec.kind === 'sets_at_rpe' && spec.rpe_at_least === null) {
     reasons.push({
-      code: 'reward_out_of_band',
-      detail: 'a sets_at_rpe challenge needs an rpe_at_least threshold',
+      code: 'missing_threshold',
+      detail: 'a sets_at_rpe challenge needs an rpe_at_least threshold to measure against',
     });
   }
 
@@ -171,8 +205,6 @@ export interface ChallengeProgress {
   target: number;
 }
 
-const KEPT = new Set(['completed', 'rest']);
-
 /**
  * Progress toward a challenge, from logged data only.
  *
@@ -191,7 +223,22 @@ export function evaluateChallenge(
   const progress = ((): number => {
     switch (spec.kind) {
       case 'sessions':
-        return inWindow(context.workouts).filter((w) => w.status === 'completed').length;
+        /*
+         * Distinct DAYS with a completed workout, not completed workout rows.
+         *
+         * WHY: nothing stops several sessions on one date — `workouts` has no
+         * unique constraint on (user_id, local_date), `startWorkout` inserts a
+         * row per call, and scripts/seed.ts says so explicitly. Counting rows
+         * meant "three sessions this week" was finished by starting and
+         * finishing three workouts in one afternoon, which is not the training
+         * pattern the challenge is asking for. Counting days also makes
+         * `maxAchievable`'s window bound true rather than assumed.
+         */
+        return new Set(
+          inWindow(context.workouts)
+            .filter((w) => w.status === 'completed')
+            .map((w) => w.localDate)
+        ).size;
 
       case 'distinct_exercises':
         return new Set(inWindow(countable).map((s) => s.exerciseId)).size;
@@ -213,9 +260,4 @@ export function evaluateChallenge(
   })();
 
   return { met: progress >= spec.target, progress, target: spec.target };
-}
-
-/** Whether a workout status counts as kept, exported so the UI agrees with the rules. */
-export function isKeptStatus(status: string): boolean {
-  return KEPT.has(status);
 }

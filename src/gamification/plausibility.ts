@@ -93,20 +93,50 @@ export function checkPlausibility(
     // one against a record it could never have set would be incoherent.
     if (set.isWarmup) return;
 
+    const bestsFor = bests.get(set.exerciseId);
     const e1rm = setE1rm(set);
-    if (e1rm === null) return;
 
-    const best = bests.get(set.exerciseId)?.bestE1rm;
-    // No history for this movement: a first entry has nothing to contradict, and
-    // flagging it would make the very first log of every exercise suspicious.
-    if (best === undefined || best === null || best <= 0) return;
+    if (e1rm !== null) {
+      const best = bestsFor?.bestE1rm;
+      // No history for this movement: a first entry has nothing to contradict,
+      // and flagging it would make the very first log of every exercise
+      // suspicious.
+      if (best === undefined || best === null || best <= 0) return;
 
-    const ceiling = best * PLAUSIBLE_E1RM_MULTIPLE;
-    if (e1rm <= ceiling) return;
+      const ceiling = best * PLAUSIBLE_E1RM_MULTIPLE;
+      if (e1rm <= ceiling) return;
+
+      findings.push({
+        code: 'exceeds_established_best',
+        detail: `implies a ${e1rm.toFixed(1)} kg 1RM, over ${PLAUSIBLE_E1RM_MULTIPLE}× this user's best of ${best.toFixed(1)} kg`,
+        setIndex,
+      });
+      return;
+    }
+
+    /*
+     * No estimate available, which is not the same as nothing to check.
+     *
+     * WHY this branch exists: Epley is capped at EPLEY_MAX_REPS (12) and
+     * `setE1rm` returns null past it, so every high-rep set used to leave this
+     * function unjudged — including the exact typo the module exists to catch.
+     * "400 kg × 15" cleared MAX_PLAUSIBLE_WEIGHT_KG and MAX_PLAUSIBLE_REPS, had
+     * no e1RM to compare, and counted toward every challenge and achievement.
+     *
+     * The raw load is the honest fallback: it needs no formula, and moving more
+     * than 1.5× the heaviest weight this user has ever handled for the movement
+     * is implausible at any rep count — more so at high ones, not less.
+     */
+    const bestWeight = bestsFor?.bestWeightKg;
+    if (weightKg === null || reps === null || reps <= 0) return;
+    if (bestWeight === undefined || bestWeight === null || bestWeight <= 0) return;
+
+    const weightCeiling = bestWeight * PLAUSIBLE_E1RM_MULTIPLE;
+    if (weightKg <= weightCeiling) return;
 
     findings.push({
       code: 'exceeds_established_best',
-      detail: `implies a ${e1rm.toFixed(1)} kg 1RM, over ${PLAUSIBLE_E1RM_MULTIPLE}× this user's best of ${best.toFixed(1)} kg`,
+      detail: `${weightKg} kg for ${reps} reps is over ${PLAUSIBLE_E1RM_MULTIPLE}× the heaviest ${bestWeight.toFixed(1)} kg this user has moved for this exercise`,
       setIndex,
     });
   });
@@ -117,6 +147,18 @@ export function checkPlausibility(
 /**
  * The sets that may count toward a reward.
  *
+ * Two exclusions, for two different reasons. An implausible set is one this
+ * module distrusts. A **warmup** is trusted completely and still earns nothing:
+ * it is not the work the reward is for.
+ *
+ * WHY warmups are dropped here and not by `checkPlausibility`: a warmup is not
+ * implausible, and emitting a finding for one would put "your empty-bar set is
+ * suspicious" in front of a user who did nothing wrong. The rest of the engine
+ * already draws this line — `setE1rm` (e1rm.ts) and `qualifies` (pr.ts) both
+ * refuse warmups — and without it three empty-bar sets on three movements
+ * completed a distinct-exercises challenge, which is the cheapest possible way
+ * to finish one.
+ *
  * AI-NOTE: every reward path filters through this rather than reading `sets`
  *          directly. A second path that skipped it would be a second definition
  *          of what counts, and the two would drift.
@@ -126,5 +168,5 @@ export function plausibleSets(
   history: readonly SetRecord[]
 ): SetRecord[] {
   const flagged = new Set(checkPlausibility(sets, history).map((f) => f.setIndex));
-  return sets.filter((_, index) => !flagged.has(index));
+  return sets.filter((set, index) => !flagged.has(index) && !set.isWarmup);
 }
