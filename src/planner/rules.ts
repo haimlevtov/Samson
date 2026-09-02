@@ -31,10 +31,35 @@ export type RuleCode =
   | 'load_ceiling'
   | 'injured_joint';
 
+/**
+ * The binding quantity behind a finding, as a field rather than as a sentence.
+ *
+ * WHY this exists at all — ADR 0008: `detail` is prose for a human, and the
+ * planner was being asked to parse "above the 30 kg ceiling" back into 30. That
+ * is exactly the handoff ADR 0004 forbids everywhere else in this pipeline; the
+ * rejection path was the last one still doing it.
+ *
+ * AI-NOTE: `comparison` is not decoration. `weekly_volume_increase` fails
+ *          strictly above its cap while `acwr_band` fails AT its threshold, so
+ *          a single "must not exceed" rendering would tell the planner that a
+ *          block sitting exactly on the ACWR limit is acceptable. It is not.
+ */
+export interface RuleConstraint {
+  kind:
+    'max_weight_kg' | 'max_week_tonnage_kg' | 'deload_by_week' | 'unknown_slug' | 'forbidden_slug';
+  comparison: 'at_most' | 'below' | 'excluded';
+  /** The offending movement, where the finding is about one. */
+  exerciseSlug: string | null;
+  /** Null for the kinds where the slug itself is the finding. */
+  limit: number | null;
+}
+
 export interface RuleFinding {
   code: RuleCode;
   detail: string;
   weekNumber: number | null;
+  /** What the planner must actually do differently — see ADR 0008. */
+  constraint: RuleConstraint;
 }
 
 export interface CandidateEquipment {
@@ -147,6 +172,12 @@ export function weeklyVolumeIncrease(block: TrainingBlock, context: RuleContext)
           code: 'weekly_volume_increase',
           detail: `week ${week.week_number} prescribes ${tonnage.toFixed(0)} kg against a baseline of ${baseline.toFixed(0)} kg — a ${pct}% increase, over the ${MAX_WEEKLY_TONNAGE_INCREASE * 100}% cap`,
           weekNumber: week.week_number,
+          constraint: {
+            kind: 'max_week_tonnage_kg',
+            comparison: 'at_most',
+            exerciseSlug: null,
+            limit: Math.floor(cap),
+          },
         });
       }
     }
@@ -185,6 +216,12 @@ export function acwrBandRule(block: TrainingBlock, context: RuleContext): RuleFi
       code: 'acwr_band',
       detail: `week 1 prescribes ${ratio.toFixed(2)}× the chronic weekly mean of ${chronic.toFixed(0)} kg, at or above the ${ACWR_HIGH_RISK} danger threshold`,
       weekNumber: 1,
+      constraint: {
+        kind: 'max_week_tonnage_kg',
+        comparison: 'below',
+        exerciseSlug: null,
+        limit: Math.ceil(chronic * ACWR_HIGH_RISK),
+      },
     },
   ];
 }
@@ -207,6 +244,12 @@ export function deloadCadence(block: TrainingBlock): RuleFinding[] {
       detail: `a ${block.weeks.length}-week block has no deload by week ${DELOAD_REQUIRED_BY_WEEK}`,
       // A property of the block as a whole, not of any single week.
       weekNumber: null,
+      constraint: {
+        kind: 'deload_by_week',
+        comparison: 'at_most',
+        exerciseSlug: null,
+        limit: DELOAD_REQUIRED_BY_WEEK,
+      },
     },
   ];
 }
@@ -233,6 +276,12 @@ export function equipmentAvailable(block: TrainingBlock, context: RuleContext): 
       code: 'equipment_available',
       detail: `"${slug}" is not in this user's candidate list`,
       weekNumber: week.week_number,
+      constraint: {
+        kind: 'unknown_slug',
+        comparison: 'excluded',
+        exerciseSlug: slug,
+        limit: null,
+      },
     });
   }
 
@@ -279,6 +328,12 @@ export function loadCeiling(block: TrainingBlock, context: RuleContext): RuleFin
       code: 'load_ceiling',
       detail: `week ${week.week_number} prescribes ${heaviest} kg of ${candidate.name}, above the ${ceiling} kg ceiling on this user's equipment`,
       weekNumber: week.week_number,
+      constraint: {
+        kind: 'max_weight_kg',
+        comparison: 'at_most',
+        exerciseSlug: slug,
+        limit: ceiling,
+      },
     });
   }
 
@@ -350,6 +405,12 @@ export function injuredJoint(block: TrainingBlock, context: RuleContext): RuleFi
       code: 'injured_joint',
       detail: `week ${week.week_number} prescribes ${candidate.name}, which loads the ${offending}`,
       weekNumber: week.week_number,
+      constraint: {
+        kind: 'forbidden_slug',
+        comparison: 'excluded',
+        exerciseSlug: slug,
+        limit: null,
+      },
     });
   }
 
