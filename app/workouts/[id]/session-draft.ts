@@ -11,10 +11,11 @@
  * memory. Losing three typed rows to a screen timeout is the failure this
  * prevents.
  *
- * AI-NOTE: when templates land, pending rows come from `workout_template_items`
- *          on the server and this file becomes the store for rows the user
- *          added by hand only. The shape below is deliberately the same either
- *          way.
+ * Templates have landed, and the note this file carried has been done: a
+ * template's pending rows come from `workout_template_items` on the server
+ * (`pendingTargets`), not from here. What this file stores for them is only
+ * what the server cannot know — the edits a user made to a target before
+ * ticking it, and the targets they decided to skip.
  */
 export interface DraftRow {
   /** Stable across re-renders and re-orders; React keys and saving state use it. */
@@ -29,10 +30,27 @@ export interface DraftRow {
 export interface SessionDraft {
   /** Exercises added to the session that may have no performed sets yet. */
   added: { id: string; name: string }[];
+  /** Rows the user added by hand, keyed by exercise. */
   rows: Record<string, DraftRow[]>;
+  /**
+   * Edits to a template's target rows, keyed by `TargetRow.key`.
+   *
+   * WHY overrides rather than copying the targets in here on first open: a copy
+   * goes stale the moment the template changes, and it exists only on the
+   * device that made it. The server stays the source of what was prescribed;
+   * this records only the divergence — the day the 60 kg said 57.5.
+   */
+  overrides: Record<string, Partial<DraftRow>>;
+  /** Target keys the user removed. A prescription is not an obligation. */
+  dismissed: string[];
 }
 
-export const EMPTY_DRAFT: SessionDraft = { added: [], rows: {} };
+export const EMPTY_DRAFT: SessionDraft = { added: [], rows: {}, overrides: {}, dismissed: [] };
+
+/** Target rows carry this prefix — see `pendingTargets` in src/templates. */
+export function isTargetKey(key: string): boolean {
+  return key.startsWith('t:');
+}
 
 export const DEFAULT_REST_SECONDS = 120;
 
@@ -65,10 +83,14 @@ export function readDraft(workoutId: string): SessionDraft {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return EMPTY_DRAFT;
 
-    const { added, rows } = parsed as Partial<SessionDraft>;
+    // Every field is checked separately: a draft written before templates
+    // existed has no overrides, and must still open.
+    const { added, rows, overrides, dismissed } = parsed as Partial<SessionDraft>;
     return {
       added: Array.isArray(added) ? added.filter((a) => typeof a?.id === 'string') : [],
       rows: typeof rows === 'object' && rows !== null ? rows : {},
+      overrides: typeof overrides === 'object' && overrides !== null ? overrides : {},
+      dismissed: Array.isArray(dismissed) ? dismissed.filter((d) => typeof d === 'string') : [],
     };
   } catch {
     return EMPTY_DRAFT;

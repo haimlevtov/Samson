@@ -73,14 +73,19 @@ would drift the first time a set was deleted.
 
 - The session screen must render a plan with zero sets logged against it. That
   is the normal opening state, not an empty state.
-- **A target is a pending row.** ADR 0011 rebuilt the session screen as a set
-  grid, and a pending row is already exactly what a target needs to be: a set
-  the user has not performed, editable, sitting in the place the performed one
-  will occupy, and absent from `sets`. The prescription fills those rows. The
-  set form this decision was originally written against no longer exists, and
-  the grid is a better home than it was — the target and the record of the work
-  are the same row in two states, so there is nowhere for the distinction to
-  get lost.
+- **A target is a pending row**, and this is now built. ADR 0011 rebuilt the
+  session screen as a set grid, and a pending row is exactly what a target
+  needs to be: a set the user has not performed, editable, sitting in the place
+  the performed one will occupy, and absent from `sets`. The target and the
+  record of the work are the same row in two states, so there is nowhere for
+  the distinction to get lost. The set form this decision was originally
+  written against no longer exists.
+- **The remaining prescription is derived, never stored.**
+  `pendingTargets()` delegates its allocation to `templateProgress()` rather
+  than counting a second time, so the rows on the session screen and the
+  progress figure above them cannot disagree about whether a session is
+  finished. Deleting a logged set brings its target back, because nothing was
+  marked done anywhere.
 - **Ticking a row logs it; nothing else does.** What was prescribed and what was
   performed stay different facts, and the user confirms the second one. This
   matches the normalizer's confirm-before-write rule for the same reason.

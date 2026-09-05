@@ -101,3 +101,66 @@ export function templateProgress(
     ratio: prescribedSets === 0 ? 0 : completedSets / prescribedSets,
   };
 }
+
+/** A prescribed group with the numbers a pending row needs to show. */
+export interface PrescribedSetGroup extends PrescribedItem {
+  reps: number;
+  /** INVARIANT: kilograms — CLAUDE.md #8. Null is bodyweight, not zero. */
+  weightKg: number | null;
+  rpe: number | null;
+  restSeconds: number | null;
+}
+
+/** One prescribed set that has not been performed, ready to render as a row. */
+export interface TargetRow {
+  /**
+   * Stable while the row exists, so an edit to it survives a re-render.
+   * `t:` marks it as coming from a template rather than from the user —
+   * app/workouts/[id] keys its overrides on that.
+   */
+  key: string;
+  itemId: string;
+  exerciseId: string;
+  weightKg: number | null;
+  reps: number;
+  rpe: number | null;
+  restSeconds: number | null;
+}
+
+/**
+ * The prescription minus what has already been done, one row per set.
+ *
+ * This is what makes a template's targets visible on the session screen — ADR
+ * 0010 requires them to render without a `sets` row existing, and ADR 0011's
+ * pending rows are the shape they render as.
+ *
+ * WHY it delegates the allocation to `templateProgress` rather than counting
+ * again: the bar on the template page and the rows on the session screen are
+ * two views of one question, and a second count is how they come to disagree
+ * about whether a session is finished.
+ *
+ * The ordinal in the key counts from `done`, so logging a set removes the row
+ * that was performed and leaves the keys of the rows below it unchanged.
+ */
+export function pendingTargets(
+  items: readonly PrescribedSetGroup[],
+  sets: readonly LoggedSetLike[]
+): TargetRow[] {
+  const done = new Map(templateProgress(items, sets).items.map((i) => [i.itemId, i.done]));
+
+  const rows: TargetRow[] = [];
+  for (const item of items) {
+    for (let n = done.get(item.id) ?? 0; n < item.setCount; n++) {
+      rows.push({
+        key: `t:${item.id}:${n}`,
+        itemId: item.id,
+        exerciseId: item.exerciseId,
+        weightKg: item.weightKg,
+        reps: item.reps,
+        rpe: item.rpe,
+        restSeconds: item.restSeconds,
+      });
+    }
+  }
+  return rows;
+}

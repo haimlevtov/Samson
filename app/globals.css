@@ -898,6 +898,15 @@ button.set-prev.copy:hover:not(:disabled) {
   flex: none;
 }
 
+/* Its own line under the session stats: two muted spans run together into
+   "0 kgWeek 1" otherwise. */
+.tpl-running {
+  display: block;
+  margin-top: 2px;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
 .tpl-group {
   margin-bottom: 6px;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type { LoggedSet, PreviousSet, PreviousSets } from '@/src/db/training';
+import type { TargetRow } from '@/src/templates/progress';
 import { deleteSet, logSet } from '../actions';
 import { LiftBlock, type LiftGroup } from './LiftBlock';
 import { QuickLog } from './QuickLog';
@@ -9,6 +10,7 @@ import { RestTimer, type RestTrigger } from './RestTimer';
 import {
   DEFAULT_REST_SECONDS,
   EMPTY_DRAFT,
+  isTargetKey,
   newRow,
   readDraft,
   writeDraft,
@@ -59,12 +61,15 @@ export function SessionConsole({
   workoutId,
   logged,
   previous,
+  targets,
   candidates,
   editable,
 }: {
   workoutId: string;
   logged: LoggedSet[];
   previous: Record<string, PreviousSets>;
+  /** What the session's template still asks for — ADR 0010. Empty without one. */
+  targets: TargetRow[];
   candidates: Candidate[];
   editable: boolean;
 }) {
@@ -91,6 +96,38 @@ export function SessionConsole({
   }, [restored, workoutId, draft]);
 
   /**
+   * A target is a pending row with its numbers already filled in.
+   *
+   * The server says what is still prescribed; the draft says what the user
+   * changed about it. Neither is complete on its own, and neither is stored in
+   * `sets` until the tick — ADR 0010.
+   */
+  const targetRows = useMemo(() => {
+    const byExercise = new Map<string, DraftRow[]>();
+    for (const target of targets) {
+      if (draft.dismissed.includes(target.key)) continue;
+      const rows = byExercise.get(target.exerciseId) ?? [];
+      rows.push({
+        key: target.key,
+        weightKg: target.weightKg === null ? '' : String(target.weightKg),
+        reps: String(target.reps),
+        rpe: target.rpe === null ? '' : String(target.rpe),
+        restSeconds: String(target.restSeconds ?? DEFAULT_REST_SECONDS),
+        // A template prescribes working sets; warm-ups are the lifter's own.
+        isWarmup: false,
+        ...draft.overrides[target.key],
+      });
+      byExercise.set(target.exerciseId, rows);
+    }
+    return byExercise;
+  }, [targets, draft.dismissed, draft.overrides]);
+
+  const rowsFor = (exerciseId: string): DraftRow[] => [
+    ...(targetRows.get(exerciseId) ?? []),
+    ...(draft.rows[exerciseId] ?? []),
+  ];
+
+  /**
    * Session order, then anything added since — `logged` already arrives in the
    * order the sets were performed, and a Map keeps that.
    */
@@ -105,13 +142,24 @@ export function SessionConsole({
       group.sets.push(set);
       byExercise.set(set.exerciseId, group);
     }
+    // The prescription comes before anything the user added by hand: it is the
+    // session they chose to run.
+    for (const target of targets) {
+      if (!byExercise.has(target.exerciseId)) {
+        byExercise.set(target.exerciseId, {
+          id: target.exerciseId,
+          name: candidates.find((c) => c.id === target.exerciseId)?.name ?? 'Unknown exercise',
+          sets: [],
+        });
+      }
+    }
     for (const added of draft.added) {
       if (!byExercise.has(added.id)) {
         byExercise.set(added.id, { id: added.id, name: added.name, sets: [] });
       }
     }
     return [...byExercise.values()];
-  }, [logged, draft.added]);
+  }, [logged, draft.added, targets, candidates]);
 
   const results = useMemo(
     () => candidates.filter((c) => matches(c, query)).slice(0, MAX_RESULTS),
@@ -143,6 +191,7 @@ export function SessionConsole({
     setDraft((current) => {
       const existing = current.rows[candidate.id] ?? [];
       return {
+        ...current,
         added: current.added.some((a) => a.id === candidate.id)
           ? current.added
           : [...current.added, { id: candidate.id, name: candidate.name }],
@@ -156,17 +205,46 @@ export function SessionConsole({
     setDraft((current) => {
       const rows = { ...current.rows };
       delete rows[exerciseId];
-      return { added: current.added.filter((a) => a.id !== exerciseId), rows };
+      return { ...current, added: current.added.filter((a) => a.id !== exerciseId), rows };
     });
   };
 
   const updateRow = (exerciseId: string, key: string, patch: Partial<DraftRow>) => {
     setError(null);
+    if (isTargetKey(key)) {
+      // The target itself belongs to the server. Only the divergence is stored.
+      setDraft((current) => ({
+        ...current,
+        overrides: { ...current.overrides, [key]: { ...current.overrides[key], ...patch } },
+      }));
+      return;
+    }
     patchRows(exerciseId, (rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   };
 
   const removeRow = (exerciseId: string, key: string) => {
+    if (isTargetKey(key)) {
+      // Skipping a prescribed set is a decision, not a deletion: the template
+      // is unchanged and every other session started from it still asks for it.
+      setDraft((current) => ({
+        ...current,
+        dismissed: current.dismissed.includes(key)
+          ? current.dismissed
+          : [...current.dismissed, key],
+      }));
+      return;
+    }
     patchRows(exerciseId, (rows) => rows.filter((r) => r.key !== key));
+  };
+
+  /** A logged target stops being pending; its override has nothing left to edit. */
+  const forgetOverride = (key: string) => {
+    setDraft((current) => {
+      if (current.overrides[key] === undefined) return current;
+      const overrides = { ...current.overrides };
+      delete overrides[key];
+      return { ...current, overrides };
+    });
   };
 
   /**
@@ -209,8 +287,10 @@ export function SessionConsole({
       try {
         await logSet(form);
         // The row is dropped only once the server has it. Until then it keeps
-        // its values, so a failure costs nothing typed.
-        removeRow(group.id, row.key);
+        // its values, so a failure costs nothing typed. A target drops itself:
+        // `pendingTargets` stops returning it as soon as the set exists.
+        if (isTargetKey(row.key)) forgetOverride(row.key);
+        else removeRow(group.id, row.key);
         if (restSeconds > 0) {
           // Rest starts on its own — reaching for a second button is the step
           // people skip when they are out of breath.
@@ -256,7 +336,7 @@ export function SessionConsole({
             key={group.id}
             group={group}
             previous={previous[group.id] ?? { warmup: [], working: [] }}
-            drafts={draft.rows[group.id] ?? []}
+            drafts={rowsFor(group.id)}
             editable={editable}
             saving={saving}
             onAddRow={addRow}
