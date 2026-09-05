@@ -32,10 +32,10 @@ is a per-exercise grid of set rows with a `PREVIOUS` column and a tick.
 **The session screen is one grid per exercise.** A row is a set, and it is in
 one of two states:
 
-| State         | Renders as                                           | Is it in the database?     |
-| ------------- | ---------------------------------------------------- | -------------------------- |
-| **pending**   | editable kg and reps, an empty tick                  | no                         |
-| **performed** | the values as text, green ground, a filled tick      | yes — one `sets` row       |
+| State         | Renders as                                      | Is it in the database? |
+| ------------- | ----------------------------------------------- | ---------------------- |
+| **pending**   | editable kg and reps, an empty tick             | no                     |
+| **performed** | the values as text, green ground, a filled tick | yes — one `sets` row   |
 
 **Ticking a pending row is the write.** It calls the same `logSet` action the
 form called, through `insertSet()` — still the single write path shared with
@@ -46,9 +46,12 @@ without retyping a weight.
 Columns are `SET · PREVIOUS · KG · REPS · ✓`. **RPE, warm-up and rest length
 live behind a row expansion**, opened by tapping the set number.
 
-`PREVIOUS` is the same set position from the most recent earlier session that
-contained this exercise, rendered `80 kg × 5`. Tapping it copies those numbers
-into the row.
+`PREVIOUS` comes from the most recent earlier session that contained this
+exercise, rendered `80 kg × 5`. Warm-ups line up with warm-ups and working sets
+with working sets: `set_index` counts both, so reading last session by raw
+position would put a 42.5 kg ramp set beside today’s first working set. A row
+with no counterpart of its own kind gets an em dash. Tapping it copies those
+numbers into the row.
 
 ## Why
 

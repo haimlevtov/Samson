@@ -100,8 +100,9 @@ you did look alike.
 
 **Columns are `SET · PREVIOUS · KG · REPS · ✓`**, in that order. Weight and reps
 are adjacent because they are entered as a pair and the keyboard covers half the
-screen anyway. `PREVIOUS` is the same set position from the last session that
-contained this lift; tapping it copies those numbers into the row.
+screen anyway. `PREVIOUS` is last session’s set of the same kind — warm-ups
+against warm-ups, working sets against working sets — and tapping it copies
+those numbers into the row.
 
 **Rank 3 hides behind the row.** RPE, warm-up and rest length appear when the
 set number is tapped. They are optional or defaulted, and putting them in
@@ -137,21 +138,21 @@ makes a session readable at a glance.
 Every state below must render something. "Nothing happens" is the failure this
 section exists to prevent.
 
-| State                         | What the user sees                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **Set logging**               | The row's tick shows a pending mark and the row is locked. It does not vanish or move.                                                 |
+| State                         | What the user sees                                                                                                                      |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Set logging**               | The row's tick shows a pending mark and the row is locked. It does not vanish or move.                                                  |
 | **Set logged**                | The row turns green with a filled tick, and the rest timer starts counting — that _is_ the confirmation, and it is what they need next. |
-| **Set un-ticked**             | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                             |
-| **No previous session**       | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                            |
-| **Rest finished**             | The timer turns green and a cue fires. Isolated behind one call site for phase 3 to replace with a persona clip.                       |
-| **Nothing added yet**         | "No exercises yet." plus the add control. Never an empty grid with headers.                                                            |
-| **Log failed**                | The server's message, inline, and **the form keeps its values**. Retyping a weight while out of breath is the worst possible recovery. |
-| **Search matches nothing**    | "Nothing matches. Only equipment you own is listed." — names the reason, since an empty list otherwise reads as a broken app.          |
-| **User owns no equipment**    | Explains that no equipment is recorded and what fixes it. Never an empty picker with no explanation.                                   |
-| **Row ticked while empty**    | "Fill in reps first." on the row. Nothing is written; a zero-rep set is not a set.                                                     |
-| **Metric not yet computable** | An em dash plus what is missing — "12/28 days of history". A blank is honest; a zero is a claim.                                       |
-| **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                    |
-| **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                              |
+| **Set un-ticked**             | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                               |
+| **No previous session**       | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                             |
+| **Rest finished**             | The timer turns green and a cue fires. Isolated behind one call site for phase 3 to replace with a persona clip.                        |
+| **Nothing added yet**         | "No exercises yet." plus the add control. Never an empty grid with headers.                                                             |
+| **Log failed**                | The server's message, inline, and **the form keeps its values**. Retyping a weight while out of breath is the worst possible recovery.  |
+| **Search matches nothing**    | "Nothing matches. Only equipment you own is listed." — names the reason, since an empty list otherwise reads as a broken app.           |
+| **User owns no equipment**    | Explains that no equipment is recorded and what fixes it. Never an empty picker with no explanation.                                    |
+| **Row ticked while empty**    | "Fill in reps first." on the row. Nothing is written; a zero-rep set is not a set.                                                      |
+| **Metric not yet computable** | An em dash plus what is missing — "12/28 days of history". A blank is honest; a zero is a claim.                                        |
+| **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                     |
+| **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                               |
 
 **The rule behind the table:** the app never says a number it has not computed,
 and never implies success it has not had. Both are invariant #1 seen from the

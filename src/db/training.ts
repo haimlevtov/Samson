@@ -121,11 +121,15 @@ export interface LoggedSet {
   rpe: number | null;
   restSeconds: number | null;
   isWarmup: boolean;
+  /** When the set was performed. Orders the exercises as the session ran. */
+  completedAt: string | null;
 }
 
 export interface WorkoutDetail {
   /** ISO instant the session began, for the elapsed timer. Null until started. */
   startedAt: string | null;
+  /** ISO instant it was finished. The clock stops here rather than at now. */
+  endedAt: string | null;
   id: string;
   localDate: string;
   status: WorkoutStatus;
@@ -137,7 +141,7 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
   const { data, error } = await db
     .from('workouts')
     .select(
-      'id, local_date, status, notes, started_at, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, exercises(name))'
+      'id, local_date, status, notes, started_at, ended_at, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, completed_at, exercises(name))'
     )
     .eq('id', workoutId)
     .maybeSingle();
@@ -154,33 +158,176 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
     rpe: string | null;
     rest_seconds: number | null;
     is_warmup: boolean;
+    completed_at: string | null;
     exercises: { name: string } | null;
   }[];
+
+  const sets: LoggedSet[] = rows.map((s) => ({
+    id: s.id,
+    exerciseId: s.exercise_id,
+    exerciseName: s.exercises?.name ?? 'Unknown exercise',
+    setIndex: s.set_index,
+    weightKg: s.weight_kg === null ? null : Number(s.weight_kg),
+    reps: s.reps,
+    rpe: s.rpe === null ? null : Number(s.rpe),
+    restSeconds: s.rest_seconds,
+    isWarmup: s.is_warmup,
+    completedAt: s.completed_at,
+  }));
 
   return {
     id: data.id,
     startedAt: data.started_at,
+    endedAt: data.ended_at,
     localDate: data.local_date,
     status: data.status as WorkoutStatus,
     notes: data.notes,
-    sets: rows
-      .map((s) => ({
-        id: s.id,
-        exerciseId: s.exercise_id,
-        exerciseName: s.exercises?.name ?? 'Unknown exercise',
-        setIndex: s.set_index,
-        weightKg: s.weight_kg === null ? null : Number(s.weight_kg),
-        reps: s.reps,
-        rpe: s.rpe === null ? null : Number(s.rpe),
-        restSeconds: s.rest_seconds,
-        isWarmup: s.is_warmup,
-      }))
-      .sort((a, b) =>
-        a.exerciseName === b.exerciseName
-          ? a.setIndex - b.setIndex
-          : a.exerciseName.localeCompare(b.exerciseName)
-      ),
+    sets: orderBySession(sets),
   };
+}
+
+/**
+ * Session order, not alphabetical order.
+ *
+ * WHY: the screen groups sets by exercise (ADR 0011), and a session is a
+ * sequence — squats, then bench, then rows. Sorting the groups by name would
+ * reorder the workout every time someone added a lift beginning with "A", and
+ * the user's memory of what they just did is chronological.
+ */
+export function orderBySession(sets: LoggedSet[]): LoggedSet[] {
+  const firstSeen = new Map<string, string>();
+  for (const set of sets) {
+    const at = set.completedAt ?? '';
+    const known = firstSeen.get(set.exerciseId);
+    if (known === undefined || at < known) firstSeen.set(set.exerciseId, at);
+  }
+
+  return [...sets].sort((a, b) => {
+    if (a.exerciseId !== b.exerciseId) {
+      const byStart = (firstSeen.get(a.exerciseId) ?? '').localeCompare(
+        firstSeen.get(b.exerciseId) ?? ''
+      );
+      // Two exercises whose first set carries no timestamp fall back to the
+      // name, so the order is at least stable between renders.
+      if (byStart !== 0) return byStart;
+      return a.exerciseName.localeCompare(b.exerciseName);
+    }
+    return a.setIndex - b.setIndex;
+  });
+}
+
+/** One set from an earlier session, for the grid's PREVIOUS column. */
+export interface PreviousSet {
+  weightKg: number | null;
+  reps: number | null;
+}
+
+/**
+ * Last session's sets, split by kind.
+ *
+ * WHY split rather than one list read by position: `set_index` counts warm-ups,
+ * so a session that ramped through three of them would put 42.5 kg next to
+ * today's first working set. The rows do not line up by position; they line up
+ * by what they are. A row with no counterpart of its own kind gets an em dash,
+ * which is the honest answer.
+ */
+export interface PreviousSets {
+  warmup: PreviousSet[];
+  working: PreviousSet[];
+}
+
+/** A set row as it arrives from the previous-sessions query. */
+export interface PriorSetRow {
+  exerciseId: string;
+  workoutId: string;
+  localDate: string;
+  setIndex: number;
+  weightKg: number | null;
+  reps: number | null;
+  isWarmup: boolean;
+}
+
+/**
+ * The last session's sets for each exercise, by position.
+ *
+ * WHY this is a pure function rather than SQL: "the most recent session that
+ * contained this lift" is a rule, and a rule that decides what the user reads
+ * before choosing a weight is worth a test. The query part — which rows —
+ * cannot be wrong in an interesting way; this part can.
+ *
+ * The caller has already excluded the current workout and anything later than
+ * it. Ties on the same local date break on workout id: arbitrary, but the same
+ * arbitrary answer on every render, which is what matters.
+ */
+export function pickPreviousSets(rows: PriorSetRow[]): Record<string, PreviousSets> {
+  const latest = new Map<string, { key: string; sets: PriorSetRow[] }>();
+
+  for (const row of rows) {
+    const key = `${row.localDate}#${row.workoutId}`;
+    const held = latest.get(row.exerciseId);
+    if (held === undefined || key > held.key) {
+      latest.set(row.exerciseId, { key, sets: [row] });
+    } else if (key === held.key) {
+      held.sets.push(row);
+    }
+  }
+
+  const out: Record<string, PreviousSets> = {};
+  for (const [exerciseId, { sets }] of latest) {
+    const ordered = [...sets].sort((a, b) => a.setIndex - b.setIndex);
+    const take = (warmup: boolean): PreviousSet[] =>
+      ordered
+        .filter((s) => s.isWarmup === warmup)
+        .map((s) => ({ weightKg: s.weightKg, reps: s.reps }));
+    out[exerciseId] = { warmup: take(true), working: take(false) };
+  }
+  return out;
+}
+
+/**
+ * WHY the window is capped at 30 sessions rather than searching all of history:
+ * a lift nobody has touched in thirty sessions has no useful "last time", and
+ * the honest em dash costs one bounded query instead of every set the user has
+ * ever logged. Raise the cap before adding a second query.
+ */
+const PREVIOUS_SESSION_WINDOW = 30;
+
+export async function loadPreviousSets(
+  db: Db,
+  workoutId: string,
+  localDate: string
+): Promise<Record<string, PreviousSets>> {
+  const { data: workouts, error: wErr } = await db
+    .from('workouts')
+    .select('id, local_date')
+    .neq('id', workoutId)
+    .lte('local_date', localDate)
+    .order('local_date', { ascending: false })
+    .limit(PREVIOUS_SESSION_WINDOW);
+
+  if (wErr) throw new Error(`loading previous sessions: ${wErr.message}`);
+
+  const dates = new Map((workouts ?? []).map((w) => [w.id, w.local_date]));
+  if (dates.size === 0) return {};
+
+  const { data: sets, error: sErr } = await db
+    .from('sets')
+    .select('exercise_id, workout_id, set_index, weight_kg, reps, is_warmup')
+    .in('workout_id', [...dates.keys()]);
+
+  if (sErr) throw new Error(`loading previous sets: ${sErr.message}`);
+
+  return pickPreviousSets(
+    (sets ?? []).map((s) => ({
+      exerciseId: s.exercise_id,
+      workoutId: s.workout_id,
+      localDate: dates.get(s.workout_id) ?? '',
+      setIndex: s.set_index,
+      weightKg: s.weight_kg === null ? null : Number(s.weight_kg),
+      reps: s.reps,
+      isWarmup: s.is_warmup,
+    }))
+  );
 }
 
 /**
