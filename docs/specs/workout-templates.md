@@ -49,12 +49,15 @@ order and is unique within a template.
 
 Bounds, enforced by both the Zod schema and a `check` constraint, and chosen to
 match `prescribedSetGroupSchema` so a coach import can never fail validation
-that the planner already passed:
+that the planner already passed. The item ceiling is 32 for the same reason and
+not because it is a round number: the planner's own ceiling is 8 exercises of 4
+set groups, so 32 is the largest session it can emit, and a lower cap here would
+reject a plan that the rules and the safety critic had both accepted.
 
 | Field          | Bound                        |
 | -------------- | ---------------------------- |
 | `name`         | 1–80 characters, trimmed     |
-| items          | 1–30 per template            |
+| items          | 1–32 per template            |
 | `set_count`    | 1–20                         |
 | `reps`         | 1–50                         |
 | `weight_kg`    | 0–500, nullable (bodyweight) |
@@ -138,8 +141,16 @@ felt 7, 8 and 9 are one prescription, not three, and grouping by RPE would
 shatter every template into single sets. A user who wants a target RPE can add
 one; the deriver will not invent it from how hard last Tuesday felt.
 
-Sets whose `reps` is null are skipped — there is nothing to prescribe. A
-session that yields no items cannot be saved, and the action says so.
+4. A run longer than the 20-set bound splits into consecutive groups rather
+   than being clamped, so no set is lost.
+
+Sets whose `reps` is null are skipped — there is nothing to prescribe — and so
+are sets whose values fall outside the bounds in §2. `sets` accepts a 0-rep
+entry and a prescription cannot carry one. A session that yields no items cannot
+be saved, and the action says so rather than storing an empty template.
+
+A session holding more than 32 groups keeps its first 32, and the fact that the
+tail was dropped is reported to the caller rather than handled silently.
 
 ## 6. Importing from the coach's plan — `templateFromPlannedSession()`
 

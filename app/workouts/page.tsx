@@ -65,6 +65,9 @@ export default async function WorkoutsPage({
           <Link href="/progress" className="chip">
             Progress
           </Link>
+          <Link href="/templates" className="chip">
+            Templates
+          </Link>
           <Link href="/coach" className="chip">
             Coach
           </Link>

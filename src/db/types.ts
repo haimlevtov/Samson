@@ -675,6 +675,108 @@ export type Database = {
         }
         Relationships: []
       }
+      workout_template_items: {
+        Row: {
+          created_at: string
+          exercise_id: string
+          id: string
+          position: number
+          reps: number
+          rest_seconds: number | null
+          rpe: number | null
+          set_count: number
+          template_id: string
+          user_id: string
+          weight_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          exercise_id: string
+          id?: string
+          position: number
+          reps: number
+          rest_seconds?: number | null
+          rpe?: number | null
+          set_count: number
+          template_id: string
+          user_id: string
+          weight_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          exercise_id?: string
+          id?: string
+          position?: number
+          reps?: number
+          rest_seconds?: number | null
+          rpe?: number | null
+          set_count?: number
+          template_id?: string
+          user_id?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_template_items_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_template_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      workout_templates: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_templates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       workouts: {
         Row: {
           created_at: string
@@ -684,6 +786,7 @@ export type Database = {
           notes: string | null
           started_at: string | null
           status: string
+          template_id: string | null
           updated_at: string
           user_id: string
         }
@@ -695,6 +798,7 @@ export type Database = {
           notes?: string | null
           started_at?: string | null
           status?: string
+          template_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -706,10 +810,18 @@ export type Database = {
           notes?: string | null
           started_at?: string | null
           status?: string
+          template_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workouts_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workouts_user_id_fkey"
             columns: ["user_id"]

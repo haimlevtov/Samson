@@ -120,6 +120,8 @@ supabase gen types typescript --local > src/db/types.ts
 
 ```
 app/                     Next.js. /api/health is the keep-alive cron target.
+app/templates/           Build, save or import a session; start one in a tap.
+src/templates/           What a template prescribes, and how much of it was done.
 src/llm/gateway.ts       The only door to OpenRouter — CLAUDE.md #2.
 src/llm/models.ts        Model fallback array per pipeline stage.
 src/db/ledger.ts         The only Postgres-backed LedgerClient.
