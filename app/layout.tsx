@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { TabBar } from '@/src/ui/TabBar';
 import './globals.css';
 
 export const metadata = {
@@ -27,6 +28,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="shell">{children}</div>
+        {/* Outside the shell: it is fixed to the viewport, not to the page. */}
+        <TabBar />
       </body>
     </html>
   );

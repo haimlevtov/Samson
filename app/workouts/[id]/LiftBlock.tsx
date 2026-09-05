@@ -121,7 +121,7 @@ export function LiftBlock({
     <section className="lift">
       <header className="lift-head">
         <h3 className="lift-name">{group.name}</h3>
-        <Link className="icon-btn" href="/progress" aria-label={`${group.name} in progress`}>
+        <Link className="icon-btn" href="/hub" aria-label={`${group.name} in progress`}>
           <ChartIcon />
         </Link>
         {editable && group.sets.length === 0 ? (

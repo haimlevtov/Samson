@@ -21,6 +21,15 @@ export interface TemplateSummary {
   source: TemplateSource;
   itemCount: number;
   createdAt: string;
+  /**
+   * The lifts it prescribes, in order, deduplicated.
+   *
+   * WHY on the summary rather than fetched per card: a template's name is
+   * whatever someone typed, and "Full body B" tells you nothing about whether
+   * it is the one with squats. The card is unreadable without this, and the
+   * rows are already joined for the count.
+   */
+  exercises: string[];
 }
 
 export interface TemplateItem {
@@ -48,18 +57,31 @@ export interface TemplateDetail {
 export async function listTemplates(db: Db): Promise<TemplateSummary[]> {
   const { data, error } = await db
     .from('workout_templates')
-    .select('id, name, source, created_at, workout_template_items(count)')
+    .select('id, name, source, created_at, workout_template_items(position, exercises(name))')
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`listing templates: ${error.message}`);
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    source: row.source as TemplateSource,
-    createdAt: row.created_at,
-    itemCount: (row.workout_template_items as unknown as { count: number }[])[0]?.count ?? 0,
-  }));
+  return (data ?? []).map((row) => {
+    const items = (row.workout_template_items ?? []) as unknown as {
+      position: number;
+      exercises: { name: string } | null;
+    }[];
+    const ordered = [...items].sort((a, b) => a.position - b.position);
+
+    return {
+      id: row.id,
+      name: row.name,
+      source: row.source as TemplateSource,
+      createdAt: row.created_at,
+      itemCount: ordered.length,
+      // Deduplicated: three set groups of squats are one lift on the card, and
+      // repeating the name three times would push the others off the line.
+      exercises: [
+        ...new Set(ordered.map((i) => i.exercises?.name).filter((n): n is string => Boolean(n))),
+      ],
+    };
+  });
 }
 
 export async function loadTemplate(db: Db, templateId: string): Promise<TemplateDetail | null> {

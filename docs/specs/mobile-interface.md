@@ -72,11 +72,11 @@ against "how did last month go" and could only lose.
 
 **Workout — `/templates`**
 
-| Rank | What                                   |
-| ---- | -------------------------------------- |
-| 1    | Start: a template, or an empty session |
-| 2    | The templates themselves               |
-| 3    | Building or importing one              |
+| Rank | What                                                 |
+| ---- | ---------------------------------------------------- |
+| 1    | The templates — picking one is what starts a session |
+| 2    | Starting an empty session instead                    |
+| 3    | Building or importing a template                     |
 
 **Hub — `/hub`**
 

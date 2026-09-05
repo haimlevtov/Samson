@@ -31,14 +31,20 @@ export type DeliveredPlan = z.infer<typeof deliveredPlanSchema>;
 /** The three shipped personas. Rows in `personas`, not values in code — CLAUDE.md #7. */
 export const SHIPPED_PERSONA_SLUGS = ['rival', 'analyst', 'old-master'] as const;
 
-export type HumorLevel = 'clean' | 'cheeky' | 'crude';
+/**
+ * The scale, least to most, as a tuple so it can be both a Zod enum and the
+ * order below without being written twice.
+ */
+export const HUMOR_LEVELS = ['clean', 'cheeky', 'crude'] as const;
+
+export type HumorLevel = (typeof HUMOR_LEVELS)[number];
 
 /**
  * Ordered least to most, so both clamps are a `Math.min` over an index.
  * WHY ordered at all: `users.humor_max_level` is a ceiling, and a ceiling needs
  * a scale to be a ceiling on.
  */
-export const HUMOR_ORDER: readonly HumorLevel[] = ['clean', 'cheeky', 'crude'];
+export const HUMOR_ORDER: readonly HumorLevel[] = HUMOR_LEVELS;
 
 /** One persona row, as the delivery stage needs it. */
 export interface Persona {

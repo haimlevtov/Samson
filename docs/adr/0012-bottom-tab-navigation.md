@@ -53,8 +53,14 @@ not divide cleanly, so they are re-cut:
 | **History** | `/workouts`  | Past sessions, and nothing else                              |
 | **Coach**   | `/coach`     | Unchanged                                                    |
 | **Hub**     | `/hub`       | XP, streak, badges, challenges, training load, bests         |
-| **Workout** | `/templates` | Templates, and starting a session — from one or from empty   |
+| **Workout** | `/templates` | Templates. Picking one is what starts a session              |
 | **Profile** | `/profile`   | Who you are and the settings that change how the app behaves |
+
+**Hub is also the landing page.** Signing in, or opening the app cold, goes
+to `/hub` rather than to the session list. Coming back after two days, the
+first question is "where am I up to" — the streak, the XP left this week, what
+challenge is running — not "what did I do in March". `/` and the sign-in
+redirect both point there.
 
 Three moves fall out of that table:
 

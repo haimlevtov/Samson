@@ -128,7 +128,7 @@ export async function finishWorkout(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/workouts');
-  revalidatePath('/progress');
+  revalidatePath('/hub');
 
   /*
    * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".

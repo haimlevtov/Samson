@@ -29,7 +29,7 @@ export default async function SignInPage({
   const {
     data: { user },
   } = await db.auth.getUser();
-  if (user) redirect('/workouts');
+  if (user) redirect('/hub');
 
   const { error } = await searchParams;
 

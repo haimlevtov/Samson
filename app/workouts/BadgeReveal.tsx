@@ -37,7 +37,7 @@ export function BadgeReveal({
         <h2>{badge.name}</h2>
         <p className="muted small">{badge.description}</p>
       </div>
-      <Link href="/progress" className="chip">
+      <Link href="/hub" className="chip">
         All badges
       </Link>
     </div>

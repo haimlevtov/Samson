@@ -43,6 +43,13 @@
    * shrinking the hit area.
    */
   --tap: 44px;
+
+  /*
+   * The tab bar's height, excluding the safe-area inset it adds underneath.
+   * Anything anchored to the bottom of the viewport measures from here — ADR
+   * 0012 — so there is one number to change rather than four.
+   */
+  --tabbar: 58px;
 }
 
 * {
@@ -78,7 +85,9 @@ a:hover {
 .shell {
   /* env() clears the home indicator on a notched phone. max() keeps a sane
      floor on every device that reports zero. */
-  padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+  /* Clears the tab bar and the home indicator under it, so the last card on
+     any page is reachable rather than behind furniture. */
+  padding: 16px 16px calc(var(--tabbar) + env(safe-area-inset-bottom) + 24px);
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
 }
@@ -147,7 +156,8 @@ h2.section {
  * acute:chronic are diagnostics. On a phone the first two get a full row each
  * and the diagnostics share one.
  */
-.grid.cols-4 {
+.grid.cols-4,
+.grid.cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .grid.cols-4 > :nth-child(-n + 2) {
@@ -681,7 +691,7 @@ button.set-prev.copy:hover:not(:disabled) {
   z-index: 40;
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 10px);
   overflow: hidden;
   background: var(--accent);
   border: 1.5px solid var(--accent-strong);
@@ -746,6 +756,178 @@ button.set-prev.copy:hover:not(:disabled) {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ---- the tab bar -------------------------------------------------------- */
+
+/*
+ * Five tabs, fixed to the bottom — ADR 0012. Bottom because §0 of the interface
+ * spec says the thumb is there and the other hand is holding a barbell.
+ *
+ * It is the only thing on the page allowed to touch the safe-area inset: every
+ * other bottom-anchored element measures from the top of this bar instead.
+ */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -6px 24px -18px rgba(28, 26, 46, 0.6);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar);
+  padding: 5px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* Both halves of a tab are the target. An icon alone is a guessing game and a
+   word alone is hard to hit — interface spec §3. */
+.tab,
+.tab:hover {
+  text-decoration: none;
+}
+.tab:hover {
+  color: var(--accent-strong);
+}
+.tab svg {
+  width: 22px;
+  height: 22px;
+  /* content-box so the pill grows around the icon rather than shrinking it. */
+  box-sizing: content-box;
+  padding: 3px 13px;
+  border-radius: 999px;
+}
+.tab-on {
+  color: var(--accent-strong);
+}
+/* Colour alone is not a state; `aria-current` carries it for a screen reader,
+   and the pill carries it for everyone who cannot tell these purples apart. */
+.tab-on svg {
+  background: var(--accent-soft);
+}
+
+/* ---- profile settings --------------------------------------------------- */
+
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+.settings-form label {
+  display: block;
+  min-width: 0;
+}
+
+.humor {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.humor legend {
+  padding: 0 4px;
+}
+.humor-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+.humor-choice input {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.settings-submit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.saved {
+  color: var(--good);
+  font-weight: 700;
+}
+
+/* Rank 1 on the Workout tab: not every session comes from a template. */
+.start-empty button {
+  width: 100%;
+  min-height: 52px;
+  font-size: 16px;
+}
+
+/* ---- the workout tab's template cards ----------------------------------- */
+
+/*
+ * Grouped by source, two cards a row — the shape a phone can scan. The name
+ * alone does not identify a template ("Full body B"), so the card leads with
+ * the lifts and the name is the link to the detail.
+ */
+.tpl-group {
+  margin-bottom: 6px;
+}
+.tpl-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 14px 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tpl-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px;
+  min-width: 0;
+}
+.tpl-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-name a {
+  color: var(--text);
+}
+/* Three lines, then an ellipsis. A template with nine lifts must not make its
+   card four times the height of the one beside it. */
+.tpl-lifts {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tpl-meta {
+  margin: 0;
+}
+.tpl-card button {
+  width: 100%;
 }
 
 /* ---- tables, which are cards on a phone -------------------------------- */
@@ -1045,7 +1227,7 @@ code {
   .shell {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 28px 20px 80px;
+    padding: 28px 20px calc(var(--tabbar) + 48px);
   }
 
   header.top {
@@ -1092,6 +1274,9 @@ code {
   }
   .lift-name {
     font-size: 19px;
+  }
+  .tpl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   /* Capped rather than stretched: on a wide screen the slack all goes to the
      PREVIOUS column and pushes KG and REPS an inch away from the set number,
