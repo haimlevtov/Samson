@@ -20,7 +20,17 @@ function format(totalSeconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export function SessionTimer({ startedAt }: { startedAt: string | null }) {
+/**
+ * Rank 4 — interface spec §2. It lives in the session bar as a number and
+ * nothing else: checkable at a glance, not competing with the grid.
+ */
+export function SessionTimer({
+  startedAt,
+  endedAt,
+}: {
+  startedAt: string | null;
+  endedAt: string | null;
+}) {
   // Rendered on the server too, so start from a value that cannot disagree
   // with the client's first paint and cause a hydration mismatch.
   const [elapsed, setElapsed] = useState<number | null>(null);
@@ -30,25 +40,24 @@ export function SessionTimer({ startedAt }: { startedAt: string | null }) {
     const began = new Date(startedAt).getTime();
     if (Number.isNaN(began)) return;
 
+    // A finished session lasted as long as it lasted. Counting to now would
+    // put "121:20:46" on a workout that took an hour last week, and a number
+    // the app has not computed is a number it must not show.
+    const finished = endedAt === null ? null : new Date(endedAt).getTime();
+    if (finished !== null && !Number.isNaN(finished)) {
+      setElapsed(Math.floor((finished - began) / 1000));
+      return;
+    }
+
     const tick = () => setElapsed(Math.floor((Date.now() - began) / 1000));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [startedAt]);
+  }, [startedAt, endedAt]);
 
   return (
-    <div className="card timer-card timer-session">
-      <div className="timer-head">
-        <div>
-          <div className="label">Session</div>
-          <div className="timer" aria-live="off">
-            {elapsed === null ? '—:—' : format(elapsed)}
-          </div>
-        </div>
-        <div className="muted small" style={{ textAlign: 'right' }}>
-          {startedAt ? 'since you started' : 'not started'}
-        </div>
-      </div>
-    </div>
+    <span className="session-clock" aria-live="off">
+      {elapsed === null ? (startedAt ? '—:—' : 'not started') : format(elapsed)}
+    </span>
   );
 }

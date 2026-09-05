@@ -1,11 +1,20 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
-import { logSet } from '../actions';
-import { FieldHint } from '@/src/ui/FieldHint';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type { LoggedSet, PreviousSet, PreviousSets } from '@/src/db/training';
+import { deleteSet, logSet } from '../actions';
+import { LiftBlock, type LiftGroup } from './LiftBlock';
 import { QuickLog } from './QuickLog';
 import { RestTimer, type RestTrigger } from './RestTimer';
-import { SessionTimer } from './SessionTimer';
+import {
+  DEFAULT_REST_SECONDS,
+  EMPTY_DRAFT,
+  newRow,
+  readDraft,
+  writeDraft,
+  type DraftRow,
+  type SessionDraft,
+} from './session-draft';
 
 export interface Candidate {
   id: string;
@@ -38,203 +47,298 @@ function matches(candidate: Candidate, query: string): boolean {
     );
 }
 
+/**
+ * The session screen — one set grid per exercise, ADR 0011.
+ *
+ * Performed sets come from the server on every render. Pending rows are held
+ * here and in localStorage, and become `sets` rows only when their tick is
+ * pressed. Nothing is written optimistically: a row turns green because the
+ * server said so, never because the user tapped — interface spec §4.
+ */
 export function SessionConsole({
   workoutId,
-  startedAt,
+  logged,
+  previous,
   candidates,
+  editable,
 }: {
   workoutId: string;
-  startedAt: string | null;
+  logged: LoggedSet[];
+  previous: Record<string, PreviousSets>;
   candidates: Candidate[];
+  editable: boolean;
 }) {
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Candidate | null>(null);
-  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<SessionDraft>(EMPTY_DRAFT);
+  const [restored, setRestored] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restTrigger, setRestTrigger] = useState<RestTrigger | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [picking, setPicking] = useState(false);
+  const [query, setQuery] = useState('');
+  const [, startTransition] = useTransition();
 
-  const formRef = useRef<HTMLFormElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Read after mount, not during render: the server has no localStorage, and a
+  // draft restored during render would not match the HTML it sent.
+  useEffect(() => {
+    setDraft(readDraft(workoutId));
+    setRestored(true);
+  }, [workoutId]);
+
+  useEffect(() => {
+    if (restored) writeDraft(workoutId, draft);
+  }, [restored, workoutId, draft]);
+
+  /**
+   * Session order, then anything added since — `logged` already arrives in the
+   * order the sets were performed, and a Map keeps that.
+   */
+  const groups = useMemo<LiftGroup[]>(() => {
+    const byExercise = new Map<string, LiftGroup>();
+    for (const set of logged) {
+      const group = byExercise.get(set.exerciseId) ?? {
+        id: set.exerciseId,
+        name: set.exerciseName,
+        sets: [],
+      };
+      group.sets.push(set);
+      byExercise.set(set.exerciseId, group);
+    }
+    for (const added of draft.added) {
+      if (!byExercise.has(added.id)) {
+        byExercise.set(added.id, { id: added.id, name: added.name, sets: [] });
+      }
+    }
+    return [...byExercise.values()];
+  }, [logged, draft.added]);
 
   const results = useMemo(
     () => candidates.filter((c) => matches(c, query)).slice(0, MAX_RESULTS),
     [candidates, query]
   );
 
-  const choose = (candidate: Candidate) => {
-    setSelected(candidate);
-    setQuery('');
-    setOpen(false);
+  const patchRows = (exerciseId: string, next: (rows: DraftRow[]) => DraftRow[]) => {
+    setDraft((current) => ({
+      ...current,
+      rows: { ...current.rows, [exerciseId]: next(current.rows[exerciseId] ?? []) },
+    }));
   };
 
-  function handleSubmit(formData: FormData) {
-    if (!selected) {
-      setError('Pick an exercise first.');
+  const addRow = (exerciseId: string, values: Partial<DraftRow> = {}) => {
+    // Rest length carries over from the row before it: someone resting three
+    // minutes on squats is resting three minutes on the next squat set too.
+    patchRows(exerciseId, (rows) => {
+      const last = rows[rows.length - 1];
+      return [
+        ...rows,
+        newRow({ restSeconds: last?.restSeconds ?? String(DEFAULT_REST_SECONDS), ...values }),
+      ];
+    });
+  };
+
+  const addExercise = (candidate: Candidate) => {
+    setQuery('');
+    setPicking(false);
+    setDraft((current) => {
+      const existing = current.rows[candidate.id] ?? [];
+      return {
+        added: current.added.some((a) => a.id === candidate.id)
+          ? current.added
+          : [...current.added, { id: candidate.id, name: candidate.name }],
+        // An exercise with no row to fill in is a heading with nothing under it.
+        rows: { ...current.rows, [candidate.id]: existing.length > 0 ? existing : [newRow()] },
+      };
+    });
+  };
+
+  const removeExercise = (exerciseId: string) => {
+    setDraft((current) => {
+      const rows = { ...current.rows };
+      delete rows[exerciseId];
+      return { added: current.added.filter((a) => a.id !== exerciseId), rows };
+    });
+  };
+
+  const updateRow = (exerciseId: string, key: string, patch: Partial<DraftRow>) => {
+    setError(null);
+    patchRows(exerciseId, (rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  };
+
+  const removeRow = (exerciseId: string, key: string) => {
+    patchRows(exerciseId, (rows) => rows.filter((r) => r.key !== key));
+  };
+
+  /**
+   * The tick, and the only write on this screen.
+   *
+   * An empty box means "what the placeholder says" — the placeholder is last
+   * session's number and it is the value the user is looking at when they tap.
+   * Requiring them to retype it to confirm it would make the common case the
+   * slow one.
+   */
+  const commitRow = (group: LiftGroup, row: DraftRow, fallback: PreviousSet | undefined) => {
+    const weightKg =
+      row.weightKg.trim() ||
+      (fallback?.weightKg === null || fallback === undefined ? '' : String(fallback.weightKg));
+    const reps =
+      row.reps.trim() ||
+      (fallback?.reps === null || fallback === undefined ? '' : String(fallback.reps));
+
+    if (reps === '') {
+      setError(`${group.name}: fill in reps first.`);
       return;
     }
-    setError(null);
 
-    // Read before the action runs so the rest length is known even though the
-    // form is reset immediately afterwards.
-    const requested = Number(formData.get('restSeconds'));
-    const restSeconds = Number.isFinite(requested) && requested > 0 ? requested : 120;
+    const requested = Number(row.restSeconds);
+    const restSeconds = Number.isFinite(requested) && requested > 0 ? requested : 0;
+
+    const form = new FormData();
+    form.set('workoutId', workoutId);
+    form.set('exerciseId', group.id);
+    form.set('weightKg', weightKg);
+    form.set('reps', reps);
+    form.set('rpe', row.rpe.trim());
+    form.set('restSeconds', String(restSeconds));
+    if (row.isWarmup) form.set('isWarmup', 'on');
+
+    setError(null);
+    setSaving(row.key);
 
     startTransition(async () => {
       try {
-        await logSet(formData);
-        // Rest starts on its own — the whole point of logging a set is that you
-        // are now resting, and reaching for a second button is the step people
-        // skip when they are out of breath.
-        setRestTrigger({ seconds: restSeconds, nonce: Date.now() });
-        // Keep the exercise selected: the next set is almost always the same
-        // lift. Only the numbers change.
-        formRef.current?.reset();
+        await logSet(form);
+        // The row is dropped only once the server has it. Until then it keeps
+        // its values, so a failure costs nothing typed.
+        removeRow(group.id, row.key);
+        if (restSeconds > 0) {
+          // Rest starts on its own — reaching for a second button is the step
+          // people skip when they are out of breath.
+          setRestTrigger({ seconds: restSeconds, nonce: Date.now() });
+        }
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Could not log that set.');
+      } finally {
+        setSaving(null);
       }
     });
-  }
+  };
+
+  const removeSet = (set: LoggedSet, keepValues: boolean) => {
+    const form = new FormData();
+    form.set('setId', set.id);
+    form.set('workoutId', workoutId);
+
+    setError(null);
+    startTransition(async () => {
+      try {
+        await deleteSet(form);
+        if (keepValues) {
+          addRow(set.exerciseId, {
+            weightKg: set.weightKg === null ? '' : String(set.weightKg),
+            reps: set.reps === null ? '' : String(set.reps),
+            rpe: set.rpe === null ? '' : String(set.rpe),
+            restSeconds: String(set.restSeconds ?? DEFAULT_REST_SECONDS),
+            isWarmup: set.isWarmup,
+          });
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Could not remove that set.');
+      }
+    });
+  };
 
   return (
     <>
-      <div className="timer-grid">
-        <SessionTimer startedAt={startedAt} />
-        <RestTimer trigger={restTrigger} />
+      <div className="lifts">
+        {groups.map((group) => (
+          <LiftBlock
+            key={group.id}
+            group={group}
+            previous={previous[group.id] ?? { warmup: [], working: [] }}
+            drafts={draft.rows[group.id] ?? []}
+            editable={editable}
+            saving={saving}
+            onAddRow={addRow}
+            onUpdateRow={updateRow}
+            onRemoveRow={removeRow}
+            onCommitRow={commitRow}
+            onUncheck={(set) => removeSet(set, true)}
+            onDeleteSet={(set) => removeSet(set, false)}
+            onRemoveExercise={removeExercise}
+          />
+        ))}
+
+        {groups.length === 0 ? (
+          <p className="muted empty">
+            No exercises yet. {editable ? 'Add the first one below.' : 'Nothing was logged.'}
+          </p>
+        ) : null}
       </div>
 
-      <QuickLog workoutId={workoutId} />
+      {error ? <p className="error small">{error}</p> : null}
 
-      <h2 className="section">Add a set</h2>
-      <div className="card">
-        <form ref={formRef} action={handleSubmit} className="set-form">
-          <input type="hidden" name="workoutId" value={workoutId} />
-          <input type="hidden" name="exerciseId" value={selected?.id ?? ''} />
-
-          <div className="f-exercise">
-            <span className="label">Exercise · {candidates.length} available to you</span>
-
-            {selected ? (
-              <div className="chosen">
-                <span className="chosen-name">{selected.name}</span>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setSelected(null);
-                    setOpen(true);
-                    requestAnimationFrame(() => searchRef.current?.focus());
-                  }}
-                >
-                  Change
-                </button>
-              </div>
-            ) : (
-              <div className="combo">
+      {editable ? (
+        <>
+          <div className="combo add-exercise">
+            {picking ? (
+              <>
                 <input
                   ref={searchRef}
                   type="search"
                   value={query}
                   placeholder="Search — try “squat”, “db press”, “lats”"
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setOpen(true);
+                  onChange={(e) => setQuery(e.target.value)}
+                  onBlur={() => {
+                    // Let a click on a result land before the list closes.
+                    window.setTimeout(() => setPicking(false), 150);
                   }}
-                  onFocus={() => setOpen(true)}
-                  aria-expanded={open}
+                  aria-expanded={picking}
                   aria-controls="exercise-results"
                 />
-                {open ? (
-                  <ul className="combo-list" id="exercise-results" role="listbox">
-                    {results.map((c) => (
-                      <li key={c.id}>
-                        <button type="button" onClick={() => choose(c)}>
-                          <span>{c.name}</span>
-                          <span className="muted small">
-                            {c.movementPattern ?? '—'} · {c.primaryMuscle}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                    {results.length === 0 ? (
-                      <li className="muted small combo-empty">
-                        Nothing matches. Only equipment you own is listed.
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : null}
-              </div>
+                <ul className="combo-list" id="exercise-results" role="listbox">
+                  {results.map((c) => (
+                    <li key={c.id}>
+                      <button type="button" onClick={() => addExercise(c)}>
+                        <span>{c.name}</span>
+                        <span className="muted small">
+                          {c.movementPattern ?? '—'} · {c.primaryMuscle}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {results.length === 0 ? (
+                    <li className="muted small combo-empty">
+                      Nothing matches. Only equipment you own is listed.
+                    </li>
+                  ) : null}
+                </ul>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="add-exercise-btn"
+                onClick={() => {
+                  setPicking(true);
+                  requestAnimationFrame(() => searchRef.current?.focus());
+                }}
+              >
+                + Add exercise
+              </button>
             )}
           </div>
 
-          <label className="f-num">
-            <span className="label">Weight kg</span>
-            <input name="weightKg" type="number" step="0.5" min="0" inputMode="decimal" />
-          </label>
+          {candidates.length === 0 ? (
+            <p className="error small">
+              No equipment recorded, so nothing can be prescribed. Seeded users have equipment; a
+              new account needs rows in <code>user_equipment</code>.
+            </p>
+          ) : null}
 
-          <div className="f-num">
-            <span className="label with-hint">
-              <label htmlFor="field-reps">Reps</label>
-              <FieldHint title="Reps">
-                How many times you completed the movement in this set. Above 12 reps the e1RM
-                estimate is left blank — the Epley formula stops being trustworthy that high.
-              </FieldHint>
-            </span>
-            <input id="field-reps" name="reps" type="number" step="1" min="0" inputMode="numeric" />
-          </div>
-
-          <div className="f-num">
-            <span className="label with-hint">
-              <label htmlFor="field-rpe">RPE</label>
-              <FieldHint title="RPE">
-                Rate of Perceived Exertion, 1–10: how hard the set felt. 10 means you could not have
-                done another rep, 9 means one more, 8 means two. Optional — leave it blank rather
-                than guess.
-              </FieldHint>
-            </span>
-            <input
-              id="field-rpe"
-              name="rpe"
-              type="number"
-              step="0.5"
-              min="1"
-              max="10"
-              inputMode="decimal"
-            />
-          </div>
-
-          <label className="f-num">
-            <span className="label">Rest s</span>
-            <input
-              name="restSeconds"
-              type="number"
-              step="15"
-              min="0"
-              defaultValue={120}
-              inputMode="numeric"
-            />
-          </label>
-
-          <label className="f-check">
-            <input name="isWarmup" type="checkbox" />
-            <span>Warmup</span>
-          </label>
-
-          <div className="f-submit">
-            <button type="submit" disabled={pending}>
-              {pending ? 'Logging…' : 'Log set'}
-            </button>
-          </div>
-        </form>
-
-        {error ? <p className="error small">{error}</p> : null}
-        {candidates.length === 0 ? (
-          <p className="error small">
-            No equipment recorded, so nothing can be prescribed. Seeded users have equipment; a new
-            account needs rows in <code>user_equipment</code>.
-          </p>
-        ) : null}
-      </div>
+          <QuickLog workoutId={workoutId} />
+          <RestTimer trigger={restTrigger} />
+        </>
+      ) : null}
     </>
   );
 }
