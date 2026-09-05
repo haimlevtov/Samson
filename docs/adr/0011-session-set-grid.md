@@ -5,7 +5,8 @@
 
 ## Context
 
-`/workouts/[id]` was built as a form plus a receipt: one "Add a set" card that
+`/history/[id]` — `/workouts/[id]` when this was written — was built as a form
+plus a receipt: one "Add a set" card that
 takes an exercise, a weight, reps, RPE, rest and a warm-up flag, and below it a
 read-only table of everything logged so far.
 

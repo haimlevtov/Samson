@@ -80,6 +80,7 @@ export default async function ProfilePage() {
           displayName={user.displayName ?? ''}
           timezone={user.timezone}
           humorMaxLevel={user.humorMaxLevel}
+          theme={user.theme}
           timezones={timezones}
         />
       </div>

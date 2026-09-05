@@ -45,7 +45,7 @@ function Icon({ children }: { children: ReactNode }) {
 
 const TABS: Tab[] = [
   {
-    href: '/workouts',
+    href: '/history',
     label: 'History',
     // A clock turned back — the past, not the schedule.
     icon: (
@@ -78,7 +78,7 @@ const TABS: Tab[] = [
     ),
   },
   {
-    href: '/templates',
+    href: '/workout',
     label: 'Workout',
     // A barbell: the thing the tab is for.
     icon: (
@@ -101,7 +101,7 @@ const TABS: Tab[] = [
 
 /**
  * A tab is current when the path is it or lives under it, so the session screen
- * at `/workouts/[id]` keeps History lit rather than lighting nothing.
+ * at `/history/[id]` keeps History lit rather than lighting nothing.
  */
 function isCurrent(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);

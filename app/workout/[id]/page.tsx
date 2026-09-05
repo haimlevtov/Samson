@@ -35,7 +35,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
             <input type="hidden" name="templateId" value={template.id} />
             <button type="submit">Start workout</button>
           </form>
-          <Link href="/templates" className="chip">
+          <Link href="/workout" className="chip">
             ← Templates
           </Link>
         </div>

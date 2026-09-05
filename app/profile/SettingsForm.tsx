@@ -2,8 +2,16 @@
 
 import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
+import { THEMES } from '@/src/ui/theme';
 import { updateSettings } from './actions';
 import { EMPTY_PROFILE_FORM, type ProfileFormState } from './form-state';
+
+/** What each theme does, said plainly. "System" is the one that needs saying. */
+const THEME_BLURB: Record<string, string> = {
+  system: 'Follow the phone',
+  light: 'Always light',
+  dark: 'Always dark',
+};
 
 /** What each level actually buys, in the user's terms rather than the schema's. */
 const HUMOR_BLURB: Record<string, string> = {
@@ -16,11 +24,13 @@ export function SettingsForm({
   displayName,
   timezone,
   humorMaxLevel,
+  theme,
   timezones,
 }: {
   displayName: string;
   timezone: string;
   humorMaxLevel: string;
+  theme: string;
   timezones: string[];
 }) {
   const [state, action, saving] = useActionState<ProfileFormState, FormData>(
@@ -57,6 +67,24 @@ export function SettingsForm({
           ))}
         </select>
       </label>
+
+      <fieldset className="humor">
+        <legend className="label">Appearance</legend>
+        {/* A segmented row rather than a switch: "on/off" cannot say "follow
+            the phone", and following the phone is the right default. */}
+        <div className="theme-choices">
+          {THEMES.map((option) => (
+            <label key={option} className="theme-choice">
+              <input type="radio" name="theme" value={option} defaultChecked={option === theme} />
+              <span>
+                <strong>{option}</strong>
+                <span className="muted small">{THEME_BLURB[option]}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="muted small">Applied on save, before the next page is drawn.</p>
+      </fieldset>
 
       <fieldset className="humor">
         <legend className="label">How rude the coach may be</legend>

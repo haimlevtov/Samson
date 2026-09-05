@@ -95,7 +95,7 @@ describe('pendingTargets', () => {
   });
 
   it('marks its keys as template-owned', () => {
-    // app/workouts/[id] routes edits by this prefix: a target's changes are an
+    // app/history/[id] routes edits by this prefix: a target's changes are an
     // override, a hand-added row's changes are the row itself.
     expect(pendingTargets([group()], []).every((r) => r.key.startsWith('t:'))).toBe(true);
   });

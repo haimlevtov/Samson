@@ -21,9 +21,9 @@ const kg = (n: number) => `${Math.round(n).toLocaleString()} kg`;
  *
  * Everything that answers "how am I doing", in the order the interface spec
  * ranks it: the retention mechanic first (adherence and streak, invariant #4),
- * then the game, then the diagnostics. `/progress` and the stat block on the
- * old `/workouts` were the same question asked in two places; this is the one
- * place.
+ * then the game, then the diagnostics. `/progress` and the stat block that
+ * used to sit on the session list were the same question asked in two places;
+ * this is the one place.
  *
  * INVARIANT: every number below is computed by src/metrics or src/gamification,
  *            never by a model — CLAUDE.md #1. This page only formats them.

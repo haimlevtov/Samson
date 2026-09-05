@@ -116,7 +116,7 @@ export interface TargetRow {
   /**
    * Stable while the row exists, so an edit to it survives a re-render.
    * `t:` marks it as coming from a template rather than from the user —
-   * app/workouts/[id] keys its overrides on that.
+   * app/history/[id] keys its overrides on that.
    */
   key: string;
   itemId: string;

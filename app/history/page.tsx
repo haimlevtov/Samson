@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * are now on Hub, Workout and Profile respectively. This page ranks 3 in
  * docs/specs/mobile-interface.md §2 — nobody opens it mid-set.
  *
- * The route keeps its name because `/workouts/[id]` is the session screen, and
+ * The route keeps its name because `/history/[id]` is the session screen, and
  * renaming that to match a tab label would buy nothing.
  */
 export default async function WorkoutsPage({
@@ -67,7 +67,7 @@ export default async function WorkoutsPage({
             {workouts.map((w) => (
               <tr key={w.id}>
                 <td data-label="Date">
-                  <Link href={`/workouts/${w.id}`}>{displayDate(w.localDate)}</Link>
+                  <Link href={`/history/${w.id}`}>{displayDate(w.localDate)}</Link>
                 </td>
                 <td data-label="Status">
                   <span className={`badge ${w.status}`}>{w.status.replace('_', ' ')}</span>

@@ -79,7 +79,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       {/* Back, the clock and the way out, in one row that stays put while the
           grid scrolls under it. */}
       <div className="session-bar">
-        <Link href="/workouts" className="bar-back" aria-label="All sessions">
+        <Link href="/history" className="bar-back" aria-label="All sessions">
           ←
         </Link>
         <SessionTimer startedAt={workout.startedAt} endedAt={workout.endedAt} />

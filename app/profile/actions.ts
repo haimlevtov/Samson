@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
+import { THEMES } from '@/src/ui/theme';
 import type { ProfileFormState } from './form-state';
 
 /**
@@ -45,6 +46,7 @@ const settingsSchema = z.object({
     .trim()
     .refine(isKnownTimezone, 'That is not a timezone this device recognises.'),
   humorMaxLevel: z.enum(HUMOR_LEVELS),
+  theme: z.enum(THEMES),
 });
 
 export async function updateSettings(
@@ -59,6 +61,7 @@ export async function updateSettings(
     displayName: formData.get('displayName') ?? '',
     timezone: formData.get('timezone') ?? '',
     humorMaxLevel: formData.get('humorMaxLevel') ?? '',
+    theme: formData.get('theme') ?? '',
   });
 
   if (!parsed.success) {
@@ -75,13 +78,15 @@ export async function updateSettings(
       display_name: parsed.data.displayName,
       timezone: parsed.data.timezone,
       humor_max_level: parsed.data.humorMaxLevel,
+      theme: parsed.data.theme,
     })
     .eq('user_id', user.id);
 
   if (error) return { error: `Could not save that: ${error.message}`, saved: false };
 
-  // Every surface reads the display name, and the timezone decides what "today"
-  // means on all of them — CLAUDE.md #9. Revalidate the layout, not one page.
+  // Every surface reads the display name, the timezone decides what "today"
+  // means on all of them (CLAUDE.md #9), and the theme is stamped by the layout
+  // itself. Revalidate the layout, not one page.
   revalidatePath('/', 'layout');
   return { error: null, saved: true };
 }

@@ -24,6 +24,14 @@
   --accent: #6c4df6;
   --accent-strong: #5734e2;
   --accent-soft: #ece6fe;
+  /*
+   * Accent as TEXT, split from accent as a BACKGROUND. On white they can be the
+   * same ink; on a dark ground they pull apart — text has to lighten to stay
+   * readable while a button must stay dark enough to carry white lettering.
+   * One token doing both jobs is how a dark theme ends up with an unreadable
+   * hover state.
+   */
+  --accent-text: var(--accent-strong);
 
   --good: #16a34a;
   --good-soft: #dcfce7;
@@ -52,6 +60,97 @@
   --tabbar: 58px;
 }
 
+/*
+ * Dark.
+ *
+ * The palette above is the whole light theme; this is the whole dark one, and
+ * nothing outside these two blocks names a colour. `--accent` goes *darker*
+ * here rather than lighter: a button that glows on a near-black page is the
+ * thing that makes a dark theme tiring, and darkening it raises the contrast of
+ * the white lettering it carries rather than lowering it — 8.1:1 against white,
+ * up from 5.2:1 in light. `--accent-text` moves the other way, because a link
+ * has no white plate behind it and must lift off the ground instead.
+ *
+ * AI-NOTE: the same declarations appear twice, and both copies must change
+ *          together. CSS cannot share one block between a media query and a
+ *          selector, and both are needed: the media query serves "system",
+ *          which stamps no attribute, while the attribute serves an explicit
+ *          choice and has to win over the device in both directions.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e0d15;
+    --surface: #17161f;
+    --surface-2: #201e2c;
+    --border: #2a2839;
+    --border-strong: #3b3853;
+
+    --text: #edebf5;
+    --muted: #a29fbd;
+
+    --accent: #4c31c9;
+    --accent-strong: #3b2599;
+    --accent-soft: #262040;
+    --accent-text: #b5a3ff;
+
+    --good: #22c55e;
+    --good-soft: #16321f;
+    --warn: #f59e0b;
+    --warn-soft: #3a2a08;
+    --bad: #f05252;
+    --bad-soft: #3b1a1a;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0d15;
+  --surface: #17161f;
+  --surface-2: #201e2c;
+  --border: #2a2839;
+  --border-strong: #3b3853;
+
+  --text: #edebf5;
+  --muted: #a29fbd;
+
+  --accent: #4c31c9;
+  --accent-strong: #3b2599;
+  --accent-soft: #262040;
+  --accent-text: #b5a3ff;
+
+  --good: #22c55e;
+  --good-soft: #16321f;
+  --warn: #f59e0b;
+  --warn-soft: #3a2a08;
+  --bad: #f05252;
+  --bad-soft: #3b1a1a;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+}
+
+/*
+ * Tells the browser to draw its own furniture dark too — form controls, the
+ * scrollbar, and the space outside the safe area. Without it a dark page keeps
+ * a white scrollbar and light-mode select popups.
+ */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -74,7 +173,7 @@ body {
 }
 
 a {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   text-decoration: none;
   font-weight: 600;
 }
@@ -217,7 +316,10 @@ select {
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent);
+  /* --accent-text, not --accent: in dark the accent is nearly the ground, and a
+     focus indicator the user cannot see fails WCAG 2.4.7 in the one theme it
+     was not designed against. */
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
@@ -279,7 +381,7 @@ button.secondary:hover:not(:disabled) {
 }
 .chip-on {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -427,7 +529,7 @@ button.secondary:hover:not(:disabled) {
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .icon-btn {
@@ -448,7 +550,7 @@ button.secondary:hover:not(:disabled) {
 }
 .icon-btn:hover {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
   text-decoration: none;
 }
@@ -505,7 +607,7 @@ button.secondary:hover:not(:disabled) {
 }
 .set-no:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 /* Warm-ups are marked, not numbered: they are not set 1, and invariant #4 does
    not pay for them either. */
@@ -534,7 +636,7 @@ button.set-prev.copy {
 }
 button.set-prev.copy:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .set-val {
@@ -583,7 +685,7 @@ button.set-prev.copy:hover:not(:disabled) {
 }
 .tick:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .tick.on,
@@ -652,14 +754,14 @@ button.set-prev.copy:hover:not(:disabled) {
   width: 100%;
   margin-top: 8px;
   background: var(--surface-2);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border: 1.5px dashed var(--border-strong);
   box-shadow: none;
 }
 .add-set:hover:not(:disabled) {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .add-exercise {
@@ -801,7 +903,7 @@ button.set-prev.copy:hover:not(:disabled) {
   text-decoration: none;
 }
 .tab:hover {
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 .tab svg {
   width: 22px;
@@ -812,7 +914,7 @@ button.set-prev.copy:hover:not(:disabled) {
   border-radius: 999px;
 }
 .tab-on {
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 /* Colour alone is not a state; `aria-current` carries it for a screen reader,
    and the pill carries it for everyone who cannot tell these purples apart. */
@@ -842,6 +944,48 @@ button.set-prev.copy:hover:not(:disabled) {
 .humor legend {
   padding: 0 4px;
 }
+/* Three abreast: the choice is small and comparing them is the whole task. */
+.theme-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+.theme-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+.theme-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.theme-choice input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.theme-choice > span {
+  display: grid;
+  min-width: 0;
+}
+.theme-choice strong {
+  text-transform: capitalize;
+}
+.theme-choice .small {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .humor-choice {
   display: flex;
   align-items: center;
@@ -903,7 +1047,7 @@ button.set-prev.copy:hover:not(:disabled) {
 .tpl-running {
   display: block;
   margin-top: 2px;
-  color: var(--accent-strong);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -1084,7 +1228,7 @@ tbody tr:last-child td {
   background: var(--warn-soft);
 }
 .badge.in_progress {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   background: var(--accent-soft);
 }
 
@@ -1179,7 +1323,7 @@ code {
 .hint-btn:hover:not(:disabled),
 .hint-btn:focus-visible {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .hint-btn:active:not(:disabled) {
@@ -1216,7 +1360,7 @@ code {
 .hint-bubble strong {
   display: block;
   margin-bottom: 3px;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* Hover for pointers, focus for keyboards, data-open for taps. */
@@ -1634,7 +1778,7 @@ details.quick-log[open] > summary {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* WHY this is not an animation by default: a badge that only announces itself

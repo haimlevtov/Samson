@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { listTemplates } from '@/src/db/templates';
 import { FieldHint } from '@/src/ui/FieldHint';
-import { startWorkout } from '../workouts/actions';
+import { startWorkout } from '../history/actions';
 import { startFromTemplate } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,7 @@ const GROUPS = [
  *
  * Two things and no more: start something, or pick a template. The three ways
  * to *create* a template used to sit under this list and made the tab four
- * screens long; they are one tap away at `/templates/new` instead. Creating a
+ * screens long; they are one tap away at `/workout/new` instead. Creating a
  * template is a thing you do once, at a desk. Starting one is a thing you do
  * standing up, every session.
  */
@@ -75,7 +75,7 @@ export default async function TemplatesPage() {
             add work you did not do to your tonnage or your records.
           </FieldHint>
         </h2>
-        <Link href="/templates/new" className="chip">
+        <Link href="/workout/new" className="chip">
           + New template
         </Link>
       </div>
@@ -101,7 +101,7 @@ export default async function TemplatesPage() {
                 {rows.map((t) => (
                   <article key={t.id} className="card tpl-card">
                     <h4 className="tpl-name">
-                      <Link href={`/templates/${t.id}`}>{t.name}</Link>
+                      <Link href={`/workout/${t.id}`}>{t.name}</Link>
                     </h4>
                     <p className="muted small tpl-lifts">
                       {t.exercises.length === 0 ? 'Nothing prescribed' : t.exercises.join(', ')}

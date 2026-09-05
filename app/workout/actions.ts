@@ -58,8 +58,8 @@ export async function createUserTemplate(
     return { error: explain(cause, 'Could not save that template.') };
   }
 
-  revalidatePath('/templates');
-  redirect(`/templates/${templateId}`);
+  revalidatePath('/workout');
+  redirect(`/workout/${templateId}`);
 }
 
 /**
@@ -107,8 +107,8 @@ export async function createTemplateFromSession(
     return { error: explain(cause, 'Could not save that session as a template.') };
   }
 
-  revalidatePath('/templates');
-  redirect(`/templates/${templateId}`);
+  revalidatePath('/workout');
+  redirect(`/workout/${templateId}`);
 }
 
 /**
@@ -162,8 +162,8 @@ export async function createTemplateFromPlan(
     return { error: explain(cause, 'Could not import that session.') };
   }
 
-  revalidatePath('/templates');
-  redirect(`/templates/${templateId}`);
+  revalidatePath('/workout');
+  redirect(`/workout/${templateId}`);
 }
 
 /**
@@ -196,8 +196,8 @@ export async function startFromTemplate(formData: FormData): Promise<void> {
 
   if (error) throw new Error(`starting workout from template: ${error.message}`);
 
-  revalidatePath('/workouts');
-  redirect(`/workouts/${data.id}`);
+  revalidatePath('/history');
+  redirect(`/history/${data.id}`);
 }
 
 export async function removeTemplate(formData: FormData): Promise<void> {
@@ -205,6 +205,6 @@ export async function removeTemplate(formData: FormData): Promise<void> {
   // No user_id filter: RLS already scopes the delete to rows this user owns.
   await deleteTemplate(db, String(formData.get('templateId') ?? ''));
 
-  revalidatePath('/templates');
-  redirect('/templates');
+  revalidatePath('/workout');
+  redirect('/workout');
 }

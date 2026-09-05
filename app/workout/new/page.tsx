@@ -76,7 +76,7 @@ export default async function NewTemplatePage() {
           <h1>New template</h1>
           <span className="muted small">Build one, or copy one you already have</span>
         </div>
-        <Link href="/templates" className="chip">
+        <Link href="/workout" className="chip">
           ← Workout
         </Link>
       </header>

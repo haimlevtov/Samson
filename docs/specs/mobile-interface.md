@@ -30,14 +30,14 @@ Three consequences that drive every decision below:
 ## 1. User flow
 
 ```
-sign in ──► /workouts ──► [Start workout] ──► /workouts/[id] ──► log set ──┐
-                │                                    ▲                     │
-                │                                    └─── rest ◄───────────┘
-                │                                             │
-                └──── tap a past session ──► /workouts/[id]   └──► [Finish]
-                                             (read-only)              │
-                                                                      ▼
-                                                                 /workouts
+sign in ──► /hub ──► /workout ──► [pick a template] ──► /history/[id] ──┐
+              │                                               ▲         │
+              │                                               └─ rest ◄─┘
+              │                                                     │
+              └──► /history ──► tap a past session ──► /history/[id] │
+                                                       (read-only)   │
+                                                                     ▼
+                                                        [Finish] ──► /history
 ```
 
 The loop that matters is the inner one: **log set → rest → log set**. It runs
@@ -52,7 +52,7 @@ requires scrolling. Browsing can scroll as much as it likes.
 Ranked by what the user needs _at the moment they look_. Rank 1 is visible
 without scrolling on a 375×812 screen; rank 3 may be below the fold.
 
-### During a session — `/workouts/[id]`
+### During a session — `/history/[id]`
 
 | Rank | What                                   | Why                                                                |
 | ---- | -------------------------------------- | ------------------------------------------------------------------ |
@@ -70,7 +70,7 @@ without scrolling on a 375×812 screen; rank 3 may be below the fold.
 ADR 0012 split this across three tabs, because one page ranked "start a session"
 against "how did last month go" and could only lose.
 
-**Workout — `/templates`**
+**Workout — `/workout`**
 
 | Rank | What                                                 |
 | ---- | ---------------------------------------------------- |
@@ -92,7 +92,7 @@ equal in rank. Adherence and streak are the mechanic the product retains people
 with (invariant #4); tonnage and ACWR are diagnostics, and they sort below the
 game.
 
-**History — `/workouts`** is the session list and nothing else. It is rank 3
+**History — `/history`** is the session list and nothing else. It is rank 3
 browsing by definition: nobody opens it under load.
 
 ## 3. Interaction model

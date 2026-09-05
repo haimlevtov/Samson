@@ -48,13 +48,19 @@ there, and the other hand is holding a barbell.
 A tab bar is only worth its 60px if each tab owns something. Today's pages do
 not divide cleanly, so they are re-cut:
 
-| Tab         | Route        | Owns                                                         |
-| ----------- | ------------ | ------------------------------------------------------------ |
-| **History** | `/workouts`  | Past sessions, and nothing else                              |
-| **Coach**   | `/coach`     | Unchanged                                                    |
-| **Hub**     | `/hub`       | XP, streak, badges, challenges, training load, bests         |
-| **Workout** | `/templates` | Templates. Picking one is what starts a session              |
-| **Profile** | `/profile`   | Who you are and the settings that change how the app behaves |
+| Tab         | Route      | Owns                                                         |
+| ----------- | ---------- | ------------------------------------------------------------ |
+| **History** | `/history` | Past sessions, and nothing else                              |
+| **Coach**   | `/coach`   | Unchanged                                                    |
+| **Hub**     | `/hub`     | XP, streak, badges, challenges, training load, bests         |
+| **Workout** | `/workout` | Templates. Picking one is what starts a session              |
+| **Profile** | `/profile` | Who you are and the settings that change how the app behaves |
+
+**Every tab is its own route, named after itself.** `/workouts` and
+`/templates` were the names those pages happened to grow up with, and a tab bar
+makes the mismatch visible: four tabs matched their label and two did not. A
+session is `/history/[id]` — the same folder renamed with its parent, because a
+session detail belongs to the list it is reached from.
 
 **Hub is also the landing page.** Signing in, or opening the app cold, goes
 to `/hub` rather than to the session list. Coming back after two days, the
@@ -66,10 +72,10 @@ Three moves fall out of that table:
 
 - **`/progress` is deleted.** Its content is what Hub means. Keeping both would
   give one page two names, which is the disease this ADR is treating.
-- **`/workouts` loses everything that is not history** — the four stat tiles,
-  the weekly tonnage chart, the best-e1RM table, "Start workout" and "Sign out"
-  all leave. What remains is the session list. The route keeps its name because
-  `/workouts/[id]` is the session screen and renaming it buys nothing.
+- **History loses everything that is not history** — the four stat tiles, the
+  weekly tonnage chart, the best-e1RM table, "Start workout" and "Sign out" all
+  leave. What remains is the session list, at `/history`, with the session
+  screen at `/history/[id]` under it.
 - **Every per-page chip row is deleted.** That is the entire point.
 
 ## Why not
