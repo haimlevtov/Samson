@@ -24,6 +24,14 @@
   --accent: #6c4df6;
   --accent-strong: #5734e2;
   --accent-soft: #ece6fe;
+  /*
+   * Accent as TEXT, split from accent as a BACKGROUND. On white they can be the
+   * same ink; on a dark ground they pull apart — text has to lighten to stay
+   * readable while a button must stay dark enough to carry white lettering.
+   * One token doing both jobs is how a dark theme ends up with an unreadable
+   * hover state.
+   */
+  --accent-text: var(--accent-strong);
 
   --good: #16a34a;
   --good-soft: #dcfce7;
@@ -43,6 +51,104 @@
    * shrinking the hit area.
    */
   --tap: 44px;
+
+  /*
+   * The tab bar's height, excluding the safe-area inset it adds underneath.
+   * Anything anchored to the bottom of the viewport measures from here — ADR
+   * 0012 — so there is one number to change rather than four.
+   */
+  --tabbar: 58px;
+}
+
+/*
+ * Dark.
+ *
+ * The palette above is the whole light theme; this is the whole dark one, and
+ * nothing outside these two blocks names a colour. `--accent` goes *darker*
+ * here rather than lighter: a button that glows on a near-black page is the
+ * thing that makes a dark theme tiring, and darkening it raises the contrast of
+ * the white lettering it carries rather than lowering it — 8.1:1 against white,
+ * up from 5.2:1 in light. `--accent-text` moves the other way, because a link
+ * has no white plate behind it and must lift off the ground instead.
+ *
+ * AI-NOTE: the same declarations appear twice, and both copies must change
+ *          together. CSS cannot share one block between a media query and a
+ *          selector, and both are needed: the media query serves "system",
+ *          which stamps no attribute, while the attribute serves an explicit
+ *          choice and has to win over the device in both directions.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e0d15;
+    --surface: #17161f;
+    --surface-2: #201e2c;
+    --border: #2a2839;
+    --border-strong: #3b3853;
+
+    --text: #edebf5;
+    --muted: #a29fbd;
+
+    --accent: #4c31c9;
+    --accent-strong: #3b2599;
+    --accent-soft: #262040;
+    --accent-text: #b5a3ff;
+
+    --good: #22c55e;
+    --good-soft: #16321f;
+    --warn: #f59e0b;
+    --warn-soft: #3a2a08;
+    --bad: #f05252;
+    --bad-soft: #3b1a1a;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0d15;
+  --surface: #17161f;
+  --surface-2: #201e2c;
+  --border: #2a2839;
+  --border-strong: #3b3853;
+
+  --text: #edebf5;
+  --muted: #a29fbd;
+
+  --accent: #4c31c9;
+  --accent-strong: #3b2599;
+  --accent-soft: #262040;
+  --accent-text: #b5a3ff;
+
+  --good: #22c55e;
+  --good-soft: #16321f;
+  --warn: #f59e0b;
+  --warn-soft: #3a2a08;
+  --bad: #f05252;
+  --bad-soft: #3b1a1a;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+}
+
+/*
+ * Tells the browser to draw its own furniture dark too — form controls, the
+ * scrollbar, and the space outside the safe area. Without it a dark page keeps
+ * a white scrollbar and light-mode select popups.
+ */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 * {
@@ -67,7 +173,7 @@ body {
 }
 
 a {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   text-decoration: none;
   font-weight: 600;
 }
@@ -78,7 +184,9 @@ a:hover {
 .shell {
   /* env() clears the home indicator on a notched phone. max() keeps a sane
      floor on every device that reports zero. */
-  padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+  /* Clears the tab bar and the home indicator under it, so the last card on
+     any page is reachable rather than behind furniture. */
+  padding: 16px 16px calc(var(--tabbar) + env(safe-area-inset-bottom) + 24px);
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
 }
@@ -147,7 +255,8 @@ h2.section {
  * acute:chronic are diagnostics. On a phone the first two get a full row each
  * and the diagnostics share one.
  */
-.grid.cols-4 {
+.grid.cols-4,
+.grid.cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .grid.cols-4 > :nth-child(-n + 2) {
@@ -207,7 +316,10 @@ select {
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent);
+  /* --accent-text, not --accent: in dark the accent is nearly the ground, and a
+     focus indicator the user cannot see fails WCAG 2.4.7 in the one theme it
+     was not designed against. */
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
@@ -269,7 +381,7 @@ button.secondary:hover:not(:disabled) {
 }
 .chip-on {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 
@@ -417,7 +529,7 @@ button.secondary:hover:not(:disabled) {
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .icon-btn {
@@ -438,7 +550,7 @@ button.secondary:hover:not(:disabled) {
 }
 .icon-btn:hover {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
   text-decoration: none;
 }
@@ -495,7 +607,7 @@ button.secondary:hover:not(:disabled) {
 }
 .set-no:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 /* Warm-ups are marked, not numbered: they are not set 1, and invariant #4 does
    not pay for them either. */
@@ -524,7 +636,7 @@ button.set-prev.copy {
 }
 button.set-prev.copy:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .set-val {
@@ -573,7 +685,7 @@ button.set-prev.copy:hover:not(:disabled) {
 }
 .tick:hover:not(:disabled) {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .tick.on,
@@ -642,14 +754,14 @@ button.set-prev.copy:hover:not(:disabled) {
   width: 100%;
   margin-top: 8px;
   background: var(--surface-2);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border: 1.5px dashed var(--border-strong);
   box-shadow: none;
 }
 .add-set:hover:not(:disabled) {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 .add-exercise {
@@ -681,7 +793,7 @@ button.set-prev.copy:hover:not(:disabled) {
   z-index: 40;
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 10px);
   overflow: hidden;
   background: var(--accent);
   border: 1.5px solid var(--accent-strong);
@@ -746,6 +858,247 @@ button.set-prev.copy:hover:not(:disabled) {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ---- the tab bar -------------------------------------------------------- */
+
+/*
+ * Five tabs, fixed to the bottom — ADR 0012. Bottom because §0 of the interface
+ * spec says the thumb is there and the other hand is holding a barbell.
+ *
+ * It is the only thing on the page allowed to touch the safe-area inset: every
+ * other bottom-anchored element measures from the top of this bar instead.
+ */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -6px 24px -18px rgba(28, 26, 46, 0.6);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar);
+  padding: 5px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* Both halves of a tab are the target. An icon alone is a guessing game and a
+   word alone is hard to hit — interface spec §3. */
+.tab,
+.tab:hover {
+  text-decoration: none;
+}
+.tab:hover {
+  color: var(--accent-text);
+}
+.tab svg {
+  width: 22px;
+  height: 22px;
+  /* content-box so the pill grows around the icon rather than shrinking it. */
+  box-sizing: content-box;
+  padding: 3px 13px;
+  border-radius: 999px;
+}
+.tab-on {
+  color: var(--accent-text);
+}
+/* Colour alone is not a state; `aria-current` carries it for a screen reader,
+   and the pill carries it for everyone who cannot tell these purples apart. */
+.tab-on svg {
+  background: var(--accent-soft);
+}
+
+/* ---- profile settings --------------------------------------------------- */
+
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+.settings-form label {
+  display: block;
+  min-width: 0;
+}
+
+.humor {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.humor legend {
+  padding: 0 4px;
+}
+/* Three abreast: the choice is small and comparing them is the whole task. */
+.theme-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+.theme-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+.theme-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.theme-choice input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.theme-choice > span {
+  display: grid;
+  min-width: 0;
+}
+.theme-choice strong {
+  text-transform: capitalize;
+}
+.theme-choice .small {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.humor-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+.humor-choice input {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.settings-submit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.saved {
+  color: var(--good);
+  font-weight: 700;
+}
+
+/* Rank 1 on the Workout tab: not every session comes from a template. */
+.start-empty button {
+  width: 100%;
+  min-height: 52px;
+  font-size: 16px;
+}
+
+/* ---- the workout tab's template cards ----------------------------------- */
+
+/*
+ * Grouped by source, two cards a row — the shape a phone can scan. The name
+ * alone does not identify a template ("Full body B"), so the card leads with
+ * the lifts and the name is the link to the detail.
+ */
+/* A section heading with an action beside it. The h2 keeps its own margin
+   so the row lines up with every other section on the page. */
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* The row carries the heading margin, so the action beside it centres on the
+     label rather than on the label plus its whitespace. */
+  margin: 22px 0 10px;
+}
+.section-row .section {
+  margin: 0;
+}
+.section-row .chip {
+  flex: none;
+}
+
+/* Its own line under the session stats: two muted spans run together into
+   "0 kgWeek 1" otherwise. */
+.tpl-running {
+  display: block;
+  margin-top: 2px;
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tpl-group {
+  margin-bottom: 6px;
+}
+.tpl-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 14px 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tpl-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px;
+  min-width: 0;
+}
+.tpl-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-name a {
+  color: var(--text);
+}
+/* Three lines, then an ellipsis. A template with nine lifts must not make its
+   card four times the height of the one beside it. */
+.tpl-lifts {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tpl-meta {
+  margin: 0;
+}
+.tpl-card button {
+  width: 100%;
 }
 
 /* ---- tables, which are cards on a phone -------------------------------- */
@@ -875,7 +1228,7 @@ tbody tr:last-child td {
   background: var(--warn-soft);
 }
 .badge.in_progress {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   background: var(--accent-soft);
 }
 
@@ -970,7 +1323,7 @@ code {
 .hint-btn:hover:not(:disabled),
 .hint-btn:focus-visible {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .hint-btn:active:not(:disabled) {
@@ -1007,7 +1360,7 @@ code {
 .hint-bubble strong {
   display: block;
   margin-bottom: 3px;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* Hover for pointers, focus for keyboards, data-open for taps. */
@@ -1045,7 +1398,7 @@ code {
   .shell {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 28px 20px 80px;
+    padding: 28px 20px calc(var(--tabbar) + 48px);
   }
 
   header.top {
@@ -1092,6 +1445,9 @@ code {
   }
   .lift-name {
     font-size: 19px;
+  }
+  .tpl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   /* Capped rather than stretched: on a wide screen the slack all goes to the
      PREVIOUS column and pushes KG and REPS an inch away from the set number,
@@ -1422,7 +1778,7 @@ details.quick-log[open] > summary {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* WHY this is not an animation by default: a badge that only announces itself

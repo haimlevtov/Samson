@@ -130,6 +130,12 @@ export interface WorkoutDetail {
   startedAt: string | null;
   /** ISO instant it was finished. The clock stops here rather than at now. */
   endedAt: string | null;
+  /**
+   * The template this session was started from, if any — ADR 0010. Null once
+   * that template is deleted (`on delete set null`): the history survives, the
+   * link does not.
+   */
+  templateId: string | null;
   id: string;
   localDate: string;
   status: WorkoutStatus;
@@ -141,7 +147,7 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
   const { data, error } = await db
     .from('workouts')
     .select(
-      'id, local_date, status, notes, started_at, ended_at, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, completed_at, exercises(name))'
+      'id, local_date, status, notes, started_at, ended_at, template_id, sets(id, exercise_id, set_index, weight_kg, reps, rpe, rest_seconds, is_warmup, completed_at, exercises(name))'
     )
     .eq('id', workoutId)
     .maybeSingle();
@@ -179,6 +185,7 @@ export async function loadWorkout(db: Db, workoutId: string): Promise<WorkoutDet
     id: data.id,
     startedAt: data.started_at,
     endedAt: data.ended_at,
+    templateId: data.template_id,
     localDate: data.local_date,
     status: data.status as WorkoutStatus,
     notes: data.notes,

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/personas';
@@ -32,7 +31,6 @@ export default async function CoachPage() {
             {plan ? `Accepted ${displayDate(plan.createdAt.slice(0, 10))}` : 'No plan yet'}
           </span>
         </div>
-        <Link href="/workouts">← Sessions</Link>
       </header>
 
       {plan === null ? (

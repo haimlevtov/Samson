@@ -5,7 +5,8 @@
 
 ## Context
 
-`/workouts/[id]` was built as a form plus a receipt: one "Add a set" card that
+`/history/[id]` — `/workouts/[id]` when this was written — was built as a form
+plus a receipt: one "Add a set" card that
 takes an exercise, a weight, reps, RPE, rest and a warm-up flag, and below it a
 read-only table of everything logged so far.
 
@@ -65,10 +66,15 @@ lock mid-session and nothing may live only in memory.
 
 **This is where a template's targets land.** ADR 0010 requires the session
 screen to render a prescription with zero sets logged against it, and for
-tapping a target to prefill rather than log. That is exactly a pending row. The
-grid is the missing half of that decision; when `workout_template_items` exists,
-pending rows come from the server instead of from `localStorage` and nothing
-else about this screen changes.
+tapping a target to prefill rather than log. That is exactly a pending row.
+
+That wiring is now built, and it cost what this paragraph predicted: a session
+with a `template_id` gets its pending rows from `pendingTargets()` on the
+server rather than from `localStorage`, and nothing else about the screen
+changed. `localStorage` keeps only what the server cannot know — the edit a
+user made to a target before ticking it, and the targets they skipped. A copy
+of the prescription is deliberately **not** taken: it would go stale when the
+template changed and would exist only on the device that made it.
 
 **Rest still starts on its own**, and there is still no optimistic write: a
 ticked row shows a pending tick until the server confirms, and turns green only
