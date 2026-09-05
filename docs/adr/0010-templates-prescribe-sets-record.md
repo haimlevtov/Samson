@@ -1,6 +1,6 @@
 # ADR 0010 — A template prescribes; `sets` records
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — consequences updated for ADR 0011
 **Date:** 2026-09-05
 
 ## Context
@@ -73,10 +73,17 @@ would drift the first time a set was deleted.
 
 - The session screen must render a plan with zero sets logged against it. That
   is the normal opening state, not an empty state.
-- Tapping a target **prefills the set form**; it does not log. What was
-  prescribed and what was performed stay different facts, and the user confirms
-  the second one. This matches the normalizer's confirm-before-write rule for
-  the same reason.
+- **A target is a pending row.** ADR 0011 rebuilt the session screen as a set
+  grid, and a pending row is already exactly what a target needs to be: a set
+  the user has not performed, editable, sitting in the place the performed one
+  will occupy, and absent from `sets`. The prescription fills those rows. The
+  set form this decision was originally written against no longer exists, and
+  the grid is a better home than it was — the target and the record of the work
+  are the same row in two states, so there is nowhere for the distinction to
+  get lost.
+- **Ticking a row logs it; nothing else does.** What was prescribed and what was
+  performed stay different facts, and the user confirms the second one. This
+  matches the normalizer's confirm-before-write rule for the same reason.
 - Deleting a template must not orphan sessions run from it, so
   `workouts.template_id` is `on delete set null`. History survives; the link
   does not.

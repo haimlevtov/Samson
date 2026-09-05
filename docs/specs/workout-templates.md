@@ -80,11 +80,12 @@ policy — CLAUDE.md #10.
 The insert is exactly what `startWorkout()` already does, plus `template_id`.
 The local date comes from the user's timezone (CLAUDE.md #9).
 
-**No `sets` rows are written.** Tapping a target prefills the set form —
-exercise, weight, reps, rest — and the user submits it like any other set,
-through `insertSet()`. One write path, and what was prescribed never becomes a
-claim about what was performed. This is ADR 0010, and it is the load-bearing
-rule of the whole feature.
+**No `sets` rows are written.** A target renders as a **pending row** in the
+session grid — ADR 0011 — carrying the prescribed weight, reps and rest, and the
+user ticks it like any other row. The tick writes through `insertSet()`. One
+write path, and what was prescribed never becomes a claim about what was
+performed. This is ADR 0010, and it is the load-bearing rule of the whole
+feature.
 
 A session keeps its `template_id` after the template is deleted only in the
 sense that it does not break: the column is `on delete set null`, so the
