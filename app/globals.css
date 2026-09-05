@@ -880,6 +880,24 @@ button.set-prev.copy:hover:not(:disabled) {
  * alone does not identify a template ("Full body B"), so the card leads with
  * the lifts and the name is the link to the detail.
  */
+/* A section heading with an action beside it. The h2 keeps its own margin
+   so the row lines up with every other section on the page. */
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* The row carries the heading margin, so the action beside it centres on the
+     label rather than on the label plus its whitespace. */
+  margin: 22px 0 10px;
+}
+.section-row .section {
+  margin: 0;
+}
+.section-row .chip {
+  flex: none;
+}
+
 .tpl-group {
   margin-bottom: 6px;
 }
