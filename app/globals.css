@@ -24,6 +24,14 @@
   --accent: #6c4df6;
   --accent-strong: #5734e2;
   --accent-soft: #ece6fe;
+  /*
+   * Accent as TEXT, split from accent as a BACKGROUND. On white they can be the
+   * same ink; on a dark ground they pull apart — text has to lighten to stay
+   * readable while a button must stay dark enough to carry white lettering.
+   * One token doing both jobs is how a dark theme ends up with an unreadable
+   * hover state.
+   */
+  --accent-text: var(--accent-strong);
 
   --good: #16a34a;
   --good-soft: #dcfce7;
@@ -43,6 +51,104 @@
    * shrinking the hit area.
    */
   --tap: 44px;
+
+  /*
+   * The tab bar's height, excluding the safe-area inset it adds underneath.
+   * Anything anchored to the bottom of the viewport measures from here — ADR
+   * 0012 — so there is one number to change rather than four.
+   */
+  --tabbar: 58px;
+}
+
+/*
+ * Dark.
+ *
+ * The palette above is the whole light theme; this is the whole dark one, and
+ * nothing outside these two blocks names a colour. `--accent` goes *darker*
+ * here rather than lighter: a button that glows on a near-black page is the
+ * thing that makes a dark theme tiring, and darkening it raises the contrast of
+ * the white lettering it carries rather than lowering it — 8.1:1 against white,
+ * up from 5.2:1 in light. `--accent-text` moves the other way, because a link
+ * has no white plate behind it and must lift off the ground instead.
+ *
+ * AI-NOTE: the same declarations appear twice, and both copies must change
+ *          together. CSS cannot share one block between a media query and a
+ *          selector, and both are needed: the media query serves "system",
+ *          which stamps no attribute, while the attribute serves an explicit
+ *          choice and has to win over the device in both directions.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e0d15;
+    --surface: #17161f;
+    --surface-2: #201e2c;
+    --border: #2a2839;
+    --border-strong: #3b3853;
+
+    --text: #edebf5;
+    --muted: #a29fbd;
+
+    --accent: #4c31c9;
+    --accent-strong: #3b2599;
+    --accent-soft: #262040;
+    --accent-text: #b5a3ff;
+
+    --good: #22c55e;
+    --good-soft: #16321f;
+    --warn: #f59e0b;
+    --warn-soft: #3a2a08;
+    --bad: #f05252;
+    --bad-soft: #3b1a1a;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e0d15;
+  --surface: #17161f;
+  --surface-2: #201e2c;
+  --border: #2a2839;
+  --border-strong: #3b3853;
+
+  --text: #edebf5;
+  --muted: #a29fbd;
+
+  --accent: #4c31c9;
+  --accent-strong: #3b2599;
+  --accent-soft: #262040;
+  --accent-text: #b5a3ff;
+
+  --good: #22c55e;
+  --good-soft: #16321f;
+  --warn: #f59e0b;
+  --warn-soft: #3a2a08;
+  --bad: #f05252;
+  --bad-soft: #3b1a1a;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.55), 0 18px 40px -20px rgba(0, 0, 0, 0.95);
+}
+
+/*
+ * Tells the browser to draw its own furniture dark too — form controls, the
+ * scrollbar, and the space outside the safe area. Without it a dark page keeps
+ * a white scrollbar and light-mode select popups.
+ */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 * {
@@ -67,7 +173,7 @@ body {
 }
 
 a {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   text-decoration: none;
   font-weight: 600;
 }
@@ -78,7 +184,9 @@ a:hover {
 .shell {
   /* env() clears the home indicator on a notched phone. max() keeps a sane
      floor on every device that reports zero. */
-  padding: 16px 16px max(24px, env(safe-area-inset-bottom));
+  /* Clears the tab bar and the home indicator under it, so the last card on
+     any page is reachable rather than behind furniture. */
+  padding: 16px 16px calc(var(--tabbar) + env(safe-area-inset-bottom) + 24px);
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
 }
@@ -147,7 +255,8 @@ h2.section {
  * acute:chronic are diagnostics. On a phone the first two get a full row each
  * and the diagnostics share one.
  */
-.grid.cols-4 {
+.grid.cols-4,
+.grid.cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .grid.cols-4 > :nth-child(-n + 2) {
@@ -179,67 +288,6 @@ h2.section {
   margin: 2px 0;
 }
 
-/* ---- timers ----------------------------------------------------------- */
-
-/*
- * Rest is rank 1 and the session clock is rank 4 — mobile-interface.md §2 — so
- * on a phone they are not peers. Rest goes first and full width, which also
- * costs less height than two columns did: at full width the four presets fit on
- * one row instead of wrapping onto two.
- *
- * The session clock keeps its place in the DOM (it reads first on a desktop,
- * left to right) and is reordered visually here rather than in the markup.
- */
-.timer-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr;
-}
-.timer-rest {
-  order: -1;
-}
-/* Rank 4: present, checkable, not competing for attention. */
-.timer-session {
-  padding: 10px 12px;
-}
-.timer-session .timer {
-  font-size: 20px;
-}
-.timer-session .timer-head {
-  grid-template-columns: auto 1fr;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.timer-card {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  min-width: 0;
-}
-.timer-head {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-.timer-controls {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.timer {
-  font-variant-numeric: tabular-nums;
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-}
-.timer.done {
-  color: var(--good);
-}
-
 /* ---- controls --------------------------------------------------------- */
 
 input,
@@ -268,7 +316,10 @@ select {
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent);
+  /* --accent-text, not --accent: in dark the accent is nearly the ground, and a
+     focus indicator the user cannot see fails WCAG 2.4.7 in the one theme it
+     was not designed against. */
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
@@ -330,67 +381,8 @@ button.secondary:hover:not(:disabled) {
 }
 .chip-on {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
-}
-
-/* ---- set entry form --------------------------------------------------- */
-
-/*
- * Thumb order, not desk order — mobile-interface.md §3: exercise, then the two
- * fields always filled (weight, reps) side by side, then the optional pair,
- * then the toggle, then the action.
- */
-.set-form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  align-items: end;
-}
-.set-form label,
-.set-form .f-exercise {
-  min-width: 0; /* lets grid children shrink instead of overflowing the card */
-}
-
-.f-exercise {
-  grid-column: span 2;
-}
-.f-num {
-  grid-column: span 1;
-}
-.f-check {
-  grid-column: span 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--tap);
-  font-size: 15px;
-  font-weight: 600;
-}
-.f-check input {
-  width: 22px;
-  height: 22px;
-  min-height: 0;
-  accent-color: var(--accent);
-}
-
-/*
- * The action stays on screen while the form is. It is rank 1 and the whole
- * reason the page is open; scrolling to find it between sets is the failure
- * this pins shut. `--surface` matches the card it sits in, so there is no seam.
- */
-.f-submit {
-  grid-column: span 2;
-  position: sticky;
-  bottom: 0;
-  background: var(--surface);
-  padding: 8px 0 max(2px, env(safe-area-inset-bottom));
-  z-index: 10;
-}
-.f-submit button {
-  width: 100%;
-  min-height: 50px;
-  font-size: 16px;
 }
 
 /* ---- searchable exercise picker --------------------------------------- */
@@ -441,28 +433,672 @@ button.secondary:hover:not(:disabled) {
   padding: 10px;
 }
 
-.chosen {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent-soft);
-  border: 1.5px solid var(--accent);
-  border-radius: var(--radius-sm);
-  padding: 6px 6px 6px 12px;
-  min-height: var(--tap);
-}
-.chosen-name {
-  font-weight: 700;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .finish-form {
   display: grid;
   gap: 10px;
+}
+
+/* ---- the session bar --------------------------------------------------- */
+
+/*
+ * Back, the clock, and the way out. Sticky rather than scrolled away: the clock
+ * is rank 4 and would not earn the space on its own, but "finish" being
+ * unreachable at the bottom of a forty-row grid is a worse failure than a pill
+ * costing 56px.
+ */
+.session-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 5px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.bar-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 19px;
+}
+.bar-back:hover {
+  background: var(--accent-soft);
+  text-decoration: none;
+}
+.session-clock {
+  text-align: center;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.bar-finish {
+  border-radius: 999px;
+  padding: 10px 18px;
+}
+.session-bar .badge {
+  margin-right: 8px;
+}
+
+/* ---- the session grid --------------------------------------------------- */
+
+/*
+ * One grid per exercise — ADR 0011. A row is either performed (green, ticked, a
+ * `sets` row) or pending (editable, not in the database), and the two are the
+ * same shape in the same place.
+ *
+ * WHY this is not a `.table-cards` table: five columns fit 375px, and the
+ * alignment down the columns is what makes a session readable at a glance.
+ * Breaking each set onto its own card would destroy the one property the grid
+ * exists for.
+ */
+.lifts {
+  display: grid;
+  gap: 14px;
+}
+
+.lift {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Tighter than `.card`: every pixel of horizontal padding comes out of the
+     PREVIOUS column, which is the first thing to overflow. */
+  padding: 12px 10px;
+  box-shadow: var(--shadow);
+}
+.lift-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 6px;
+}
+.lift-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--accent-text);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-size: 18px;
+  font-weight: 700;
+}
+.icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+}
+
+.set-grid {
+  display: grid;
+  gap: 2px;
+}
+.set-head,
+.set-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 74px 60px var(--tap);
+  align-items: center;
+  gap: 4px;
+}
+.set-head {
+  padding: 2px 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.set-head span:nth-child(3),
+.set-head span:nth-child(4) {
+  text-align: center;
+}
+
+.set-row {
+  min-height: 52px;
+  padding: 2px 0;
+  border-radius: var(--radius-sm);
+}
+.set-row.done {
+  background: var(--good-soft);
+}
+
+.set-no {
+  width: 38px;
+  padding: 0;
+  min-height: var(--tap);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: var(--radius-sm);
+}
+.set-no:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+/* Warm-ups are marked, not numbered: they are not set 1, and invariant #4 does
+   not pay for them either. */
+.set-no.warm {
+  color: var(--warn);
+}
+
+.set-prev {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.set-prev.copy {
+  min-height: var(--tap);
+  padding: 0 2px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-weight: 600;
+  text-decoration: underline dotted var(--border-strong);
+  text-underline-offset: 3px;
+}
+button.set-prev.copy:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.set-val {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.set-in {
+  width: 100%;
+  padding: 8px 4px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border-color: var(--border);
+  border-radius: 10px;
+}
+/* Spinner arrows eat a third of a 74px column and cannot be hit with a thumb. */
+.set-in::-webkit-outer-spin-button,
+.set-in::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.set-in {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: none;
+}
+.tick:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.tick.on,
+.tick.on:hover:not(:disabled) {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}
+/* A set that is not the last one: still ticked, no longer a control. */
+.tick.static {
+  cursor: default;
+}
+
+/* The rest that was taken between two logged sets. Static — the running one is
+   the pinned bar below. */
+.rest-note {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 4px 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+.rest-note::before,
+.rest-note::after {
+  content: '';
+  height: 1px;
+  background: var(--good-soft);
+}
+
+/* Rank 3 — RPE, warm-up, rest length — one tap under the set number. */
+.set-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 2px 0 4px;
+  padding: 8px 8px 10px 40px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.more-field {
+  width: 88px;
+}
+.more-field .label {
+  margin-bottom: 3px;
+}
+.more-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  font-weight: 600;
+}
+.more-check input {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.add-set {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface-2);
+  color: var(--accent-text);
+  border: 1.5px dashed var(--border-strong);
+  box-shadow: none;
+}
+.add-set:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.add-exercise {
+  margin-top: 14px;
+}
+.add-exercise-btn {
+  width: 100%;
+  min-height: 50px;
+  font-size: 16px;
+}
+
+.empty {
+  padding: 20px 4px;
+  text-align: center;
+}
+
+/* ---- rest, pinned ------------------------------------------------------- */
+
+/*
+ * Rest is rank 1 — mobile-interface.md §2 — so it does not scroll. The
+ * reference design draws it inline between the set rows; that bar is off the
+ * screen the moment the session is longer than a phone, which is always.
+ *
+ * The whole pill is accent-coloured and the elapsed part is darker, so the
+ * countdown stays white on a readable ground wherever the fill has reached.
+ */
+.rest-bar {
+  position: fixed;
+  z-index: 40;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 10px);
+  overflow: hidden;
+  background: var(--accent);
+  border: 1.5px solid var(--accent-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-lift);
+}
+.rest-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--accent-strong);
+}
+.rest-bar.done,
+.rest-bar.done .rest-fill {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.rest-face {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 5px;
+  color: #fff;
+}
+.rest-count {
+  flex: 1;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.rest-adjust,
+.rest-skip {
+  padding: 8px 12px;
+  min-height: var(--tap);
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  box-shadow: none;
+}
+.rest-adjust:hover:not(:disabled),
+.rest-skip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* Announced, never drawn. The countdown itself is aria-hidden: it changes four
+   times a second, and a live region that did that would be unusable. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- the tab bar -------------------------------------------------------- */
+
+/*
+ * Five tabs, fixed to the bottom — ADR 0012. Bottom because §0 of the interface
+ * spec says the thumb is there and the other hand is holding a barbell.
+ *
+ * It is the only thing on the page allowed to touch the safe-area inset: every
+ * other bottom-anchored element measures from the top of this bar instead.
+ */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -6px 24px -18px rgba(28, 26, 46, 0.6);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar);
+  padding: 5px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* Both halves of a tab are the target. An icon alone is a guessing game and a
+   word alone is hard to hit — interface spec §3. */
+.tab,
+.tab:hover {
+  text-decoration: none;
+}
+.tab:hover {
+  color: var(--accent-text);
+}
+.tab svg {
+  width: 22px;
+  height: 22px;
+  /* content-box so the pill grows around the icon rather than shrinking it. */
+  box-sizing: content-box;
+  padding: 3px 13px;
+  border-radius: 999px;
+}
+.tab-on {
+  color: var(--accent-text);
+}
+/* Colour alone is not a state; `aria-current` carries it for a screen reader,
+   and the pill carries it for everyone who cannot tell these purples apart. */
+.tab-on svg {
+  background: var(--accent-soft);
+}
+
+/* ---- profile settings --------------------------------------------------- */
+
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+.settings-form label {
+  display: block;
+  min-width: 0;
+}
+
+.humor {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.humor legend {
+  padding: 0 4px;
+}
+/* Three abreast: the choice is small and comparing them is the whole task. */
+.theme-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+.theme-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+.theme-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.theme-choice input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.theme-choice > span {
+  display: grid;
+  min-width: 0;
+}
+.theme-choice strong {
+  text-transform: capitalize;
+}
+.theme-choice .small {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.humor-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+.humor-choice input {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.settings-submit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.saved {
+  color: var(--good);
+  font-weight: 700;
+}
+
+/* Rank 1 on the Workout tab: not every session comes from a template. */
+.start-empty button {
+  width: 100%;
+  min-height: 52px;
+  font-size: 16px;
+}
+
+/* ---- the workout tab's template cards ----------------------------------- */
+
+/*
+ * Grouped by source, two cards a row — the shape a phone can scan. The name
+ * alone does not identify a template ("Full body B"), so the card leads with
+ * the lifts and the name is the link to the detail.
+ */
+/* A section heading with an action beside it. The h2 keeps its own margin
+   so the row lines up with every other section on the page. */
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* The row carries the heading margin, so the action beside it centres on the
+     label rather than on the label plus its whitespace. */
+  margin: 22px 0 10px;
+}
+.section-row .section {
+  margin: 0;
+}
+.section-row .chip {
+  flex: none;
+}
+
+/* Its own line under the session stats: two muted spans run together into
+   "0 kgWeek 1" otherwise. */
+.tpl-running {
+  display: block;
+  margin-top: 2px;
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tpl-group {
+  margin-bottom: 6px;
+}
+.tpl-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 14px 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tpl-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px;
+  min-width: 0;
+}
+.tpl-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.tpl-name a {
+  color: var(--text);
+}
+/* Three lines, then an ellipsis. A template with nine lifts must not make its
+   card four times the height of the one beside it. */
+.tpl-lifts {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tpl-meta {
+  margin: 0;
+}
+.tpl-card button {
+  width: 100%;
 }
 
 /* ---- tables, which are cards on a phone -------------------------------- */
@@ -592,7 +1228,7 @@ tbody tr:last-child td {
   background: var(--warn-soft);
 }
 .badge.in_progress {
-  color: var(--accent-strong);
+  color: var(--accent-text);
   background: var(--accent-soft);
 }
 
@@ -687,7 +1323,7 @@ code {
 .hint-btn:hover:not(:disabled),
 .hint-btn:focus-visible {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .hint-btn:active:not(:disabled) {
@@ -724,7 +1360,7 @@ code {
 .hint-bubble strong {
   display: block;
   margin-bottom: 3px;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* Hover for pointers, focus for keyboards, data-open for taps. */
@@ -740,23 +1376,16 @@ code {
  * ===================================================================== */
 
 @media (min-width: 560px) {
-  .set-form {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .set-head,
+  .set-row {
+    grid-template-columns: 44px minmax(0, 1fr) 92px 78px var(--tap);
+    gap: 8px;
   }
-  .f-exercise {
-    grid-column: span 4;
+  .set-prev {
+    font-size: 13px;
   }
-  .f-check {
-    grid-column: span 2;
-  }
-  .f-submit {
-    grid-column: span 2;
-    /* Enough room for the action to sit inline, so it stops needing to stick. */
-    position: static;
-    padding: 0;
-  }
-  .f-submit button {
-    min-height: var(--tap);
+  .lift {
+    padding: 14px;
   }
 
   .finish-form {
@@ -769,7 +1398,7 @@ code {
   .shell {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 28px 20px 80px;
+    padding: 28px 20px calc(var(--tabbar) + 48px);
   }
 
   header.top {
@@ -807,53 +1436,38 @@ code {
     font-size: 30px;
   }
 
-  .timer-grid {
-    gap: 14px;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  }
-  .timer-rest {
-    order: 0;
-  }
-  .timer-session {
-    padding: 18px;
-  }
-  .timer-session .timer {
-    font-size: 38px;
-  }
   header.top a {
     display: inline;
     min-height: 0;
   }
-  .timer-card {
+  .lift {
     padding: 18px;
-    gap: 12px;
   }
-  .timer-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+  .lift-name {
+    font-size: 19px;
   }
-  .timer {
-    font-size: 38px;
+  .tpl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .set-form {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 12px;
+  /* Capped rather than stretched: on a wide screen the slack all goes to the
+     PREVIOUS column and pushes KG and REPS an inch away from the set number,
+     which is the one relationship the grid exists to show. */
+  .set-grid {
+    max-width: 620px;
   }
-  .f-exercise {
-    grid-column: span 12;
+  .session-bar {
+    top: 12px;
+    padding: 6px 8px;
   }
-  .f-num {
-    grid-column: span 2;
+  .session-clock {
+    font-size: 22px;
   }
-  .f-check {
-    grid-column: span 2;
-  }
-  .f-submit {
-    grid-column: span 2;
+  /* Full width it reads as a banner; centred, it reads as a timer. */
+  .rest-bar {
+    left: 50%;
+    right: auto;
+    width: 520px;
+    transform: translateX(-50%);
   }
 
   .combo-list {
@@ -1164,7 +1778,7 @@ details.quick-log[open] > summary {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent-strong);
+  color: var(--accent-text);
 }
 
 /* WHY this is not an animation by default: a badge that only announces itself
