@@ -71,20 +71,49 @@ export function blockNumbers(block: TrainingBlock): Set<number> {
   return allowed;
 }
 
-/** Every numeral in the text that the block does not contain. */
-export function findInventedNumbers(block: TrainingBlock, text: string): number[] {
-  const allowed = blockNumbers(block);
-  const invented: number[] = [];
+/**
+ * Every numeral in `text` that is not in `allowed`, in order of first
+ * appearance and without repeats.
+ *
+ * WHY this is separate from the block: the coach chat needs the same check
+ * against a different set of permitted numbers — ADR 0015 §4. The rule "a model
+ * may quote a figure it was given and may not invent one" is the same rule in
+ * both places; only the definition of "given" differs.
+ */
+export function findUnknownNumbers(allowed: ReadonlySet<number>, text: string): number[] {
+  const unknown: number[] = [];
 
   for (const match of text.matchAll(NUMERAL)) {
     const value = Number(match[0]);
     if (!Number.isFinite(value)) continue;
     if (allowed.has(value)) continue;
-    if (invented.includes(value)) continue;
-    invented.push(value);
+    if (unknown.includes(value)) continue;
+    unknown.push(value);
   }
 
-  return invented;
+  return unknown;
+}
+
+/**
+ * Every number appearing in a piece of text.
+ *
+ * AI-NOTE: the chat builds its allowed set from the RENDERED prompt rather than
+ *          from the facts object, so the set cannot drift from what the model
+ *          was actually shown. That only works if the same NUMERAL pattern
+ *          reads both sides, which is why this lives here beside it.
+ */
+export function numbersIn(text: string): Set<number> {
+  const found = new Set<number>();
+  for (const match of text.matchAll(NUMERAL)) {
+    const value = Number(match[0]);
+    if (Number.isFinite(value)) found.add(value);
+  }
+  return found;
+}
+
+/** Every numeral in the text that the block does not contain. */
+export function findInventedNumbers(block: TrainingBlock, text: string): number[] {
+  return findUnknownNumbers(blockNumbers(block), text);
 }
 
 /** Flattens a delivered plan to the text a user would actually read. */

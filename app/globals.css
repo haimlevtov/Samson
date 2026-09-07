@@ -292,6 +292,7 @@ h2.section {
 
 input,
 select,
+textarea,
 button {
   font: inherit;
   color: var(--text);
@@ -303,9 +304,18 @@ button {
  * Below 16px iOS Safari zooms the viewport on focus and never zooms back,
  * which leaves the user pinch-scrolling a form mid-set. This is not a
  * preference.
+ *
+ * AI-NOTE: `textarea` is in this list, and was added late — the coach chat is
+ *          the app's first one, and until then the selector said "input,
+ *          select" while the rule said "anything typed into". A textarea left
+ *          out of it renders at the browser default, which is monospace and
+ *          about 13px: the exact iOS zoom trap this rule exists to prevent, on
+ *          the control people type into most. Any new typed-into element goes
+ *          in all three of these lists.
  */
 input,
-select {
+select,
+textarea {
   width: 100%;
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
@@ -314,7 +324,8 @@ select {
   min-height: var(--tap);
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   /* --accent-text, not --accent: in dark the accent is nearly the ground, and a
      focus indicator the user cannot see fails WCAG 2.4.7 in the one theme it
@@ -1981,4 +1992,137 @@ details.quick-log[open] > summary {
 .lift-chart-single strong {
   color: var(--text);
   font-size: 1.15rem;
+}
+
+/* ---- the coach: a revealed plan, and an open chat ------------------------
+ *
+ * ADR 0015, docs/specs/coach-chat.md. Nothing here is a security control —
+ * every constraint on the coach is on the server. This is a conversation on a
+ * phone.
+ */
+
+/* The plan, behind a disclosure rather than unrolled on load. A <details>, so
+   it costs no client state and stays keyboard navigable — the same shape the
+   quick-log uses. */
+.plan-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  cursor: pointer;
+  list-style: none;
+}
+
+.plan-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.plan-disclosure > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+
+.plan-disclosure[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+/* --accent-text rather than --accent: in dark the accent sits close to the
+   surface and the ring drops below the 3:1 WCAG 2.4.7 threshold. Stated once
+   at the top of this file and applied everywhere a summary takes focus. */
+.plan-disclosure > summary:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.plan-body {
+  padding-top: 4px;
+}
+
+/* The section heading inside the disclosure is redundant with the summary
+   above it, so it does not need the margin a top-level one carries. */
+.plan-body > .section:first-child {
+  margin-top: 12px;
+}
+
+.chat {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-empty {
+  margin: 0;
+}
+
+.chat-log {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* Bounded, with the newest pinned by scrollIntoView: an unbounded log pushes
+     the input off a phone screen entirely, and the input is the point. */
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.chat-turn {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.chat-turn p {
+  margin: 0;
+  /* A pasted paragraph with no spaces must not widen the card — the page body
+     never scrolls sideways, docs/specs/mobile-interface.md. */
+  overflow-wrap: anywhere;
+}
+
+.chat-who {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+/* The user's own turns sit against the accent so the two voices are
+   distinguishable without reading the labels. */
+.chat-user {
+  background: var(--accent-soft);
+}
+
+.chat-user .chat-who {
+  color: var(--accent-text);
+}
+
+.chat-form {
+  display: grid;
+  gap: 8px;
+}
+
+.chat-form textarea {
+  /* Vertical only: horizontal resizing on a phone can push the card wider than
+     the viewport, which is the one thing the layout must never do. */
+  resize: vertical;
+  /* Two rows of room without needing to drag it open. Width, font-size and the
+     focus ring come from the shared typed-into rules above — including the
+     16px floor, which is why this textarea does not set its own. */
+  min-height: calc(var(--tap) + 16px);
+}
+
+.chat-actions {
+  /* Send leads; Clear sits beside it rather than under, so the pair does not
+     eat another 44px of a small screen. */
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-disclosure > summary::after {
+    transition: none;
+  }
 }

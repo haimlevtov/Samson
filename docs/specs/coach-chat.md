@@ -11,9 +11,14 @@ Two controls on `/coach`, and neither of them fires on page load.
 the page opens. The page shows a one-line summary — that a plan exists and when
 it was accepted — and a control that reveals it.
 
-The control is a `<details>` disclosure, for the same reasons the settings cog
-is one (`docs/specs/mobile-interface.md`): no client state, keyboard and screen
-reader navigable without work, and it degrades to an open section with CSS off.
+The control is a `<details>` disclosure: no client state, keyboard and screen
+reader navigable without work, and it degrades to an open section with CSS off —
+`docs/specs/mobile-interface.md`.
+
+> This deliberately does **not** cite the profile settings cog as precedent.
+> That cog is becoming a link to its own `/settings` route, which is the right
+> shape for a whole page of controls and the wrong one for revealing a block
+> that is already on this page.
 
 > **`Create a plan` is not this button, and the difference is deliberate.**
 > Nothing in the application creates a plan today — blocks come from
@@ -116,13 +121,21 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
 
 1. **The message is sanitised and fenced** — `fenceUntrusted`, capped at
    `MAX_CHAT_MESSAGE_CHARS`.
-2. **Each prior user turn is fenced separately**, every time it is replayed.
+2. **Every replayed turn is fenced separately**, the coach's own included, each
+   with its own cap. The payload contains no `assistant` message — the
+   transcript is client-supplied, so all of it is untrusted. ADR 0015 §2.
 3. **`scanOutput`** runs inside the gateway, as for every stage.
 4. **`findUnknownNumbers(allowed, reply)`** where `allowed` is every numeral in
    the rendered facts block plus every numeral in the user's own turns.
 
-Allowed is computed from the **rendered text the model was shown**, not from the
-facts object, so it cannot drift from what the model actually saw.
+`chatMessages` returns `{ messages, allowed }` from **one pass over the rendered
+strings**, so the quotable set cannot drift from what was sent. A coach turn's
+figures are excluded: admitting them would let one reply that slipped a number
+past the guard license every later reply to repeat it.
+
+The set is fixed **before** the retry loop. The correction names the rejected
+figure, and recomputing after appending it would authorise the very number that
+was just refused.
 
 ## 6. What the tests must cover
 

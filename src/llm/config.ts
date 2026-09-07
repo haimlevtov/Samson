@@ -40,6 +40,35 @@ export const PERSONA_MAX_TOKENS = 2_000;
 export const NORMALIZER_MAX_TOKENS = 800;
 
 /**
+ * One conversational reply — docs/specs/coach-chat.md §2.
+ *
+ * WHY it is the smallest ceiling in the file: the schema caps `reply` at 700
+ * characters, which is roughly 200 tokens, so 400 is headroom rather than a
+ * target. This is also the only stage a user can invoke repeatedly by typing,
+ * which makes its ceiling the one that decides what abuse costs.
+ */
+export const CHAT_MAX_TOKENS = 400;
+
+/**
+ * One chat message in, before fencing — ADR 0015 §5.
+ *
+ * Deliberately far below `MAX_UNTRUSTED_CHARS`: that cap is sized for a whole
+ * workout note, and a question about training is a sentence or two. Length is
+ * an attack, so the bound is the smallest one the feature can actually work in.
+ */
+export const MAX_CHAT_MESSAGE_CHARS = 800;
+
+/**
+ * Prior turns replayed with each message, newest kept.
+ *
+ * WHY bounded at all: the transcript is user-authored text being fed back to
+ * the model on every turn — ADR 0015 §2. Unbounded, it is both a cost leak and
+ * an attention-dilution attack, and it is the half of the input that grows
+ * without anybody pressing anything.
+ */
+export const MAX_HISTORY_TURNS = 8;
+
+/**
  * Planner→rules→critic passes before a run is abandoned.
  * WHY a hard cap rather than "until it passes": an unbounded revision loop is
  * the failure mode the budget gate exists to catch, and catching it there means
