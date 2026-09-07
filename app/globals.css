@@ -244,6 +244,31 @@ h2.section {
   box-shadow: var(--shadow);
 }
 
+/*
+ * Two blocks of content that meet with no heading between them.
+ *
+ * WHY this is needed at all: almost every pair of siblings on a page is
+ * separated by an `h2.section`, which carries `margin: 22px 0 10px`. Where one
+ * is absent — Profile's level card sitting straight on top of the stat tiles —
+ * the gap is exactly 0, and `.card` has a `box-shadow` reaching 10px down with
+ * a 30px blur. The shadow then falls on the card below and reads as the two
+ * overlapping.
+ *
+ * FOUND BY A USER, 2026-09-07, and not by the sweep that went looking for it:
+ * bounding boxes that touch are not a geometric overlap, so a detector checking
+ * for intersection finds nothing. It is a spacing bug wearing an overlap's
+ * clothes.
+ *
+ * 12px matches `.grid`'s own gap, so a card followed by a grid keeps the same
+ * rhythm as the tiles inside it.
+ */
+.card + .card,
+.card + .grid,
+.grid + .card,
+.grid + .grid {
+  margin-top: 12px;
+}
+
 .grid {
   display: grid;
   gap: 12px;
