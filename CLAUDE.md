@@ -99,9 +99,10 @@ place — update or delete it.
 Repetitive extensions have skills in `.claude/skills/`. Use them:
 
 - `add-achievement` — new achievement row, predicate, test, humor tier
-- `add-persona` — new coach persona config and eval entry
+- `add-persona` — new coach persona row, voice variant, banned phrases, test
 - `add-progression` — new node in an exercise progression tree
-- `add-pipeline-stage` — new LLM stage, schema, token budget, fixture
+- `add-pipeline-stage` — new LLM stage: schema, prompt, token budget, **and the
+  `llm_calls.stage` migration the TypeScript union does not give you**
 
 ## Local environment — leave nothing running
 
