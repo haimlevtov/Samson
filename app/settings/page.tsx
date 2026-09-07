@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
-import { signOut } from '../sign-in/actions';
-import { SettingsForm } from '../profile/SettingsForm';
+import { SettingsForm } from './SettingsForm';
+import { SignOutButton } from './SignOutButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,9 +37,10 @@ function knownTimezones(): string[] {
  *
  * AI-NOTE: this page is not in the tab bar, deliberately. Five tabs is the
  *          budget ADR 0012 set, and settings are visited rarely. The cog on
- *          Profile is the only route in, so if that link ever moves, this page
- *          becomes unreachable — there is a test for exactly that in
- *          app/profile/page.tsx's sibling suite.
+ *          Profile is therefore the ONLY route in, and deleting that link
+ *          orphans this page without breaking a build. tests/unit/
+ *          invariants.test.ts asserts every route in OWNED_BY is linked from
+ *          somewhere under app/, which is the check that catches it.
  */
 export default async function SettingsPage() {
   const db = await createServerDb();
@@ -90,13 +91,15 @@ export default async function SettingsPage() {
        * reachable spot, immediately below a Save button. Two buttons that do
        * very different things should not sit in one group.
        */}
-      <h2 className="section">Session</h2>
+      {/* "Account", not "Session": a session is a workout everywhere else in
+          this product — the session screen, the session bar, "during a
+          session". */}
+      <h2 className="section">Account</h2>
       <div className="card">
-        <form action={signOut}>
-          <button type="submit" className="secondary">
-            Sign out
-          </button>
-        </form>
+        <SignOutButton />
+        <p className="muted small">
+          Signing out also clears any unfinished session saved on this device.
+        </p>
       </div>
     </>
   );

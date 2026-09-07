@@ -88,14 +88,14 @@ against "how did last month go" and could only lose.
 
 **Profile — `/profile`**
 
-| Rank | What                                                     |
-| ---- | -------------------------------------------------------- |
-| 1    | Level, and progress into the next one                    |
-| 2    | Streak and adherence — the retention numbers, per PRD §3 |
-| 3    | XP this week against the ceiling                         |
-| 4    | Badges                                                   |
-| 5    | Tonnage, acute:chronic, weekly chart, best e1RM          |
-| 6    | Settings, behind a disclosure                            |
+| Rank | What                                                        |
+| ---- | ----------------------------------------------------------- |
+| 1    | Level, and progress into the next one                       |
+| 2    | Streak and adherence — the retention numbers, per PRD §3    |
+| 3    | XP this week against the ceiling                            |
+| 4    | Badges                                                      |
+| 5    | Tonnage, acute:chronic, weekly chart, best e1RM             |
+| 6    | — (settings moved to `/settings`; the cog is in the header) |
 
 **A consequence worth stating:** the stat tiles are equal in weight and are not
 equal in rank. Streak and adherence are the mechanic the product retains people
@@ -107,23 +107,33 @@ is the mechanic: the level is a _summary_ of them. It is read from lifetime XP,
 which comes from adherence and nothing else, so putting it first states the
 conclusion before the workings rather than competing with them.
 
-**WHY settings sort last on their own tab.** They were the whole of Profile
-before ADR 0013 and are now a drawer on it. A setting is changed a handful of
-times in the life of an account; the things above it are looked at weekly. Rank
-follows how often something is read, not how important it felt when it was
-built.
+**WHY settings are not on this page at all.** They were the whole of Profile
+before ADR 0013, then a disclosure at the foot of it, and are now their own
+route — ADR 0013's amendment of 2026-09-07. The ranking argument is what drove
+them off the page: a setting is changed a handful of times in the life of an
+account and the things above it are looked at weekly, so ranking last put the
+control below a screen and a half of content. Something ranked that low does
+not want a lower slot; it wants a door.
 
-**Disclosures.** Where a section is demoted rather than deleted — Profile's
-settings are the first — it goes behind a native `<details>`, not a modal or a
-client-state accordion. It stays keyboard and screen-reader navigable with no
-work, needs no client component on a page that is otherwise server-rendered, and
-with CSS off it degrades to an open section rather than a control that does
-nothing.
+**The cog is in the header, and it is the only one.** `/settings` is not in the
+tab bar — five is the budget ADR 0012 set — so deleting that link orphans the
+page without breaking a build. `tests/unit/invariants.test.ts` asserts every
+route in `OWNED_BY` is linked from somewhere under `app/`.
+
+**Disclosures.** Where a section is demoted rather than deleted — the coach's
+accepted plan, the session quick-log — it goes behind a native `<details>`, not
+a modal or a client-state accordion. It stays keyboard and screen-reader
+navigable with no work, needs no client component on a page that is otherwise
+server-rendered, and with CSS off it degrades to an open section rather than a
+control that does nothing.
+
+**A disclosure reveals more of what the page is already about.** A different
+subject gets a route instead — that is the line ADR 0013's amendment drew when
+settings stopped being a disclosure and became `/settings`.
 
 Two rules come with it, and both are easy to lose:
 
-- **The summary is a full tap target** (`min-height: var(--tap)`). It is the
-  only route to every setting in the app.
+- **The summary is a full tap target** (`min-height: var(--tap)`).
 - **Removing `list-style` removes the focus indicator's box.** A summary with
   its marker suppressed must set its own `:focus-visible` outline, or keyboard
   focus lands somewhere invisible.

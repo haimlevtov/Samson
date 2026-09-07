@@ -83,14 +83,16 @@ export default async function ProfilePage() {
          * rather than at the foot of the page, because this is the longest page
          * in the app and a control below all of it is a scroll target.
          *
-         * aria-label rather than a visible word: the cog is the whole target,
-         * and a 44px icon button with no accessible name is unusable with a
-         * screen reader. title gives the same string to a pointer user.
+         * .icon-btn is the project's icon-only control — the same primitive the
+         * session screen's chart and edit links use — rather than a fifth
+         * hand-rolled copy of its five declarations.
+         *
+         * aria-label rather than a visible word: the glyph is the whole target,
+         * and an icon button with no accessible name is unusable with a screen
+         * reader. title gives the same string to a pointer user.
          */}
-        <Link href="/settings" className="chip cog-link" aria-label="Settings" title="Settings">
-          <span className="cog" aria-hidden="true">
-            ⚙
-          </span>
+        <Link href="/settings" className="icon-btn" aria-label="Settings" title="Settings">
+          <span aria-hidden="true">⚙</span>
         </Link>
       </header>
 
@@ -319,15 +321,6 @@ export default async function ProfilePage() {
           </table>
         </div>
       )}
-
-      {/*
-       * Settings behind a disclosure — ADR 0013.
-       *
-       * WHY <details> and not a modal: it is keyboard and screen-reader
-       * navigable with no work, it needs no client state on a page that is
-       * otherwise a server component, and with CSS off it degrades to an open
-       * section rather than a button that does nothing.
-       */}
     </>
   );
 }

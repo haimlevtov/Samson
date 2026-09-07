@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { STAGE_MODELS } from '../../src/llm/models';
+import { OWNED_BY } from '../../src/ui/tabs';
 
 const ROOT = join(__dirname, '..', '..');
 const SEARCH_DIRS = ['src', 'app', 'scripts', 'tests'];
@@ -141,5 +142,29 @@ describe('PLAN.md phase 2 — the critic runs on a different model from the plan
     for (const [stage, models] of Object.entries(STAGE_MODELS)) {
       expect(models.length, `${stage} has no model configured`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('a route a tab owns is reachable from somewhere', () => {
+  /*
+   * WHY: `/settings` is not in the tab bar — five tabs is the budget ADR 0012
+   * set — so the cog on Profile is its ONLY entry point. Deleting that link
+   * orphans a whole page and breaks no build, fails no type check, and renders
+   * perfectly everywhere else.
+   *
+   * `src/ui/tabs.test.ts` asserts which tab lights up for the route. That is a
+   * different claim from "you can get there", which is this one.
+   */
+  it('links every OWNED_BY route from a page under app/', () => {
+    const pages = sourceFiles().filter((f) => f.rel.startsWith('app/'));
+
+    const orphaned = Object.keys(OWNED_BY).filter(
+      (route) => !pages.some((f) => f.text.includes(`href="${route}"`))
+    );
+
+    expect(
+      orphaned,
+      'a tab owns these routes and nothing links to them — they are unreachable'
+    ).toEqual([]);
   });
 });

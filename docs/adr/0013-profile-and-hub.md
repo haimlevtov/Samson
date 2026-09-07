@@ -35,10 +35,10 @@ name and your timezone.
 
 **Profile is you. Hub is other people.**
 
-| Tab         | Owns                                                                |
-| ----------- | ------------------------------------------------------------------- |
-| **Profile** | Identity, settings, level, XP, badges, streak, training load, bests |
-| **Hub**     | Leaderboard, quests and challenges, and later collaboration         |
+| Tab         | Owns                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| **Profile** | Identity, settings (at `/settings`, owned by this tab), level, XP, badges, streak, training load, bests |
+| **Hub**     | Leaderboard, quests and challenges, and later collaboration                                             |
 
 Everything else in ADR 0012's table stands unchanged: History is past sessions,
 Workout is templates, Coach is the plan. Hub remains the landing page — "what is
@@ -108,7 +108,12 @@ irreversible control on the page also the least reachable one.
 `useState` in a server component. A route needs none of those either — it is
 one more server page — so this amendment costs nothing that paragraph was
 protecting. The `<details>` pattern itself stays in the codebase for the two
-places it genuinely fits, and the CSS is shared rather than copied.
+places it genuinely fits: the coach's plan and the session quick-log.
+
+The disclosure CSS this decision originally wrote now has one caller, the
+coach's plan, and `details.quick-log` still carries its own copies of the rules
+rather than joining it. Stated because a claim that the CSS is "shared" would
+be a claim about a file, and that is not the state of the file.
 
 **Judged against:** a modal (traps focus, needs client state, no address, and
 the back gesture dismisses the page rather than the modal on some browsers) and
@@ -167,9 +172,18 @@ loud rather than left for a reader to notice.
 The reversal is narrower than it looks. 0012's objection was to folding a whole
 _tab_ into another — Profile disappearing as a destination. What is happening
 here is the opposite: Profile becomes the substantial tab and gains a subject,
-and the settings that used to be its whole content are demoted behind a
-disclosure. "Settings and rewards" are not co-equal halves of a tab; rewards are
-the tab, and settings are a drawer on it.
+and the settings that used to be its whole content are demoted. "Settings and
+rewards" are not co-equal halves of a tab; rewards are the tab, and settings
+hang off it.
+
+**Narrowed again by the 2026-09-07 amendment**, and worth saying out loud by
+the same standard this section sets. Settings are no longer _content_ on
+Profile at all — they are their own route, and what Profile keeps is
+**ownership**: the cog is the only way in, and `OWNED_BY` in `src/ui/tabs.ts`
+encodes that the tab bar lights Profile while you are there. So the reversal of
+0012 shrinks to "the tab that owns your rewards also owns the door to your
+settings", which is a good deal weaker than putting both on one page — and
+closer to 0012's original instinct than this section first admitted.
 
 What survives from 0012 unchanged is the test it set — a tab must own one thing
 you can name in a word — and by that test "you" is a better answer than

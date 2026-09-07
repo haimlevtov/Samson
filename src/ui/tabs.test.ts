@@ -7,13 +7,11 @@
  * nothing logs, and it renders perfectly.
  */
 import { describe, expect, it } from 'vitest';
-import { OWNED_BY, isCurrent } from './tabs';
-
-const TAB_HREFS = ['/history', '/coach', '/hub', '/workout', '/profile'];
+import { OWNED_BY, TAB_HREFS, isCurrent, tabMatch } from './tabs';
 
 /** The one tab lit for a path, or null when the bar would light nothing. */
 function litTab(pathname: string): string | null {
-  const lit = TAB_HREFS.filter((href) => isCurrent(pathname, href));
+  const lit = TAB_HREFS.filter((href: string) => isCurrent(pathname, href));
   if (lit.length > 1) throw new Error(`${pathname} lit ${lit.length} tabs: ${lit.join(', ')}`);
   return lit[0] ?? null;
 }
@@ -59,8 +57,13 @@ describe('isCurrent — routes a tab owns without containing', () => {
 
 describe('OWNED_BY', () => {
   it('maps every owned route to a real tab', () => {
-    // A typo here is invisible: the route would light nothing, exactly as if
-    // the entry were missing.
+    /*
+     * A typo here is invisible at runtime: the route would light nothing,
+     * exactly as if the entry were missing. This reads the SAME TAB_HREFS the
+     * tab bar renders from — an earlier version kept its own copy of that
+     * list, which meant renaming a tab in TabBar.tsx left this passing while
+     * the OWNED_BY entry silently went dead.
+     */
     for (const [route, owner] of Object.entries(OWNED_BY)) {
       expect(TAB_HREFS, `${route} is owned by ${owner}, which is not a tab`).toContain(owner);
     }
@@ -72,6 +75,37 @@ describe('OWNED_BY', () => {
     for (const route of Object.keys(OWNED_BY)) {
       const nested = TAB_HREFS.some((href) => route.startsWith(`${href}/`));
       expect(nested, `${route} already lives under a tab`).toBe(false);
+    }
+  });
+});
+
+describe('tabMatch — what aria-current may claim', () => {
+  it('says "page" for the tab itself and for pages under it', () => {
+    expect(tabMatch('/profile', '/profile')).toBe('page');
+    expect(tabMatch('/history/abc', '/history')).toBe('page');
+  });
+
+  it('says "owned" for a route the tab merely owns', () => {
+    /*
+     * The distinction exists for one reason: /settings lights Profile, but its
+     * heading says Settings. aria-current="page" there tells a screen-reader
+     * user they are on a page they are not on. "true" marks it as the current
+     * one of the set without making that claim.
+     */
+    expect(tabMatch('/settings', '/profile')).toBe('owned');
+  });
+
+  it('says nothing for an unrelated tab', () => {
+    expect(tabMatch('/settings', '/history')).toBeNull();
+    expect(tabMatch('/profile', '/hub')).toBeNull();
+  });
+
+  it('agrees with isCurrent everywhere', () => {
+    // isCurrent is the coarse form; it must not disagree about which tabs light.
+    for (const path of ['/settings', '/profile', '/history/1', '/workouts', '/hub']) {
+      for (const href of TAB_HREFS) {
+        expect(isCurrent(path, href)).toBe(tabMatch(path, href) !== null);
+      }
     }
   });
 });

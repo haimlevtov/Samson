@@ -1447,7 +1447,13 @@ code {
     font-size: 30px;
   }
 
-  header.top a {
+  /* Text links in a header can shrink to their text on a desktop pointer.
+     An ICON-ONLY control cannot — it has no text to be, and the 44px rule in
+     docs/specs/mobile-interface.md §3 is not qualified by breakpoint.
+     FOUND IN REVIEW, 2026-09-07: without the :not(), header.top a beats
+     .icon-btn on specificity and the Profile cog collapsed to about 18px
+     above this width. */
+  header.top a:not(.icon-btn) {
     display: inline;
     min-height: 0;
   }
@@ -1888,16 +1894,18 @@ details.quick-log[open] > summary {
 /* The disclosure. A <details> so it needs no client state and stays keyboard
    and screen-reader navigable for free.
 
-   This was written for the settings cog (ADR 0013) and is now used by the
-   coach's plan (ADR 0015) — settings became a route in ADR 0013's amendment,
-   so `.settings-disclosure` is gone and its rules stayed here with the caller
-   that still needs them.
+   Written for the settings DISCLOSURE (ADR 0013) and inherited by the coach's
+   plan (ADR 0015) when ADR 0013's amendment turned settings into a route. One
+   caller, therefore — this is not a shared block today, whatever its shape
+   suggests, and `details.quick-log` further up carries its own copies of the
+   marker reset, the tap target and the focus ring rather than joining here.
 
-   AI-NOTE: a third disclosure joins these selector lists rather than copying
-            them. The two rules easiest to lose that way are the
+   AI-NOTE: a second disclosure should join this selector list rather than copy
+            it, and quick-log should be folded in when something else touches
+            it. The two rules easiest to lose in a copy are the
             ::-webkit-details-marker reset and the :focus-visible ring —
-            docs/specs/mobile-interface.md says so, and this block was once
-            copied wholesale, which is how it briefly held two of each. */
+            docs/specs/mobile-interface.md says so, and this block briefly held
+            two of each for exactly that reason. */
 .plan-disclosure > summary {
   display: flex;
   align-items: center;
@@ -1952,27 +1960,6 @@ details.quick-log[open] > summary {
 .settings-body {
   display: grid;
   gap: 16px;
-}
-
-/*
- * The cog in the Profile header — the only route to /settings.
- *
- * A .chip, so it inherits the border, radius and hit area every other header
- * control has, with the padding squared up because the content is one glyph
- * rather than a word.
- */
-.cog-link {
-  min-width: var(--tap);
-  min-height: var(--tap);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.cog {
-  font-size: 1.15rem;
-  line-height: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
