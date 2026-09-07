@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
@@ -39,7 +40,7 @@ const settingsSchema = z.object({
   displayName: z
     .string()
     .trim()
-    .max(60, 'Keep it to 60 characters.')
+    .max(MAX_DISPLAY_NAME, `Keep it to ${MAX_DISPLAY_NAME} characters.`)
     .transform((value) => (value === '' ? null : value)),
   timezone: z
     .string()

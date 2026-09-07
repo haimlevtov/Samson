@@ -6,16 +6,22 @@
  * **nothing else** — no email, no user_id, no set history. The RLS coverage
  * test in `tests/db` gains a case for the view, not an exemption."
  *
- * INVARIANT: the coverage test in schema-invariants.test.ts enumerates
- *            `relkind = 'r'`, so a VIEW is invisible to it. Without this file
- *            the leaderboard is a hole in that coverage rather than a surface
- *            it protects — ADR 0016, Consequences.
+ * INVARIANT: the RLS, user_id and policy cases in schema-invariants.test.ts
+ *            enumerate `relkind = 'r'`, so a VIEW is invisible to those three.
+ *            Without this file the leaderboard is a hole in that coverage
+ *            rather than a surface it protects — ADR 0016, Consequences.
+ *
+ * AI-NOTE: the GRANTS case there is the exception and does cover this view —
+ *          it reads information_schema.role_table_grants, which includes views.
+ *          So a migration re-granting the leaderboard to anon fails twice: once
+ *          there, once here. Do not "simplify" by deleting either.
  *
  * Fixtures are made with the service role; every assertion runs through a
  * user-scoped client, the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { loadLeaderboard } from '../../src/db/leaderboard';
 
 let alice: TestUser;
 let bob: TestUser;
@@ -163,7 +169,22 @@ describe('grants — the second gate', () => {
      * is exactly why it gets its own test.
      */
     const { error } = await anonClient().from('leaderboard').select('display_name').limit(1);
+
     expect(error, 'anon could read the leaderboard').not.toBeNull();
+    /*
+     * The code, not merely "an error" — otherwise a dropped view, a stale
+     * schema cache or a typo in the relation name all pass this green, on the
+     * one test whose entire subject is the GRANT. 42501 is insufficient
+     * privilege.
+     */
+    expect(error?.code, `expected a privilege error, got: ${error?.message}`).toBe('42501');
+  });
+
+  it('lets an authenticated reader run the identical query', async () => {
+    // The other half of the pair: proves the case above failed because of the
+    // grant, and not because the view is missing or misnamed.
+    const { error } = await alice.client.from('leaderboard').select('display_name').limit(1);
+    expect(error).toBeNull();
   });
 });
 
@@ -187,5 +208,99 @@ describe('ranking', () => {
     await giveXp(alice.id, 75);
 
     expect((await boardFor(alice))[0]?.['lifetime_xp']).toBe(175);
+  });
+});
+
+describe('a name that is not a name', () => {
+  /*
+   * FOUND IN REVIEW, 2026-09-07. `btrim(x)` with one argument strips ASCII
+   * SPACE and nothing else, so these passed the view's original blank check,
+   * took a numbered slot on everybody's board, and rendered as an empty row.
+   * `has_visible_name` in the hardening migration is what these pin.
+   */
+  const NBSP = String.fromCharCode(160);
+  const IDEOGRAPHIC = String.fromCharCode(12288);
+
+  for (const [label, name] of [
+    ['a tab', '\t'],
+    ['a non-breaking space', NBSP],
+    ['an ideographic space', IDEOGRAPHIC],
+    ['a mix of them', ` \t${NBSP} `],
+  ] as const) {
+    it(`leaves out a display name that is ${label}`, async () => {
+      await profile(alice.id, { display_name: 'Alice Lifts' });
+      await profile(bob.id, { display_name: name });
+
+      expect((await boardFor(alice)).map((r) => r['display_name'])).toEqual(['Alice Lifts']);
+    });
+  }
+});
+
+describe('the database bounds the name, not only the form', () => {
+  it('refuses a display name longer than the cap', async () => {
+    /*
+     * `authenticated` holds UPDATE on public.users and `users_update_own`
+     * permits it, so the Zod cap is one PATCH away from being bypassed — and
+     * the view ships the string before `clampDisplayName` ever sees it. This is
+     * the second gate — ADR 0003.
+     */
+    const { error } = await alice.client
+      .from('users')
+      .update({ display_name: 'a'.repeat(61) })
+      .eq('user_id', alice.id);
+
+    expect(error, 'a 61-character name was accepted').not.toBeNull();
+    expect(error?.code, `expected a check violation, got: ${error?.message}`).toBe('23514');
+  });
+
+  it('accepts one exactly at the cap', async () => {
+    const { error } = await alice.client
+      .from('users')
+      .update({ display_name: 'a'.repeat(60) })
+      .eq('user_id', alice.id);
+
+    expect(error).toBeNull();
+  });
+});
+
+describe('loadLeaderboard — the function the page actually calls', () => {
+  /*
+   * The cases above go straight to PostgREST, which proves the view. These go
+   * through the exported function, which is what the Hub renders from: the
+   * rank ordering, the limit, and the mapping onto LeaderboardRow are all
+   * unasserted otherwise. Same reasoning as tests/db/session-routing.test.ts.
+   */
+  it('returns rows best first, mapped to the shape the page renders', async () => {
+    await profile(alice.id, { display_name: 'Alice Lifts' });
+    await profile(bob.id, { display_name: 'Bob Lifts' });
+    await giveXp(bob.id, 500);
+    await giveXp(alice.id, 100);
+
+    const rows = await loadLeaderboard(alice.client);
+    const mine = rows.filter((r) => r.displayName.endsWith(' Lifts'));
+
+    expect(mine.length).toBeGreaterThanOrEqual(2);
+    // Ranks ascend through the whole list, so "best first" holds across it.
+    expect([...rows].map((r) => r.rank)).toEqual(
+      [...rows].map((r) => r.rank).sort((a, b) => a - b)
+    );
+
+    const bobRow = mine.find((r) => r.displayName === 'Bob Lifts');
+    expect(bobRow?.lifetimeXp).toBe(500);
+    expect(bobRow?.isYou).toBe(false);
+    expect(mine.find((r) => r.displayName === 'Alice Lifts')?.isYou).toBe(true);
+  });
+
+  it('honours the limit it is given', async () => {
+    await profile(alice.id, { display_name: 'Alice Lifts' });
+    await profile(bob.id, { display_name: 'Bob Lifts' });
+
+    expect(await loadLeaderboard(alice.client, 1)).toHaveLength(1);
+  });
+
+  it('throws rather than returning an empty board when the read fails', async () => {
+    // The Hub catches this and logs — an empty board and a revoked grant must
+    // not be the same thing to the caller.
+    await expect(loadLeaderboard(anonClient())).rejects.toThrow(/leaderboard/i);
   });
 });

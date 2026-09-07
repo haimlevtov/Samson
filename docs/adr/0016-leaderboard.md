@@ -2,6 +2,8 @@
 
 **Status:** accepted, phase 5
 **Date:** 2026-09-07
+**Supersedes:** ADR 0012's "no leaderboard" consequence, and ADR 0013's
+"Hub holds challenges and a placeholder"
 
 ## Context
 
@@ -25,7 +27,7 @@ game feature into an address book.
 
 ## Decision
 
-**A `security_invoker = false` view exposing three values and nothing else, over
+**A `security_invoker = false` view exposing four values and nothing else, over
 users who have chosen to be there.**
 
 ### 1. A view, not the service role and not a policy
@@ -48,7 +50,7 @@ Postgres default. A reader should not have to know the default to know whether
 this view is the boundary, and a future default change must not silently turn
 the leaderboard into an empty list.
 
-### 2. Three columns, and the two that are absent matter more
+### 2. Four columns, and the two that are absent matter more
 
 | Column         | Why                                                                                |
 | -------------- | ---------------------------------------------------------------------------------- |
@@ -112,11 +114,34 @@ left for a reader to discover.
 
 **A display name is user-authored text.** It renders in a React text node, so
 it cannot inject markup — but it is also third-party text on a shared surface,
-and it is sanitised on the way out for the same reason catalogue names are.
+and it is clamped on the way out. The mechanism is shared with the catalogue
+sanitiser in `src/llm/safety.ts`; the reason is not. Catalogue text is fenced to
+keep it out of a model's instruction channel (invariant #11). A display name is
+clamped so a bidirectional override or a stack of combining marks cannot
+vandalise the row of somebody who never typed it.
 
 **Rank ties are broken by name.** Two users on identical XP get a stable order
 rather than a fair one. It is deterministic, which is what stops the list
 shuffling between renders.
+
+**A polled XP total is an activity signal.** `lifetime_xp` has no date bound and
+only ever rises, and any authenticated user may read the view as often as they
+like. Invariant #4 ties XP to adherence, so a total that moves means _that named
+person trained_. Nobody's sessions are exposed, but somebody watching closely
+enough can infer roughly when they happen.
+
+This is why the settings copy says "when you last trained can be inferred"
+rather than the flat "not your sessions" it said first — the app makes a factual
+privacy claim at the moment of consent, and that claim has to be true. Rate
+limiting is out of scope (`CLAUDE.md`), so the honest move is to say it.
+
+**Display names are not unique, and impersonation is undefended.** Nothing stops
+one user setting their display name to another's, and `is_you` marks only the
+reader's own row — so on the app's one shared surface, two identical names are
+indistinguishable to everybody except the two people involved. A uniqueness
+constraint would be the fix, and it brings its own problem (first come, first
+served, on a name somebody else may already use elsewhere). For a demo cohort,
+naming it here is the right amount of effort.
 
 ## Consequences
 

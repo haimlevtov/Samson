@@ -45,9 +45,18 @@ describe('clampDisplayName — characters that attack the reader, not the writer
     expect(clampDisplayName(`${BOM}Ha${SHY}im`)).toBe('Haim');
   });
 
-  it('strips control characters, newlines included', () => {
-    // A newline in a table cell is a name that occupies two rows.
-    expect(clampDisplayName(`Haim${NUL}\nLev`)).toBe('HaimLev');
+  it('flattens control characters and newlines to a single space', () => {
+    /*
+     * A newline in a table cell is a name occupying two rows. It becomes a
+     * SPACE rather than nothing — matching how `stripInvisible` treats a
+     * control character — because deleting it would glue two words together
+     * and quietly change how somebody's name reads.
+     */
+    expect(clampDisplayName(`Haim${NUL}\nLev`)).toBe('Haim Lev');
+  });
+
+  it('collapses a run of whitespace, so padding buys no width', () => {
+    expect(clampDisplayName('Haim         Lev')).toBe('Haim Lev');
   });
 
   it('trims surrounding whitespace', () => {
@@ -98,5 +107,59 @@ describe('clampDisplayName — length', () => {
     // truncated to 59 and an ellipsis — the author vandalising themselves, but
     // still a wrong answer.
     expect(clampDisplayName(`${'a'.repeat(60)}${ZWSP.repeat(50)}`)).toBe('a'.repeat(60));
+  });
+});
+
+describe('clampDisplayName — combining marks, which stack vertically', () => {
+  const ACUTE = ch(0x0301);
+
+  it('keeps a normal accented name', () => {
+    // The case that must not break: one base character, one mark.
+    expect(clampDisplayName(`e${ACUTE}quipe`)).toBe(`e${ACUTE}quipe`);
+  });
+
+  it('keeps two marks on one base character', () => {
+    // Vietnamese vowels and pointed Hebrew genuinely stack two.
+    const two = `a${ACUTE}${ch(0x0323)}`;
+    expect(clampDisplayName(two)).toBe(two);
+  });
+
+  it('drops the rest of a stack, keeping the base character', () => {
+    /*
+     * The attack: 59 marks on one base is a legal 60-character name that grows
+     * one row of the table on EVERY other user's screen. The horizontal axis is
+     * defended by .lb-name's overflow; nothing defended this one.
+     */
+    const attack = `A${ACUTE.repeat(59)}`;
+    expect(clampDisplayName(attack)).toBe(`A${ACUTE}${ACUTE}`);
+  });
+
+  it('counts the run per base character, not per name', () => {
+    // Two accented letters in a row is an ordinary name, not a stack.
+    const name = `e${ACUTE}te${ACUTE}`;
+    expect(clampDisplayName(name)).toBe(name);
+  });
+});
+
+describe('clampDisplayName — names that are nothing at all', () => {
+  it('returns empty for whitespace the view used to let through', () => {
+    // btrim() in Postgres strips ASCII space only, so these reached the page.
+    // loadLeaderboard drops a row whose name clamps to empty.
+    const NBSP = ch(0x00a0);
+    const IDEOGRAPHIC = ch(0x3000);
+
+    for (const blank of [
+      String.fromCharCode(9),
+      NBSP,
+      IDEOGRAPHIC,
+      NBSP + String.fromCharCode(9),
+      '   ',
+    ]) {
+      expect(clampDisplayName(blank)).toBe('');
+    }
+  });
+
+  it('returns empty for a name made only of invisible characters', () => {
+    expect(clampDisplayName(ZWSP.repeat(10))).toBe('');
   });
 });

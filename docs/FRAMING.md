@@ -74,13 +74,25 @@ explicitly _not_ what the next two weeks are judged against.
 
 Entries earn a place only if someone could reasonably have expected them.
 
-| Excluded                                                                 | Why it could have been expected                                                                                                                                                                           |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Social — leaderboards, guilds, friends, shared PRs**                   | The audience is gamers and the retention mechanic is XP. Every game they play is social. Samson is a multiplayer idea shipped single-player for the showcase; direction recorded at the end of `PLAN.md`. |
-| **Push notifications**                                                   | The standard re-engagement mechanic in this category. Without it XP only fires once the user has already opened the app.                                                                                  |
-| **Native mobile app**                                                    | Phone-first is a requirement; a native app is not. It is a web app that must work well on a phone.                                                                                                        |
-| **Real-time sync**                                                       | Multi-device training logs are a reasonable expectation of a fitness app.                                                                                                                                 |
-| Caching layers, queues, payments, containers, multi-region, load testing | Infrastructure nobody expected here. Listed in `PLAN.md` for completeness.                                                                                                                                |
+| Excluded                                                                  | Why it could have been expected                                                                                                                                                                           |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Social — guilds, friends, shared PRs** (leaderboard shipped, see below) | The audience is gamers and the retention mechanic is XP. Every game they play is social. Samson is a multiplayer idea shipped single-player for the showcase; direction recorded at the end of `PLAN.md`. |
+| **Push notifications**                                                    | The standard re-engagement mechanic in this category. Without it XP only fires once the user has already opened the app.                                                                                  |
+| **Native mobile app**                                                     | Phone-first is a requirement; a native app is not. It is a web app that must work well on a phone.                                                                                                        |
+| **Real-time sync**                                                        | Multi-device training logs are a reasonable expectation of a fitness app.                                                                                                                                 |
+| Caching layers, queues, payments, containers, multi-region, load testing  | Infrastructure nobody expected here. Listed in `PLAN.md` for completeness.                                                                                                                                |
+
+**Amended 2026-09-07 — the leaderboard shipped.** The social row above excluded
+it, and that exclusion no longer holds. It was built because the Hub tab needed
+to own something (ADR 0013) and a ranking is the smallest social feature that
+does not need a second user relationship: no friends, no guilds, no invitations,
+no shared PRs — just a name and a number that other people can see. Those three
+remain excluded for the original reason.
+
+The decision, its four columns and the things it deliberately does not
+guarantee are in [ADR 0016](adr/0016-leaderboard.md). It is also the first
+feature in the project that reads another user's rows, which is why it has an
+ADR at all.
 
 ---
 

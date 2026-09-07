@@ -20,9 +20,9 @@ export const dynamic = 'force-dynamic';
  * property was being numbers about you — and left nowhere to put anything
  * social. Everything personal moved to Profile.
  *
- * It is deliberately sparse until the leaderboard lands. Moving the boundary
- * first means that arrives in a tab which already means "other people", rather
- * than as one more item in a pile.
+ * The leaderboard is here now — ADR 0016 — and it arrived into a tab that
+ * already meant "other people" rather than as one more item in a pile, which
+ * was the point of moving the boundary first.
  *
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
@@ -42,7 +42,16 @@ export default async function HubPage() {
      * challenges are what the user came for — and a view that fails must not
      * take the quests down with it.
      */
-    loadLeaderboard(db).catch(() => []),
+    /*
+     * WHY it logs rather than swallowing silently: an empty board and a REVOKED
+     * GRANT render the same "nobody is listed yet". Failing closed is the right
+     * direction for a cross-user read, but a permission regression that looks
+     * exactly like an unpopulated feature is one nobody would ever notice.
+     */
+    loadLeaderboard(db).catch((cause: unknown) => {
+      console.error('leaderboard unavailable', cause);
+      return [];
+    }),
   ]);
 
   /*
