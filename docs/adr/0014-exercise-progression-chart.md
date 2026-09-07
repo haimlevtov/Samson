@@ -63,9 +63,14 @@ address, and the full 375px rather than a chart squeezed under a set grid.
 
 ## Consequences
 
-**A lift with one session is a dot, not a line**, and one with none says so
-rather than rendering an empty axis. Both are ordinary states here: the chart is
-reachable from any exercise, including one being logged for the first time.
+**A lift with one session draws no axis**, and one with none says so. Both are
+ordinary states here: the chart is reachable from any exercise, including one
+being logged for the first time.
+
+_Amended after building it._ This first said "a dot, not a line". Rendered, that
+is a single point floating in a full-height empty box — which is the empty axis
+the same sentence set out to avoid, a chart shape promising a trend and showing
+none. One reading is printed as a reading instead.
 
 **The shaping is in `src/metrics/`, not in the component.** It is arithmetic
 over logged sets — invariant #1 — and it is testable without a database or a

@@ -121,7 +121,13 @@ export function LiftBlock({
     <section className="lift">
       <header className="lift-head">
         <h3 className="lift-name">{group.name}</h3>
-        <Link className="icon-btn" href="/hub" aria-label={`${group.name} in progress`}>
+        {/* The chart this icon has promised since ADR 0011. It pointed at
+            /progress, then /hub, then a Hub with no badges on it — ADR 0014. */}
+        <Link
+          className="icon-btn"
+          href={`/history/exercise/${group.id}`}
+          aria-label={`${group.name} progression`}
+        >
           <ChartIcon />
         </Link>
         {editable && group.sets.length === 0 ? (

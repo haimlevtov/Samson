@@ -387,3 +387,53 @@ export async function insertSet(db: Db, userId: string, set: SetToInsert): Promi
 
   if (error) throw new Error(`logging set: ${error.message}`);
 }
+
+export interface ExerciseHistory {
+  name: string;
+  sets: SetRecord[];
+}
+
+/**
+ * Every logged set of one exercise, for the progression chart — ADR 0014.
+ *
+ * WHY this exists rather than filtering `loadHistory()`: that reads the user's
+ * whole set history to answer questions about all of them at once. This answers
+ * one question about one lift, and it is reached from a per-exercise route, so
+ * pulling the entire log to throw most of it away would make the cost of the
+ * chart grow with the length of somebody's training career.
+ *
+ * RLS scopes both queries to the caller — CLAUDE.md #10 — so there is no
+ * user_id filter here and none to forget. An exercise id that is not this
+ * user's simply returns nothing.
+ */
+export async function loadExerciseHistory(
+  db: Db,
+  exerciseId: string
+): Promise<ExerciseHistory | null> {
+  const [{ data: exercise, error: eErr }, { data: sets, error: sErr }] = await Promise.all([
+    db.from('exercises').select('name').eq('id', exerciseId).maybeSingle(),
+    db
+      .from('sets')
+      .select('exercise_id, weight_kg, reps, rpe, is_warmup, workouts!inner(local_date)')
+      .eq('exercise_id', exerciseId)
+      .order('set_index'),
+  ]);
+
+  if (eErr) throw new Error(`loading exercise: ${eErr.message}`);
+  if (sErr) throw new Error(`loading exercise history: ${sErr.message}`);
+  if (exercise === null) return null;
+
+  return {
+    name: exercise.name,
+    sets: (sets ?? []).map((row) => ({
+      exerciseId: row.exercise_id,
+      // Postgres numerics arrive as strings; Number() once here rather than at
+      // every call site downstream, as loadHistory does.
+      weightKg: row.weight_kg === null ? null : Number(row.weight_kg),
+      reps: row.reps,
+      rpe: row.rpe === null ? null : Number(row.rpe),
+      isWarmup: row.is_warmup,
+      localDate: (row.workouts as unknown as { local_date: string }).local_date,
+    })),
+  };
+}
