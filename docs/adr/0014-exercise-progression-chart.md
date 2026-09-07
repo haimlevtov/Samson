@@ -1,6 +1,6 @@
 # ADR 0014 — The progression chart plots what you lifted, not what it implies
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — **amended 2026-09-07, see Consequences**
 **Date:** 2026-09-07
 
 ## Context
@@ -67,7 +67,7 @@ address, and the full 375px rather than a chart squeezed under a set grid.
 ordinary states here: the chart is reachable from any exercise, including one
 being logged for the first time.
 
-_Amended after building it._ This first said "a dot, not a line". Rendered, that
+_Amended 2026-09-07, after building it._ This first said "a dot, not a line". Rendered, that
 is a single point floating in a full-height empty box — which is the empty axis
 the same sentence set out to avoid, a chart shape promising a trend and showing
 none. One reading is printed as a reading instead.

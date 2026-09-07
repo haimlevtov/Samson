@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { loadExerciseHistory } from '@/src/db/training';
-import { exerciseProgression } from '@/src/metrics/progression';
+import { exerciseProgression, progressionView } from '@/src/metrics/progression';
 import { LiftChart } from '@/src/ui/LiftChart';
 import { FieldHint } from '@/src/ui/FieldHint';
 
@@ -36,7 +36,15 @@ export default async function ExerciseProgressionPage({
   // exist or is not visible to this user — the same answer either way.
   if (history === null) notFound();
 
-  const points = exerciseProgression(history.sets, id);
+  /*
+   * Trimmed twice, for two different reasons. The read is capped, so older
+   * sessions may exist that were never fetched — and because a set cap can cut
+   * mid-session, the oldest day present may be missing its heavier sets and is
+   * dropped rather than drawn as a dip nobody trained. On top of that a chart
+   * stops being readable past a certain number of points, whatever was read.
+   * Both live in src/metrics so they are tested rather than sliced in JSX.
+   */
+  const view = progressionView(exerciseProgression(history.sets, id), history.truncated);
 
   return (
     <>
@@ -44,14 +52,18 @@ export default async function ExerciseProgressionPage({
         <div>
           <h1>{history.name}</h1>
           <span className="muted small">
-            {points.length === 0
+            {view.points.length === 0
               ? 'No working sets logged'
-              : `${points.length} ${points.length === 1 ? 'session' : 'sessions'}`}
+              : `${view.points.length} ${view.points.length === 1 ? 'session' : 'sessions'}` +
+                (view.hidden > 0 ? ', most recent' : '')}
           </span>
         </div>
         <div className="row">
+          {/* Named for where it goes. The entry point is the chart icon on a
+              session screen, which may be a live one — "Back" would promise to
+              return there, and this returns to the list. */}
           <Link href="/history" className="chip">
-            Back
+            All sessions
           </Link>
         </div>
       </header>
@@ -66,7 +78,7 @@ export default async function ExerciseProgressionPage({
         </FieldHint>
       </h2>
 
-      <LiftChart points={points} />
+      <LiftChart points={view.points} hidden={view.hidden} />
     </>
   );
 }

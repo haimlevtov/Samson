@@ -1,6 +1,6 @@
 import type { ProgressionPoint } from '../metrics/progression';
-import { progressionRange } from '../metrics/progression';
-import { displayShortDate } from './format';
+import { progressionChange, progressionRange } from '../metrics/progression';
+import { displayDate } from './format';
 
 /**
  * One lift's heaviest working set over time — ADR 0014.
@@ -21,7 +21,21 @@ const PAD_X = 10;
 const PAD_TOP = 18;
 const PAD_BOTTOM = 26;
 
-export function LiftChart({ points, unit = 'kg' }: { points: ProgressionPoint[]; unit?: string }) {
+/*
+ * AI-NOTE: there is deliberately no `unit` prop. Nothing in this project
+ *          converts anything — every screen is kilograms and invariant #8 says
+ *          conversion happens at display when it exists. A unit knob with no
+ *          conversion behind it can only relabel canonical kilograms as pounds,
+ *          which is worse than not offering it.
+ */
+export function LiftChart({
+  points,
+  hidden = 0,
+}: {
+  points: ProgressionPoint[];
+  /** Sessions that exist and are not drawn. See progressionView. */
+  hidden?: number;
+}) {
   if (points.length === 0) {
     return (
       <p className="card muted">
@@ -36,32 +50,42 @@ export function LiftChart({ points, unit = 'kg' }: { points: ProgressionPoint[];
   const span = range.max - range.min;
 
   /*
-   * One session draws no axis at all — ADR 0014, amended after seeing it.
-   *
-   * The original decision was "a dot, not a line". Rendered, that is a single
-   * point floating in a full-height empty box, which is exactly the empty axis
-   * the same sentence set out to avoid: a chart shape that promises a trend and
-   * shows none. One reading is a reading, so it is printed as one.
+   * AI-NOTE: x() divides by points.length - 1 and is therefore only valid for
+   *          two or more points. `line` is computed lazily for the same reason
+   *          — evaluating it eagerly produced "NaN,66" on every single-session
+   *          render. Harmless, since that branch never drew it, but a NaN
+   *          sitting in a variable is how the next edit ships a broken chart.
    */
   const x = (i: number): number => PAD_X + (i / (points.length - 1)) * (W - PAD_X * 2);
 
   const y = (weight: number): number =>
     PAD_TOP + (1 - (weight - range.min) / span) * (H - PAD_TOP - PAD_BOTTOM);
 
-  const line = points.map((p, i) => `${x(i)},${y(p.weightKg)}`).join(' ');
+  const polyline = (): string => points.map((p, i) => `${x(i)},${y(p.weightKg)}`).join(' ');
 
+  // Both are inhabited: the points.length === 0 branch returned above.
   const first = points[0]!;
   const last = points[points.length - 1]!;
-  const change = last.weightKg - first.weightKg;
+
+  // INVARIANT: the component draws, it does not compute — ADR 0014. This was
+  //            a subtraction in JSX, which made the page's headline figure the
+  //            one number on screen with no test behind it.
+  const change = progressionChange(points);
 
   const label = (p: ProgressionPoint): string =>
-    `${p.weightKg} ${unit}${p.reps === null ? '' : ` × ${p.reps}`}`;
+    `${p.weightKg} kg${p.reps === null ? '' : ` × ${p.reps}`}`;
 
   return (
     <div className="card lift-chart">
+      {/*
+       * One session draws no axis at all — ADR 0014, amended after building it.
+       * The decision first read "a dot, not a line"; rendered, that is a single
+       * point floating in a full-height empty box, which is the empty axis the
+       * same sentence set out to avoid. One reading is printed as a reading.
+       */}
       {points.length === 1 ? (
         <p className="lift-chart-single">
-          <strong>{label(first)}</strong> on {displayShortDate(first.localDate)}. One session is a
+          <strong>{label(first)}</strong> on {displayDate(first.localDate)}. One session is a
           reading, not a trend — train it again and this becomes a line.
         </p>
       ) : (
@@ -70,12 +94,12 @@ export function LiftChart({ points, unit = 'kg' }: { points: ProgressionPoint[];
           className="lift-chart-svg"
           role="img"
           aria-label={
-            `${points.length} sessions from ${displayShortDate(first.localDate)} to ` +
-            `${displayShortDate(last.localDate)}. Heaviest working set went from ` +
+            `${points.length} sessions from ${displayDate(first.localDate)} to ` +
+            `${displayDate(last.localDate)}. Heaviest working set went from ` +
             `${label(first)} to ${label(last)}.`
           }
         >
-          <polyline className="lift-chart-line" points={line} fill="none" strokeWidth={2} />
+          <polyline className="lift-chart-line" points={polyline()} fill="none" strokeWidth={2} />
           {points.map((p, i) => (
             <circle
               key={p.localDate}
@@ -108,7 +132,10 @@ export function LiftChart({ points, unit = 'kg' }: { points: ProgressionPoint[];
             <tbody>
               {[...points].reverse().map((p) => (
                 <tr key={p.localDate}>
-                  <td data-label="When">{displayShortDate(p.localDate)}</td>
+                  {/* Full date, not the short one: this table spans a training
+                    history, and two sessions a year apart read as adjacent
+                    without the year. */}
+                  <td data-label="When">{displayDate(p.localDate)}</td>
                   <td data-label="Top set">{label(p)}</td>
                 </tr>
               ))}
@@ -117,11 +144,22 @@ export function LiftChart({ points, unit = 'kg' }: { points: ProgressionPoint[];
         </div>
       )}
 
-      {points.length > 1 && (
+      {hidden > 0 && (
+        // Never a count: when the read was capped the query cannot know how
+        // much history it did not fetch — progressionView's AI-NOTE.
+        <p className="muted small">
+          Older sessions are not shown. This is your most recent training on this lift.
+        </p>
+      )}
+
+      {/* Gated on the figure rather than on the point count: progressionChange
+          returns null below two points, and that is the same condition said
+          once instead of twice. */}
+      {change !== null && (
         <p className="muted small">
           {change === 0
-            ? `Same top set as ${displayShortDate(first.localDate)}. A flat line is a plateau, not a missing chart.`
-            : `${change > 0 ? '+' : ''}${Number(change.toFixed(1))} ${unit} since ${displayShortDate(first.localDate)}. Reps are shown because weight alone reads a deload as a decline.`}
+            ? `Same top set as ${displayDate(first.localDate)}. A flat line is a plateau, not a missing chart.`
+            : `${change > 0 ? '+' : ''}${change} kg since ${displayDate(first.localDate)}. Reps are shown because weight alone reads a deload as a decline.`}
         </p>
       )}
     </div>

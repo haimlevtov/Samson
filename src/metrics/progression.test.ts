@@ -6,7 +6,14 @@
  * a plateau dividing by zero, and a tie flipping the label between renders.
  */
 import { describe, expect, it } from 'vitest';
-import { exerciseProgression, progressionRange } from './progression';
+import {
+  MAX_PLOTTED_SESSIONS,
+  exerciseProgression,
+  progressionChange,
+  progressionRange,
+  progressionView,
+  type ProgressionPoint,
+} from './progression';
 import type { SetRecord } from './types';
 
 const SQUAT = 'squat-id';
@@ -179,5 +186,91 @@ describe('progressionRange', () => {
     ]);
 
     expect(range.min).toBe(100);
+  });
+});
+
+describe('progressionChange', () => {
+  const at = (weightKg: number, localDate: string) => ({ localDate, weightKg, reps: 5 });
+
+  it('measures from the first session to the last', () => {
+    expect(
+      progressionChange([at(100, '2026-09-01'), at(110, '2026-09-08'), at(122.5, '2026-09-15')])
+    ).toBe(22.5);
+  });
+
+  it('reports a decline as a negative number rather than hiding it', () => {
+    expect(progressionChange([at(100, '2026-09-01'), at(90, '2026-09-08')])).toBe(-10);
+  });
+
+  it('reports a plateau as zero, not as nothing', () => {
+    // Zero and null are different answers: one says "no change", the other
+    // says "not enough history to have changed".
+    expect(progressionChange([at(100, '2026-09-01'), at(100, '2026-09-08')])).toBe(0);
+  });
+
+  it('has no answer for a single session', () => {
+    expect(progressionChange([at(100, '2026-09-01')])).toBeNull();
+    expect(progressionChange([])).toBeNull();
+  });
+
+  it('rounds plate maths rather than printing its float', () => {
+    // 122.5 - 100 is 22.499999999999996 in binary floating point.
+    const change = progressionChange([at(100, '2026-09-01'), at(122.5, '2026-09-08')]);
+    expect(change).toBe(22.5);
+    expect(String(change)).not.toContain('99999');
+  });
+});
+
+describe('progressionView', () => {
+  const many = (n: number): ProgressionPoint[] =>
+    Array.from({ length: n }, (_, i) => ({
+      localDate: `2026-${String(Math.floor(i / 28) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+      weightKg: 100 + i,
+      reps: 5,
+    }));
+
+  it('shows everything when the history is short', () => {
+    const view = progressionView(many(12));
+    expect(view.points).toHaveLength(12);
+    expect(view.hidden).toBe(0);
+  });
+
+  it('keeps the most RECENT sessions when there are too many to draw', () => {
+    const view = progressionView(many(MAX_PLOTTED_SESSIONS + 20));
+
+    expect(view.points).toHaveLength(MAX_PLOTTED_SESSIONS);
+    expect(view.hidden).toBe(20);
+    // Recency is the point: a progression chart that dropped this month to keep
+    // last year would answer the opposite of the question being asked.
+    expect(view.points.at(-1)?.weightKg).toBe(100 + MAX_PLOTTED_SESSIONS + 19);
+  });
+
+  /*
+   * The truncation case. A set-row cap can cut mid-session, so the oldest day
+   * that survived may be missing its heavier sets — plotting it would draw a
+   * dip the user never trained.
+   */
+  it('drops the oldest day when the read was truncated', () => {
+    const points = many(10);
+    const view = progressionView(points, true);
+
+    expect(view.points).toHaveLength(9);
+    expect(view.points[0]?.localDate).toBe(points[1]?.localDate);
+    expect(view.hidden).toBe(1);
+  });
+
+  it('does not drop anything when the read was complete', () => {
+    expect(progressionView(many(10), false).points).toHaveLength(10);
+  });
+
+  it('survives an empty history without dropping a point that is not there', () => {
+    expect(progressionView([], true)).toEqual({ points: [], hidden: 0 });
+  });
+
+  it('does not mutate the array it was given', () => {
+    const points = many(5);
+    const copy = structuredClone(points);
+    progressionView(points, true);
+    expect(points).toEqual(copy);
   });
 });
