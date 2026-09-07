@@ -171,7 +171,29 @@ Every completion is verified server-side. Nothing can be granted from the
 client, and submitted loads face plausibility checks — an empty bar spammed for
 reps must not unlock a volume badge.
 
-### 5.6 Diet — **Deferred** (phase 6)
+### 5.6 The leaderboard — **Built** (phase 5)
+
+The one surface in the app where you see another person. On the Hub tab: a
+ranking by lifetime XP, showing a **display name and a total, and nothing
+else** — no email, no session history, and no user id.
+
+Two rules make it something a user chooses rather than something that happens
+to them. **You are not listed until you set a display name**, so appearing
+requires having picked the name you appear under; the alternatives were an email
+local part, which turns a game into a directory, and a generated placeholder,
+which ranks somebody who never volunteered. And **leaving is one checkbox** on
+`/settings`.
+
+What it does not promise is written down too, because the settings screen makes
+a privacy claim at the moment of consent: an XP total only rises and can be
+polled, so somebody watching closely can infer roughly when you train. Display
+names are not unique, so two people can share one.
+
+The mechanism, and why it is a view rather than a privileged client, is
+[ADR 0016](adr/0016-leaderboard.md) — this is the first feature in the project
+that reads another user's rows, which invariant #10 forbids by default.
+
+### 5.7 Diet — **Deferred** (phase 6)
 
 Maintenance calories by equation, bounded adjustment, and a floor hard-clamped
 in code. The model explains the number; it never chooses it. Supplement answers
@@ -179,7 +201,7 @@ are retrieval-only from a curated table with evidence grades and resolvable
 DOIs. Acceptance is adversarial: no prompt, persona or framing moves the floor,
 and every attempt is logged.
 
-### 5.7 Import — **Deferred** (phase 6)
+### 5.8 Import — **Deferred** (phase 6)
 
 `.fit`, `.tcx`, `.gpx` and Apple Health XML. File import is the primary path and
 must demo without any native module. Health Connect and HealthKit only if a test

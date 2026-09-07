@@ -10,7 +10,9 @@ plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
 **Current phase: 5** — phases 0 to 4 are complete; see `docs/plans/` for the
-plan and recorded outcome of each. Phase 3 carries one unmet
+plan and recorded outcome of each. One phase-6 item, the leaderboard, was pulled
+forward into phase 5 and shipped; see the entry under phase 6 for why and for
+the two ways it differs from what was written there. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
 met all four of its criteria, and every gap its outcome named is now closed.
 
@@ -223,14 +225,20 @@ Each is self-contained. Cut any of them without breaking anything above.
 - Health Connect and HealthKit, only if time allows and a test device exists
 - Diet advisor: maintenance computed by equation, bounded adjustment,
   hard-clamped floor in code, retrieval-only supplement answers
-- **Leaderboard** — the "top player" half of the Hub tab (ADR 0012). Deferred
-  here rather than built with the tab bar because it is the first feature that
-  wants to read another user's rows, and invariant #10 says every table is
-  RLS'd to its owner and application code never touches the service role.
-  It needs its own ADR before any code: a `security definer` view exposing
-  **display name and XP total only**, a migration, and an explicit answer to
-  what a user who has not chosen a display name is called. Opting out has to
-  be possible, which is a `users` column, which is a second migration.
+- ~~**Leaderboard**~~ — **built early, in phase 5.** Pulled forward because
+  ADR 0013 gave Hub the job of being the tab about other people, and a tab that
+  owns nothing is the fault ADR 0012 was written to fix. The conditions this
+  entry set were all met first: its own ADR before any code
+  ([0016](adr/0016-leaderboard.md)), a view rather than the service role, an
+  explicit answer for a user with no display name, and an opt-out column.
+
+  Two details differ from what was written here, and are worth naming rather
+  than quietly reconciling. The mechanism is a view with
+  `security_invoker = false` rather than a `security definer` function — a
+  view's definition is its contract, and this one only reads. And it exposes
+  **four** values, not two: `rank`, because a leaderboard without your position
+  is half a feature, and `is_you`, which is what lets the page mark your row
+  without any user id crossing the network.
 
 **Acceptance criteria**
 

@@ -140,6 +140,11 @@ is a deliberate ordering: moving the ownership boundary first means the
 leaderboard lands in a tab that already means "other people", rather than
 arriving as one more item in a pile.
 
+> **Resolved 2026-09-07.** The placeholder is gone: ADR 0016 built the
+> leaderboard, and it did land in a tab that already meant "other people". The
+> ordering argument above is left standing because it is the thing that was
+> being claimed, and it turned out to be right.
+
 **`/progress` stays deleted.** This is not a partial reversal of ADR 0012 — the
 argument that one page must not have two names still holds. What changes is
 which tab the content sits under.

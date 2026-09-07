@@ -1866,7 +1866,8 @@ details.quick-log[open] > summary {
  * target to shrink. The 44px rule applies to things you press.
  */
 .badge-card .chip,
-.badge-card .chip-on {
+.badge-card .chip-on,
+.you-chip {
   display: inline-block;
   min-height: 0;
   min-width: 0;
@@ -2144,4 +2145,103 @@ details.quick-log[open] > summary {
   /* Send leads; Clear sits beside it rather than under, so the pair does not
      eat another 44px of a small screen. */
   gap: 8px;
+}
+
+/* ---- the leaderboard ----------------------------------------------------
+ *
+ * ADR 0016. The only surface in the app showing another user's data, which is
+ * why the row for the reader is marked: on a list of names, "which one is me"
+ * is the first question and scanning for it is the whole cost.
+ */
+/* Narrow, muted, and out of the way: the rank is scanned, not read. Tabular
+   figures come from the base `table` rule. */
+.leaderboard td:first-child {
+  color: var(--muted);
+  width: 1%;
+  white-space: nowrap;
+}
+
+.leaderboard th {
+  text-align: left;
+  /* Overridden for XP below — a heading that does not sit over its own column
+     defeats the alignment this table stayed a table for. */
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 6px 8px;
+  font-weight: 700;
+}
+
+.leaderboard td {
+  padding: 9px 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* The name takes whatever the two number columns do not, and truncates rather
+   than widening the table — a long display name is the one input here that
+   another user controls. */
+.lb-name {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard th:last-child {
+  text-align: right;
+}
+
+.lb-xp {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Background rather than a border: a border on a <tr> draws through the cells
+   in a collapsed table. The chip beside the name is what carries the meaning
+   where colour cannot — mobile-interface.md §3. */
+.leaderboard tr.you td {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+/*
+ * Not colour alone — the chip is what a screen reader and a colourblind reader
+ * both get. mobile-interface.md §3, "State is never carried by colour alone".
+ *
+ * Sizing comes from the label-chip reset above, which this joins rather than
+ * copies: .chip carries a 44px floor because most chips in this app are pressed
+ * with a thumb, and a span inside a 9px-padded table cell is not.
+ */
+.you-chip {
+  margin-left: 8px;
+  /* Its own ground: .chip-on's background is the same --accent-soft the .you
+     row already has, so without this the chip has no edge to be seen against. */
+  background: var(--surface);
+  color: var(--accent-text);
+  border-color: var(--accent-text);
+}
+
+/* The opt-out sits in its own fieldset; the checkbox and its label share a row
+   rather than stacking, because a checkbox on its own line reads as a heading. */
+/*
+ * Scoped to beat `.settings-form label { display: block }`, which is (0,1,1)
+ * and outranks a bare class — FOUND IN REVIEW, 2026-09-07: as `.check-row` alone
+ * the flex row never applied at all, so `gap` and `align-items` did nothing and
+ * the box sat above its label rather than beside it.
+ */
+.settings-form label.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+
+.settings-form label.check-row input[type='checkbox'] {
+  width: auto;
+  min-height: 0;
+  /* A 44px target for the pair comes from .check-row's min-height; the box
+     itself is sized by the platform, which is what people recognise. */
+  accent-color: var(--accent-text);
 }

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
+import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
 import { updateSettings } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -26,12 +27,14 @@ export function SettingsForm({
   humorMaxLevel,
   theme,
   timezones,
+  leaderboardOptOut,
 }: {
   displayName: string;
   timezone: string;
   humorMaxLevel: string;
   theme: string;
   timezones: string[];
+  leaderboardOptOut: boolean;
 }) {
   const [state, action, saving] = useActionState<SettingsFormState, FormData>(
     updateSettings,
@@ -45,7 +48,7 @@ export function SettingsForm({
         <input
           name="displayName"
           type="text"
-          maxLength={60}
+          maxLength={MAX_DISPLAY_NAME}
           defaultValue={displayName}
           placeholder="What the coach should call you"
           autoComplete="nickname"
@@ -104,6 +107,30 @@ export function SettingsForm({
         ))}
         <p className="muted small">
           A ceiling, not a setting: a persona pitched below it stays below it.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend className="label">Leaderboard</legend>
+        <label className="check-row">
+          <input type="checkbox" name="leaderboardOptOut" defaultChecked={leaderboardOptOut} />
+          <span>Keep me off the leaderboard</span>
+        </label>
+        {/*
+         * Says what is shared, not just that something is — ADR 0016 §2. A
+         * privacy control that does not name the data it governs asks for
+         * consent to an unknown.
+         *
+         * The inference caveat is there because this is the one place the app
+         * makes a factual privacy claim to a user, at the moment they decide.
+         * "Not your sessions" alone was true of the columns and false of what
+         * can be worked out from them — ADR 0016, "What this does not
+         * guarantee". FOUND IN REVIEW, 2026-09-07.
+         */}
+        <p className="muted small">
+          Other people see your display name and your total XP — not your email and not your
+          sessions, though a total that only ever rises means roughly when you last trained can be
+          inferred from it. Without a display name you are not listed at all.
         </p>
       </fieldset>
 

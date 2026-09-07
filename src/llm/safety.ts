@@ -83,6 +83,24 @@ const INVISIBLE = /[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\u
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
 
+/**
+ * Removes the characters above and nothing else.
+ *
+ * WHY it is exported: the leaderboard's display-name clamp needs the same two
+ * sets — a bidirectional override or a run of zero-width characters vandalises
+ * a shared table exactly as it hides an instruction from a model. It was a
+ * second, hand-written copy of these ranges until review found it. One
+ * definition, so a character added here is added everywhere.
+ *
+ * AI-NOTE: this deliberately keeps TAB and NEWLINE, because `CONTROL` does — a
+ *          workout note legitimately contains both. A caller that must not have
+ *          them (anything rendered into one table cell) strips them itself and
+ *          says why.
+ */
+export function stripInvisible(value: string): string {
+  return value.replace(INVISIBLE, '').replace(CONTROL, ' ');
+}
+
 export function sanitizeUntrusted(value: string, maxChars = MAX_UNTRUSTED_CHARS): string {
   const cleaned = value
     .replace(INVISIBLE, '')

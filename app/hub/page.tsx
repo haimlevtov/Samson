@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
 import { loadChallenges } from '@/src/db/gamification';
+import { loadLeaderboard } from '@/src/db/leaderboard';
 import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
@@ -19,9 +20,9 @@ export const dynamic = 'force-dynamic';
  * property was being numbers about you — and left nowhere to put anything
  * social. Everything personal moved to Profile.
  *
- * It is deliberately sparse until the leaderboard lands. Moving the boundary
- * first means that arrives in a tab which already means "other people", rather
- * than as one more item in a pile.
+ * The leaderboard is here now — ADR 0016 — and it arrived into a tab that
+ * already meant "other people" rather than as one more item in a pile, which
+ * was the point of moving the boundary first.
  *
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
@@ -32,7 +33,26 @@ export default async function HubPage() {
   if (!user) redirect('/sign-in');
 
   const today = localDateFor(user.timezone);
-  const [history, challenges] = await Promise.all([loadHistory(db), loadChallenges(db)]);
+  const [history, challenges, board] = await Promise.all([
+    loadHistory(db),
+    loadChallenges(db),
+    /*
+     * Degrades rather than throws, like the other cross-page reads added in
+     * this phase. The leaderboard is the least important thing on this tab —
+     * challenges are what the user came for — and a view that fails must not
+     * take the quests down with it.
+     */
+    /*
+     * WHY it logs rather than swallowing silently: an empty board and a REVOKED
+     * GRANT render the same "nobody is listed yet". Failing closed is the right
+     * direction for a cross-user read, but a permission regression that looks
+     * exactly like an unpopulated feature is one nobody would ever notice.
+     */
+    loadLeaderboard(db).catch((cause: unknown) => {
+      console.error('leaderboard unavailable', cause);
+      return [];
+    }),
+  ]);
 
   /*
    * Three buckets, not two. Accepting is what puts a challenge in play — see the
@@ -200,13 +220,61 @@ export default async function HubPage() {
         </>
       )}
 
-      <h2 className="section">Leaderboard</h2>
-      <p className="card muted small">
-        Not built yet. It is the first thing in this app that would read another user&rsquo;s rows,
-        which invariant #10 forbids by default, so it needs a decision of its own before any code —
-        a view exposing a display name and an XP total and nothing else, and a way to opt out.
-        Meanwhile your own XP and badges are on <Link href="/profile">Profile</Link>.
-      </p>
+      <h2 className="section with-hint">
+        Leaderboard
+        <FieldHint title="What other people can see">
+          Your display name and your total XP, and nothing else — not your email, not your sessions.
+          You are listed only if you have set a display name, and you can leave at any time from
+          Settings.
+        </FieldHint>
+      </h2>
+
+      {board.length === 0 ? (
+        // Never an empty table with headers — docs/specs/mobile-interface.md §4.
+        // And the likeliest reason for an empty board is the reader's own
+        // missing display name, so it says how to fix that rather than only
+        // reporting the absence.
+        <p className="card muted small">
+          Nobody is listed yet. A lifter appears here once they have set a display name — yours is
+          on <Link href="/settings">Settings</Link>.
+        </p>
+      ) : (
+        <div className="card">
+          {/*
+           * NOT a .table-cards table, for the reason globals.css already gives
+           * for the set grid: three narrow columns fit 375px, and a ranking is
+           * read DOWN the rank and XP columns. Breaking each lifter onto their
+           * own card turns five rows into fifteen and destroys the alignment a
+           * leaderboard exists for.
+           */}
+          <table className="leaderboard">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Lifter</th>
+                <th>XP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {board.map((row) => (
+                /*
+                 * Keyed by rank, not by name: two lifters may share a display
+                 * name — nothing makes it unique — and a duplicate React key
+                 * drops a row silently. Rank is unique within one response.
+                 */
+                <tr key={row.rank} className={row.isYou ? 'you' : undefined}>
+                  <td>{row.rank}</td>
+                  <td className="lb-name">
+                    {row.displayName}
+                    {row.isYou ? <span className="chip chip-on you-chip">you</span> : null}
+                  </td>
+                  <td className="lb-xp">{row.lifetimeXp.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

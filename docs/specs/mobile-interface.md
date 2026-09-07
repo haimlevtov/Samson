@@ -83,7 +83,7 @@ against "how did last month go" and could only lose.
 | Rank | What                                           |
 | ---- | ---------------------------------------------- |
 | 1    | Challenges you can accept or are part-way into |
-| 2    | The leaderboard, once it exists                |
+| 2    | The leaderboard — ADR 0016                     |
 | 3    | Challenges the validator declined, and why     |
 
 **Profile — `/profile`**
@@ -166,6 +166,11 @@ alternative is a row that exists and is reachable from nowhere.
 
 ## 3. Interaction model
 
+**State is never carried by colour alone.** Anywhere a row, chip or control
+means something by being a different colour — the reader's own leaderboard row,
+a performed set, the current tab — a word or an icon carries the same meaning.
+Colour is the fast path for people who can use it, never the only path.
+
 **Sizes.** Every interactive target is at least **44×44 px**. A visually smaller
 control gets its target from padding or a pseudo-element, not from shrinking the
 hit area. This currently fails in three places: buttons are ~37 px tall, chips
@@ -227,9 +232,20 @@ bar is the thing that does this now.
 **Tables become cards below 760 px.** Seven columns of `white-space: nowrap`
 cannot be made to fit 375 px, and horizontal page scroll is the single most
 common phone-layout failure. Each row becomes a card with its column name as a
-label. The set grid is exempt: it is five columns, sized to fit 375 px as a
-grid, and turning a set into a card would destroy the column alignment that
-makes a session readable at a glance.
+label.
+
+**Two things are exempt, and the test for an exemption is the same both times:**
+the table is narrow enough to fit 375 px, and it is read DOWN a column rather
+than across a row, so card-stacking would destroy the one property it has.
+
+- **The set grid** — five columns, sized to fit as a grid. Turning a set into a
+  card destroys the alignment that makes a session readable at a glance.
+- **The leaderboard** — three columns, and a ranking is read down its rank and
+  XP columns. Card-stacking turned five lifters into fifteen rows.
+
+Anything else becomes cards. A new exemption is argued here, in this list, not
+in a comment beside the table — a rule whose exceptions live in code comments
+has stopped being a rule.
 
 ## 4. Feedback, and its bad states
 
