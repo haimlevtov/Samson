@@ -92,13 +92,87 @@ export async function loadHistory(db: Db): Promise<History> {
   };
 }
 
-/** The workout list, newest first, with a set count for each. */
-export async function listWorkouts(db: Db, limit = 40): Promise<WorkoutRow[]> {
+/** The session you are in the middle of right now, if there is one. */
+export interface ActiveWorkout {
+  id: string;
+  localDate: string;
+  startedAt: string | null;
+}
+
+/**
+ * How recently a session must have started to count as one you are in.
+ *
+ * WHY a duration and not the local date — FOUND IN REVIEW, 2026-09-07: this was
+ * `local_date = today`, which is a calendar match, and "am I in the middle of a
+ * session" is not a calendar question. A session begun at 23:55 stopped being
+ * active at midnight while the user was still logging into it, so the Workout
+ * tab offered Start again and a tap created the second row this whole change
+ * exists to prevent.
+ *
+ * WHY it does not touch CLAUDE.md #9: this compares a UTC instant to a UTC
+ * instant. `local_date` remains the write-time truth for every calendar
+ * question — streaks, achievements, challenge windows — and is untouched.
+ *
+ * Twelve hours is longer than any session and shorter than a night's sleep, so
+ * a workout abandoned yesterday is a loose end rather than a redirect you
+ * cannot escape. Loose ends belong in History, which shows them with their
+ * `in progress` badge and lets them be finished.
+ */
+export const ACTIVE_SESSION_WINDOW_HOURS = 12;
+
+/**
+ * The session you are in the middle of, if there is one.
+ *
+ * AI-NOTE: `started_at` is compared, not `local_date`, and that also disposes
+ *          of a NULLS-FIRST hazard the calendar version had. `order by ... desc`
+ *          is NULLS FIRST in Postgres, so a row with no `started_at` outranked
+ *          every real session and won the `limit(1)`. A `gte` on the same
+ *          column excludes nulls outright — but `nullsFirst: false` is set
+ *          anyway, because the next person to relax that filter should not
+ *          have to rediscover this. See `loadExerciseHistory` below, which
+ *          carries the same note.
+ */
+export async function activeWorkout(db: Db, now: Date = new Date()): Promise<ActiveWorkout | null> {
+  const since = new Date(now.getTime() - ACTIVE_SESSION_WINDOW_HOURS * 60 * 60 * 1000);
+
   const { data, error } = await db
+    .from('workouts')
+    .select('id, local_date, started_at')
+    .eq('status', 'in_progress')
+    .gte('started_at', since.toISOString())
+    .order('started_at', { ascending: false, nullsFirst: false })
+    .limit(1);
+
+  if (error) throw new Error(`loading the active session: ${error.message}`);
+
+  const row = data?.[0];
+  return row === undefined
+    ? null
+    : { id: row.id, localDate: row.local_date, startedAt: row.started_at };
+}
+
+/**
+ * The workout list, newest first, with a set count for each.
+ *
+ * `excludeId` leaves out the session currently being performed: History is
+ * where a session goes when it is over, and one that is still being logged
+ * appearing in the list of past sessions is the app telling the user they have
+ * finished something they are still doing.
+ */
+export async function listWorkouts(
+  db: Db,
+  limit = 40,
+  excludeId: string | null = null
+): Promise<WorkoutRow[]> {
+  let query = db
     .from('workouts')
     .select('id, local_date, status, notes, sets(count)')
     .order('local_date', { ascending: false })
     .limit(limit);
+
+  if (excludeId !== null) query = query.neq('id', excludeId);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`listing workouts: ${error.message}`);
 

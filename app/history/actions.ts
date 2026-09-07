@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
-import { insertSet } from '@/src/db/training';
+import { activeWorkout, insertSet } from '@/src/db/training';
 import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
@@ -30,6 +30,19 @@ export async function startWorkout(): Promise<void> {
   // INVARIANT: the user's local date, not the server's — CLAUDE.md #9.
   const localDate = localDateFor(user.timezone);
 
+  /*
+   * One session at a time.
+   *
+   * WHY resume rather than start a second: a workout is a thing you are in the
+   * middle of, and there is no such thing as being in the middle of two. The
+   * old behaviour inserted a row on every press, so a stray tap on the way back
+   * from the water fountain silently orphaned the sets already logged — they
+   * stayed on a session the user had navigated away from and would not think to
+   * look for.
+   */
+  const active = await activeWorkout(db);
+  if (active !== null) redirect(`/history/${active.id}`);
+
   const { data, error } = await db
     .from('workouts')
     .insert({
@@ -44,6 +57,8 @@ export async function startWorkout(): Promise<void> {
   if (error) throw new Error(`starting workout: ${error.message}`);
 
   revalidatePath('/history');
+  // Starting one flips /workout from Start to Resume — see finishWorkout.
+  revalidatePath('/workout');
   redirect(`/history/${data.id}`);
 }
 
@@ -129,6 +144,10 @@ export async function finishWorkout(formData: FormData): Promise<void> {
 
   revalidatePath('/history');
   revalidatePath('/hub');
+  // /workout renders Start or Resume from the active session, so finishing one
+  // changes that page too. Masked today by force-dynamic and Next's cache
+  // defaults, which is not the same as being correct.
+  revalidatePath('/workout');
 
   /*
    * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".

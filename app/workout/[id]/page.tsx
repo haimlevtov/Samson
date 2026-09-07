@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { loadTemplate } from '@/src/db/templates';
+import { activeWorkout } from '@/src/db/training';
 import { removeTemplate, startFromTemplate } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,12 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const template = await loadTemplate(db, id);
+  // Same degradation as the templates list: a failure here must not take the
+  // page down, and offering Start is wrong-but-usable rather than blank.
+  const [template, active] = await Promise.all([
+    loadTemplate(db, id),
+    activeWorkout(db).catch(() => null),
+  ]);
   // RLS returns nothing for another user's template, so "not mine" and "does
   // not exist" are the same 404 — no probing for valid ids.
   if (!template) notFound();
@@ -31,10 +37,21 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           </span>
         </div>
         <div className="row">
-          <form action={startFromTemplate}>
-            <input type="hidden" name="templateId" value={template.id} />
-            <button type="submit">Start workout</button>
-          </form>
+          {/*
+           * Not offered while a session is running — the action would redirect
+           * into that session rather than start this template, and a button
+           * labelled "Start workout" that lands you somewhere else is the app
+           * lying about what it did. FOUND IN REVIEW, 2026-09-07: this page
+           * did not read the active session at all.
+           */}
+          {active === null ? (
+            <form action={startFromTemplate}>
+              <input type="hidden" name="templateId" value={template.id} />
+              <button type="submit">Start workout</button>
+            </form>
+          ) : (
+            <Link href={`/history/${active.id}`}>Resume your session</Link>
+          )}
           <Link href="/workout" className="chip">
             ← Templates
           </Link>

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
-import { listWorkouts } from '@/src/db/training';
+import { activeWorkout, listWorkouts } from '@/src/db/training';
 import { loadUnlockedAchievements } from '@/src/db/gamification';
 import { displayDate } from '@/src/ui/format';
 import { BadgeReveal } from './BadgeReveal';
@@ -28,13 +28,28 @@ export default async function WorkoutsPage({
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  const today = localDateFor(user.timezone);
+
+  // The session being performed right now is not history yet — ADR 0012 says
+  // this page owns past sessions and nothing else, and a workout you are still
+  // logging into is not one.
+  /*
+   * Degrades rather than throws — FOUND IN REVIEW, 2026-09-07.
+   *
+   * This query exists to remove ONE row from the list. History is also the
+   * recovery surface for every session that falls outside the active window,
+   * so letting a transient failure here take the page down means the screen
+   * somebody reaches for when something already went wrong is the screen that
+   * breaks. Showing the running session in History for one render is strictly
+   * better than showing nothing.
+   */
+  const active = await activeWorkout(db).catch(() => null);
+
   const [workouts, badges, { unlocked }] = await Promise.all([
-    listWorkouts(db),
+    listWorkouts(db, 40, active?.id ?? null),
     loadUnlockedAchievements(db),
     searchParams,
   ]);
-
-  const today = localDateFor(user.timezone);
   const logged = workouts.filter((w) => w.setCount > 0).length;
 
   return (
