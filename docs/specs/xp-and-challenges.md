@@ -117,6 +117,85 @@ For any sequence of workouts and any week:
 
 ---
 
+## Level
+
+A level is a reading of lifetime XP. It is **derived, never stored** — there is
+no level column, no level-up event and no timestamp, so the same history always
+yields the same level and there is nothing to migrate when the curve is tuned.
+
+```ts
+export const LEVEL_BASE_XP = 300;
+export const LEVEL_GROWTH = 1.25;
+
+export interface LevelProgress {
+  level: number; // 1 or above
+  intoLevel: number; // XP earned since this level began, >= 0
+  span: number; // XP this level costs end to end, > 0
+  toNext: number; // XP still needed for the next level, > 0
+}
+
+/** The level a lifetime XP total earns. Level 1 starts at zero. */
+export function levelForXp(lifetimeXp: number): number;
+
+/** Total XP required to have REACHED `level`. `xpForLevel(1) === 0`. */
+export function xpForLevel(level: number): number;
+
+/** Everything the UI needs, so it cannot derive a bar that disagrees. */
+export function levelProgress(lifetimeXp: number): LevelProgress;
+```
+
+### The curve
+
+Level 1 begins at 0 XP. Climbing **from** level `n` **to** `n + 1` costs
+`round(LEVEL_BASE_XP × LEVEL_GROWTH^(n−1))`, so:
+
+| Level | Cost to reach it | Reached at |
+| ----- | ---------------- | ---------- |
+| 1     | —                | 0          |
+| 2     | 300              | 300        |
+| 3     | 375              | 675        |
+| 4     | 469              | 1,144      |
+| 5     | 586              | 1,730      |
+| 10    | 1,788            | 7,741      |
+
+Each step is rounded **before** it is summed, so `xpForLevel` is a sum of
+rounded steps rather than the rounding of a sum. The two drift apart by a few XP
+by level 10, and only the first satisfies the boundary property below.
+
+**WHY geometric and not linear:** a linear curve makes level 30 exactly as far
+from 29 as 2 is from 1, so the number stops meaning anything once the early
+levels are gone. **WHY 1.25 and not 2:** the weekly ceiling is 500, so a
+doubling curve would put level 10 beyond a year of perfect adherence, and a
+level nobody reaches is not a reward. At 1.25 a consistent user is around level
+10 after a season, which is the horizon this app is built for — one demo, one
+training block, not a decade.
+
+`LEVEL_BASE_XP` is deliberately larger than one perfect week (395 by the table
+above), so the first level-up takes more than a single good week and cannot be
+farmed in one sitting.
+
+### Properties
+
+| Property           | Statement                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| **Floor**          | `levelForXp(x) >= 1` for every `x >= 0`, including 0                                         |
+| **Monotonic**      | `x <= y` implies `levelForXp(x) <= levelForXp(y)`                                            |
+| **Never negative** | `intoLevel >= 0` and `toNext > 0` for every input                                            |
+| **Agreement**      | `intoLevel + toNext === span`, and `levelForXp(x + toNext) === level + 1`                    |
+| **Boundary**       | `levelForXp(xpForLevel(n)) === n`, and `levelForXp(xpForLevel(n) − 1) === n − 1` for `n > 1` |
+
+The **agreement** property is the one that matters for the interface. A progress
+bar computed from one rule beside a "420 XP to level 6" label computed from
+another is the classic way this feature ships subtly wrong, so `levelProgress`
+returns every figure the UI prints and the UI derives none of them itself.
+
+**Negative or non-finite input** is treated as 0 rather than throwing. Lifetime
+XP is a sum over a ledger whose amounts are non-negative by constraint, so a
+negative total is unreachable — and a progress bar is not the place to discover
+that it happened.
+
+---
+
 ## Plausibility
 
 The brief requires "plausibility checks on submitted loads". A set that is not
