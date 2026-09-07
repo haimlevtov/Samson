@@ -67,7 +67,7 @@ export function newRow(values: Partial<DraftRow> = {}): DraftRow {
 }
 
 function storageKey(workoutId: string): string {
-  return `samson:draft:${workoutId}`;
+  return `${DRAFT_KEY_PREFIX}${workoutId}`;
 }
 
 /**
@@ -111,5 +111,36 @@ export function clearDraft(workoutId: string): void {
     window.localStorage.removeItem(storageKey(workoutId));
   } catch {
     // See writeDraft.
+  }
+}
+
+/** The prefix every draft key shares. Exported so the sweep can be tested. */
+export const DRAFT_KEY_PREFIX = 'samson:draft:';
+
+/**
+ * Removes every draft this browser holds, for every workout.
+ *
+ * WHY it exists — FOUND IN REVIEW, 2026-09-07: `clearDraft` is per workout and
+ * runs when a session is finished, so an abandoned one persists indefinitely.
+ * Signing out cleared the Supabase cookie and left the drafts, which on a
+ * shared or lab machine means the next person can read the previous user's
+ * weights, reps and exercise names out of devtools. RLS makes them unreadable
+ * through the app; it does nothing about the disk.
+ *
+ * AI-NOTE: keys are collected before any are removed. Mutating localStorage
+ *          while iterating it by index re-indexes the remaining keys and skips
+ *          every other one.
+ */
+export function clearAllDrafts(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key !== null && key.startsWith(DRAFT_KEY_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+  } catch {
+    // See writeDraft: private browsing throws on access, and failing to clear
+    // must not stop the sign-out that follows it.
   }
 }

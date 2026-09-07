@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
@@ -11,25 +12,10 @@ import { levelProgress } from '@/src/gamification/level';
 import { STREAK_MILESTONES } from '@/src/gamification/xp';
 import { displayDate, displayShortDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
-import { signOut } from '../sign-in/actions';
-import { SettingsForm } from './SettingsForm';
 
 export const dynamic = 'force-dynamic';
 
 const kg = (n: number) => `${Math.round(n).toLocaleString()} kg`;
-
-/**
- * Every timezone this runtime can resolve.
- *
- * WHY the whole list rather than a curated dozen: a curated list is a list of
- * the places the author thought of, and being absent from it means your streak
- * breaks at the wrong hour with no way to fix it. `Intl` already knows them.
- */
-function knownTimezones(): string[] {
-  const supported = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
-  const zones = supported ? supported('timeZone') : [];
-  return zones.length > 0 ? zones : ['UTC'];
-}
 
 /**
  * Profile — ADR 0013.
@@ -41,7 +27,9 @@ function knownTimezones(): string[] {
  *
  * The page is long, and that was the argued cost of the decision: a long page
  * about one subject is scrolled, while a tab about two subjects is misnavigated.
- * Settings sit behind a disclosure so the page still opens on what you earned.
+ * Settings are their own route, reached by the cog in the header — ADR 0013's
+ * amendment, which followed from that same length: a control at the foot of the
+ * longest page in the app is a scroll target rather than a control.
  *
  * INVARIANT: every number below is computed by src/metrics or src/gamification,
  *            never by a model — CLAUDE.md #1. This page only formats them.
@@ -82,11 +70,6 @@ export default async function ProfilePage() {
 
   const spentPct = Math.min(100, Math.round((xp.thisWeek / xp.ceiling) * 100));
 
-  const zones = knownTimezones();
-  // A stored zone this runtime does not list would otherwise vanish from the
-  // select and be silently replaced on the next save.
-  const timezones = zones.includes(user.timezone) ? zones : [user.timezone, ...zones];
-
   return (
     <>
       <header className="top">
@@ -94,6 +77,23 @@ export default async function ProfilePage() {
           <h1>{user.displayName ?? 'Your profile'}</h1>
           <span className="muted small">{user.email}</span>
         </div>
+
+        {/*
+         * The only route to /settings — ADR 0013's amendment. In the header
+         * rather than at the foot of the page, because this is the longest page
+         * in the app and a control below all of it is a scroll target.
+         *
+         * .icon-btn is the project's icon-only control — the same primitive the
+         * session screen's chart and edit links use — rather than a fifth
+         * hand-rolled copy of its five declarations.
+         *
+         * aria-label rather than a visible word: the glyph is the whole target,
+         * and an icon button with no accessible name is unusable with a screen
+         * reader. title gives the same string to a pointer user.
+         */}
+        <Link href="/settings" className="icon-btn" aria-label="Settings" title="Settings">
+          <span aria-hidden="true">⚙</span>
+        </Link>
       </header>
 
       <div className="card level-card">
@@ -321,45 +321,6 @@ export default async function ProfilePage() {
           </table>
         </div>
       )}
-
-      {/*
-       * Settings behind a disclosure — ADR 0013.
-       *
-       * WHY <details> and not a modal: it is keyboard and screen-reader
-       * navigable with no work, it needs no client state on a page that is
-       * otherwise a server component, and with CSS off it degrades to an open
-       * section rather than a button that does nothing.
-       */}
-      <details className="card settings-disclosure">
-        <summary>
-          <span className="cog" aria-hidden="true">
-            ⚙
-          </span>
-          Settings
-        </summary>
-
-        <div className="settings-body">
-          <SettingsForm
-            displayName={user.displayName ?? ''}
-            timezone={user.timezone}
-            humorMaxLevel={user.humorMaxLevel}
-            theme={user.theme}
-            timezones={timezones}
-          />
-
-          <p className="muted small">
-            Everything is shown in kilograms, and stored that way. An imperial toggle lands when
-            display conversion does; until then it would be a switch that changes no number on any
-            screen.
-          </p>
-
-          <form action={signOut}>
-            <button type="submit" className="secondary">
-              Sign out
-            </button>
-          </form>
-        </div>
-      </details>
     </>
   );
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { TAB_HREFS, isCurrent, tabMatch, type TabHref } from './tabs';
 
 /**
  * The five tabs — ADR 0012.
@@ -16,7 +17,9 @@ import type { ReactNode } from 'react';
  * screen reader follows the markup.
  */
 interface Tab {
-  href: string;
+  /* INVARIANT: one of TAB_HREFS — src/ui/tabs.ts. The type is what keeps this
+     array and the OWNED_BY map from drifting apart. */
+  href: TabHref;
   label: string;
   icon: ReactNode;
 }
@@ -99,12 +102,14 @@ const TABS: Tab[] = [
   },
 ];
 
-/**
- * A tab is current when the path is it or lives under it, so the session screen
- * at `/history/[id]` keeps History lit rather than lighting nothing.
+/*
+ * The list above must cover TAB_HREFS exactly — the type makes each href legal,
+ * and this makes the set complete. A tab added to one and not the other is
+ * otherwise a tab that never renders, or an OWNED_BY entry pointing at nothing.
  */
-function isCurrent(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+const RENDERED: ReadonlySet<string> = new Set(TABS.map((t) => t.href));
+if (TAB_HREFS.some((href) => !RENDERED.has(href))) {
+  throw new Error('TABS is missing a route listed in TAB_HREFS — src/ui/tabs.ts');
 }
 
 /** Signed out, every tab redirects to the page you are already on. */
@@ -117,14 +122,21 @@ export function TabBar() {
   return (
     <nav className="tabbar" aria-label="Sections">
       {TABS.map((tab) => {
-        const current = isCurrent(pathname, tab.href);
+        const match = tabMatch(pathname, tab.href);
         return (
           <Link
             key={tab.href}
             href={tab.href}
-            className={`tab ${current ? 'tab-on' : ''}`}
-            // Colour alone is not a state. This is what a screen reader reads.
-            aria-current={current ? 'page' : undefined}
+            className={`tab ${match !== null ? 'tab-on' : ''}`}
+            /*
+             * Colour alone is not a state. This is what a screen reader reads.
+             *
+             * "page" only when this really is the page: /settings lights
+             * Profile but its heading says Settings, so claiming "page" there
+             * would tell a screen-reader user they are somewhere they are not.
+             * "true" marks it as the current one of the set without the claim.
+             */
+            aria-current={match === 'page' ? 'page' : match === 'owned' ? 'true' : undefined}
           >
             {tab.icon}
             <span>{tab.label}</span>
