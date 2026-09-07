@@ -181,3 +181,23 @@ export async function awardSessionXp(db: Db, workoutId: string): Promise<AwardRe
     unlocked: result?.unlocked ?? [],
   };
 }
+
+/**
+ * Puts a challenge in play.
+ *
+ * INVARIANT: this is the only way a challenge leaves `offered`, and it goes
+ *            through a definer function because `challenges` has read-only RLS
+ *            — ADR 0009. It carries a challenge id and nothing else: no
+ *            progress, no claim that anything was met. Whether a challenge was
+ *            COMPLETED is still derived from logged rows by the weekly batch.
+ *
+ * Returns false when nothing was accepted — someone else's challenge, one
+ * already accepted, or one whose window has closed. The RPC does not
+ * distinguish them on purpose: the caller is a browser, and "that is not yours"
+ * and "that has expired" are the same answer from here.
+ */
+export async function acceptChallenge(db: Db, challengeId: string): Promise<boolean> {
+  const { data, error } = await db.rpc('accept_challenge', { p_challenge_id: challengeId });
+  if (error) throw new Error(`accepting challenge: ${error.message}`);
+  return data === true;
+}

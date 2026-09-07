@@ -1,7 +1,15 @@
 import type { z } from 'zod';
 
 export type LlmStage =
-  'normalizer' | 'planner' | 'critic' | 'persona' | 'diet' | 'challenge' | 'smoke';
+  | 'normalizer'
+  | 'planner'
+  | 'critic'
+  | 'persona'
+  | 'diet'
+  | 'challenge'
+  /** The open chat — ADR 0015. The only stage whose input has no shape. */
+  | 'chat'
+  | 'smoke';
 
 export type LlmCallStatus =
   | 'ok'

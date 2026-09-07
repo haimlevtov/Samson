@@ -43,11 +43,22 @@ export interface ChallengeSettlement {
 }
 
 /**
- * Only these are settleable. A `rejected` challenge was never offered, and a
- * `completed` or `failed` one has already been resolved — re-settling either
- * would pay twice.
+ * Only an ACCEPTED challenge settles.
+ *
+ * INVARIANT: accepting is what puts a challenge in play — see the lifecycle
+ *            table in docs/specs/xp-and-challenges.md. This set used to include
+ *            `offered`, which meant a challenge paid out whether or not the user
+ *            ever accepted it, and made the Hub's Accept control a button that
+ *            changed nothing.
+ *
+ * A `rejected` challenge was never offered, and a `completed` or `failed` one
+ * has already been resolved — re-settling either would pay twice.
+ *
+ * AI-NOTE: the UPDATE in scripts/generate-challenges.ts filters on the same
+ *          statuses. Widen one and you must widen the other, or the batch pays
+ *          for a challenge this function did not settle.
  */
-const SETTLEABLE = new Set(['offered', 'active']);
+const SETTLEABLE = new Set(['active']);
 
 /**
  * The challenges finished as of `context.asOf`, with what each pays.

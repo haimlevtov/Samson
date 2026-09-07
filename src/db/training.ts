@@ -439,3 +439,96 @@ export async function insertSet(db: Db, userId: string, set: SetToInsert): Promi
 
   if (error) throw new Error(`logging set: ${error.message}`);
 }
+
+/**
+ * How many set rows one lift's chart will read.
+ *
+ * INVARIANT: this is BELOW PostgREST's `max_rows` (1000, supabase/config.toml)
+ *            on purpose. At or above it, the cap is applied silently and a full
+ *            page is indistinguishable from a truncated one; below it, a full
+ *            page means we hit our own limit and can say so.
+ */
+const EXERCISE_SET_CAP = 900;
+
+export interface ExerciseHistory {
+  name: string;
+  sets: SetRecord[];
+  /**
+   * True when the read hit `EXERCISE_SET_CAP`, so older sessions exist that are
+   * not in `sets` — and the OLDEST day present may be missing its heavier sets.
+   */
+  truncated: boolean;
+}
+
+/**
+ * Every logged set of one exercise, for the progression chart — ADR 0014.
+ *
+ * WHY this exists rather than filtering `loadHistory()`: that reads the user's
+ * whole set history to answer questions about all of them at once. This answers
+ * one question about one lift, and it is reached from a per-exercise route, so
+ * pulling the entire log to throw most of it away would make the cost of the
+ * chart grow with the length of somebody's training career.
+ *
+ * RLS scopes the SETS read to the caller — CLAUDE.md #10 — so there is no
+ * user_id filter here and none to forget.
+ *
+ * The NAME is a different matter, and the difference is worth stating rather
+ * than glossing: `exercises_read` is `user_id is null or user_id = auth.uid()`,
+ * so the catalogue is shared and any global exercise resolves a name for any
+ * user. An id this user has never trained therefore renders the chart's empty
+ * state rather than a 404, which is the behaviour we want — but it is the
+ * catalogue being public, not RLS hiding anything. Only another user's CUSTOM
+ * exercise comes back null.
+ */
+export async function loadExerciseHistory(
+  db: Db,
+  exerciseId: string
+): Promise<ExerciseHistory | null> {
+  const [{ data: exercise, error: eErr }, { data: sets, error: sErr }] = await Promise.all([
+    db.from('exercises').select('name').eq('id', exerciseId).maybeSingle(),
+    /*
+     * INVARIANT: newest first, and bounded. An earlier version ordered by
+     *            `set_index` with no limit, which was a silent wrong answer
+     *            rather than a slow one: LIMIT applies after ORDER BY, so
+     *            PostgREST's 1000-row cap dropped the HIGHEST set indices —
+     *            and since set_index counts warm-ups, the discarded rows were
+     *            exactly the top sets this chart exists to plot. A lifter with
+     *            enough history would have seen their opening sets charted as
+     *            their progression, or "nothing to plot" at all.
+     *
+     * Ordering by `completed_at` instead means truncation drops the OLDEST
+     * sessions, which is the one direction a history chart can lose data in and
+     * still be honest — and the page says when it happened.
+     */
+    db
+      .from('sets')
+      .select('weight_kg, reps, is_warmup, workouts!inner(local_date)')
+      .eq('exercise_id', exerciseId)
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .limit(EXERCISE_SET_CAP),
+  ]);
+
+  if (eErr) throw new Error(`loading exercise: ${eErr.message}`);
+  if (sErr) throw new Error(`loading exercise history: ${sErr.message}`);
+  if (exercise === null) return null;
+
+  const rows = sets ?? [];
+
+  return {
+    name: exercise.name,
+    truncated: rows.length >= EXERCISE_SET_CAP,
+    sets: rows.map((row) => ({
+      // The query filters on it, so every row carries the id we asked for.
+      exerciseId,
+      // Postgres numerics arrive as strings; Number() once here rather than at
+      // every call site downstream, as loadHistory does.
+      weightKg: row.weight_kg === null ? null : Number(row.weight_kg),
+      reps: row.reps,
+      // Not selected: nothing downstream of this function reads rpe, and it is
+      // a numeric conversion per row on the largest result this app fetches.
+      rpe: null,
+      isWarmup: row.is_warmup,
+      localDate: (row.workouts as unknown as { local_date: string }).local_date,
+    })),
+  };
+}

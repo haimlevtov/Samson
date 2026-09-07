@@ -12,7 +12,7 @@ meets its acceptance criteria.
 **Current phase: 5** — phases 0 to 4 are complete; see `docs/plans/` for the
 plan and recorded outcome of each. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
-met all four of its criteria and left four gaps named in its outcome.
+met all four of its criteria, and every gap its outcome named is now closed.
 
 ---
 
@@ -146,8 +146,9 @@ analysis is measuring.
 - Normalizer: free text or voice into validated set JSON, schema retry on
   failure
 - Persona layer: receives a finished plan, changes only delivery. Personas are
-  config rows — system prompt, TTS voice id, intensity, humor tier, banned
-  phrases
+  config rows — system prompt, language hint and voice variant, intensity, humor
+  tier, banned phrases. There is no TTS provider; delivery is the browser's own
+  speechSynthesis — ADR 0006, corrected 2026-09-07
 - Ship three personas: the Rival, the Analyst, and one of the Sergeant or the
   Old Master
 - Precomputed audio clips for high-frequency live events (rest over, set

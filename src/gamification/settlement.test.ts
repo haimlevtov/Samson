@@ -26,7 +26,9 @@ function spec(over: Partial<ChallengeSpec> = {}): ChallengeSpec {
 }
 
 function challenge(over: Partial<AssignedChallenge> = {}): AssignedChallenge {
-  return { id: 'c-1', slug: 'weekly-two', spec: spec(), status: 'offered', ...over };
+  // Accepted by default: only an accepted challenge settles, so an 'offered'
+  // fixture would make every test below assert nothing.
+  return { id: 'c-1', slug: 'weekly-two', spec: spec(), status: 'active', ...over };
 }
 
 function workout(localDate: string, status: WorkoutStatus = 'completed'): WorkoutRecord {
@@ -63,6 +65,29 @@ describe('settleChallenges', () => {
     for (const status of ['completed', 'failed', 'rejected']) {
       expect(settleChallenges([challenge({ status })], context(), 0), status).toEqual([]);
     }
+  });
+
+  /*
+   * The rule accepting exists for. This is the same context that settles an
+   * accepted challenge in the first test above — the ONLY difference is that
+   * nobody pressed Accept, and that has to be enough to withhold the payout or
+   * the Hub's control does nothing.
+   */
+  it('does not settle a challenge the user never accepted', () => {
+    expect(settleChallenges([challenge({ status: 'offered' })], context(), 0)).toEqual([]);
+  });
+
+  it('settles the accepted one and leaves its unaccepted twin', () => {
+    const settled = settleChallenges(
+      [
+        challenge({ id: 'accepted', slug: 'taken', status: 'active' }),
+        challenge({ id: 'ignored', slug: 'untaken', status: 'offered' }),
+      ],
+      context(),
+      0
+    );
+
+    expect(settled.map((s) => s.id)).toEqual(['accepted']);
   });
 
   it('clamps a payout to what the week has left', () => {

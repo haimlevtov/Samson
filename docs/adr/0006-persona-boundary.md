@@ -1,6 +1,6 @@
 # ADR 0006 — The persona speaks; it does not decide
 
-**Status:** accepted, phase 3
+**Status:** accepted, phase 3 — **amended 2026-09-02 and 2026-09-07, see below**
 **Date:** 2026-09-01
 
 ## Context
@@ -101,3 +101,75 @@ only key this project has is for text. Persona voice is therefore tone and word
 choice, not timbre, and nothing is precomputed — a deliberate reduction of what
 PLAN.md phase 3 describes, recorded here so the phase report does not claim the
 audio pipeline that was planned.
+
+**Amended 2026-09-02, after a user report that every coach sounded the same.**
+The reduction above was true and the implementation was weaker still. Voices
+were selected by LANGUAGE alone, and `personas.tts_voice_id` — despite its
+name — holds a BCP-47 tag rather than a voice identity. Two consequences, and
+the second is the one that made the feature look broken:
+
+- `old-master` and `rival` are both seeded `en-GB`, so they resolved to the same
+  `SpeechSynthesisVoice` object. All that separated them was one step of
+  intensity: a 7% rate and 5% pitch difference, under what a listener hears as a
+  different speaker.
+- `pickVoice` falls back from an exact language match to the language prefix,
+  which is right — asking for en-GB on a US-only machine should speak American
+  English rather than fall silent. But it meant that on a device with no en-GB
+  voice installed, the Windows default, the `en-US` persona landed on that same
+  voice too. All three coaches converged on one.
+
+Meanwhile `docs/PRD.md` and `docs/PLAN.md` both promise each persona row carries
+a "TTS voice", and the UI labels the picker "Voice". The interface and the
+product docs promised something this note had already conceded was impossible.
+
+**What changed:** the language tag now narrows the field and a `variant` index
+picks a distinct voice within it, so three personas take three of the device's
+voices whenever it has three. This does not buy a persona a consistent timbre —
+which voice a coach gets still depends on what is installed, and a machine with
+one English voice still speaks with one — but it does mean choosing a different
+coach produces an audibly different speaker on any ordinary device. The claim in
+the first paragraph stands: nothing here is a recorded or synthesised persona
+voice. It is the device's voices, allocated so they do not collide.
+
+`tts_voice_id` keeps its misleading name for now; renaming a column is a
+migration and a type regeneration for a cosmetic gain. `src/ui/speak.ts` says
+what it actually holds, and `src/ui/speak.test.ts` pins the behaviour that was
+previously untested — which is why nothing caught this.
+
+---
+
+**Amended again 2026-09-07, after review of the change above.**
+
+Two things that amendment got wrong, both found by reviewers rather than by
+running the app.
+
+**Voice allocation was a code branch, not content.** The variant passed to
+`speak()` was each persona's _position_ in the list, which `listPersonas`
+orders by name. That violates CLAUDE.md #7 and the promise in `docs/PRD.md`
+§5.4 that a persona is a row "not a code branch" — and it was a live bug, not
+only a rule: inserting any persona whose name sorts early shifts every persona
+after it. A fourth shared coach, or a user creating their own row —
+`personas_read` is `user_id is null or user_id = auth.uid()` — silently
+reassigned the voices of coaches the migration never touched. It is now
+`personas.tts_voice_variant`, seeded so the two `en-GB` coaches differ
+(migration `20260907120000`).
+
+The claim above that "three personas take three of the device's voices whenever
+it has three" is also overstated, and is corrected here rather than left
+standing: `pickVoice` indexes within the pool matching the persona's _language_,
+modulo that pool's size. With one `en-GB` and two `en-US` voices installed, the
+two `en-GB` coaches still collide. Accurate wording is "three of the voices
+matching their language, where the language has three".
+
+**The speech clamp disagreed with the tone clamp.** `spokenIntensity` subtracted
+two where `resolveTone` clamps to `GENTLE_MAX_INTENSITY`. Those are different
+functions: on a gentle week the Old Master's words were generated at intensity 2
+and read aloud at 1, and the Analyst's at 2 and read at 1. This ADR's Decision
+section already fixed the tone override as a single rule in code, and a second
+definition of "gentle" living in a client component contradicted it. It now
+imports the same constant, and `speak.test.ts` asserts the two agree at every
+point on the scale rather than trusting them to.
+
+**One consequence worth naming for whoever adds the fourth persona:** the
+variant is content now, so the `add-persona` skill has to set it. A new `en-GB`
+coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.

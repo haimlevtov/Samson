@@ -169,16 +169,21 @@ async function main(): Promise<void> {
       if (!APPLY) continue;
 
       /*
-       * The status transition IS the idempotency guard. Filtering on the
-       * unresolved statuses inside the UPDATE means two overlapping runs cannot
-       * both pay: whichever commits second matches no row and writes no XP.
-       * Checking first and updating after would leave exactly that gap open.
+       * The status filter does two jobs now. It is the idempotency guard —
+       * whichever of two overlapping runs commits second matches no row and
+       * writes no XP, where checking first and updating after would leave
+       * exactly that gap open. It is ALSO the acceptance gate: only 'active' is
+       * here, so a challenge nobody accepted is never paid.
+       *
+       * AI-NOTE: this list and SETTLEABLE in src/gamification/settlement.ts
+       *          must stay identical, or the batch pays for something that
+       *          function did not settle.
        */
       const { data: won, error: settleErr } = await db
         .from('challenges')
         .update({ status: 'completed' })
         .eq('id', done.id)
-        .in('status', ['offered', 'active'])
+        .in('status', ['active'])
         .select('id');
       if (settleErr) throw new Error(`settling ${done.slug}: ${settleErr.message}`);
       if ((won ?? []).length === 0) continue;

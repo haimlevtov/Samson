@@ -63,6 +63,11 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
   types from them, and use the same schema for LLM structured output and
   runtime validation.
 - Migrations only. Never modify the database by hand.
+- `src/db/types.ts` is **generated**. Never hand-edit it: CI regenerates it with
+  `supabase gen types typescript --local` and fails on any diff, and the
+  generator's formatting is not guessable — short function entries collapse onto
+  one line, longer ones do not. Adding a column or an RPC means regenerating,
+  not typing. This has cost two red builds already.
 - Every feature ships with tests in the same commit.
 - Tests must pass with no API key present. Mock the gateway in unit tests.
 
