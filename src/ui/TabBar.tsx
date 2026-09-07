@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { isCurrent } from './tabs';
 
 /**
  * The five tabs — ADR 0012.
@@ -98,14 +99,6 @@ const TABS: Tab[] = [
     ),
   },
 ];
-
-/**
- * A tab is current when the path is it or lives under it, so the session screen
- * at `/history/[id]` keeps History lit rather than lighting nothing.
- */
-function isCurrent(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 /** Signed out, every tab redirects to the page you are already on. */
 const HIDDEN_ON = ['/sign-in'];
