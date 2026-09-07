@@ -1051,6 +1051,32 @@ button.set-prev.copy:hover:not(:disabled) {
   font-weight: 600;
 }
 
+/* The way back into a session you are in the middle of. Sized like the
+   primary action it replaces, because that is what it is. */
+.resume {
+  display: grid;
+  gap: 2px;
+  padding: 12px 16px;
+  min-height: 52px;
+  align-content: center;
+  background: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 0 var(--accent-strong);
+  color: #fff;
+}
+.resume:hover {
+  text-decoration: none;
+  background: var(--accent-strong);
+}
+.resume .muted {
+  color: rgba(255, 255, 255, 0.75);
+}
+.resume-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
 .tpl-group {
   margin-bottom: 6px;
 }

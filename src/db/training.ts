@@ -92,13 +92,65 @@ export async function loadHistory(db: Db): Promise<History> {
   };
 }
 
-/** The workout list, newest first, with a set count for each. */
-export async function listWorkouts(db: Db, limit = 40): Promise<WorkoutRow[]> {
+/** The session you are in the middle of right now, if there is one. */
+export interface ActiveWorkout {
+  id: string;
+  localDate: string;
+  startedAt: string | null;
+}
+
+/**
+ * Today's unfinished session.
+ *
+ * WHY it is scoped to the user's local date rather than "any in_progress row":
+ * a session abandoned last Tuesday is not something you are doing, and treating
+ * it as one would make "Start a workout" a permanent redirect into a session
+ * from a week ago with no way past it. Today's is live; an older one is a loose
+ * end, and History is where loose ends belong.
+ *
+ * INVARIANT: the caller passes the user's local date, never the server's —
+ *            CLAUDE.md #9. A session begun at 23:30 in Jerusalem is still
+ *            today's at 23:59, whatever UTC thinks.
+ */
+export async function activeWorkout(db: Db, today: string): Promise<ActiveWorkout | null> {
   const { data, error } = await db
+    .from('workouts')
+    .select('id, local_date, started_at')
+    .eq('status', 'in_progress')
+    .eq('local_date', today)
+    .order('started_at', { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(`loading the active session: ${error.message}`);
+
+  const row = data?.[0];
+  return row === undefined
+    ? null
+    : { id: row.id, localDate: row.local_date, startedAt: row.started_at };
+}
+
+/**
+ * The workout list, newest first, with a set count for each.
+ *
+ * `excludeId` leaves out the session currently being performed: History is
+ * where a session goes when it is over, and one that is still being logged
+ * appearing in the list of past sessions is the app telling the user they have
+ * finished something they are still doing.
+ */
+export async function listWorkouts(
+  db: Db,
+  limit = 40,
+  excludeId: string | null = null
+): Promise<WorkoutRow[]> {
+  let query = db
     .from('workouts')
     .select('id, local_date, status, notes, sets(count)')
     .order('local_date', { ascending: false })
     .limit(limit);
+
+  if (excludeId !== null) query = query.neq('id', excludeId);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`listing workouts: ${error.message}`);
 

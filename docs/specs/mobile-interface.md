@@ -95,6 +95,17 @@ game.
 **History — `/history`** is the session list and nothing else. It is rank 3
 browsing by definition: nobody opens it under load.
 
+**One session at a time, and it is not history until it is finished.** A
+workout is something you are in the middle of, and there is no being in the
+middle of two. Both start actions — empty and from a template — resume today's
+unfinished session rather than opening a second, and that session is left out
+of History until `finishWorkout` resolves it. The way back into it is the
+Workout tab, which offers "Resume" in place of "Start" while one is running.
+
+A session left unfinished on an _earlier_ day is not live. It appears in
+History with its `in progress` badge, where it can be opened and finished,
+because the alternative is a row that exists and is reachable from nowhere.
+
 ## 3. Interaction model
 
 **Sizes.** Every interactive target is at least **44×44 px**. A visually smaller
@@ -172,6 +183,7 @@ section exists to prevent.
 | **Set logging**               | The row's tick shows a pending mark and the row is locked. It does not vanish or move.                                                  |
 | **Set logged**                | The row turns green with a filled tick, and the rest timer starts counting — that _is_ the confirmation, and it is what they need next. |
 | **Set un-ticked**             | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                               |
+| **Start pressed mid-session** | The session already running opens, rather than a second one. Nothing is created and nothing logged is orphaned.                         |
 | **No previous session**       | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                             |
 | **Rest finished**             | The timer turns green and a cue fires. Isolated behind one call site for phase 3 to replace with a persona clip.                        |
 | **Nothing added yet**         | "No exercises yet." plus the add control. Never an empty grid with headers.                                                             |

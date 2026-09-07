@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createServerDb, currentUser } from '@/src/db/server';
+import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { activeWorkout } from '@/src/db/training';
 import { listTemplates } from '@/src/db/templates';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { startWorkout } from '../history/actions';
@@ -40,7 +41,10 @@ export default async function TemplatesPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const templates = await listTemplates(db);
+  const [templates, active] = await Promise.all([
+    listTemplates(db),
+    activeWorkout(db, localDateFor(user.timezone)),
+  ]);
 
   return (
     <>
@@ -56,15 +60,35 @@ export default async function TemplatesPage() {
       </header>
 
       {/*
-       * Quick start, above the templates. Picking a template is how a session
-       * normally begins — that is the whole feature — but an account with none
-       * yet would be a dead end on its first day, and "walk in and start" stays
-       * one tap for everyone else.
+       * A session in progress owns this whole section. Starting anything else
+       * would only redirect back here — the actions enforce one at a time — and
+       * offering "Start" while one is running invites the user to think the
+       * first one was lost.
        */}
-      <h2 className="section">Quick start</h2>
-      <form action={startWorkout} className="start-empty">
-        <button type="submit">Start an empty workout</button>
-      </form>
+      {active === null ? (
+        <>
+          {/*
+           * Quick start, above the templates. Picking a template is how a
+           * session normally begins — that is the whole feature — but an
+           * account with none yet would be a dead end on its first day, and
+           * "walk in and start" stays one tap for everyone else.
+           */}
+          <h2 className="section">Quick start</h2>
+          <form action={startWorkout} className="start-empty">
+            <button type="submit">Start an empty workout</button>
+          </form>
+        </>
+      ) : (
+        <>
+          <h2 className="section">In progress</h2>
+          <Link href={`/history/${active.id}`} className="resume">
+            <span className="resume-label">Resume your session</span>
+            <span className="muted small">
+              Started today. It stays out of History until you finish it.
+            </span>
+          </Link>
+        </>
+      )}
 
       <div className="section-row">
         <h2 className="section with-hint">

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createTemplate, deleteTemplate, exerciseIdsBySlug } from '@/src/db/templates';
 import { latestAcceptedPlan } from '@/src/db/personas';
-import { loadWorkout } from '@/src/db/training';
+import { activeWorkout, loadWorkout } from '@/src/db/training';
 import { templateDraftSchema } from '@/src/templates/schema';
 import { templateFromSession } from '@/src/templates/derive';
 import { templateFromPlannedSession } from '@/src/templates/plan';
@@ -179,12 +179,19 @@ export async function startFromTemplate(formData: FormData): Promise<void> {
   if (!user) redirect('/sign-in');
 
   const templateId = String(formData.get('templateId') ?? '');
+  const localDate = localDateFor(user.timezone);
+
+  // One session at a time, exactly as `startWorkout()` enforces it. Starting a
+  // template while one is running would leave the sets already logged on a
+  // session the user has been navigated away from.
+  const active = await activeWorkout(db, localDate);
+  if (active !== null) redirect(`/history/${active.id}`);
 
   const { data, error } = await db
     .from('workouts')
     .insert({
       user_id: user.id,
-      local_date: localDateFor(user.timezone),
+      local_date: localDate,
       status: 'in_progress',
       started_at: new Date().toISOString(),
       // RLS rejects a template id belonging to anyone else, so this cannot

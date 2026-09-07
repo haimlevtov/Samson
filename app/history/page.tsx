@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
-import { listWorkouts } from '@/src/db/training';
+import { activeWorkout, listWorkouts } from '@/src/db/training';
 import { loadUnlockedAchievements } from '@/src/db/gamification';
 import { displayDate } from '@/src/ui/format';
 import { BadgeReveal } from './BadgeReveal';
@@ -28,13 +28,18 @@ export default async function WorkoutsPage({
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  const today = localDateFor(user.timezone);
+
+  // The session being performed right now is not history yet — ADR 0012 says
+  // this page owns past sessions and nothing else, and a workout you are still
+  // logging into is not one.
+  const active = await activeWorkout(db, today);
+
   const [workouts, badges, { unlocked }] = await Promise.all([
-    listWorkouts(db),
+    listWorkouts(db, 40, active?.id ?? null),
     loadUnlockedAchievements(db),
     searchParams,
   ]);
-
-  const today = localDateFor(user.timezone);
   const logged = workouts.filter((w) => w.setCount > 0).length;
 
   return (
