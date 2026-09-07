@@ -10,7 +10,7 @@
  * INVARIANT: the service role creates fixtures; every assertion runs through a
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
 import { ACTIVE_SESSION_WINDOW_HOURS, activeWorkout, listWorkouts } from '../../src/db/training';
 
@@ -46,6 +46,20 @@ beforeAll(async () => {
   alice = await createTestUser('session-routing-a');
   bob = await createTestUser('session-routing-b');
 }, 60_000);
+
+/**
+ * Every test starts from no workouts at all.
+ *
+ * WHY this is not optional: these assertions are about WHICH row a query
+ * returns, so a row left behind by an earlier test is not untidiness — it is a
+ * different answer. Without this, "still finds one that crossed midnight" is
+ * beaten by the fresher row the first test created, and the RLS case asserts
+ * null against a user who already has two sessions running.
+ */
+beforeEach(async () => {
+  const admin = adminClient();
+  await admin.from('workouts').delete().in('user_id', [alice.id, bob.id]);
+});
 
 afterAll(async () => {
   await deleteTestUser(alice);
@@ -182,7 +196,10 @@ describe('listWorkouts — excluding the running session', () => {
   });
 
   it('returns everything when nothing is excluded', async () => {
+    await makeWorkout(alice.id, { status: 'completed', local_date: DAY });
+    await makeWorkout(alice.id, { status: 'completed', local_date: '2026-05-05' });
+
     const rows = await listWorkouts(alice.client, 40, null);
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows).toHaveLength(2);
   });
 });
