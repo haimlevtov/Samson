@@ -78,19 +78,55 @@ against "how did last month go" and could only lose.
 | 2    | Starting an empty session instead                    |
 | 3    | Building or importing a template                     |
 
-**Hub — `/hub`**
+**Hub — `/hub`** — ADR 0013 moved everything personal off this tab.
 
-| Rank | What                                                  |
-| ---- | ----------------------------------------------------- |
-| 1    | Adherence, streak — the retention numbers, per PRD §3 |
-| 2    | XP this week against the ceiling                      |
-| 3    | Badges, challenges                                    |
-| 4    | Tonnage, acute:chronic, weekly chart, best e1RM       |
+| Rank | What                                           |
+| ---- | ---------------------------------------------- |
+| 1    | Challenges you can accept or are part-way into |
+| 2    | The leaderboard, once it exists                |
+| 3    | Challenges the validator declined, and why     |
+
+**Profile — `/profile`**
+
+| Rank | What                                                     |
+| ---- | -------------------------------------------------------- |
+| 1    | Level, and progress into the next one                    |
+| 2    | Streak and adherence — the retention numbers, per PRD §3 |
+| 3    | XP this week against the ceiling                         |
+| 4    | Badges                                                   |
+| 5    | Tonnage, acute:chronic, weekly chart, best e1RM          |
+| 6    | Settings, behind a disclosure                            |
 
 **A consequence worth stating:** the stat tiles are equal in weight and are not
-equal in rank. Adherence and streak are the mechanic the product retains people
+equal in rank. Streak and adherence are the mechanic the product retains people
 with (invariant #4); tonnage and ACWR are diagnostics, and they sort below the
 game.
+
+**WHY level outranks the retention numbers**, when invariant #4 says adherence
+is the mechanic: the level is a _summary_ of them. It is read from lifetime XP,
+which comes from adherence and nothing else, so putting it first states the
+conclusion before the workings rather than competing with them.
+
+**WHY settings sort last on their own tab.** They were the whole of Profile
+before ADR 0013 and are now a drawer on it. A setting is changed a handful of
+times in the life of an account; the things above it are looked at weekly. Rank
+follows how often something is read, not how important it felt when it was
+built.
+
+**Disclosures.** Where a section is demoted rather than deleted — Profile's
+settings are the first — it goes behind a native `<details>`, not a modal or a
+client-state accordion. It stays keyboard and screen-reader navigable with no
+work, needs no client component on a page that is otherwise server-rendered, and
+with CSS off it degrades to an open section rather than a control that does
+nothing.
+
+Two rules come with it, and both are easy to lose:
+
+- **The summary is a full tap target** (`min-height: var(--tap)`). It is the
+  only route to every setting in the app.
+- **Removing `list-style` removes the focus indicator's box.** A summary with
+  its marker suppressed must set its own `:focus-visible` outline, or keyboard
+  focus lands somewhere invisible.
 
 **History — `/history`** is the session list and nothing else. It is rank 3
 browsing by definition: nobody opens it under load.
