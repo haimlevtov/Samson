@@ -7,7 +7,7 @@
  */
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DB_URL } from './helpers';
+import { DB_URL, redactDbUrl } from './helpers';
 
 let pg: Client | undefined;
 
@@ -16,9 +16,6 @@ const db = (): Client => {
   if (!pg) throw new Error('no database connection — beforeAll should have failed');
   return pg;
 };
-
-/** The URL with its password replaced, so a failure can name it safely. */
-const redacted = (): string => DB_URL.replace(/(?<=:\/\/[^:/@]*:)[^@]*(?=@)/, '***');
 
 beforeAll(async () => {
   /*
@@ -32,7 +29,45 @@ beforeAll(async () => {
    * one that fails: the first missing RLS policy would ship.
    */
   try {
-    pg = new Client({ connectionString: DB_URL });
+    /*
+     * INVARIANT: TLS is explicit, not inherited. `pg` 8 defaults `ssl: false`
+     *            (node_modules/pg/lib/defaults.js), and the pooler string in
+     *            helpers.ts carries no sslmode — so before this the hosted path
+     *            would happily open an unencrypted session across the public
+     *            internet, authenticating as the database owner. Localhost did
+     *            not care; a shared hosted project does.
+     *
+     * WHY local is exempt: the local stack serves a self-signed certificate and
+     * a workstation talking to 127.0.0.1 has no on-path attacker to defend
+     * against. Everything else is on the network.
+     *
+     * WHY verification is opt-in rather than always on — measured, not assumed:
+     * `rejectUnauthorized: true` against the Supabase pooler fails with
+     * "self-signed certificate in certificate chain". The pooler presents a
+     * chain rooted in Supabase's own CA, which is not in Node's trust store, so
+     * demanding verification by default would simply stop the suite running and
+     * the next person would turn TLS off again to fix it.
+     *
+     * What this configuration does and does not buy, stated plainly rather than
+     * implied: the session IS encrypted, so a passive observer sees nothing,
+     * and SCRAM-SHA-256 means the password never crosses the wire in any case.
+     * What remains open without verification is an ACTIVE on-path relay. Point
+     * SUPABASE_CA_CERT at Supabase's CA certificate (dashboard → Database →
+     * SSL configuration) and that closes too.
+     *
+     * AI-NOTE: do not "simplify" this to `ssl: true` or drop it. `pg` 8
+     *          defaults to false, and the string in helpers.ts carries no
+     *          sslmode, so removing this silently restores plaintext.
+     */
+    const local = /^(?:postgresql|postgres):\/\/[^@]*@?(?:localhost|127\.0\.0\.1|\[::1\])[:/]/.test(
+      DB_URL
+    );
+    const ca = process.env['SUPABASE_CA_CERT'];
+
+    pg = new Client({
+      connectionString: DB_URL,
+      ssl: local ? false : ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false },
+    });
     await pg.connect();
   } catch (cause) {
     /*
@@ -49,6 +84,13 @@ beforeAll(async () => {
      * at a time, so a connection string pasted across two lines keeps only as
      * far as the newline — and a wrapped paste is the single most common way to
      * get here, worth naming rather than leaving under "no stray line breaks".
+     */
+    /*
+     * AI-NOTE: `truncated` must be tested BEFORE the TypeError branch. A URL
+     *          cut off at the @ also throws TypeError at construction, so
+     *          reordering these — the obvious "general case last" tidy-up —
+     *          silently re-creates the percent-encoding misdiagnosis this
+     *          message went through three versions to escape.
      */
     const truncated = DB_URL.includes('@') && DB_URL.slice(DB_URL.lastIndexOf('@') + 1) === '';
 
@@ -75,7 +117,7 @@ beforeAll(async () => {
             'from most networks.';
 
     throw new Error(
-      `could not open a Postgres connection to ${redacted()}. ${detail} ` +
+      `could not open a Postgres connection to ${redactDbUrl(DB_URL)}. ${detail} ` +
         'See tests/db/helpers.ts for where to find the string.',
       { cause }
     );
@@ -83,8 +125,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Optional-chained: when beforeAll threw, there is no client to close, and a
-  // TypeError here would bury the real failure under a second one.
+  // When beforeAll threw there is no client to close, and a TypeError here
+  // would bury the real failure under a second one.
   await pg?.end();
 });
 

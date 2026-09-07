@@ -81,8 +81,9 @@ New migrations go to the hosted project with `npm run db:push`, after
 
 ## Setup (local stack)
 
-Only worth it when you need to reset the schema repeatedly or run
-`npm run test:db`, which requires a direct Postgres connection. Docker's WSL2 VM
+Only worth it when you need to reset the schema repeatedly. `npm run test:db`
+no longer requires it — set `SUPABASE_DB_URL` to the hosted pooler string
+(see `.env.example`) and the whole suite runs without Docker. Docker's WSL2 VM
 holds several GB while it runs.
 
 ```bash
@@ -101,7 +102,7 @@ supabase stop && wsl --shutdown
 | Command                                 | What it does                                                |
 | --------------------------------------- | ----------------------------------------------------------- |
 | `npm test`                              | Unit tests. No database, no network, no API key.            |
-| `npm run test:db`                       | RLS and schema tests against the local stack.               |
+| `npm run test:db`                       | RLS and schema tests. Local stack, or hosted via DB_URL.    |
 | `npm run migrate`                       | `supabase db reset` — local stack only, rebuilds from zero. |
 | `npm run db:push`                       | Applies new migrations to the hosted project.               |
 | `npm run seed`                          | Five synthetic users with 8+ weeks of history.              |

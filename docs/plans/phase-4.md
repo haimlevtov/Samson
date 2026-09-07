@@ -217,7 +217,7 @@ both eval modes), `npm run test:db`, `npm run build`.
 | Property tests: XP monotonic, never exceeds the weekly cap   | ✅     | `fast-check`, 10,000 generated cases on the ceiling property |
 | A rejected challenge is inspectable — the validator logs why | ✅     | 14 rejections written with reasons; rendered on `/progress`  |
 | A badge visibly fires in the UI on unlock                    | ✅     | Browser at 375×812, real data, whole path                    |
-| No completion can be granted from the client                 | ✅     | `npm run test:db`, 28 passing                                |
+| No completion can be granted from the client                 | ✅     | `npm run test:db` — 28 at the time, 60 across the suite now  |
 
 ### What the phase actually cost
 
@@ -323,7 +323,8 @@ against a target of 8 before starting"), while the beginner was offered them.
 
 ### Known gaps
 
-Two of the four were closed on 2026-09-02, after the review below. The entries
+All four are now closed — three on 2026-09-02 after the review below, the last
+by the branch this entry describes. The entries
 are kept rather than deleted, because what was missed and when is part of what
 this document is for.
 
