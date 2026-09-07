@@ -10,9 +10,12 @@ plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
 **Current phase: 5** — phases 0 to 4 are complete; see `docs/plans/` for the
-plan and recorded outcome of each. One phase-6 item, the leaderboard, was pulled
-forward into phase 5 and shipped; see the entry under phase 6 for why and for
-the two ways it differs from what was written there. Phase 3 carries one unmet
+plan and recorded outcome of each. Phase 5 shipped, but **not the phase written
+below**: it became interface and feature work, and
+[`plans/phase-5.md`](plans/phase-5.md) records the divergence and what the
+content-fill brief still owes. One phase-6 item, the leaderboard, was pulled
+forward into it and shipped; see the entry under phase 6 for why and for the two
+ways it differs from what was written there. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
 met all four of its criteria, and every gap its outcome named is now closed.
 
@@ -192,6 +195,17 @@ One of each, end to end. This is about plumbing, not content.
 ---
 
 ## Phase 5 — Content fill
+
+> **This is not what phase 5 became.** The phase ran 2026-09-05 to 2026-09-07
+> and shipped interface and feature work — a set grid, five-tab navigation,
+> templates, a theme, the Profile/Hub re-cut, progression charts, the coach
+> chat, a settings route and the leaderboard — while almost none of the content
+> fill below was built. [`plans/phase-5.md`](plans/phase-5.md) records what
+> shipped, why it diverged, and which of the items below still do not exist.
+>
+> Rescheduling or cutting them is a decision nobody has made yet. The brief
+> calls them compressible, so cutting is legitimate — but it should be written
+> down rather than left as a section that quietly stopped being true.
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
