@@ -47,6 +47,19 @@ const settingsSchema = z.object({
     .refine(isKnownTimezone, 'That is not a timezone this device recognises.'),
   humorMaxLevel: z.enum(HUMOR_LEVELS),
   theme: z.enum(THEMES),
+  /*
+   * A plain boolean, because the absent-means-false translation happens at the
+   * FormData boundary below, beside the other defaults.
+   *
+   * WHY it is worth a comment: an unchecked checkbox sends NOTHING at all, so
+   * the value here is derived from a presence check rather than read. FOUND IN
+   * TESTING — this field was in the schema and missing from the parse object,
+   * which made it permanently undefined and failed EVERY settings save, not
+   * only the ones touching the leaderboard.
+   *
+   * ADR 0016 §4: the stored default is visible, and this is the way out.
+   */
+  leaderboardOptOut: z.boolean(),
 });
 
 export async function updateSettings(
@@ -62,6 +75,8 @@ export async function updateSettings(
     timezone: formData.get('timezone') ?? '',
     humorMaxLevel: formData.get('humorMaxLevel') ?? '',
     theme: formData.get('theme') ?? '',
+    // Present only when ticked — see the schema field.
+    leaderboardOptOut: formData.get('leaderboardOptOut') === 'on',
   });
 
   if (!parsed.success) {
@@ -79,6 +94,7 @@ export async function updateSettings(
       timezone: parsed.data.timezone,
       humor_max_level: parsed.data.humorMaxLevel,
       theme: parsed.data.theme,
+      leaderboard_opt_out: parsed.data.leaderboardOptOut,
     })
     .eq('user_id', user.id);
 

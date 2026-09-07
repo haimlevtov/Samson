@@ -26,12 +26,14 @@ export function SettingsForm({
   humorMaxLevel,
   theme,
   timezones,
+  leaderboardOptOut,
 }: {
   displayName: string;
   timezone: string;
   humorMaxLevel: string;
   theme: string;
   timezones: string[];
+  leaderboardOptOut: boolean;
 }) {
   const [state, action, saving] = useActionState<SettingsFormState, FormData>(
     updateSettings,
@@ -104,6 +106,23 @@ export function SettingsForm({
         ))}
         <p className="muted small">
           A ceiling, not a setting: a persona pitched below it stays below it.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend className="label">Leaderboard</legend>
+        <label className="check-row">
+          <input type="checkbox" name="leaderboardOptOut" defaultChecked={leaderboardOptOut} />
+          <span>Keep me off the leaderboard</span>
+        </label>
+        {/*
+         * Says what is shared, not just that something is — ADR 0016 §2. A
+         * privacy control that does not name the data it governs asks for
+         * consent to an unknown.
+         */}
+        <p className="muted small">
+          Other people see your display name and your total XP. Nothing else — not your email, not
+          your sessions. Without a display name you are not listed at all.
         </p>
       </fieldset>
 

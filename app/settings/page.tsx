@@ -72,6 +72,7 @@ export default async function SettingsPage() {
           displayName={user.displayName ?? ''}
           timezone={user.timezone}
           humorMaxLevel={user.humorMaxLevel}
+          leaderboardOptOut={user.leaderboardOptOut}
           theme={user.theme}
           timezones={timezones}
         />

@@ -2145,3 +2145,87 @@ details.quick-log[open] > summary {
      eat another 44px of a small screen. */
   gap: 8px;
 }
+
+/* ---- the leaderboard ----------------------------------------------------
+ *
+ * ADR 0016. The only surface in the app showing another user's data, which is
+ * why the row for the reader is marked: on a list of names, "which one is me"
+ * is the first question and scanning for it is the whole cost.
+ */
+.leaderboard td:first-child {
+  /* Ranks are read as a column of numbers, so they line up as one. */
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  width: 1%;
+  white-space: nowrap;
+}
+
+.leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leaderboard th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 6px 8px;
+  font-weight: 700;
+}
+
+.leaderboard td {
+  padding: 9px 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* The name takes whatever the two number columns do not, and truncates rather
+   than widening the table — a long display name is the one input here that
+   another user controls. */
+.lb-name {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-xp {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Background rather than a border: a border on a <tr> draws through the cells
+   in a collapsed table. The chip beside the name is what carries the meaning
+   where colour cannot — mobile-interface.md §3. */
+.leaderboard tr.you td {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+/* Not colour alone — the chip is what a screen reader and a colourblind reader
+   both get. mobile-interface.md §3. */
+.you-chip {
+  margin-left: 8px;
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+
+/* The opt-out sits in its own fieldset; the checkbox and its label share a row
+   rather than stacking, because a checkbox on its own line reads as a heading. */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+}
+
+.check-row input[type='checkbox'] {
+  width: auto;
+  min-height: 0;
+  /* A 44px target for the pair comes from .check-row's min-height; the box
+     itself is sized by the platform, which is what people recognise. */
+  accent-color: var(--accent-text);
+}

@@ -641,6 +641,7 @@ export type Database = {
           display_name: string | null
           height_cm: number | null
           humor_max_level: string
+          leaderboard_opt_out: boolean
           llm_weekly_budget_usd: number
           sex: string | null
           theme: string
@@ -656,6 +657,7 @@ export type Database = {
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string
+          leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
           sex?: string | null
           theme?: string
@@ -671,6 +673,7 @@ export type Database = {
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string
+          leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
           sex?: string | null
           theme?: string
@@ -890,7 +893,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      leaderboard: {
+        Row: {
+          display_name: string | null
+          is_you: boolean | null
+          lifetime_xp: number | null
+          rank: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_challenge: { Args: { p_challenge_id: string }; Returns: boolean }

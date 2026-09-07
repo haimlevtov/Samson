@@ -46,6 +46,8 @@ export interface SessionUser {
    * and can be tested without a database.
    */
   humorMaxLevel: string;
+  /** ADR 0016 §4. Default is visible; this is the way out. */
+  leaderboardOptOut: boolean;
   /** Appearance — see src/ui/theme.ts. The layout stamps it onto <html>. */
   theme: string;
 }
@@ -66,7 +68,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
 
   const { data: profile } = await db
     .from('users')
-    .select('display_name, timezone, unit_preference, humor_max_level, theme')
+    .select('display_name, timezone, unit_preference, humor_max_level, theme, leaderboard_opt_out')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -79,6 +81,9 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
     // 'cheeky' is the column default; the fallback matches it so a missing
     // profile row behaves the same as a default one.
     humorMaxLevel: profile?.humor_max_level ?? 'cheeky',
+    // Falls back to VISIBLE, matching the column default. A missing profile row
+    // must not silently opt somebody out of a feature they never saw.
+    leaderboardOptOut: profile?.leaderboard_opt_out ?? false,
     theme: profile?.theme ?? 'system',
   };
 }
