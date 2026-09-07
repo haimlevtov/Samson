@@ -18,7 +18,9 @@ import { trainingBlockSchema } from '../planner/schema';
 export async function listPersonas(db: Db): Promise<Persona[]> {
   const { data, error } = await db
     .from('personas')
-    .select('slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id')
+    .select(
+      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant'
+    )
     .eq('is_active', true)
     .order('name');
 
@@ -31,6 +33,7 @@ export async function listPersonas(db: Db): Promise<Persona[]> {
     intensity: row.intensity,
     humorLevel: row.humor_level as HumorLevel,
     bannedPhrases: row.banned_phrases ?? [],
+    voiceVariant: row.tts_voice_variant,
   }));
 }
 

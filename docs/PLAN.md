@@ -146,8 +146,9 @@ analysis is measuring.
 - Normalizer: free text or voice into validated set JSON, schema retry on
   failure
 - Persona layer: receives a finished plan, changes only delivery. Personas are
-  config rows — system prompt, TTS voice id, intensity, humor tier, banned
-  phrases
+  config rows — system prompt, language hint and voice variant, intensity, humor
+  tier, banned phrases. There is no TTS provider; delivery is the browser's own
+  speechSynthesis — ADR 0006, corrected 2026-09-07
 - Ship three personas: the Rival, the Analyst, and one of the Sergeant or the
   Old Master
 - Precomputed audio clips for high-frequency live events (rest over, set
