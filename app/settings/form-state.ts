@@ -5,9 +5,9 @@
  * navigates when you save your settings. You stay on the page you were on, and
  * without a word from the server, "Save" and "do nothing" look identical.
  */
-export interface ProfileFormState {
+export interface SettingsFormState {
   error: string | null;
   saved: boolean;
 }
 
-export const EMPTY_PROFILE_FORM: ProfileFormState = { error: null, saved: false };
+export const EMPTY_SETTINGS_FORM: SettingsFormState = { error: null, saved: false };

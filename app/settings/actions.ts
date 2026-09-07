@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
-import type { ProfileFormState } from './form-state';
+import type { SettingsFormState } from './form-state';
 
 /**
  * The only place a `users` row is written by the application.
@@ -50,9 +50,9 @@ const settingsSchema = z.object({
 });
 
 export async function updateSettings(
-  _previous: ProfileFormState,
+  _previous: SettingsFormState,
   formData: FormData
-): Promise<ProfileFormState> {
+): Promise<SettingsFormState> {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');

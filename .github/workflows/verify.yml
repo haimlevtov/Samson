@@ -64,9 +64,24 @@ jobs:
 
       - run: npm ci
 
+      # PINNED, not `latest` — this job regenerates src/db/types.ts and fails on
+      # any diff, so the generator's exact output is part of the contract and an
+      # upstream release is a breaking change to it.
+      #
+      # MEASURED, 2026-09-07: CLI v2.117.0 published at 16:47:15Z and `main`'s
+      # run failed at 16:47:14Z, on nothing but formatting — the new generator
+      # wraps conditional type parameters in parentheses. Every open PR went red
+      # at once, for a reason none of them had anything to do with.
+      #
+      # AI-NOTE: bumping this pin means regenerating src/db/types.ts with the
+      #          SAME version, from a LOCAL stack (`--local`), in the same
+      #          commit. Do not regenerate from `--linked`: the hosted project
+      #          emits an `__InternalSupabase.PostgrestVersion` that the local
+      #          stack does not, so a file generated that way fails this step in
+      #          a second, more confusing way.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.116.0
 
       # Proves `npm run migrate` rebuilds the schema from zero: the stack starts
       # empty and every migration is applied in order.

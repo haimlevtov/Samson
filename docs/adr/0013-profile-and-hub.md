@@ -1,6 +1,6 @@
 # ADR 0013 — Profile owns what you have earned; Hub owns everyone else
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — **amended 2026-09-07, see "Settings go behind a disclosure"**
 **Date:** 2026-09-07
 **Supersedes:** the ownership table in [0012](0012-bottom-tab-navigation.md)
 
@@ -35,10 +35,10 @@ name and your timezone.
 
 **Profile is you. Hub is other people.**
 
-| Tab         | Owns                                                                |
-| ----------- | ------------------------------------------------------------------- |
-| **Profile** | Identity, settings, level, XP, badges, streak, training load, bests |
-| **Hub**     | Leaderboard, quests and challenges, and later collaboration         |
+| Tab         | Owns                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| **Profile** | Identity, settings (at `/settings`, owned by this tab), level, XP, badges, streak, training load, bests |
+| **Hub**     | Leaderboard, quests and challenges, and later collaboration                                             |
 
 Everything else in ADR 0012's table stands unchanged: History is past sessions,
 Workout is templates, Coach is the plan. Hub remains the landing page — "what is
@@ -64,6 +64,10 @@ is scrolled; a tab about two subjects is misnavigated.
 
 ### Settings go behind a disclosure
 
+> **Amended 2026-09-07 — settings moved to their own route. See the amendment
+> below; this section records what was decided first and why it did not
+> survive contact with the page.**
+
 Profile now leads with what you have earned, so the settings form cannot be the
 first thing on it. It moves behind a cog.
 
@@ -72,6 +76,48 @@ screen-reader navigable with no work, it needs no `useState` in a page that is
 otherwise a server component, and with CSS disabled it degrades to an open
 section rather than to a button that does nothing. The summary is a 44px target
 per `docs/specs/mobile-interface.md`.
+
+#### Amendment, 2026-09-07 — `/settings` is a route, and the cog is a link
+
+The disclosure shipped and was wrong in one specific way this ADR had already
+written down without noticing: it says, four paragraphs earlier, that **Profile
+becomes the longest page in the app**. Putting the settings at the bottom of it
+means the cog is not a control, it is a scroll target. Changing a timezone
+requires scrolling past every badge, every chart and every diagnostic first.
+
+**The cog moves to the header, top right, and links to `/settings`.**
+
+A disclosure is the right shape for revealing more of what a page is already
+about — the coach's plan on the Coach tab, the quick-log on a session. Settings
+are a **different subject** that happened to be parked on Profile because it
+was the identity tab. Three things follow from being a route rather than a
+region:
+
+- **It has an address.** It can be linked to, bookmarked, and returned to. A
+  disclosure two thousand pixels down a page has no address at all.
+- **Back works.** The device back gesture leaves settings and returns to
+  Profile. Closing a disclosure is a separate, invisible affordance that back
+  does not reach — and on a phone, back is the gesture people actually use.
+- **The cog is reachable without scrolling**, which is the whole point of
+  putting a control in a header.
+
+**Sign out moves with it.** It was inside the disclosure, which made the one
+irreversible control on the page also the least reachable one.
+
+**What is kept from the original decision:** no modal, no client state, and no
+`useState` in a server component. A route needs none of those either — it is
+one more server page — so this amendment costs nothing that paragraph was
+protecting. The `<details>` pattern itself stays in the codebase for the two
+places it genuinely fits: the coach's plan and the session quick-log.
+
+The disclosure CSS this decision originally wrote now has one caller, the
+coach's plan, and `details.quick-log` still carries its own copies of the rules
+rather than joining it. Stated because a claim that the CSS is "shared" would
+be a claim about a file, and that is not the state of the file.
+
+**Judged against:** a modal (traps focus, needs client state, no address, and
+the back gesture dismisses the page rather than the modal on some browsers) and
+leaving it in place (rejected on the scroll-distance argument above).
 
 ### Level is new, and it is arithmetic
 
@@ -126,9 +172,18 @@ loud rather than left for a reader to notice.
 The reversal is narrower than it looks. 0012's objection was to folding a whole
 _tab_ into another — Profile disappearing as a destination. What is happening
 here is the opposite: Profile becomes the substantial tab and gains a subject,
-and the settings that used to be its whole content are demoted behind a
-disclosure. "Settings and rewards" are not co-equal halves of a tab; rewards are
-the tab, and settings are a drawer on it.
+and the settings that used to be its whole content are demoted. "Settings and
+rewards" are not co-equal halves of a tab; rewards are the tab, and settings
+hang off it.
+
+**Narrowed again by the 2026-09-07 amendment**, and worth saying out loud by
+the same standard this section sets. Settings are no longer _content_ on
+Profile at all — they are their own route, and what Profile keeps is
+**ownership**: the cog is the only way in, and `OWNED_BY` in `src/ui/tabs.ts`
+encodes that the tab bar lights Profile while you are there. So the reversal of
+0012 shrinks to "the tab that owns your rewards also owns the door to your
+settings", which is a good deal weaker than putting both on one page — and
+closer to 0012's original instinct than this section first admitted.
 
 What survives from 0012 unchanged is the test it set — a tab must own one thing
 you can name in a word — and by that test "you" is a better answer than

@@ -1447,7 +1447,13 @@ code {
     font-size: 30px;
   }
 
-  header.top a {
+  /* Text links in a header can shrink to their text on a desktop pointer.
+     An ICON-ONLY control cannot — it has no text to be, and the 44px rule in
+     docs/specs/mobile-interface.md §3 is not qualified by breakpoint.
+     FOUND IN REVIEW, 2026-09-07: without the :not(), header.top a beats
+     .icon-btn on specificity and the Profile cog collapsed to about 18px
+     above this width. */
+  header.top a:not(.icon-btn) {
     display: inline;
     min-height: 0;
   }
@@ -1886,32 +1892,34 @@ details.quick-log[open] > summary {
 }
 
 /* The disclosure. A <details> so it needs no client state and stays keyboard
-   and screen-reader navigable for free — ADR 0013, and ADR 0015 for the coach's
-   plan, which is the same control doing the same job.
+   and screen-reader navigable for free.
 
-   AI-NOTE: these selector lists carry BOTH disclosures. The two rules easiest
-            to lose when adding a third are the ::-webkit-details-marker reset
-            and the :focus-visible ring — docs/specs/mobile-interface.md says
-            so, and this block was once copied wholesale rather than extended,
-            which is how it acquired a second copy of every one of them. */
-.settings-disclosure > summary,
+   Written for the settings DISCLOSURE (ADR 0013) and inherited by the coach's
+   plan (ADR 0015) when ADR 0013's amendment turned settings into a route. One
+   caller, therefore — this is not a shared block today, whatever its shape
+   suggests, and `details.quick-log` further up carries its own copies of the
+   marker reset, the tap target and the focus ring rather than joining here.
+
+   AI-NOTE: a second disclosure should join this selector list rather than copy
+            it, and quick-log should be folded in when something else touches
+            it. The two rules easiest to lose in a copy are the
+            ::-webkit-details-marker reset and the :focus-visible ring —
+            docs/specs/mobile-interface.md says so, and this block briefly held
+            two of each for exactly that reason. */
 .plan-disclosure > summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* A real target: this is the only way to reach every setting in the app. */
   min-height: var(--tap);
   font-weight: 700;
   cursor: pointer;
   list-style: none;
 }
 
-.settings-disclosure > summary::-webkit-details-marker,
 .plan-disclosure > summary::-webkit-details-marker {
   display: none;
 }
 
-.settings-disclosure > summary::after,
 .plan-disclosure > summary::after {
   content: '▾';
   margin-left: auto;
@@ -1919,7 +1927,6 @@ details.quick-log[open] > summary {
   transition: transform 150ms ease;
 }
 
-.settings-disclosure[open] > summary::after,
 .plan-disclosure[open] > summary::after {
   transform: rotate(180deg);
 }
@@ -1927,21 +1934,13 @@ details.quick-log[open] > summary {
 /* WHY a visible focus ring rather than the default outline: the summary has
    list-style removed, so in some browsers the default focus indicator lands on
    a zero-width marker box and is effectively invisible. */
-.settings-disclosure > summary:focus-visible,
 .plan-disclosure > summary:focus-visible {
   /* --accent-text, not --accent, for the reason already written at the top of
      this file: in dark the accent is nearly the ground and the ring drops to
-     2.2:1, under the 3:1 WCAG 2.4.7 threshold. This summary is the only route
-     to every setting in the app, including the theme switch — so the dark-theme
-     user trying to leave dark is exactly the one who could not see it. */
+     2.2:1, under the 3:1 WCAG 2.4.7 threshold. */
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-}
-
-.settings-disclosure .cog {
-  font-size: 1.15rem;
-  line-height: 1;
 }
 
 /* .label is a block with a bottom margin of its own, which pushes the summary
@@ -1951,16 +1950,19 @@ details.quick-log[open] > summary {
   margin-bottom: 0;
 }
 
+/*
+ * The settings form's own card on /settings.
+ *
+ * The border-top and the margin above it are gone with the disclosure: they
+ * separated this body from the summary it hung under, and on its own page
+ * there is nothing above it to separate from.
+ */
 .settings-body {
   display: grid;
   gap: 16px;
-  padding-top: 12px;
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-disclosure > summary::after,
   .plan-disclosure > summary::after {
     transition: none;
   }
@@ -2031,9 +2033,8 @@ details.quick-log[open] > summary {
  * phone.
  */
 
-/* The plan disclosure itself is styled with .settings-disclosure, above —
-   same control, same job, one set of rules. Only what is specific to this one
-   lives here. */
+/* The plan disclosure's summary is styled with the shared disclosure rules
+   further up this file. Only what is specific to this one lives here. */
 
 .plan-body {
   padding-top: 4px;

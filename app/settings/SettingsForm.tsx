@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
 import { updateSettings } from './actions';
-import { EMPTY_PROFILE_FORM, type ProfileFormState } from './form-state';
+import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
 /** What each theme does, said plainly. "System" is the one that needs saying. */
 const THEME_BLURB: Record<string, string> = {
@@ -33,9 +33,9 @@ export function SettingsForm({
   theme: string;
   timezones: string[];
 }) {
-  const [state, action, saving] = useActionState<ProfileFormState, FormData>(
+  const [state, action, saving] = useActionState<SettingsFormState, FormData>(
     updateSettings,
-    EMPTY_PROFILE_FORM
+    EMPTY_SETTINGS_FORM
   );
 
   return (

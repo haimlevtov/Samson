@@ -67,7 +67,16 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
   `supabase gen types typescript --local` and fails on any diff, and the
   generator's formatting is not guessable — short function entries collapse onto
   one line, longer ones do not. Adding a column or an RPC means regenerating,
-  not typing. This has cost two red builds already.
+  not typing. This has cost two red builds already. Two further traps:
+  - **The CLI version is pinned in `.github/workflows/verify.yml`** because the
+    generator's output is part of the contract. v2.117.0 changed nothing but
+    parentheses and turned every open PR red at once. Bumping the pin means
+    regenerating in the same commit.
+  - **Never regenerate from `--linked`.** Hosted emits an
+    `__InternalSupabase.PostgrestVersion` the local stack does not, so a file
+    produced that way fails CI in a second, more confusing way. `npm run
+db:types:inspect` prints the hosted schema to stdout for reading; it
+    deliberately does not write the file.
 - Every feature ships with tests in the same commit.
 - Tests must pass with no API key present. Mock the gateway in unit tests.
 
