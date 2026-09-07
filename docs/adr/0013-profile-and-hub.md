@@ -1,6 +1,6 @@
 # ADR 0013 — Profile owns what you have earned; Hub owns everyone else
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — **amended 2026-09-07, see "Settings go behind a disclosure"**
 **Date:** 2026-09-07
 **Supersedes:** the ownership table in [0012](0012-bottom-tab-navigation.md)
 
@@ -64,6 +64,10 @@ is scrolled; a tab about two subjects is misnavigated.
 
 ### Settings go behind a disclosure
 
+> **Amended 2026-09-07 — settings moved to their own route. See the amendment
+> below; this section records what was decided first and why it did not
+> survive contact with the page.**
+
 Profile now leads with what you have earned, so the settings form cannot be the
 first thing on it. It moves behind a cog.
 
@@ -72,6 +76,43 @@ screen-reader navigable with no work, it needs no `useState` in a page that is
 otherwise a server component, and with CSS disabled it degrades to an open
 section rather than to a button that does nothing. The summary is a 44px target
 per `docs/specs/mobile-interface.md`.
+
+#### Amendment, 2026-09-07 — `/settings` is a route, and the cog is a link
+
+The disclosure shipped and was wrong in one specific way this ADR had already
+written down without noticing: it says, four paragraphs earlier, that **Profile
+becomes the longest page in the app**. Putting the settings at the bottom of it
+means the cog is not a control, it is a scroll target. Changing a timezone
+requires scrolling past every badge, every chart and every diagnostic first.
+
+**The cog moves to the header, top right, and links to `/settings`.**
+
+A disclosure is the right shape for revealing more of what a page is already
+about — the coach's plan on the Coach tab, the quick-log on a session. Settings
+are a **different subject** that happened to be parked on Profile because it
+was the identity tab. Three things follow from being a route rather than a
+region:
+
+- **It has an address.** It can be linked to, bookmarked, and returned to. A
+  disclosure two thousand pixels down a page has no address at all.
+- **Back works.** The device back gesture leaves settings and returns to
+  Profile. Closing a disclosure is a separate, invisible affordance that back
+  does not reach — and on a phone, back is the gesture people actually use.
+- **The cog is reachable without scrolling**, which is the whole point of
+  putting a control in a header.
+
+**Sign out moves with it.** It was inside the disclosure, which made the one
+irreversible control on the page also the least reachable one.
+
+**What is kept from the original decision:** no modal, no client state, and no
+`useState` in a server component. A route needs none of those either — it is
+one more server page — so this amendment costs nothing that paragraph was
+protecting. The `<details>` pattern itself stays in the codebase for the two
+places it genuinely fits, and the CSS is shared rather than copied.
+
+**Judged against:** a modal (traps focus, needs client state, no address, and
+the back gesture dismisses the page rather than the modal on some browsers) and
+leaving it in place (rejected on the scroll-distance argument above).
 
 ### Level is new, and it is arithmetic
 
