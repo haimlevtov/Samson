@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { createServerDb, currentUser } from '@/src/db/server';
 import { activeWorkout } from '@/src/db/training';
 import { listTemplates } from '@/src/db/templates';
 import { FieldHint } from '@/src/ui/FieldHint';
@@ -41,9 +41,13 @@ export default async function TemplatesPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  // Same reasoning as History: an activeWorkout failure inside this
+  // Promise.all would discard the templates with it and take the whole Workout
+  // tab down. Falling back to null offers Start, which is wrong-but-usable
+  // rather than blank.
   const [templates, active] = await Promise.all([
     listTemplates(db),
-    activeWorkout(db, localDateFor(user.timezone)),
+    activeWorkout(db).catch(() => null),
   ]);
 
   return (
@@ -83,9 +87,7 @@ export default async function TemplatesPage() {
           <h2 className="section">In progress</h2>
           <Link href={`/history/${active.id}`} className="resume">
             <span className="resume-label">Resume your session</span>
-            <span className="muted small">
-              Started today. It stays out of History until you finish it.
-            </span>
+            <span className="muted small">It stays out of History until you finish it.</span>
           </Link>
         </>
       )}
@@ -133,11 +135,22 @@ export default async function TemplatesPage() {
                     <p className="muted small tpl-meta">
                       {t.itemCount} set group{t.itemCount === 1 ? '' : 's'}
                     </p>
-                    {/* The whole point of the feature: one tap to training. */}
-                    <form action={startFromTemplate}>
-                      <input type="hidden" name="templateId" value={t.id} />
-                      <button type="submit">Start</button>
-                    </form>
+                    {/*
+                     * The whole point of the feature: one tap to training —
+                     * but not while a session is running. The actions redirect
+                     * rather than insert, so a Start here would silently land
+                     * the user in a DIFFERENT session from the template they
+                     * tapped, with nothing on the destination to explain it.
+                     * The "Resume your session" block above is the one call to
+                     * action while that is true; the template stays reachable
+                     * through its own name.
+                     */}
+                    {active === null ? (
+                      <form action={startFromTemplate}>
+                        <input type="hidden" name="templateId" value={t.id} />
+                        <button type="submit">Start</button>
+                      </form>
+                    ) : null}
                   </article>
                 ))}
               </div>

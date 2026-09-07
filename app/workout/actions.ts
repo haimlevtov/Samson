@@ -184,7 +184,7 @@ export async function startFromTemplate(formData: FormData): Promise<void> {
   // One session at a time, exactly as `startWorkout()` enforces it. Starting a
   // template while one is running would leave the sets already logged on a
   // session the user has been navigated away from.
-  const active = await activeWorkout(db, localDate);
+  const active = await activeWorkout(db);
   if (active !== null) redirect(`/history/${active.id}`);
 
   const { data, error } = await db

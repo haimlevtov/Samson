@@ -33,7 +33,17 @@ export default async function WorkoutsPage({
   // The session being performed right now is not history yet — ADR 0012 says
   // this page owns past sessions and nothing else, and a workout you are still
   // logging into is not one.
-  const active = await activeWorkout(db, today);
+  /*
+   * Degrades rather than throws — FOUND IN REVIEW, 2026-09-07.
+   *
+   * This query exists to remove ONE row from the list. History is also the
+   * recovery surface for every session that falls outside the active window,
+   * so letting a transient failure here take the page down means the screen
+   * somebody reaches for when something already went wrong is the screen that
+   * breaks. Showing the running session in History for one render is strictly
+   * better than showing nothing.
+   */
+  const active = await activeWorkout(db).catch(() => null);
 
   const [workouts, badges, { unlocked }] = await Promise.all([
     listWorkouts(db, 40, active?.id ?? null),

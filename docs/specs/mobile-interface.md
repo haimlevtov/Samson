@@ -133,14 +133,26 @@ browsing by definition: nobody opens it under load.
 
 **One session at a time, and it is not history until it is finished.** A
 workout is something you are in the middle of, and there is no being in the
-middle of two. Both start actions — empty and from a template — resume today's
-unfinished session rather than opening a second, and that session is left out
-of History until `finishWorkout` resolves it. The way back into it is the
-Workout tab, which offers "Resume" in place of "Start" while one is running.
+middle of two. Both start actions — empty and from a template — resume the
+running session rather than opening a second, and that session is left out of
+History until `finishWorkout` resolves it.
 
-A session left unfinished on an _earlier_ day is not live. It appears in
-History with its `in progress` badge, where it can be opened and finished,
-because the alternative is a row that exists and is reachable from nowhere.
+**"Running" is a recency window, not a date.** A session counts as live while it
+is `in_progress` and was started within `ACTIVE_SESSION_WINDOW_HOURS` (12).
+This was originally "started today", which broke at midnight: a session begun at
+23:55 stopped being live at 00:00 while the user was still logging into it, so
+Start reappeared and a tap created the second row this rule exists to prevent.
+The window is compared against a UTC instant and does not touch CLAUDE.md #9 —
+`local_date` is still the write-time truth for every calendar question.
+
+**Every route in offers Resume instead of Start while one is running**, and
+there are three: Quick start, each template card, and the template detail page.
+A "Start" that redirects into a different session is the app lying about what it
+did — the actions redirect rather than insert, so the label has to follow.
+
+A session left unfinished beyond that window is not live. It appears in History
+with its `in progress` badge, where it can be opened and finished, because the
+alternative is a row that exists and is reachable from nowhere.
 
 ## 3. Interaction model
 

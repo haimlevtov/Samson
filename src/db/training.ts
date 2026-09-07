@@ -100,25 +100,47 @@ export interface ActiveWorkout {
 }
 
 /**
- * Today's unfinished session.
+ * How recently a session must have started to count as one you are in.
  *
- * WHY it is scoped to the user's local date rather than "any in_progress row":
- * a session abandoned last Tuesday is not something you are doing, and treating
- * it as one would make "Start a workout" a permanent redirect into a session
- * from a week ago with no way past it. Today's is live; an older one is a loose
- * end, and History is where loose ends belong.
+ * WHY a duration and not the local date — FOUND IN REVIEW, 2026-09-07: this was
+ * `local_date = today`, which is a calendar match, and "am I in the middle of a
+ * session" is not a calendar question. A session begun at 23:55 stopped being
+ * active at midnight while the user was still logging into it, so the Workout
+ * tab offered Start again and a tap created the second row this whole change
+ * exists to prevent.
  *
- * INVARIANT: the caller passes the user's local date, never the server's —
- *            CLAUDE.md #9. A session begun at 23:30 in Jerusalem is still
- *            today's at 23:59, whatever UTC thinks.
+ * WHY it does not touch CLAUDE.md #9: this compares a UTC instant to a UTC
+ * instant. `local_date` remains the write-time truth for every calendar
+ * question — streaks, achievements, challenge windows — and is untouched.
+ *
+ * Twelve hours is longer than any session and shorter than a night's sleep, so
+ * a workout abandoned yesterday is a loose end rather than a redirect you
+ * cannot escape. Loose ends belong in History, which shows them with their
+ * `in progress` badge and lets them be finished.
  */
-export async function activeWorkout(db: Db, today: string): Promise<ActiveWorkout | null> {
+export const ACTIVE_SESSION_WINDOW_HOURS = 12;
+
+/**
+ * The session you are in the middle of, if there is one.
+ *
+ * AI-NOTE: `started_at` is compared, not `local_date`, and that also disposes
+ *          of a NULLS-FIRST hazard the calendar version had. `order by ... desc`
+ *          is NULLS FIRST in Postgres, so a row with no `started_at` outranked
+ *          every real session and won the `limit(1)`. A `gte` on the same
+ *          column excludes nulls outright — but `nullsFirst: false` is set
+ *          anyway, because the next person to relax that filter should not
+ *          have to rediscover this. See `loadExerciseHistory` below, which
+ *          carries the same note.
+ */
+export async function activeWorkout(db: Db, now: Date = new Date()): Promise<ActiveWorkout | null> {
+  const since = new Date(now.getTime() - ACTIVE_SESSION_WINDOW_HOURS * 60 * 60 * 1000);
+
   const { data, error } = await db
     .from('workouts')
     .select('id, local_date, started_at')
     .eq('status', 'in_progress')
-    .eq('local_date', today)
-    .order('started_at', { ascending: false })
+    .gte('started_at', since.toISOString())
+    .order('started_at', { ascending: false, nullsFirst: false })
     .limit(1);
 
   if (error) throw new Error(`loading the active session: ${error.message}`);
