@@ -50,8 +50,19 @@ export default async function HubPage() {
    * rows, which the spec records as a known gap, so they accumulate here and
    * this is what keeps them honest.
    */
-  const expired = (c: (typeof offered)[number]): boolean =>
-    c.windowEnd !== null && c.windowEnd < today;
+  /**
+   * The date a challenge's window closed, or null while it is still open.
+   *
+   * INVARIANT: `today` is the user's local date, and it has to be — the RPC
+   *            compares `window_end` against the same thing. When these two
+   *            disagreed, the page rendered an Accept button that the function
+   *            then refused, which is a dead end rather than a refusal.
+   *
+   * Returns the date rather than a boolean so the caller cannot narrow in one
+   * place and assert non-null in another.
+   */
+  const closedOn = (c: (typeof offered)[number]): string | null =>
+    c.windowEnd !== null && c.windowEnd < today ? c.windowEnd : null;
 
   const progressOf = (c: (typeof offered)[number]) =>
     c.spec === null
@@ -97,13 +108,17 @@ export default async function HubPage() {
                 <span className="chip">{c.kind}</span>
                 {c.spec === null ? 'unreadable' : `${c.spec.reward_xp} XP`}
               </p>
-              {expired(c) ? (
+              {closedOn(c) !== null ? (
                 // Says why rather than showing a button that would refuse.
-                <p className="muted small">Its window closed on {displayDate(c.windowEnd!)}.</p>
+                <p className="muted small">Its window closed on {displayDate(closedOn(c)!)}.</p>
               ) : (
                 <form action={acceptChallengeAction}>
                   <input type="hidden" name="challengeId" value={c.id} />
-                  <button type="submit">Accept</button>
+                  {/* Every card has an Accept button, so the accessible name has
+                      to say which one it accepts. */}
+                  <button type="submit" aria-label={`Accept ${c.slug.replace(/-/g, ' ')}`}>
+                    Accept
+                  </button>
                 </form>
               )}
             </article>

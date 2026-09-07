@@ -31,13 +31,35 @@ begin
    * `window_end` is checked here too, so a challenge whose window has closed
    * cannot be put in play — nothing expires them, so they linger as `offered`
    * and would otherwise stay acceptable forever.
+   *
+   * INVARIANT: the user's local date, never a server date — CLAUDE.md #9.
+   *            `window_end` was written by the batch from
+   *            `localToday(user.timezone)`, so comparing it to `current_date`
+   *            compares a user-local date to a server one. West of UTC that
+   *            hides the last hours of a window behind a button that renders
+   *            and then refuses; east of UTC it grants a day past the close.
+   *            Two other migrations refuse server dates for this exact reason —
+   *            20260902090100 and 20260902100100.
+   *
+   * AI-NOTE: `at time zone 'utc'` looked like it handled this and did not.
+   *          `current_date` is already "today in the session TimeZone", so
+   *          wrapping it only coerces a date into a timestamp and is a no-op
+   *          while that session happens to be UTC.
    */
-  update public.challenges
+  update public.challenges c
      set status = 'active'
-   where id = p_challenge_id
-     and user_id = auth.uid()
-     and status = 'offered'
-     and (window_end is null or window_end >= (current_date at time zone 'utc'));
+   where c.id = p_challenge_id
+     and c.user_id = auth.uid()
+     and c.status = 'offered'
+     and (
+       c.window_end is null
+       or c.window_end >= (
+         now() at time zone coalesce(
+           (select u.timezone from public.users u where u.user_id = auth.uid()),
+           'UTC'
+         )
+       )::date
+     );
 
   get diagnostics v_accepted = row_count;
   return v_accepted > 0;

@@ -377,7 +377,9 @@ this document is for.
   warns against — or trust its caller, which lets any signed-in client be paid
   for work it did not do. A batch job has neither problem and exposes no
   endpoint. The idempotency guard is the status transition itself: the `UPDATE`
-  filters on `status in ('offered','active')`, so a second run matches no row.
+  filters on the unresolved statuses, so a second run matches no row. (Narrowed
+  to `'active'` alone on 2026-09-07, when accepting became a real transition —
+  ADR 0009 §4, amended.)
 
   **What it costs, recorded rather than glossed:** payout is not immediate. A
   challenge finished mid-session pays on the next batch run, so the completion

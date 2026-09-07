@@ -1,7 +1,8 @@
 # Spec — XP, streaks and challenges
 
 Status: authoritative
-Date: 2026-09-02 — **amended 2026-09-07: the Level section**
+Date: 2026-09-02 — **amended 2026-09-07: the Level section, and the challenge
+lifecycle**
 Governs: `src/gamification/`
 
 This document is the contract. As with `planner-rules.md`, the tests for
@@ -359,7 +360,7 @@ A challenge moves through these states, and nothing else moves it:
 | --------- | ----------- | --------------------------------------------------------- |
 | —         | `offered`   | the weekly batch, for a candidate that passed validation  |
 | —         | `rejected`  | the weekly batch, for one that did not                    |
-| `offered` | `active`    | **the user, by accepting it**                             |
+| `offered` | `active`    | **the user, by accepting it, inside its window**          |
 | `active`  | `completed` | the weekly batch, when `evaluateChallenge` says it is met |
 
 **Only `active` settles.** A challenge the user never accepted does not pay,
@@ -386,7 +387,26 @@ runs through a `security definer` function like every other write in
 `src/gamification/`, and the status filter inside its `UPDATE` is what makes a
 second press a no-op rather than a second acceptance.
 
+**Accepting is refused past `window_end`**, and the refusal is in the function
+rather than only in the surface — a button is a courtesy, not a control.
+
+**The date is the user's, never the server's** (CLAUDE.md #9). `window_end` was
+written from the user's local today, so it has to be compared against the user's
+local today. Comparing it to a server date hides the last hours of a window from
+anyone west of UTC — behind a button that renders and then refuses — and grants
+an extra day to anyone east of it.
+
 **An expired challenge is left `offered`.** Nothing marks it `failed`. That is a
 gap rather than a decision: it means the Hub accumulates challenges whose window
 has closed, and the surface has to say so rather than offer an Accept button
 that would put a dead challenge in play.
+
+**A known gap, wider than it looks.** `evaluateChallenge` derives a rolling
+window from `asOf` and never reads `window_start`/`window_end`, so an accepted
+challenge that is never met stays `active` and settles the first time the user's
+rolling activity meets its target — arbitrarily far past the window the row
+records. Accepting is gated on the window; **completing is not**. This predates
+the accept control and is narrowed rather than widened by it, since the same row
+previously paid out with no acceptance at all. Closing it means either skipping
+settlement past `window_end` or marking expired rows `failed`, and passing the
+row's own window into the evaluator instead of deriving one.

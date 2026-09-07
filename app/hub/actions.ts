@@ -1,7 +1,9 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createServerDb } from '@/src/db/server';
+import { z } from 'zod';
+import { createServerDb, currentUser } from '@/src/db/server';
 import { acceptChallenge } from '@/src/db/gamification';
 
 /**
@@ -22,18 +24,37 @@ import { acceptChallenge } from '@/src/db/gamification';
  *          `completed`.
  */
 export async function acceptChallengeAction(formData: FormData): Promise<void> {
-  const challengeId = String(formData.get('challengeId') ?? '');
-  if (challengeId === '') return;
-
   const db = await createServerDb();
 
   /*
-   * A false return is not an error worth showing. It means the row was already
-   * accepted, is not this user's, or its window has closed — and in every one of
-   * those cases the re-rendered page is the honest answer, because it shows the
-   * challenge in whatever state it is actually in.
+   * The session gate every other action in this app opens with, and this one
+   * was missing. `anon` holds no EXECUTE on the RPC, so an unauthenticated post
+   * was never a bypass — it was an uncaught PostgREST error escaping the action
+   * instead of a redirect, which puts a Postgres message in the logs and on the
+   * screen in development.
    */
-  await acceptChallenge(db, challengeId);
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  /*
+   * A malformed id is the same class as a missing one: nothing to do, and not
+   * worth a crash. Without this, `challengeId=x` reaches Postgres and comes
+   * back as `22P02 invalid input syntax for type uuid` — a 500 raised by a
+   * value any authenticated user can type.
+   */
+  const parsed = z.uuid().safeParse(formData.get('challengeId'));
+  if (!parsed.success) return;
+
+  /*
+   * A false return means the row was already accepted, is not this user's, or
+   * its window has closed. None of those is an error worth interrupting for,
+   * and the re-rendered page shows the challenge in whatever state it is
+   * actually in — which is the honest answer, now that the RPC and the page
+   * agree on what "expired" means. They did not before: the page used the
+   * user's local date and the RPC used the server's, so a user west of UTC
+   * could press a button that rendered and then silently refused.
+   */
+  await acceptChallenge(db, parsed.data);
 
   revalidatePath('/hub');
 }
