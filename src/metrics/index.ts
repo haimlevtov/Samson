@@ -15,4 +15,5 @@ export * from './e1rm';
 export * from './tonnage';
 export * from './adherence';
 export * from './pr';
+export * from './progression';
 export * from './acwr';

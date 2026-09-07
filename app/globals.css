@@ -1931,3 +1931,54 @@ details.quick-log[open] > summary {
 .badge-card form {
   margin-top: 10px;
 }
+
+/* ---------------------------------------------------------------------------
+ * ADR 0014 — the exercise progression chart.
+ * Hand-drawn SVG rather than a charting dependency, so it themes off the same
+ * custom properties as everything else.
+ * ------------------------------------------------------------------------- */
+
+.lift-chart {
+  display: grid;
+  gap: 12px;
+}
+
+.lift-chart-svg {
+  display: block;
+  width: 100%;
+  /* Fixed aspect via the viewBox; height follows so the chart keeps its shape
+     from 320px to a desktop pane without a resize observer. */
+  height: auto;
+  /* A dot sits r=3 from its centre, so the first and last points would be
+     clipped in half at the viewBox edge. Nothing else is drawn outside it. */
+  overflow: visible;
+}
+
+.lift-chart-line {
+  stroke: var(--accent-text);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lift-chart-dot {
+  fill: var(--accent-text);
+}
+
+/* WHY --accent-text and not --accent: the same reason the focus ring uses it.
+   In dark, --accent sits close to the surface behind it, and a line the user
+   cannot follow is not a chart. */
+
+.lift-chart-table {
+  margin: 0;
+}
+
+/* One session: a reading rather than a chart — ADR 0014, amended. */
+.lift-chart-single {
+  margin: 0;
+  color: var(--muted);
+}
+
+.lift-chart-single strong {
+  color: var(--text);
+  font-size: 1.15rem;
+}
