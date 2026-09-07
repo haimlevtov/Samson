@@ -4,6 +4,7 @@ import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/persona
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { CoachConsole, type CoachPersona } from './CoachConsole';
+import { ChatPanel } from './ChatPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,86 +27,118 @@ export default async function CoachPage() {
     <>
       <header className="top">
         <div>
-          <h1>Your plan</h1>
+          {/* The tab is Coach, and the plan is one of two things on it now. */}
+          <h1>Coach</h1>
           <span className="muted small">
-            {plan ? `Accepted ${displayDate(plan.createdAt.slice(0, 10))}` : 'No plan yet'}
+            {plan ? `Plan accepted ${displayDate(plan.createdAt.slice(0, 10))}` : 'No plan yet'}
           </span>
         </div>
       </header>
 
       {plan === null ? (
         <div className="card">
+          {/*
+           * No "Create a plan" button here, and the card says why instead of
+           * offering one — docs/specs/coach-chat.md §1. A planner run is up to
+           * three planner+critic round trips at 25 to 120 seconds each, which
+           * does not fit in a serverless function, and making it fit means a
+           * job queue that CLAUDE.md puts out of scope. A button that dead-ends
+           * would be worse than this sentence.
+           */}
           <p className="muted">
-            No accepted plan yet. A plan appears here once the planner has produced one that passes
-            both the deterministic rules and the safety critic.
+            No accepted plan yet. Plans are produced by the planner run, which has to pass the
+            deterministic rules and the safety critic before anything appears here. You can still
+            talk to your coach below.
           </p>
         </div>
       ) : (
         <>
           <CoachConsole personas={personas} weekLabels={weekLabels} />
 
-          <h2 className="section with-hint">
-            The plan itself
-            <FieldHint title="Where these numbers come from">
-              Every figure below was chosen by the planner and checked by deterministic rules before
-              the coach ever saw it. The coach can describe the plan; it cannot change a number in
-              it, and a number it states that is not here is rejected automatically.
-            </FieldHint>
-          </h2>
+          {/*
+           * The plan is revealed, not served — the user's own request, and the
+           * right default regardless: a twelve-week block unrolled on load is
+           * most of a screen nobody asked for.
+           *
+           * A <details> rather than client state: it needs no JavaScript, it is
+           * keyboard and screen-reader navigable for free, and with CSS off it
+           * degrades to an open section rather than to a hidden one.
+           */}
+          <details className="plan-disclosure card">
+            <summary>
+              <span className="label">Show my plan</span>
+              <span className="muted small">
+                {plan.block.weeks.length} {plan.block.weeks.length === 1 ? 'week' : 'weeks'}
+              </span>
+            </summary>
 
-          {plan.block.weeks.map((week) => (
-            <div key={week.week_number} className="card week-card">
-              <div className="row">
-                <span className="label">Week {week.week_number}</span>
-                {week.is_deload ? <span className="badge rest">deload</span> : null}
-              </div>
+            <div className="plan-body">
+              <h2 className="section with-hint">
+                The plan itself
+                <FieldHint title="Where these numbers come from">
+                  Every figure below was chosen by the planner and checked by deterministic rules
+                  before the coach ever saw it. The coach can describe the plan; it cannot change a
+                  number in it, and a number it states that is not here is rejected automatically.
+                </FieldHint>
+              </h2>
 
-              {week.sessions.map((session) => (
-                <div key={session.day_index} className="session-block">
-                  <span className="muted small">
-                    Day {session.day_index + 1} · {session.focus}
-                  </span>
-                  <table className="table-cards">
-                    <thead>
-                      <tr>
-                        <th>Exercise</th>
-                        <th>Sets</th>
-                        <th>Reps</th>
-                        <th>Weight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {session.exercises.map((exercise) => {
-                        const first = exercise.set_groups[0];
-                        const totalSets = exercise.set_groups.reduce((n, g) => n + g.count, 0);
-                        return (
-                          <tr key={exercise.exercise_slug}>
-                            <td data-label="Exercise">{exercise.exercise_slug}</td>
-                            <td data-label="Sets">{totalSets}</td>
-                            <td data-label="Reps">{first?.reps ?? '—'}</td>
-                            <td data-label="Weight">
-                              {first?.weight_kg === null || first === undefined
-                                ? 'bodyweight'
-                                : `${first.weight_kg} kg`}
-                            </td>
+              {plan.block.weeks.map((week) => (
+                <div key={week.week_number} className="card week-card">
+                  <div className="row">
+                    <span className="label">Week {week.week_number}</span>
+                    {week.is_deload ? <span className="badge rest">deload</span> : null}
+                  </div>
+
+                  {week.sessions.map((session) => (
+                    <div key={session.day_index} className="session-block">
+                      <span className="muted small">
+                        Day {session.day_index + 1} · {session.focus}
+                      </span>
+                      <table className="table-cards">
+                        <thead>
+                          <tr>
+                            <th>Exercise</th>
+                            <th>Sets</th>
+                            <th>Reps</th>
+                            <th>Weight</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody>
+                          {session.exercises.map((exercise) => {
+                            const first = exercise.set_groups[0];
+                            const totalSets = exercise.set_groups.reduce((n, g) => n + g.count, 0);
+                            return (
+                              <tr key={exercise.exercise_slug}>
+                                <td data-label="Exercise">{exercise.exercise_slug}</td>
+                                <td data-label="Sets">{totalSets}</td>
+                                <td data-label="Reps">{first?.reps ?? '—'}</td>
+                                <td data-label="Weight">
+                                  {first?.weight_kg === null || first === undefined
+                                    ? 'bodyweight'
+                                    : `${first.weight_kg} kg`}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
                 </div>
               ))}
-            </div>
-          ))}
 
-          <h2 className="section">Why this plan</h2>
-          <div className="card">
-            {/* The planner's own rationale, not the persona's. Kept separate so
+              <h2 className="section">Why this plan</h2>
+              <div className="card">
+                {/* The planner's own rationale, not the persona's. Kept separate so
                 it is obvious which text came from which stage. */}
-            <p className="muted">{plan.block.rationale}</p>
-          </div>
+                <p className="muted">{plan.block.rationale}</p>
+              </div>
+            </div>
+          </details>
         </>
       )}
+
+      <ChatPanel />
     </>
   );
 }

@@ -37,6 +37,14 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
   persona: ['anthropic/claude-haiku-4.5', 'google/gemini-2.5-flash'],
   diet: ['anthropic/claude-haiku-4.5', 'google/gemini-2.5-flash'],
   challenge: ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite'],
+  /*
+   * The same pair as the persona, for the same reason: this is prose in a
+   * voice, not structured reasoning over a schema. It is also the highest
+   * FREQUENCY call in the app — one per message rather than one per plan — so
+   * the cheap tier is the right default and a stronger model here would be paid
+   * for on every turn of every conversation.
+   */
+  chat: ['anthropic/claude-haiku-4.5', 'google/gemini-2.5-flash'],
   smoke: ['google/gemini-2.5-flash-lite'],
 } as const;
 

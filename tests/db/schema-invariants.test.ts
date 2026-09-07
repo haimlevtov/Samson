@@ -8,6 +8,18 @@
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DB_URL, redactDbUrl } from './helpers';
+import { STAGE_MODELS } from '../../src/llm/models';
+import type { LlmStage } from '../../src/llm/types';
+
+/*
+ * Every stage the code can emit, at runtime.
+ *
+ * WHY STAGE_MODELS and not a hand-written list: it is typed
+ * `Record<LlmStage, ...>`, so the compiler already fails if a stage is missing
+ * from it. A literal array here would be a third copy of the same fact and
+ * would drift from the other two exactly as the constraint did.
+ */
+const STAGES = Object.keys(STAGE_MODELS) as LlmStage[];
 
 let pg: Client | undefined;
 
@@ -265,5 +277,57 @@ describe('CLAUDE.md #8 and #9 — canonical units and UTC timestamps', () => {
         where table_schema = 'public' and data_type = 'timestamp without time zone'`
     );
     expect(rows.map((r) => `${r.table_name}.${r.column_name}`)).toEqual([]);
+  });
+});
+
+describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', () => {
+  /*
+   * WHY this test exists: `llm_calls.stage` is a CHECK constraint, not an enum
+   * derived from anything, so the TypeScript union and the database list are two
+   * copies of one fact. Adding `chat` to `LlmStage` without touching the
+   * constraint passed typecheck, lint and all 757 unit tests — the unit suite
+   * mocks the gateway, so it never inserts a row — and then failed on the first
+   * live message with "violates check constraint llm_calls_stage_check".
+   *
+   * Invariant #3 turns that into a hard failure rather than an unlogged call,
+   * which is the right behaviour and also means a whole feature is dead until
+   * the migration lands. This test is how the next stage gets caught here
+   * instead.
+   */
+  it('admits every value of LlmStage', async () => {
+    const { rows } = await db().query<{ def: string }>(
+      `select pg_get_constraintdef(c.oid) as def
+         from pg_constraint c
+         join pg_class t on t.oid = c.conrelid
+         join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public'
+          and t.relname = 'llm_calls'
+          and c.conname = 'llm_calls_stage_check'`
+    );
+
+    const def = rows[0]?.def;
+    expect(def, 'llm_calls_stage_check is missing entirely').toBeDefined();
+
+    const missing = STAGES.filter((stage) => !def?.includes(`'${stage}'`));
+    expect(missing, 'add these to the constraint in a migration').toEqual([]);
+  });
+
+  it('admits no stage the code cannot emit', async () => {
+    // The other direction: a stage left in the constraint after being removed
+    // from the union is a value nothing writes and the cost breakdown still
+    // groups by.
+    const { rows } = await db().query<{ def: string }>(
+      `select pg_get_constraintdef(c.oid) as def
+         from pg_constraint c
+         join pg_class t on t.oid = c.conrelid
+         join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public'
+          and t.relname = 'llm_calls'
+          and c.conname = 'llm_calls_stage_check'`
+    );
+
+    const quoted = [...(rows[0]?.def ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    const stray = quoted.filter((s) => s !== undefined && !STAGES.includes(s as LlmStage));
+    expect(stray).toEqual([]);
   });
 });

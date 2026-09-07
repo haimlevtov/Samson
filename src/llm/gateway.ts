@@ -32,6 +32,7 @@ import {
 import {
   SAFETY_PREAMBLE,
   SafetyBlockedError,
+  fenceUntrusted,
   safetyCorrection,
   scanOutput,
   type SafetyFinding,
@@ -48,6 +49,35 @@ import {
 } from './types';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * A rejected completion, replayed for the model to correct.
+ *
+ * INVARIANT: fenced user content, never an `assistant` message — ADR 0015 §2.
+ *
+ * FOUND IN REVIEW, 2026-09-07. Both retry paths used to push
+ * `{ role: 'assistant', content }` here, unfenced and unsanitised. That is the
+ * model's own output, so it looks like the one thing that could safely occupy
+ * the assistant role — but its CONTENT is shaped by whoever wrote the prompt,
+ * and the assistant role is the channel a model treats as its own prior
+ * reasoning.
+ *
+ * The concrete path: a message engineered to make the reply trip `scanOutput`
+ * gets that reply echoed back pre-trusted on attempt two. It also laundered the
+ * fence token itself into the payload outside any fence, because the echo was
+ * never sanitised and the model can read the token out of SAFETY_PREAMBLE.
+ *
+ * WHY the correction beside it stays unfenced: ADR 0008. The instruction is
+ * ours and belongs in the trusted region; the echoed attempt is data. Splitting
+ * them is the whole point — a stage that fenced both would be telling the model
+ * to fix a violation and to ignore the request in the same payload.
+ */
+function rejectedAttempt(content: string, maxChars: number): ChatMessage {
+  return {
+    role: 'user',
+    content: fenceUntrusted('your previous attempt, which was rejected', content, maxChars),
+  };
+}
 
 /** Production dependencies. Tests build their own object instead. */
 export function createGatewayDeps(db: LedgerClient, env: Env = process.env): GatewayDeps {
@@ -221,7 +251,7 @@ export async function callLLM<T>(
             // Corrected the same way a schema failure is: say what was wrong and
             // ask again, rather than spending a retry on the same question.
             correction = [
-              { role: 'assistant', content: content.slice(0, 500) },
+              rejectedAttempt(content, 500),
               { role: 'user', content: safetyCorrection(findings) },
             ];
           } else {
@@ -251,7 +281,7 @@ export async function callLLM<T>(
               // WHY: re-prompting with the validation error attached turns a
               //      wasted retry into a targeted correction.
               correction = [
-                { role: 'assistant', content: content.slice(0, 2000) },
+                rejectedAttempt(content, 2000),
                 {
                   role: 'user',
                   content: `That response failed schema validation: ${validation.error}. Reply with JSON matching the schema exactly, and nothing else.`,

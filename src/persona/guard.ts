@@ -19,8 +19,28 @@
 import type { TrainingBlock } from '../planner/schema';
 import type { DeliveredPlan } from './schema';
 
-/** Matches a bare numeral, including decimals. Word forms ("three") are not numbers. */
-const NUMERAL = /\d+(?:\.\d+)?/g;
+/**
+ * Matches a numeral, including decimals and thousands grouping.
+ *
+ * Word forms ("three") are not numbers and are invisible to this — which is a
+ * recorded limitation, not an oversight. See the AI-NOTE on findUnknownNumbers.
+ *
+ * WHY grouping separators are part of the token — FOUND IN REVIEW, 2026-09-07:
+ * as a bare `\d+`, "100,900" scanned as 100 and 900. Both are ordinary figures
+ * that a facts block plausibly contains, so a reply could compose a total from
+ * two authorised numbers and state a figure that appears in no source. Matching
+ * the whole grouped token makes it one number, 100900, which is then checked
+ * like any other.
+ *
+ * AI-NOTE: the separator must be followed by exactly three digits, so "3, 4" in
+ *          ordinary prose is still two numbers rather than one.
+ */
+const NUMERAL = /\d+(?:[,\u202f]\d{3})*(?:\.\d+)?/g;
+
+/** The matched token as a number. Grouping separators are notation, not value. */
+function toNumber(raw: string): number {
+  return Number(raw.replace(/[,\u202f]/g, ''));
+}
 
 /**
  * Every number the persona is allowed to say.
@@ -71,20 +91,64 @@ export function blockNumbers(block: TrainingBlock): Set<number> {
   return allowed;
 }
 
-/** Every numeral in the text that the block does not contain. */
-export function findInventedNumbers(block: TrainingBlock, text: string): number[] {
-  const allowed = blockNumbers(block);
-  const invented: number[] = [];
+/**
+ * Every numeral in `text` that is not in `allowed`, in order of first
+ * appearance and without repeats.
+ *
+ * WHY this is separate from the block: the coach chat needs the same check
+ * against a different set of permitted numbers — ADR 0015 §4. The rule "a model
+ * may quote a figure it was given and may not invent one" is the same rule in
+ * both places; only the definition of "given" differs.
+ *
+ * AI-NOTE: what this checks is NUMERAL MEMBERSHIP, and the honest statement of
+ *          the guarantee is "every numeral in the text appeared in the allowed
+ *          set". It is not "no unverifiable figure", and three gaps make the
+ *          difference concrete:
+ *
+ *            - word forms are invisible ("up seven and a half kilos"),
+ *            - an authorised numeral can be reattached to a different claim
+ *              ("your one-rep max is 475" when 475 was last week's tonnage),
+ *            - and nothing here reads meaning, so a false claim with no digits
+ *              in it passes untouched.
+ *
+ *          Those are recorded as passing tests in src/chat/reply.test.ts under
+ *          "what this stage does NOT stop". Do not restate this function's
+ *          guarantee more strongly than the list above allows.
+ */
+export function findUnknownNumbers(allowed: ReadonlySet<number>, text: string): number[] {
+  const unknown: number[] = [];
 
   for (const match of text.matchAll(NUMERAL)) {
-    const value = Number(match[0]);
+    const value = toNumber(match[0]);
     if (!Number.isFinite(value)) continue;
     if (allowed.has(value)) continue;
-    if (invented.includes(value)) continue;
-    invented.push(value);
+    if (unknown.includes(value)) continue;
+    unknown.push(value);
   }
 
-  return invented;
+  return unknown;
+}
+
+/**
+ * Every number appearing in a piece of text.
+ *
+ * AI-NOTE: the chat builds its allowed set from the RENDERED prompt rather than
+ *          from the facts object, so the set cannot drift from what the model
+ *          was actually shown. That only works if the same NUMERAL pattern
+ *          reads both sides, which is why this lives here beside it.
+ */
+export function numbersIn(text: string): Set<number> {
+  const found = new Set<number>();
+  for (const match of text.matchAll(NUMERAL)) {
+    const value = toNumber(match[0]);
+    if (Number.isFinite(value)) found.add(value);
+  }
+  return found;
+}
+
+/** Every numeral in the text that the block does not contain. */
+export function findInventedNumbers(block: TrainingBlock, text: string): number[] {
+  return findUnknownNumbers(blockNumbers(block), text);
 }
 
 /** Flattens a delivered plan to the text a user would actually read. */

@@ -11,6 +11,8 @@ import {
   assertNoInventedNumbers,
   blockNumbers,
   findInventedNumbers,
+  findUnknownNumbers,
+  numbersIn,
 } from './guard';
 import type { DeliveredPlan } from './schema';
 
@@ -128,5 +130,63 @@ describe('assertNoInventedNumbers', () => {
         closing: 'Finish at 999 kg.',
       })
     ).toThrow(InventedNumberError);
+  });
+});
+
+/*
+ * The two exports the coach chat added — ADR 0015 §4.
+ *
+ * WHY they are pinned here rather than only through src/chat/: this is a shared
+ * guard now, and `findInventedNumbers` is a caller of `findUnknownNumbers`
+ * rather than an implementation. A change to the general function moves the
+ * persona's behaviour too, so the general function needs its own cases.
+ */
+describe('numbersIn', () => {
+  it('collects every numeral, decimals included', () => {
+    expect([...numbersIn('3 sets of 5 at 62.5 kg')]).toEqual([3, 5, 62.5]);
+  });
+
+  it('reads a grouped thousand as one number, not two', () => {
+    // "100,900" as 100 and 900 would let a reply compose a total out of two
+    // authorised figures — see the AI-NOTE on NUMERAL.
+    expect([...numbersIn('18,250 kg lifetime')]).toEqual([18250]);
+  });
+
+  it('still reads a comma in prose as a separator between two numbers', () => {
+    // Three digits must follow, or "3, 4" would collapse into 34.
+    expect([...numbersIn('weeks 3, 4 and 5')]).toEqual([3, 4, 5]);
+  });
+
+  it('finds nothing in text with no digits', () => {
+    expect([...numbersIn('add a little each week')]).toEqual([]);
+  });
+});
+
+describe('findUnknownNumbers', () => {
+  const allowed = new Set([5, 62.5, 100]);
+
+  it('passes text whose every numeral is allowed', () => {
+    expect(findUnknownNumbers(allowed, '5 reps at 62.5 kg')).toEqual([]);
+  });
+
+  it('reports an unknown numeral once, in order of first appearance', () => {
+    expect(findUnknownNumbers(allowed, '80 then 70 then 80 again')).toEqual([80, 70]);
+  });
+
+  it('rejects a grouped number even when its parts are allowed', () => {
+    // 100 and 5 are both permitted; 100,005 is not a figure anybody supplied.
+    expect(findUnknownNumbers(allowed, 'that is 100,005 kg')).toEqual([100005]);
+  });
+
+  it('is blind to a figure written as words, which is recorded, not fixed', () => {
+    // The honest statement of this guard: every NUMERAL appeared in the set.
+    // src/chat/reply.test.ts carries the same limitation as a taxonomy entry.
+    expect(findUnknownNumbers(allowed, 'up seven and a half kilos')).toEqual([]);
+  });
+
+  it('admits any allowed numeral regardless of the claim it is attached to', () => {
+    // Membership, not meaning. 100 is in the set, so this passes even though
+    // the sentence asserts something the set never said.
+    expect(findUnknownNumbers(allowed, 'your one-rep max is 100 kg')).toEqual([]);
   });
 });
