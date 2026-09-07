@@ -170,9 +170,17 @@ level nobody reaches is not a reward. At 1.25 a consistent user is around level
 10 after a season, which is the horizon this app is built for — one demo, one
 training block, not a decade.
 
-`LEVEL_BASE_XP` is deliberately larger than one perfect week (395 by the table
-above), so the first level-up takes more than a single good week and cannot be
-farmed in one sitting.
+**The first level-up is reachable inside a strong first week, deliberately.** A
+perfect week earns 395 and level 2 costs 300, so a new user who trains all week
+levels up. That is onboarding, not a leak: the reward has to arrive while
+somebody is still deciding whether to come back.
+
+**The anti-farming guarantee is the weekly ceiling, not the cost of level 2.**
+Because a week cannot yield more than `WEEKLY_XP_CEILING`, levelling is bounded
+by adherence however the curve is tuned — measured: **no single week can produce
+more than two level-ups, from any starting XP**. That is asserted as a property
+rather than argued, and it is the claim that would actually break if someone
+raised the ceiling.
 
 ### Properties
 

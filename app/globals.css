@@ -1832,3 +1832,90 @@ details.quick-log[open] > summary {
 .badge-card .xp-meter {
   margin-top: 8px;
 }
+
+/* ---------------------------------------------------------------------------
+ * ADR 0013 — the level card, and settings behind a cog.
+ * Phone-first: base rules are the narrow layout, min-width only.
+ * ------------------------------------------------------------------------- */
+
+.level-card {
+  display: grid;
+  gap: 10px;
+}
+
+.level-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.level-badge {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  /* The level is decoration here — the accessible name is on the meter below,
+     which carries the numbers. A screen reader reading "7" twice is noise. */
+}
+
+/* The disclosure. A <details> so it needs no client state and stays keyboard
+   and screen-reader navigable for free — ADR 0013. */
+.settings-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A real target: this is the only way to reach every setting in the app. */
+  min-height: var(--tap);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+
+.settings-disclosure[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+/* WHY a visible focus ring rather than the default outline: the summary has
+   list-style removed, so in some browsers the default focus indicator lands on
+   a zero-width marker box and is effectively invisible. */
+.settings-disclosure > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.settings-disclosure .cog {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.settings-body {
+  display: grid;
+  gap: 16px;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-disclosure > summary::after {
+    transition: none;
+  }
+}
