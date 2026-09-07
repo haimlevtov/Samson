@@ -29,6 +29,7 @@ export function CoachConsole({
   weekLabels: string[];
 }) {
   const [selected, setSelected] = useState(personas[0]?.slug ?? '');
+  const [speechFailed, setSpeechFailed] = useState(false);
   const [state, formAction, pending] = useActionState<DeliveryState, FormData>(
     deliverForPersona,
     EMPTY_DELIVERY
@@ -72,6 +73,7 @@ export function CoachConsole({
    */
   useEffect(() => {
     stopSpeaking();
+    setSpeechFailed(false);
   }, [state.delivered, state.personaSlug]);
 
   return (
@@ -129,24 +131,43 @@ export function CoachConsole({
              * way to stop it, which is what review found.
              */}
             {canSpeak() ? (
-              <div className="row">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() =>
-                    speak(spoken, {
-                      lang: speaking?.voice ?? null,
-                      intensity: spokenIntensity(speaking?.intensity ?? 3, state.gentle),
-                      variant: speaking?.voiceVariant ?? 0,
-                    })
-                  }
-                >
-                  Read it aloud
-                </button>
-                <button type="button" className="secondary" onClick={stopSpeaking}>
-                  Stop
-                </button>
-              </div>
+              <>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      /*
+                       * Both failure paths are handled, because they are
+                       * different failures: `false` is "could not start", and
+                       * onFailure is "started and then died", which is what iOS
+                       * Safari does. docs/specs/mobile-interface.md §4 — every
+                       * state renders something, and "nothing happens" is the
+                       * failure that section exists to prevent. Here the speech
+                       * IS the action, so silence would be the only feedback.
+                       */
+                      setSpeechFailed(false);
+                      const started = speak(spoken, {
+                        lang: speaking?.voice ?? null,
+                        intensity: spokenIntensity(speaking?.intensity ?? 3, state.gentle),
+                        variant: speaking?.voiceVariant ?? 0,
+                        onFailure: () => setSpeechFailed(true),
+                      });
+                      if (!started) setSpeechFailed(true);
+                    }}
+                  >
+                    Read it aloud
+                  </button>
+                  <button type="button" className="secondary" onClick={stopSpeaking}>
+                    Stop
+                  </button>
+                </div>
+                {speechFailed ? (
+                  <p className="muted small">
+                    This device would not read it aloud. The plan above is the whole of it.
+                  </p>
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : null}
