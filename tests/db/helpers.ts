@@ -25,7 +25,7 @@ export const SERVICE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
  * is what a workstation without Docker has to do, put the pooler connection
  * string in `.env.local`:
  *
- *   SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@<region>.pooler.supabase.com:6543/postgres
+ *   SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@<region>.pooler.supabase.com:6543/postgres?sslmode=verify-full
  *
  * Dashboard → Project Settings → Database → Connection string → URI. It is a
  * database password rather than an API key, so it is not interchangeable with
@@ -33,6 +33,47 @@ export const SERVICE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
  */
 export const DB_URL =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+
+/**
+ * A connection string with its password removed, safe to put in an error.
+ *
+ * INVARIANT: this fails CLOSED. It rebuilds the URL from parsed parts rather
+ *            than substituting into the original, because `String.replace`
+ *            with a regex that does not match returns the input UNCHANGED —
+ *            which prints the password verbatim on exactly the malformed inputs
+ *            the caller's error branches exist to explain. Measured before the
+ *            change: the previous regex leaked on three of four malformed
+ *            inputs, including a string truncated mid-password by a wrapped
+ *            paste, which is the most common way to get there.
+ *
+ * AI-NOTE: SUPABASE_DB_URL is the database OWNER password. It bypasses RLS and
+ *          PostgREST both and can run DDL, so it outranks the service role key.
+ *          Do not "simplify" this back to a .replace() — helpers.test.ts pins
+ *          the cases that would regress.
+ */
+export function redactDbUrl(url: string): string {
+  const unparseable = '<SUPABASE_DB_URL — unparseable, not echoed>';
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return unparseable;
+  }
+
+  /*
+   * A missing slash is not a parse error.  parses
+   * happily — postgresql is a non-special scheme, so with only one slash the
+   * whole authority lands in  and  comes back empty. The
+   * password would then be echoed inside the path. An empty host means the
+   * string was never a usable connection string, so say nothing about it.
+   *
+   * Found by helpers.test.ts, not by reading the code.
+   */
+  if (parsed.host === '') return unparseable;
+  const user = parsed.username === '' ? '' : `${decodeURIComponent(parsed.username)}:***@`;
+  return `${parsed.protocol}//${user}${parsed.host}${parsed.pathname}`;
+}
 
 export type Client = SupabaseClient<Database>;
 

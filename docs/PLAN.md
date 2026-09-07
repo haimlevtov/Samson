@@ -12,7 +12,7 @@ meets its acceptance criteria.
 **Current phase: 5** — phases 0 to 4 are complete; see `docs/plans/` for the
 plan and recorded outcome of each. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
-met all four of its criteria and left four gaps named in its outcome.
+met all four of its criteria, and every gap its outcome named is now closed.
 
 ---
 
