@@ -37,7 +37,8 @@ export function BadgeReveal({
         <h2>{badge.name}</h2>
         <p className="muted small">{badge.description}</p>
       </div>
-      <Link href="/hub" className="chip">
+      {/* Badges live on Profile since ADR 0013. This link followed them. */}
+      <Link href="/profile" className="chip">
         All badges
       </Link>
     </div>

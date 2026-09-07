@@ -1896,7 +1896,12 @@ details.quick-log[open] > summary {
    list-style removed, so in some browsers the default focus indicator lands on
    a zero-width marker box and is effectively invisible. */
 .settings-disclosure > summary:focus-visible {
-  outline: 2px solid var(--accent);
+  /* --accent-text, not --accent, for the reason already written at the top of
+     this file: in dark the accent is nearly the ground and the ring drops to
+     2.2:1, under the 3:1 WCAG 2.4.7 threshold. This summary is the only route
+     to every setting in the app, including the theme switch — so the dark-theme
+     user trying to leave dark is exactly the one who could not see it. */
+  outline: 2px solid var(--accent-text);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }

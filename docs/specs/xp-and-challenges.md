@@ -1,7 +1,7 @@
 # Spec — XP, streaks and challenges
 
 Status: authoritative
-Date: 2026-09-02
+Date: 2026-09-02 — **amended 2026-09-07: the Level section**
 Governs: `src/gamification/`
 
 This document is the contract. As with `planner-rules.md`, the tests for

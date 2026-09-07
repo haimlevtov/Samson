@@ -1,6 +1,6 @@
 # ADR 0013 — Profile owns what you have earned; Hub owns everyone else
 
-**Status:** accepted
+**Status:** accepted, phase 5
 **Date:** 2026-09-07
 **Supersedes:** the ownership table in [0012](0012-bottom-tab-navigation.md)
 
@@ -114,3 +114,22 @@ bars become nine icons.
 
 **Keep the diagnostics on Hub as "stats".** "Stats" is not a thing you can name
 in a word — it is a bucket, and a bucket is what this is trying to stop.
+
+## A reversal worth naming
+
+ADR 0012 rejected a four-tab layout partly on the grounds that "settings and
+rewards have nothing to do with each other" ([0012](0012-bottom-tab-navigation.md),
+Alternatives). This ADR puts settings and rewards on the same tab, so that
+reasoning is reversed rather than merely superseded, and it should be said out
+loud rather than left for a reader to notice.
+
+The reversal is narrower than it looks. 0012's objection was to folding a whole
+_tab_ into another — Profile disappearing as a destination. What is happening
+here is the opposite: Profile becomes the substantial tab and gains a subject,
+and the settings that used to be its whole content are demoted behind a
+disclosure. "Settings and rewards" are not co-equal halves of a tab; rewards are
+the tab, and settings are a drawer on it.
+
+What survives from 0012 unchanged is the test it set — a tab must own one thing
+you can name in a word — and by that test "you" is a better answer than
+"settings".

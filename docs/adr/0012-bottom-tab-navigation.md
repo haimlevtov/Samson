@@ -1,6 +1,6 @@
 # ADR 0012 — Five tabs at the bottom, and what lives behind each
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — ownership table superseded by [ADR 0013](0013-profile-and-hub.md)
 **Date:** 2026-09-05
 
 ## Context
@@ -111,4 +111,5 @@ with each other; the only thing they share is that neither is training.
 - The bar is hidden on `/sign-in`. Tabs that all redirect to the page you are
   already on are not navigation.
 - `BadgeReveal` and the session screen's chart icon pointed at `/progress` and
-  now point at `/hub`.
+  now point at `/hub`. (`BadgeReveal` moved again with ADR 0013, which took the
+  badge shelf to Profile.)

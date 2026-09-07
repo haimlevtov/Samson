@@ -125,15 +125,13 @@ export default async function ProfilePage() {
         </p>
       </div>
 
+      {/*
+       * The first two tiles get a full row each (.grid.cols-4 nth-child(-n+2)),
+       * so this order IS the ranking — mobile-interface.md §2. Streak and
+       * adherence are the mechanic the product retains people with (invariant
+       * #4); a lifetime session count is vanity and sorts below them.
+       */}
       <div className="grid cols-4">
-        <div className="stat">
-          <div className="label">Sessions</div>
-          <div className="value">{completed}</div>
-          <div className="muted small">
-            {first ? `since ${displayDate(first.localDate)}` : 'nothing logged yet'}
-          </div>
-        </div>
-
         <div className="stat">
           <div className="label with-hint">
             Streak
@@ -169,6 +167,14 @@ export default async function ProfilePage() {
         </div>
 
         <div className="stat">
+          <div className="label">Sessions</div>
+          <div className="value">{completed}</div>
+          <div className="muted small">
+            {first ? `since ${displayDate(first.localDate)}` : 'nothing logged yet'}
+          </div>
+        </div>
+
+        <div className="stat">
           <div className="label">Badges</div>
           <div className="value">{badges.length}</div>
           <div className="muted small">unlocked</div>
@@ -177,10 +183,11 @@ export default async function ProfilePage() {
 
       <h2 className="section with-hint">
         This week&rsquo;s XP
-        <FieldHint title="The weekly ceiling">
-          Past the cap, more training earns nothing. That is deliberate: the cap is what stops the
-          game rewarding you for cramming, and it is enforced in the database as well as in the app,
-          so no path can exceed it.
+        <FieldHint title="Weekly XP">
+          XP comes from adherence — keeping the sessions you planned — and never from how much you
+          lifted. Volume-scaled XP would pay you to overtrain. Each session in a week is worth a
+          little less than the one before, and past the cap more training earns nothing at all. The
+          cap is enforced in the database as well as in the app, so no path can exceed it.
         </FieldHint>
       </h2>
       <div className="card">
@@ -248,7 +255,16 @@ export default async function ProfilePage() {
         </div>
       </div>
 
-      {weekly.length > 0 && (
+      <h2 className="section with-hint">
+        Weekly tonnage
+        <FieldHint title="Weekly tonnage">
+          Load moved per week, Monday to Sunday. The bar is scaled against your heaviest week, so it
+          shows the shape of your training rather than an absolute amount.
+        </FieldHint>
+      </h2>
+      {weekly.length === 0 ? (
+        <p className="card muted">No sets logged yet.</p>
+      ) : (
         <div className="card tonnage">
           {weekly.slice(-12).map(([week, value]) => (
             <div key={week} className="tonnage-row">
@@ -262,36 +278,48 @@ export default async function ProfilePage() {
         </div>
       )}
 
-      {topLifts.length > 0 && (
-        <>
-          <h2 className="section with-hint">
-            Best estimated 1RM
-            <FieldHint title="Estimated 1RM">
-              Epley&rsquo;s formula over your heaviest qualifying set. Warm-ups never count, and
-              sets above twelve reps are excluded — the estimate stops being meaningful there.
-            </FieldHint>
-          </h2>
-          <div className="card table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lift</th>
-                  <th>e1RM</th>
-                  <th>When</th>
+      <h2 className="section with-hint">
+        Best estimated 1RM
+        <FieldHint title="Estimated 1RM">
+          Epley&rsquo;s formula — weight × (1 + reps ÷ 30) — over your heaviest qualifying set.
+          Warm-ups never count, and sets above twelve reps are excluded: the estimate stops being
+          meaningful there.
+        </FieldHint>
+      </h2>
+      {topLifts.length === 0 ? (
+        <p className="card muted">
+          Nothing estimable yet — Epley needs a loaded set of 12 reps or fewer.
+        </p>
+      ) : (
+        <div className="card table-scroll">
+          {/* table-cards, not a bare table: below 760px each row becomes a card
+              using these data-labels, which is what keeps the page from
+              scrolling sideways — mobile-interface.md §3. */}
+          <table className="table-cards">
+            <thead>
+              <tr>
+                <th>Lift</th>
+                <th>e1RM</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topLifts.map((best) => (
+                <tr key={best.exerciseId}>
+                  <td data-label="Lift">
+                    {history.exercises.get(best.exerciseId)?.name ?? 'Unknown lift'}
+                  </td>
+                  <td data-label="e1RM">
+                    {best.bestE1rm === null ? '—' : `${best.bestE1rm.toFixed(1)} kg`}
+                  </td>
+                  <td data-label="When">
+                    {best.bestE1rmDate ? displayShortDate(best.bestE1rmDate) : '—'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {topLifts.map((best) => (
-                  <tr key={best.exerciseId}>
-                    <td>{history.exercises.get(best.exerciseId)?.name ?? 'Unknown lift'}</td>
-                    <td>{best.bestE1rm === null ? '—' : `${best.bestE1rm.toFixed(1)} kg`}</td>
-                    <td>{best.bestE1rmDate ? displayShortDate(best.bestE1rmDate) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/*
@@ -320,9 +348,9 @@ export default async function ProfilePage() {
           />
 
           <p className="muted small">
-            Everything is shown in kilograms, and stored that way — CLAUDE.md #8. An imperial toggle
-            lands when display conversion does; until then it would be a switch that changes no
-            number on any screen.
+            Everything is shown in kilograms, and stored that way. An imperial toggle lands when
+            display conversion does; until then it would be a switch that changes no number on any
+            screen.
           </p>
 
           <form action={signOut}>
