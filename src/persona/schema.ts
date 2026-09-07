@@ -53,4 +53,12 @@ export interface Persona {
   intensity: number;
   humorLevel: HumorLevel;
   bannedPhrases: string[];
+  /**
+   * Which of the device voices matching this persona's language it takes.
+   *
+   * INVARIANT: content, not position — CLAUDE.md #7. This was the index into
+   *            the persona list, which is ordered by name, so adding any
+   *            persona reassigned the voices of the ones after it.
+   */
+  voiceVariant: number;
 }

@@ -44,7 +44,6 @@ export function CoachConsole({
    * mismatched voice rather than merely a surprising one.
    */
   const speaking = personas.find((p) => p.slug === state.personaSlug) ?? null;
-  const speakingIndex = personas.findIndex((p) => p.slug === state.personaSlug);
 
   const spoken = state.delivered
     ? [state.delivered.opening, ...state.delivered.week_notes, state.delivered.closing].join(' ')
@@ -58,6 +57,22 @@ export function CoachConsole({
     // screen until it finishes the whole delivery.
     return stopSpeaking;
   }, []);
+
+  /*
+   * Stop talking whenever the delivery changes underneath us.
+   *
+   * WHY: `speechSynthesis` is a global queue that outlives this subtree, and
+   * the only other cancels are a new `speak()` call, the Stop button, and
+   * unmount. Without this, delivering again while the previous read is still
+   * playing leaves the screen showing one coach while the audio reads another
+   * — the same mismatch this component's `speaking` lookup exists to prevent,
+   * moved from the click boundary to the delivery boundary. It also covers the
+   * failure case, where `state.delivered` goes null and the text disappears
+   * while the voice carries on.
+   */
+  useEffect(() => {
+    stopSpeaking();
+  }, [state.delivered, state.personaSlug]);
 
   return (
     <>
@@ -105,6 +120,14 @@ export function CoachConsole({
             ))}
             <p>{state.delivered.closing}</p>
 
+            {/*
+             * WHY Stop can live in here, gated on the same state as the text:
+             * every path that clears `state.delivered` — including every error
+             * return in actions.ts — trips the cancel effect above, so the
+             * audio stops at the same moment this control disappears. Without
+             * that effect this gating would strand a running utterance with no
+             * way to stop it, which is what review found.
+             */}
             {canSpeak() ? (
               <div className="row">
                 <button
@@ -114,9 +137,7 @@ export function CoachConsole({
                     speak(spoken, {
                       lang: speaking?.voice ?? null,
                       intensity: spokenIntensity(speaking?.intensity ?? 3, state.gentle),
-                      // Each persona's position in the list, so three coaches
-                      // take three different voices where the device has them.
-                      variant: speakingIndex < 0 ? 0 : speakingIndex,
+                      variant: speaking?.voiceVariant ?? 0,
                     })
                   }
                 >

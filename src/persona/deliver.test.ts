@@ -41,6 +41,7 @@ const RIVAL: Persona = {
   intensity: 5,
   humorLevel: 'crude',
   bannedPhrases: [],
+  voiceVariant: 0,
 };
 
 const ANALYST: Persona = { ...RIVAL, slug: 'analyst', name: 'The Analyst', intensity: 2 };

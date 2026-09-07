@@ -19,6 +19,8 @@
  *          never the only signal that something happened.
  */
 
+import { GENTLE_MAX_INTENSITY } from '../persona/tone';
+
 /** The part of `SpeechSynthesisVoice` this module reasons about. */
 export interface VoiceLike {
   name: string;
@@ -38,7 +40,31 @@ export interface SpeakOptions {
    * three personas take three different voices whenever the device has three.
    */
   variant?: number;
+  /**
+   * Called when the utterance fails AFTER being queued.
+   *
+   * WHY this exists: `speak()` returning true means "queued without throwing",
+   * not "the user heard it". On iOS Safari and locked-down configurations
+   * `speechSynthesis` exists and accepts the utterance, which then fails
+   * asynchronously with `not-allowed` or `synthesis-failed`. A caller gated on
+   * the synchronous return — the rest timer was — plays no fallback and the
+   * user gets silence at the one moment the app is time-critical.
+   *
+   * INVARIANT: fires at most once per utterance, and NEVER for a cancellation.
+   *            `speech.cancel()` below and `stopSpeaking()` both raise `error`
+   *            on the utterance they superseded, so without that filter pressing
+   *            the button twice would beep at you for the utterance you replaced.
+   */
+  onFailure?: () => void;
 }
+
+/**
+ * Utterance errors that mean "something else stopped this", not "this failed".
+ *
+ * AI-NOTE: keep these out of onFailure. They are the normal result of replacing
+ *          or stopping speech, which the caller asked for.
+ */
+const CANCELLATION: ReadonlySet<string> = new Set(['interrupted', 'canceled', 'cancelled']);
 
 function synth(): SpeechSynthesis | null {
   if (typeof window === 'undefined') return null;
@@ -61,13 +87,15 @@ export function canSpeak(): boolean {
  * later empty reading (which some engines return while reloading) cannot
  * un-choose a voice mid-session.
  */
-let cachedVoices: VoiceLike[] = [];
+// Typed as what it actually holds — it is only ever assigned from getVoices()
+// — so returning it needs no assertion the checker cannot verify.
+let cachedVoices: SpeechSynthesisVoice[] = [];
 let primed = false;
 
 function refreshVoices(speech: SpeechSynthesis): SpeechSynthesisVoice[] {
   const live = speech.getVoices();
   if (live.length > 0) cachedVoices = live;
-  return live.length > 0 ? live : (cachedVoices as SpeechSynthesisVoice[]);
+  return live.length > 0 ? live : cachedVoices;
 }
 
 /**
@@ -83,12 +111,26 @@ export function primeVoices(): void {
 
   refreshVoices(speech);
   if (primed) return;
-  primed = true;
 
-  // addEventListener is absent on some older speechSynthesis implementations.
-  speech.addEventListener?.('voiceschanged', () => {
-    refreshVoices(speech);
-  });
+  /*
+   * WHY `primed` is set AFTER a listener is attached, and why there is a
+   * fallback: an earlier version latched it first and then called
+   * `addEventListener?.()`, so on an implementation without that method the
+   * module was permanently marked primed with no listener at all — the voice
+   * list then only ever refreshed inside `speak()`, which is the empty-first-
+   * call bug this whole cache exists to prevent, silently back.
+   */
+  if (typeof speech.addEventListener === 'function') {
+    speech.addEventListener('voiceschanged', () => {
+      refreshVoices(speech);
+    });
+    primed = true;
+  } else {
+    speech.onvoiceschanged = () => {
+      refreshVoices(speech);
+    };
+    primed = speech.onvoiceschanged !== null;
+  }
 }
 
 const normalise = (lang: string): string => lang.replace('_', '-').toLowerCase();
@@ -163,9 +205,16 @@ export function voiceSettings(intensity: number): { rate: number; pitch: number 
  * any model is involved). Leaving the speech at the persona's usual rate meant
  * the app printed "Gentler tone: this is not a week to push" and then read it
  * out faster and higher-pitched than a normal week.
+ *
+ * INVARIANT: this is the SAME clamp `applyTone` uses on the words — the
+ *            constant is imported rather than restated. An earlier version
+ *            subtracted two instead of clamping to two, which is not the same
+ *            function: the Old Master at 3 was written at 2 and spoken at 1,
+ *            so a gentle week was generated at one intensity and read aloud at
+ *            another. Two definitions of "gentle" is one too many.
  */
 export function spokenIntensity(intensity: number, gentle: boolean): number {
-  return gentle ? Math.max(1, intensity - 2) : intensity;
+  return gentle ? Math.min(intensity, GENTLE_MAX_INTENSITY) : intensity;
 }
 
 /** Stops anything currently being spoken. Safe when speech is unavailable. */
@@ -181,7 +230,8 @@ export function stopSpeaking(): void {
  * AI-NOTE: a `true` here means the utterance was queued without throwing, not
  *          that the user heard it — `speechSynthesis.speak` is fire-and-forget
  *          and failures surface asynchronously on the utterance. A caller whose
- *          fallback matters should not treat this as proof of audio.
+ *          fallback matters must pass `onFailure` and not treat `true` as proof
+ *          of audio. `RestTimer` is the caller this matters most for.
  */
 export function speak(text: string, options: SpeakOptions = {}): boolean {
   const speech = synth();
@@ -203,6 +253,25 @@ export function speak(text: string, options: SpeakOptions = {}): boolean {
       utterance.lang = voice.lang;
     } else if (options.lang) {
       utterance.lang = options.lang;
+    }
+
+    /*
+     * Fires once. `onerror` and `onend` can both arrive, and an engine that
+     * errors after some audio may raise error then end — the latch is what
+     * keeps a caller's fallback from running twice.
+     */
+    if (options.onFailure) {
+      const fail = options.onFailure;
+      let settled = false;
+      utterance.onerror = (event) => {
+        if (settled) return;
+        settled = true;
+        if (CANCELLATION.has(event.error)) return;
+        fail();
+      };
+      utterance.onend = () => {
+        settled = true;
+      };
     }
 
     speech.speak(utterance);

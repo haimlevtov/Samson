@@ -15,6 +15,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { pickVoice, spokenIntensity, voiceSettings, type VoiceLike } from './speak';
+import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
+import type { Persona } from '../persona/schema';
 
 const voice = (name: string, lang: string): VoiceLike => ({ name, lang });
 
@@ -137,7 +139,7 @@ describe('spokenIntensity', () => {
   it('softens the speech on a week the app has judged gentle', () => {
     // The banner says "not a week to push"; speaking it faster and higher than
     // usual contradicted the words it was reading.
-    expect(spokenIntensity(4, true)).toBe(2);
+    expect(spokenIntensity(4, true)).toBe(GENTLE_MAX_INTENSITY);
     expect(voiceSettings(spokenIntensity(4, true)).rate).toBeLessThan(voiceSettings(4).rate);
   });
 
@@ -145,8 +147,47 @@ describe('spokenIntensity', () => {
     expect(spokenIntensity(4, false)).toBe(4);
   });
 
-  it('never goes below the bottom of the scale', () => {
+  it('leaves a persona already at or below the gentle ceiling where it is', () => {
+    // This is the case the previous implementation got wrong. Subtracting two
+    // instead of clamping to two took the Analyst at 2 down to 1, so the words
+    // were written at 2 and read aloud at 1.
+    expect(spokenIntensity(2, true)).toBe(2);
     expect(spokenIntensity(1, true)).toBe(1);
-    expect(spokenIntensity(2, true)).toBe(1);
+  });
+
+  /*
+   * The property that matters, rather than three examples of it: the voice and
+   * the words must be softened by the SAME rule. `resolveTone` decides the
+   * intensity the persona writes at; `spokenIntensity` decides the intensity it
+   * is read at. Two definitions of "gentle" is one too many, and the drift is
+   * invisible — nothing crashes, the coach just sounds unlike its own text.
+   */
+  it('agrees with resolveTone at every point on the scale', () => {
+    const persona = (intensity: number): Persona => ({
+      slug: 'fixture',
+      name: 'Fixture',
+      systemPrompt: 'x',
+      intensity,
+      humorLevel: 'clean',
+      bannedPhrases: [],
+      voiceVariant: 0,
+    });
+
+    for (const intensity of [1, 2, 3, 4, 5]) {
+      for (const gentle of [true, false]) {
+        const tone = resolveTone(
+          persona(intensity),
+          'clean',
+          gentle
+            ? { notes: ['tweaked my knee'], adherenceRate: 1 }
+            : { notes: [], adherenceRate: 1 }
+        );
+
+        expect(tone.gentle, `gentle flag for intensity ${intensity}`).toBe(gentle);
+        expect(spokenIntensity(intensity, gentle), `intensity ${intensity}, gentle ${gentle}`).toBe(
+          tone.intensity
+        );
+      }
+    }
   });
 });

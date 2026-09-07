@@ -139,14 +139,24 @@ specifically so that if it does not work, there is still time to change course.
 ### 5.4 Voice — **Specified** (phase 3)
 
 Three coach personas at launch: the Rival, the Analyst, and one of the Sergeant
-or the Old Master. Each is a database row — system prompt, TTS voice, intensity,
-humour tier, banned phrases — not a code branch.
+or the Old Master. Each is a database row — system prompt, language and voice
+variant, intensity, humour tier, banned phrases — not a code branch.
+
+**Corrected 2026-09-07.** This said "TTS voice", which promised something the
+project does not have: there is no TTS provider and the only key here is for
+text ([ADR 0006](adr/0006-persona-boundary.md)). Delivery uses the browser's own
+`speechSynthesis`, so a persona cannot carry a voice — the device decides which
+voices exist and they differ per browser and per OS. What the row carries is a
+language hint (`tts_voice_id`, a BCP-47 tag) and a `tts_voice_variant` saying
+which of the matching voices this coach takes. Persona voice is therefore tone,
+rate and word choice rather than timbre.
 
 Personas may not alter any number in the plan they receive, asserted by test. A
 tone override forces a gentler register when an injury or a run of missed
 sessions is flagged, regardless of which persona is selected. High-frequency
-cues (rest over, set logged, PR hit, last set) are precomputed audio, generated
-once when the persona is created.
+cues (rest over, set logged, PR hit, last set) are spoken live by the browser,
+with a tone as the fallback where speech is unavailable — not precomputed audio,
+for the same reason as above.
 
 ### 5.5 Progression and rewards — **Specified** (phases 4–5)
 

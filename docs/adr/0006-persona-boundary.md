@@ -1,6 +1,6 @@
 # ADR 0006 — The persona speaks; it does not decide
 
-**Status:** accepted, phase 3
+**Status:** accepted, phase 3 — **amended 2026-09-02 and 2026-09-07, see below**
 **Date:** 2026-09-01
 
 ## Context
@@ -135,3 +135,41 @@ voice. It is the device's voices, allocated so they do not collide.
 migration and a type regeneration for a cosmetic gain. `src/ui/speak.ts` says
 what it actually holds, and `src/ui/speak.test.ts` pins the behaviour that was
 previously untested — which is why nothing caught this.
+
+---
+
+**Amended again 2026-09-07, after review of the change above.**
+
+Two things that amendment got wrong, both found by reviewers rather than by
+running the app.
+
+**Voice allocation was a code branch, not content.** The variant passed to
+`speak()` was each persona's _position_ in the list, which `listPersonas`
+orders by name. That violates CLAUDE.md #7 and the promise in `docs/PRD.md`
+§5.4 that a persona is a row "not a code branch" — and it was a live bug, not
+only a rule: inserting any persona whose name sorts early shifts every persona
+after it. A fourth shared coach, or a user creating their own row —
+`personas_read` is `user_id is null or user_id = auth.uid()` — silently
+reassigned the voices of coaches the migration never touched. It is now
+`personas.tts_voice_variant`, seeded so the two `en-GB` coaches differ
+(migration `20260907120000`).
+
+The claim above that "three personas take three of the device's voices whenever
+it has three" is also overstated, and is corrected here rather than left
+standing: `pickVoice` indexes within the pool matching the persona's _language_,
+modulo that pool's size. With one `en-GB` and two `en-US` voices installed, the
+two `en-GB` coaches still collide. Accurate wording is "three of the voices
+matching their language, where the language has three".
+
+**The speech clamp disagreed with the tone clamp.** `spokenIntensity` subtracted
+two where `resolveTone` clamps to `GENTLE_MAX_INTENSITY`. Those are different
+functions: on a gentle week the Old Master's words were generated at intensity 2
+and read aloud at 1, and the Analyst's at 2 and read at 1. This ADR's Decision
+section already fixed the tone override as a single rule in code, and a second
+definition of "gentle" living in a client component contradicted it. It now
+imports the same constant, and `speak.test.ts` asserts the two agree at every
+point on the scale rather than trusting them to.
+
+**One consequence worth naming for whoever adds the fourth persona:** the
+variant is content now, so the `add-persona` skill has to set it. A new `en-GB`
+coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.

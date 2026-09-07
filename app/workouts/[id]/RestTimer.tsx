@@ -17,8 +17,19 @@ import { speak } from '@/src/ui/speak';
  *          this is the one function that changes.
  */
 function announceRestOver(): void {
-  if (speak('Rest over.')) return;
+  // INVARIANT: the beep is reachable on EVERY path where speech does not
+  //            actually play. `speak` returning true only means the utterance
+  //            was queued, so an asynchronous failure — iOS Safari and
+  //            locked-down configurations accept it and then raise
+  //            `not-allowed` — has to route here too, or rest ends in silence
+  //            on a phone in a pocket. That is the one time-critical signal in
+  //            the app (docs/specs/mobile-interface.md §2).
+  if (speak('Rest over.', { onFailure: beep })) return;
 
+  beep();
+}
+
+function beep(): void {
   try {
     const AudioCtor =
       window.AudioContext ??
