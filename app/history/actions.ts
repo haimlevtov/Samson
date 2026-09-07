@@ -43,8 +43,8 @@ export async function startWorkout(): Promise<void> {
 
   if (error) throw new Error(`starting workout: ${error.message}`);
 
-  revalidatePath('/workouts');
-  redirect(`/workouts/${data.id}`);
+  revalidatePath('/history');
+  redirect(`/history/${data.id}`);
 }
 
 export async function logSet(formData: FormData): Promise<void> {
@@ -74,7 +74,7 @@ export async function logSet(formData: FormData): Promise<void> {
     isWarmup,
   });
 
-  revalidatePath(`/workouts/${workoutId}`);
+  revalidatePath(`/history/${workoutId}`);
 }
 
 export async function deleteSet(formData: FormData): Promise<void> {
@@ -86,7 +86,7 @@ export async function deleteSet(formData: FormData): Promise<void> {
   const { error } = await db.from('sets').delete().eq('id', setId);
   if (error) throw new Error(`deleting set: ${error.message}`);
 
-  revalidatePath(`/workouts/${workoutId}`);
+  revalidatePath(`/history/${workoutId}`);
 }
 
 export async function finishWorkout(formData: FormData): Promise<void> {
@@ -127,8 +127,8 @@ export async function finishWorkout(formData: FormData): Promise<void> {
     console.error('award_session_xp failed', cause);
   }
 
-  revalidatePath('/workouts');
-  revalidatePath('/progress');
+  revalidatePath('/history');
+  revalidatePath('/hub');
 
   /*
    * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".
@@ -139,7 +139,7 @@ export async function finishWorkout(formData: FormData): Promise<void> {
    * the event has to exist. No schema change and no "seen" column.
    */
   const first = unlocked[0];
-  redirect(first === undefined ? '/workouts' : `/workouts?unlocked=${encodeURIComponent(first)}`);
+  redirect(first === undefined ? '/history' : `/history?unlocked=${encodeURIComponent(first)}`);
 }
 
 /**
@@ -215,5 +215,5 @@ export async function confirmParsedSets(formData: FormData): Promise<void> {
     });
   }
 
-  revalidatePath(`/workouts/${workoutId}`);
+  revalidatePath(`/history/${workoutId}`);
 }

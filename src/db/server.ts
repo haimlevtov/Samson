@@ -46,6 +46,8 @@ export interface SessionUser {
    * and can be tested without a database.
    */
   humorMaxLevel: string;
+  /** Appearance — see src/ui/theme.ts. The layout stamps it onto <html>. */
+  theme: string;
 }
 
 /**
@@ -64,7 +66,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
 
   const { data: profile } = await db
     .from('users')
-    .select('display_name, timezone, unit_preference, humor_max_level')
+    .select('display_name, timezone, unit_preference, humor_max_level, theme')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -77,6 +79,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
     // 'cheeky' is the column default; the fallback matches it so a missing
     // profile row behaves the same as a default one.
     humorMaxLevel: profile?.humor_max_level ?? 'cheeky',
+    theme: profile?.theme ?? 'system',
   };
 }
 

@@ -21,7 +21,7 @@ export async function signIn(formData: FormData): Promise<void> {
   }
 
   revalidatePath('/', 'layout');
-  redirect('/workouts');
+  redirect('/hub');
 }
 
 export async function signOut(): Promise<void> {

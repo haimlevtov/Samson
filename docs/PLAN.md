@@ -214,7 +214,7 @@ Compressible and parallelisable. Safe to cut down if time runs short.
 
 ## Phase 6 — Optional features
 
-Both are self-contained. Cut either without breaking anything above.
+Each is self-contained. Cut any of them without breaking anything above.
 
 **Build**
 
@@ -222,12 +222,23 @@ Both are self-contained. Cut either without breaking anything above.
 - Health Connect and HealthKit, only if time allows and a test device exists
 - Diet advisor: maintenance computed by equation, bounded adjustment,
   hard-clamped floor in code, retrieval-only supplement answers
+- **Leaderboard** — the "top player" half of the Hub tab (ADR 0012). Deferred
+  here rather than built with the tab bar because it is the first feature that
+  wants to read another user's rows, and invariant #10 says every table is
+  RLS'd to its owner and application code never touches the service role.
+  It needs its own ADR before any code: a `security definer` view exposing
+  **display name and XP total only**, a migration, and an explicit answer to
+  what a user who has not chosen a display name is called. Opting out has to
+  be possible, which is a `users` column, which is a second migration.
 
 **Acceptance criteria**
 
 - File import is the primary path and demos without any native module
 - Adversarial suite: no prompt, persona, or user framing moves the calorie
   floor. Every attempt blocked and logged.
+- A query as user A against the leaderboard view returns user B's display name
+  and XP and **nothing else** — no email, no user_id, no set history. The RLS
+  coverage test in `tests/db` gains a case for the view, not an exemption.
 
 ---
 
