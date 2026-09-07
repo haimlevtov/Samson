@@ -139,9 +139,15 @@ with the service role, which CLAUDE.md #10 permits in a batch job and forbids in
 application code, and it exposes no endpoint for a client to call.
 
 The idempotency guard is the status transition itself: the `UPDATE` filters on
-`status in ('offered','active')`, so two overlapping runs cannot both pay —
-whichever commits second matches no row. Checking first and updating after would
-leave precisely that gap open.
+the unresolved statuses, so two overlapping runs cannot both pay — whichever
+commits second matches no row. Checking first and updating after would leave
+precisely that gap open.
+
+**Amended 2026-09-07.** That filter is now `status = 'active'` alone. Accepting
+a challenge became a real transition rather than a label, and only an accepted
+challenge settles — see the lifecycle table in `docs/specs/xp-and-challenges.md`.
+The idempotency argument is unchanged; what changed is that the same filter is
+now the acceptance gate as well as the guard.
 
 **What this costs:** payout is not immediate. A challenge finished mid-session
 is paid on the next batch run rather than the moment the set is logged, so the

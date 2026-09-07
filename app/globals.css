@@ -1924,3 +1924,10 @@ details.quick-log[open] > summary {
     transition: none;
   }
 }
+
+/* The Accept control on an offered challenge. Its own row, because the meta
+   line above it is a flex row and a button dropped into that gap sits flush
+   against it — measured at 0px before this. */
+.badge-card form {
+  margin-top: 10px;
+}
