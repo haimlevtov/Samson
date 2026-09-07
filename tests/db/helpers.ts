@@ -77,6 +77,19 @@ export function redactDbUrl(url: string): string {
 
 export type Client = SupabaseClient<Database>;
 
+/**
+ * A signed-OUT client.
+ *
+ * WHY it exists: RLS and grants are two independent gates (ADR 0003), and a
+ * test that only ever holds a signed-in session measures the first one. This is
+ * how the second is measured.
+ */
+export function anonClient(): Client {
+  return createClient<Database>(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export function adminClient(): Client {
   return createClient<Database>(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },

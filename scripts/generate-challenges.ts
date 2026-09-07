@@ -178,7 +178,7 @@ async function main(): Promise<void> {
         .from('challenges')
         .update({ status: 'completed' })
         .eq('id', done.id)
-        .in('status', ['offered', 'active'])
+        .in('status', ['active'])
         .select('id');
       if (settleErr) throw new Error(`settling ${done.slug}: ${settleErr.message}`);
       if ((won ?? []).length === 0) continue;

@@ -6,6 +6,7 @@ import { loadChallenges } from '@/src/db/gamification';
 import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { acceptChallengeAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,8 +34,35 @@ export default async function HubPage() {
   const today = localDateFor(user.timezone);
   const [history, challenges] = await Promise.all([loadHistory(db), loadChallenges(db)]);
 
-  const active = challenges.filter((c) => c.status === 'offered' || c.status === 'active');
+  /*
+   * Three buckets, not two. Accepting is what puts a challenge in play — see the
+   * lifecycle table in docs/specs/xp-and-challenges.md — so an offered
+   * challenge is an invitation and an active one is a commitment, and showing
+   * them as one list would hide the only decision this page asks for.
+   */
+  const offered = challenges.filter((c) => c.status === 'offered');
+  const accepted = challenges.filter((c) => c.status === 'active');
   const rejected = challenges.filter((c) => c.status === 'rejected');
+
+  /*
+   * A window that has closed cannot be accepted — the RPC refuses it — so the
+   * card must not offer a button that would do nothing. Nothing expires these
+   * rows, which the spec records as a known gap, so they accumulate here and
+   * this is what keeps them honest.
+   */
+  const expired = (c: (typeof offered)[number]): boolean =>
+    c.windowEnd !== null && c.windowEnd < today;
+
+  const progressOf = (c: (typeof offered)[number]) =>
+    c.spec === null
+      ? null
+      : evaluateChallenge(c.spec, {
+          workouts: history.workouts,
+          sets: history.sets,
+          history: history.sets,
+          asOf: today,
+          availableExerciseIds: [...history.exercises.keys()],
+        });
 
   return (
     <>
@@ -47,34 +75,62 @@ export default async function HubPage() {
         </div>
       </header>
 
-      <h2 className="section">Challenges</h2>
-      {active.length === 0 ? (
+      <h2 className="section with-hint">
+        Open to you
+        <FieldHint title="Accepting a challenge">
+          A challenge only earns XP once you accept it. That is the point of the button — until then
+          it is an invitation, and training that happens to satisfy it pays nothing. Your adherence
+          XP, streak and badges are unaffected either way.
+        </FieldHint>
+      </h2>
+      {offered.length === 0 ? (
         <p className="card muted">
-          No challenges assigned yet. They are generated weekly and validated against your own
-          history first, so one you already meet without changing anything is never offered.
+          Nothing on offer. Challenges are generated weekly and validated against your own history
+          first, so one you already meet without changing anything is never offered.
         </p>
       ) : (
         <div className="badge-shelf">
-          {active.map((c) => {
-            // Progress is derived from logged rows here exactly as the server
-            // derives it — ADR 0009. This is a display of the same computation,
-            // not a second definition of it.
-            const progress =
-              c.spec === null
-                ? null
-                : evaluateChallenge(c.spec, {
-                    workouts: history.workouts,
-                    sets: history.sets,
-                    history: history.sets,
-                    asOf: today,
-                    availableExerciseIds: [...history.exercises.keys()],
-                  });
+          {offered.map((c) => (
+            <article key={c.id} className="card badge-card">
+              <h3>{c.slug.replace(/-/g, ' ')}</h3>
+              <p className="muted small">
+                <span className="chip">{c.kind}</span>
+                {c.spec === null ? 'unreadable' : `${c.spec.reward_xp} XP`}
+              </p>
+              {expired(c) ? (
+                // Says why rather than showing a button that would refuse.
+                <p className="muted small">Its window closed on {displayDate(c.windowEnd!)}.</p>
+              ) : (
+                <form action={acceptChallengeAction}>
+                  <input type="hidden" name="challengeId" value={c.id} />
+                  <button type="submit">Accept</button>
+                </form>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+
+      <h2 className="section">In play</h2>
+      {accepted.length === 0 ? (
+        <p className="card muted">
+          Nothing accepted yet. Take one above and it starts counting from what you have already
+          logged this window.
+        </p>
+      ) : (
+        <div className="badge-shelf">
+          {accepted.map((c) => {
+            // Progress is derived from logged rows here exactly as the batch
+            // derives it — the same evaluateChallenge, so there is one
+            // definition of how far along you are.
+            const progress = progressOf(c);
 
             return (
               <article key={c.id} className="card badge-card">
                 <h3>{c.slug.replace(/-/g, ' ')}</h3>
                 <p className="muted small">
-                  <span className="chip">{c.kind}</span> {c.status}
+                  <span className="chip chip-on">{c.kind}</span>
+                  {c.spec === null ? 'unreadable' : `${c.spec.reward_xp} XP`}
                 </p>
                 {progress !== null && (
                   <>
@@ -87,7 +143,7 @@ export default async function HubPage() {
                     </div>
                     <p className="muted small">
                       {progress.progress} of {progress.target}
-                      {progress.met ? ' · complete' : ''}
+                      {progress.met ? ' · complete, pays on the next weekly run' : ''}
                     </p>
                   </>
                 )}

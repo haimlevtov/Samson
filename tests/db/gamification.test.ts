@@ -14,7 +14,7 @@
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -1008,5 +1008,116 @@ describe('settling a challenge pays it exactly once', () => {
     } finally {
       await deleteTestUser(user);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Accepting a challenge — the only transition a user drives
+// ---------------------------------------------------------------------------
+
+describe('accept_challenge', () => {
+  /** An offered challenge belonging to `owner`, inside its window. */
+  async function offer(
+    ownerId: string,
+    slug: string,
+    windowEnd = '2099-01-01',
+    // challenges_window requires end >= start, so an expired fixture needs a
+    // window entirely in the past rather than an end date dragged backwards.
+    windowStart = '2026-01-01'
+  ) {
+    const admin = adminClient();
+    const { data, error } = await admin
+      .from('challenges')
+      .insert({
+        user_id: ownerId,
+        slug,
+        kind: 'weekly',
+        status: 'offered',
+        window_start: windowStart,
+        window_end: windowEnd,
+        spec: {
+          kind: 'sessions',
+          target: 3,
+          window_days: 7,
+          reward_xp: 50,
+          rpe_at_least: null,
+        },
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(`offering ${slug}: ${error.message}`);
+    return data.id;
+  }
+
+  async function statusOf(id: string): Promise<string> {
+    const { data } = await adminClient().from('challenges').select('status').eq('id', id).single();
+    return data?.status ?? 'missing';
+  }
+
+  it('puts the caller’s own offered challenge in play', async () => {
+    const id = await offer(alice.id, `accept-ok-${Date.now()}`);
+
+    const { data } = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+
+    expect(data).toBe(true);
+    expect(await statusOf(id)).toBe('active');
+  });
+
+  /*
+   * The authorisation check. The RPC filters on auth.uid() rather than trusting
+   * the id it was handed, so a forged challenge id belonging to someone else
+   * matches no row — and, importantly, Bob's challenge is not moved.
+   */
+  it('will not accept a challenge belonging to somebody else', async () => {
+    const id = await offer(bob.id, `accept-theirs-${Date.now()}`);
+
+    const { data } = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+
+    expect(data).toBe(false);
+    expect(await statusOf(id)).toBe('offered');
+  });
+
+  it('is idempotent: a second press changes nothing', async () => {
+    const id = await offer(alice.id, `accept-twice-${Date.now()}`);
+
+    const first = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+    const second = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+
+    expect(first.data).toBe(true);
+    // The status filter inside the UPDATE is the guard — the second press
+    // matches no row rather than re-accepting.
+    expect(second.data).toBe(false);
+    expect(await statusOf(id)).toBe('active');
+  });
+
+  it('will not put an expired challenge in play', async () => {
+    // Nothing marks these failed, so they linger as `offered` forever. The
+    // window check is what stops one being accepted long after it closed.
+    const id = await offer(alice.id, `accept-expired-${Date.now()}`, '2020-01-08', '2020-01-01');
+
+    const { data } = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+
+    expect(data).toBe(false);
+    expect(await statusOf(id)).toBe('offered');
+  });
+
+  it('will not resurrect a resolved challenge', async () => {
+    const admin = adminClient();
+    const id = await offer(alice.id, `accept-done-${Date.now()}`);
+    await admin.from('challenges').update({ status: 'completed' }).eq('id', id);
+
+    const { data } = await alice.client.rpc('accept_challenge', { p_challenge_id: id });
+
+    expect(data).toBe(false);
+    expect(await statusOf(id)).toBe('completed');
+  });
+
+  it('is not callable by an anonymous client', async () => {
+    // RLS and grants are two independent gates — ADR 0003. This is the grant.
+    const { error } = await anonClient().rpc('accept_challenge', {
+      p_challenge_id: '00000000-0000-0000-0000-000000000000',
+    });
+
+    expect(error).not.toBeNull();
   });
 });
