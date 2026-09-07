@@ -1,8 +1,11 @@
 /**
- * What one chat turn returns.
+ * What one chat turn returns, and what a transcript is allowed to be.
  *
  * Design and threat model: ADR 0015. The contract, including why each bound is
  * the number it is: docs/specs/coach-chat.md §2.
+ *
+ * INVARIANT: the Zod schemas are the source of truth and the TS types are
+ *            derived from them — CLAUDE.md § Conventions.
  */
 import { z } from 'zod';
 
@@ -42,35 +45,32 @@ export type ChatReply = z.infer<typeof chatReplySchema>;
  *
  * `coach` rather than `assistant` because this is the app's own shape: it is
  * what the UI renders and what the server action round-trips. The mapping onto
- * the gateway's `ChatMessage` roles happens in `prompt.ts`, which is also where
- * the fencing happens — so a turn cannot reach a model without passing the one
- * function that knows which side it came from.
- */
-export interface ChatTurn {
-  role: 'user' | 'coach';
-  text: string;
-}
-
-/**
- * The transcript kept between messages.
+ * the gateway's `ChatMessage` roles happens in `prompts.ts`, which is also
+ * where the fencing happens — so a turn cannot reach a model without passing
+ * the one function that knows which side it came from.
  *
  * INVARIANT: validated on arrival — ADR 0015 §1. This stage has no write path,
  *            so the transcript is not stored: it is held by the client and
  *            comes back with every request. That makes it user input, exactly
  *            as the message is, and it is parsed rather than trusted.
  *
- * AI-NOTE: the roles here are a CLAIM about who said what, not a fact. Nothing
- *          downstream may treat a `coach` turn as trusted — `prompt.ts` fences
- *          both kinds and gives neither an assistant role. If you ever add
- *          server-side storage, this schema stays: the client would still be
- *          the one telling us which conversation it is.
+ * AI-NOTE: `role` here is a CLAIM about who said what, not a fact. Nothing
+ *          downstream may treat a `coach` turn as trusted — `prompts.ts` fences
+ *          both kinds and gives neither an assistant role. If server-side
+ *          storage is ever added, this schema stays: the client would still be
+ *          the one saying which conversation it is.
  */
 export const chatTurnSchema = z.strictObject({
   role: z.enum(['user', 'coach']),
-  // Bounded per turn so no single one can flood the payload. `sanitizeUntrusted`
-  // truncates below this again; this is the parse-time rejection.
+  /**
+   * Capped at the same length one message may be. `sanitizeUntrusted` applies
+   * the same bound again when the turn is fenced; this is the parse-time
+   * rejection, so an over-long turn never reaches the prompt layer at all.
+   */
   text: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
 });
+
+export type ChatTurn = z.infer<typeof chatTurnSchema>;
 
 /**
  * How much scrollback survives a round trip.

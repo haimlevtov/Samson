@@ -5,7 +5,7 @@ Read that first; this is the part with the numbers in it.
 
 ## 1. The surface
 
-Two controls on `/coach`, and neither of them fires on page load.
+Three controls on `/coach`, and none of them fires on page load.
 
 **The plan is revealed, not served.** The accepted block no longer renders when
 the page opens. The page shows a one-line summary — that a plan exists and when
@@ -31,7 +31,13 @@ reader navigable without work, and it degrades to an open section with CSS off �
 
 **The chat is a panel below it.** One text field, a send button, and the
 transcript. Empty state names the boundary before the user hits it: this coach
-talks about your training and nothing else.
+talks about your training and nothing else, and the conversation is not kept.
+
+**Clear** appears once there is a transcript, and is the third control. It
+empties the visible conversation; there is nothing to delete, because nothing is
+stored. It exists because the transcript is re-sent with every message — so
+without it, a user who has wandered somewhere unhelpful pays for that history on
+every subsequent turn and cannot get out of it except by leaving the page.
 
 ## 2. The stage
 
@@ -84,6 +90,10 @@ nothing reads a prompt to decide what goes in it — ADR 0015 §1.
 Every value is a number the metrics engine computed or a label it chose. The
 model receives them fenced, as data — invariant #11.
 
+`top_lifts[].name` is the exception worth naming: it is third-party catalogue
+text, so it is sanitised and capped per field, and the digits inside it are not
+quotable. See ADR 0015 §4.
+
 ## 4. What comes back
 
 ### On-topic
@@ -125,13 +135,20 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
    with its own cap. The payload contains no `assistant` message — the
    transcript is client-supplied, so all of it is untrusted. ADR 0015 §2.
 3. **`scanOutput`** runs inside the gateway, as for every stage.
-4. **`findUnknownNumbers(allowed, reply)`** where `allowed` is every numeral in
-   the rendered facts block plus every numeral in the user's own turns.
+4. **`findUnknownNumbers(allowed, reply)`** where `allowed` is the facts'
+   **typed numeric leaves** plus every numeral in the user's own turns. What
+   this does and does not guarantee is in ADR 0015 §4, and it is weaker than it
+   sounds: it enforces that every numeral appeared in what the model was fed,
+   not that a figure is true.
 
-`chatMessages` returns `{ messages, allowed }` from **one pass over the rendered
-strings**, so the quotable set cannot drift from what was sent. A coach turn's
-figures are excluded: admitting them would let one reply that slipped a number
-past the guard license every later reply to repeat it.
+`chatMessages` returns `{ messages, allowed }` from **one pass**, so the
+quotable set cannot drift from what was sent. Two exclusions matter:
+
+- **Coach turns contribute nothing.** Admitting them would let one reply that
+  slipped a number past the guard license every later reply to repeat it.
+- **Exercise names contribute nothing**, which is why the facts half reads typed
+  leaves rather than the rendered block. Catalogue names carry digits ("3/4
+  Sit-Up"), and any authenticated user may insert an exercise of their own.
 
 The set is fixed **before** the retry loop. The correction names the rejected
 figure, and recomputing after appending it would authorise the very number that

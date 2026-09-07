@@ -78,9 +78,13 @@ export function CoachConsole({
 
   return (
     <>
-      <h2 className="section">Coach</h2>
+      {/* "Voice", not "Coach": the page's h1 is Coach now that the chat
+          shares the tab, and an h2 repeating it reads as a broken heading
+          outline to anyone navigating by headings. This section is the persona
+          picker and the delivery, which is what a voice is. */}
+      <h2 className="section">Voice</h2>
       <div className="card">
-        <span className="label">Voice</span>
+        <span className="label">Pick one</span>
         <div className="row">
           {personas.map((p) => (
             <button

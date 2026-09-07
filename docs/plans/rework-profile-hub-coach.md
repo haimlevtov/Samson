@@ -2,10 +2,18 @@
 Committed 2026-09-07, at the start of PR 4, which is later than it should have
 been: PRs 1 to 3 of this sequence were already merged. It is recorded verbatim
 as it was approved rather than backdated or tidied, so the trail shows what was
-actually decided up front and what was decided along the way. Two things moved
-after approval and are corrected in the documents that supersede them, not here:
-the chat ADR is 0015 rather than 0014 (the progression chart took 0014), and
-the leaderboard ADR is therefore 0016.
+actually decided up front and what was decided along the way. Three things moved
+after approval and are corrected in the documents that supersede them, not here.
+
+1. The chat ADR is 0015 rather than 0014 — the progression chart took 0014 while
+   this branch waited — so the leaderboard ADR becomes 0016.
+2. PR 4's "Create a plan" button is not what shipped. Nothing in the app creates
+   a plan, so the control reads "Show my plan", and docs/specs/coach-chat.md §1
+   argues for not adding a Create button until a planner run can outlive a
+   serverless request.
+3. PR 4's note about the missing `add-pipeline-stage` skill still stands, and
+   the registry is worse than recorded: CLAUDE.md advertises four skills and
+   `.claude/skills/` contains one.
 -->
 
 # Rework — profile, hub, history graphs, and a coach you can talk to

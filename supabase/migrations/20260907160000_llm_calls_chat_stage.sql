@@ -1,4 +1,4 @@
--- Samson 0026 — the ledger accepts the chat stage
+-- Samson 0031 — the ledger accepts the chat stage
 --
 -- INVARIANT: every gateway call writes a row, including failures — CLAUDE.md #3
 --
@@ -17,7 +17,7 @@
 --
 -- AI-NOTE: adding a stage means BOTH `LlmStage` in src/llm/types.ts and this
 --          constraint, in the same change. There is a companion assertion in
---          tests/db/schema-invariants.ts so the next stage is caught by the db
+--          tests/db/schema-invariants.test.ts so the next stage is caught by the db
 --          suite rather than by a user.
 --
 -- See docs/adr/0015-coach-chat.md.

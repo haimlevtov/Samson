@@ -38,9 +38,18 @@ export function ChatPanel() {
     formRef.current?.reset();
   }, [state.turns]);
 
-  // Newest turn into view. `block: 'nearest'` so the page does not jump when
-  // the panel is already fully visible.
+  /*
+   * Newest turn into view, but never on mount.
+   *
+   * WHY the length guard: this effect runs once when the component mounts, and
+   * on a 375px screen with a plan present that scrolled /coach straight past
+   * its own header to the bottom of the page the moment it opened. There is no
+   * newest turn to reveal when there are no turns.
+   *
+   * `block: 'nearest'` so it does not jump when the panel is already visible.
+   */
   useEffect(() => {
+    if (state.turns.length === 0) return;
     endRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [state.turns]);
 
@@ -58,8 +67,8 @@ export function ChatPanel() {
           <p className="muted chat-empty">
             Ask about your training — a lift that has stalled, whether to deload, why a week felt
             heavy. This coach only talks about your training, and it can only see the figures on
-            your Profile and History tabs. The conversation is not saved: it ends when you leave
-            this page.
+            your Profile and History tabs. The conversation is not kept: it ends when you leave this
+            page.
           </p>
         ) : (
           <ol className="chat-log">

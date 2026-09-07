@@ -19,7 +19,7 @@ import { CHAT_MAX_TOKENS } from '../llm/config';
 import { findUnknownNumbers } from '../persona/guard';
 import type { LlmCaller } from '../planner/types';
 import type { CoachFacts } from './facts';
-import { CHAT_SYSTEM, chatMessages, unknownNumberCorrection } from './prompt';
+import { CHAT_SYSTEM, chatMessages, unknownNumberCorrection } from './prompts';
 import { chatReplySchema, type ChatTurn } from './schema';
 
 /**
@@ -125,11 +125,17 @@ export async function askCoach(
 
     if (!result.data.on_topic) {
       /*
-       * INVARIANT: `result.data.reply` is not read on this path — ADR 0015 §3.
-       *            Not logged, not scanned, not shown. It is the one place in
-       *            the pipeline where the model's output is discarded rather
-       *            than checked, and that is the point: a string nobody reads
-       *            cannot carry an instruction to anybody.
+       * INVARIANT: `result.data.reply` is never SHOWN — ADR 0015 §3. Nothing
+       *            in it reaches the user, so no instruction inside the
+       *            message that produced it can reach the user either.
+       *
+       * AI-NOTE: it has already been scanned by `scanOutput` inside the
+       *          gateway, like every completion, and a safety finding puts up
+       *          to 80 characters of it in `llm_calls.error`. An earlier
+       *          version of this comment claimed "not logged, not scanned",
+       *          which was false on both counts. What this branch does is
+       *          decline to READ it — its numbers are not checked, because
+       *          nothing it says is used.
        */
       return {
         text: offTopicReply(input.history),

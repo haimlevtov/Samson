@@ -50,8 +50,12 @@ output.
 This is the layer that is a guarantee. A completely jailbroken chat can say
 things it should not say. It cannot read another user's rows (there is no query
 it can cause), cannot change a figure the app displays (every one of those comes
-from `src/metrics/`), cannot write anything, and cannot spend money beyond the
-call it is already inside.
+from `src/metrics/`), and cannot write to anything the user trains against.
+
+The one write beneath this stage is the `llm_calls` ledger row per attempt,
+which invariant #3 requires and whose shape is entirely code's. Saying "cannot
+write anything" would be tidier and would contradict this ADR's own
+Consequences section.
 
 **The facts summary is built by `src/chat/facts.ts` from the metrics engine**,
 not selected by the model. It is the same shape for every message: there is no
@@ -121,7 +125,7 @@ gains `findUnknownNumbers(allowed, text)` — the persona's existing
 `findInventedNumbers(block, text)` becomes a caller of it — and the chat's
 allowed set is:
 
-- every numeral in the facts summary the stage was given, and
+- every **typed numeric leaf** of the facts the stage was given, and
 - every numeral the **user** wrote in this conversation.
 
 Nothing else. A coach that states a figure about someone's training which the
@@ -139,6 +143,33 @@ quoting a number that is not real costs trust the user cannot audit. On the
 second failure the user gets a **code-owned message that says what happened**
 rather than a fabricated answer or a silent empty box.
 
+**What it actually enforces, precisely: every numeral in the reply appeared in
+what the model was fed.** That is weaker than "states no unverifiable figure",
+and the difference is not academic:
+
+- **Word forms are invisible.** "Up seven and a half kilos" contains no numeral.
+- **An authorised numeral can be reattached to a different claim.** If 475 is in
+  the facts as last week's tonnage, "your one-rep max is 475 kg" passes.
+- **A false claim with no digits passes untouched.** "Your bench is your weakest
+  lift" is a statement about this user's training that nothing here checks.
+
+Closing any of those means reading meaning, which is the same impossible problem
+§4 of ADR 0005 declined for slurs. They are recorded as passing tests in
+`src/chat/reply.test.ts` under "what this stage does NOT stop", and no report
+may describe this guard as making the coach's figures trustworthy — only as
+making them **traceable to something the app supplied**.
+
+One member of that family WAS closed rather than recorded. "100,900" used to
+scan as 100 and 900, so a reply could compose a total out of two authorised
+figures and state one that came from nowhere. The grouping separator is part of
+the numeral token now, so it reads as 100900 and is checked like any other.
+
+The allowed set's two halves are also derived differently, and deliberately: the
+facts contribute their **typed numeric leaves**, never their rendered text,
+because `top_lifts[].name` is catalogue text and any user may insert an exercise
+called "Squat 4242". User turns contribute every numeral in the rendered string,
+because a message has no leaves to read.
+
 ### 5. A bounded window and the budget it protects — code
 
 History is truncated **by turns and by characters**, and each turn is capped
@@ -151,6 +182,17 @@ The gateway's per-user weekly budget applies unchanged, and a chat message is
 the cheapest call in the pipeline by design: a small model, a small
 `max_tokens`, and a schema that caps the reply's length.
 
+Two limits on what that buys, stated rather than implied. The budget gate reads
+the spend total and then calls, with no reservation between the two, so it
+bounds **sequential** spend and concurrent messages can all pass the same check.
+And one submitted message can drive up to six upstream completions —
+`MAX_CHAT_ATTEMPTS` (2) nesting inside the gateway's `DEFAULT_MAX_ATTEMPTS` (3)
+— both of which an attacker can steer, one by reliably provoking an unauthorised
+numeral and the other by tripping `scanOutput`. Rate limiting is out of scope
+for this project (CLAUDE.md), so nothing is built here; the closing claim that a
+misuser "pays out of their own weekly budget" should be read with both of these
+in view.
+
 ## What this does not guarantee, stated plainly
 
 **Topical confinement is a judgement and cannot be made arithmetic.** There is
@@ -159,14 +201,15 @@ about training. Anyone reading the phase report should take "the coach stays on
 topic" as _defence in depth that works against ordinary misuse_, and take the
 following as the actual guarantees:
 
-| Claim                                             | Status                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------- |
-| The chat cannot read another user's data          | **Guaranteed** — no tool, no query, RLS underneath         |
-| The chat cannot write anything                    | **Guaranteed** — no write path exists                      |
-| The chat cannot change a number the app shows     | **Guaranteed** — those come from `src/metrics/`            |
-| A refusal's wording cannot be altered by the user | **Guaranteed** — it is a constant                          |
-| The reply states no unverifiable figure           | **Enforced** — guard, retry, then a code-owned message     |
-| The chat only ever discusses training             | **Mitigated, not guaranteed** — a model classifying itself |
+| Claim                                                | Status                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| The chat cannot read another user's data             | **Guaranteed** — no tool, no query, RLS underneath                 |
+| The chat cannot write to the user's training data    | **Guaranteed** — no such write path exists                         |
+| The chat cannot change a number the app shows        | **Guaranteed** — those come from `src/metrics/`                    |
+| A refusal's wording cannot be altered by the user    | **Guaranteed** — it is a constant                                  |
+| Every numeral in a reply appeared in what it was fed | **Enforced** — guard, retry, then a code-owned message             |
+| The reply states no unverifiable figure              | **NOT guaranteed** — the guard reads numerals, not meaning. See §4 |
+| The chat only ever discusses training                | **Mitigated, not guaranteed** — a model classifying itself         |
 
 A jailbroken chat's realistic worst case is that a user who worked at it gets a
 non-training answer, and pays for it out of their own weekly budget. That is a
@@ -177,7 +220,19 @@ blur the two.
 
 - `LlmStage` gains `chat`, which means a model array, a token budget, and a row
   in `llm_calls` per message — invariant #3 applies, so a blocked or refused
-  message is still a logged call.
+  message is still a logged call. That ledger row is the one write beneath this
+  stage, which is why the table above says "cannot write to the user's training
+  data" rather than "cannot write anything": the row is required, its shape is
+  code's, and no model chooses any of it.
+- `llm_calls.stage` is a CHECK constraint, so the stage needed a migration as
+  well as a type. It did not get one at first, and the resulting failure was
+  invisible to the unit suite because that suite mocks the gateway and never
+  inserts. `tests/db/schema-invariants.test.ts` now asserts the constraint and
+  the `LlmStage` union admit exactly the same set.
+- The retry path in `src/llm/gateway.ts` used to echo a rejected completion back
+  as an `assistant` message, unfenced. That reopened, for every stage, the
+  channel §2 argues is closed for this one. It is now a fenced `user` record of
+  a rejected attempt; the correction beside it stays unfenced, per ADR 0008.
 - The number guard makes the coach vaguer than a general assistant would be. It
   will say "your top set has moved up" where a chatbot would say "up 7.5 kg".
   That is the intended trade and users should not be surprised by it, so the

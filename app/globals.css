@@ -1657,6 +1657,16 @@ details.quick-log > summary {
 details.quick-log > summary::-webkit-details-marker {
   display: none;
 }
+/* FOUND IN REVIEW, 2026-09-07: this summary removes list-style and had no
+   focus indicator at all, which docs/specs/mobile-interface.md forbids — with
+   the marker gone, the browser default lands on a zero-width box and is
+   effectively invisible. Same ring as the other two disclosures, and
+   --accent-text for the same contrast reason stated at the top of this file. */
+details.quick-log > summary:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
 details.quick-log > summary .label {
   margin-bottom: 0;
 }
@@ -1876,8 +1886,16 @@ details.quick-log[open] > summary {
 }
 
 /* The disclosure. A <details> so it needs no client state and stays keyboard
-   and screen-reader navigable for free — ADR 0013. */
-.settings-disclosure > summary {
+   and screen-reader navigable for free — ADR 0013, and ADR 0015 for the coach's
+   plan, which is the same control doing the same job.
+
+   AI-NOTE: these selector lists carry BOTH disclosures. The two rules easiest
+            to lose when adding a third are the ::-webkit-details-marker reset
+            and the :focus-visible ring — docs/specs/mobile-interface.md says
+            so, and this block was once copied wholesale rather than extended,
+            which is how it acquired a second copy of every one of them. */
+.settings-disclosure > summary,
+.plan-disclosure > summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1888,25 +1906,29 @@ details.quick-log[open] > summary {
   list-style: none;
 }
 
-.settings-disclosure > summary::-webkit-details-marker {
+.settings-disclosure > summary::-webkit-details-marker,
+.plan-disclosure > summary::-webkit-details-marker {
   display: none;
 }
 
-.settings-disclosure > summary::after {
+.settings-disclosure > summary::after,
+.plan-disclosure > summary::after {
   content: '▾';
   margin-left: auto;
   color: var(--muted);
   transition: transform 150ms ease;
 }
 
-.settings-disclosure[open] > summary::after {
+.settings-disclosure[open] > summary::after,
+.plan-disclosure[open] > summary::after {
   transform: rotate(180deg);
 }
 
 /* WHY a visible focus ring rather than the default outline: the summary has
    list-style removed, so in some browsers the default focus indicator lands on
    a zero-width marker box and is effectively invisible. */
-.settings-disclosure > summary:focus-visible {
+.settings-disclosure > summary:focus-visible,
+.plan-disclosure > summary:focus-visible {
   /* --accent-text, not --accent, for the reason already written at the top of
      this file: in dark the accent is nearly the ground and the ring drops to
      2.2:1, under the 3:1 WCAG 2.4.7 threshold. This summary is the only route
@@ -1922,6 +1944,13 @@ details.quick-log[open] > summary {
   line-height: 1;
 }
 
+/* .label is a block with a bottom margin of its own, which pushes the summary
+   text off centre against the chevron. details.quick-log resets it for the same
+   reason. */
+.plan-disclosure > summary .label {
+  margin-bottom: 0;
+}
+
 .settings-body {
   display: grid;
   gap: 16px;
@@ -1931,7 +1960,8 @@ details.quick-log[open] > summary {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-disclosure > summary::after {
+  .settings-disclosure > summary::after,
+  .plan-disclosure > summary::after {
     transition: none;
   }
 }
@@ -2001,41 +2031,9 @@ details.quick-log[open] > summary {
  * phone.
  */
 
-/* The plan, behind a disclosure rather than unrolled on load. A <details>, so
-   it costs no client state and stays keyboard navigable — the same shape the
-   quick-log uses. */
-.plan-disclosure > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: var(--tap);
-  cursor: pointer;
-  list-style: none;
-}
-
-.plan-disclosure > summary::-webkit-details-marker {
-  display: none;
-}
-
-.plan-disclosure > summary::after {
-  content: '▾';
-  margin-left: auto;
-  color: var(--muted);
-  transition: transform 150ms ease;
-}
-
-.plan-disclosure[open] > summary::after {
-  transform: rotate(180deg);
-}
-
-/* --accent-text rather than --accent: in dark the accent sits close to the
-   surface and the ring drops below the 3:1 WCAG 2.4.7 threshold. Stated once
-   at the top of this file and applied everywhere a summary takes focus. */
-.plan-disclosure > summary:focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
+/* The plan disclosure itself is styled with .settings-disclosure, above —
+   same control, same job, one set of rules. Only what is specific to this one
+   lives here. */
 
 .plan-body {
   padding-top: 4px;
@@ -2119,10 +2117,4 @@ details.quick-log[open] > summary {
   /* Send leads; Clear sits beside it rather than under, so the pair does not
      eat another 44px of a small screen. */
   gap: 8px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .plan-disclosure > summary::after {
-    transition: none;
-  }
 }

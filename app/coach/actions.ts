@@ -26,9 +26,12 @@ const RECENT_NOTES = 5;
 /**
  * One turn of the coach chat — ADR 0015, docs/specs/coach-chat.md.
  *
- * INVARIANT: this action has no write path, and adding one would break the
- *            first guarantee in the ADR's table. It reads the user's own rows,
- *            calls one stage, and returns prose. Nothing here inserts.
+ * INVARIANT: this action has no write path to the user's training data, and
+ *            adding one would break the guarantees in ADR 0015's table. It
+ *            reads the user's own rows, calls one stage, and returns prose.
+ *            The one insert underneath it is the `llm_calls` ledger row the
+ *            gateway writes per attempt, which invariant #3 requires and which
+ *            no model chooses the shape of.
  *
  * INVARIANT: the transcript arriving in `previous` is USER INPUT. It is held by
  *            the client precisely because nothing stores it, so it is parsed by
@@ -50,7 +53,12 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
   // Parsed, not trusted — see the invariant above. A malformed transcript is
   // dropped rather than repaired: continuing from a conversation we cannot
   // read is worse than starting a fresh one.
-  const parsed = chatHistorySchema.safeParse(previous.turns);
+  //
+  // `previous` itself is optional-chained because it is client-supplied state,
+  // not a value this code produced: a crafted POST with a null previous state
+  // would otherwise throw a TypeError outside this function's try/catch and
+  // return a framework 500 instead of the generic string below.
+  const parsed = chatHistorySchema.safeParse((previous as { turns?: unknown } | null)?.turns);
   const turns: ChatTurn[] = parsed.success ? parsed.data : [];
 
   if (message === '') return { turns, error: null };
@@ -174,15 +182,19 @@ export async function deliverForPersona(
       error: null,
     };
   } catch (cause) {
-    // Running without a key is the common case today, and it should say so
-    // rather than surfacing a Postgres or transport error.
-    if (cause instanceof MissingApiKeyError) {
+    // The same allowlist `sendChatMessage` uses, and for the same reason —
+    // this one was returning `cause.message` verbatim, which reaches the
+    // browser as a raw Postgres error, or as the first 500 characters of an
+    // upstream provider response body. FOUND IN REVIEW, 2026-09-07.
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
       return { ...EMPTY_DELIVERY, personaSlug: slug, error: cause.message };
     }
+
+    console.error('persona delivery failed', cause);
     return {
       ...EMPTY_DELIVERY,
       personaSlug: slug,
-      error: cause instanceof Error ? cause.message : 'The coach could not answer.',
+      error: 'The coach could not deliver that plan. Try again in a moment.',
     };
   }
 }

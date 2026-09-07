@@ -22,20 +22,20 @@ import { MAX_CHAT_ATTEMPTS, OFF_TOPIC_REPLIES, UNVERIFIED_NUMBER_REPLY, askCoach
 import type { ChatReply, ChatTurn } from './schema';
 
 const FACTS: CoachFacts = {
-  asOf: '2026-09-09',
-  sessionsLast7Days: 2,
-  sessionsLast28Days: 3,
-  adherence28dPercent: 75,
-  currentStreakDays: 3,
-  daysSinceLastSession: 0,
-  tonnageThisWeekKg: 900,
-  tonnageLastWeekKg: 475,
+  as_of: '2026-09-09',
+  sessions_last_7_days: 2,
+  sessions_last_28_days: 3,
+  adherence_28d_percent: 75,
+  current_streak_days: 3,
+  days_since_last_session: 0,
+  tonnage_this_week_kg: 900,
+  tonnage_last_week_kg: 475,
   acwr: 1.12,
-  acwrBand: 'sweet-spot',
+  acwr_band: 'sweet-spot',
   level: 2,
-  lifetimeXp: 400,
-  xpToNextLevel: 275,
-  topLifts: [{ name: 'Barbell Full Squat', heaviestKg: 100, onDate: '2026-09-08' }],
+  lifetime_xp: 400,
+  xp_to_next_level: 275,
+  top_lifts: [{ name: 'Barbell Full Squat', heaviest_kg: 100, on_date: '2026-09-08' }],
 };
 
 const turn = (role: ChatTurn['role'], text: string): ChatTurn => ({ role, text });
@@ -77,16 +77,16 @@ const offTopic = (reply: string): ChatReply => ({ on_topic: false, reply });
 // ---------------------------------------------------------------------------
 
 describe('askCoach — answering a training question', () => {
-  it('returns the model reply when it is on topic and quotes nothing invented', () => {
-    return ask(
+  it('returns the model reply when it is on topic and quotes nothing invented', async () => {
+    const answer = await ask(
       harness([onTopic('Three sessions in, streak intact. Keep the squat where it is.')]),
       'how am I doing this week?'
-    ).then((answer) => {
-      expect(answer.text).toContain('streak intact');
-      expect(answer.onTopic).toBe(true);
-      expect(answer.substituted).toBe(false);
-      expect(answer.attempts).toBe(1);
-    });
+    );
+
+    expect(answer.text).toContain('streak intact');
+    expect(answer.onTopic).toBe(true);
+    expect(answer.substituted).toBe(false);
+    expect(answer.attempts).toBe(1);
   });
 
   it('lets the coach quote a figure from the facts', async () => {
@@ -337,15 +337,62 @@ describe('what this stage does NOT stop, recorded rather than implied', () => {
     expect(answer.substituted).toBe(false);
   });
 
-  it('cannot tell a plausible invented claim from a true one when it has no number in it', () => {
+  it('does not stop a false claim with no numeral in it', async () => {
     /*
-     * The number guard only sees numerals. "Your bench is your weakest lift" is
-     * a claim about this user's training that the facts may not support, and
-     * nothing here checks it. Making it checkable means enumerating the
-     * assertions a coach may make, which is the same impossible problem ADR
-     * 0005 §4 declined for slurs.
+     * The guard only sees numerals. "Your bench is your weakest lift" is a
+     * claim about this user's training that the facts may not support, and
+     * nothing checks it. Making it checkable means enumerating the assertions a
+     * coach may make, which is the same impossible problem ADR 0005 §4 declined
+     * for slurs.
      */
-    expect(true).toBe(true);
+    const answer = await ask(
+      harness([onTopic('Your bench is your weakest lift and always has been.')]),
+      'what is my weak point?'
+    );
+    expect(answer.substituted).toBe(false);
+  });
+
+  it('does not stop a figure written as words', async () => {
+    // NUMERAL matches digits. "seven and a half" is a figure to a reader and
+    // invisible to the guard — src/persona/guard.ts records this.
+    const answer = await ask(
+      harness([onTopic('Your squat has gone up seven and a half kilos this month.')]),
+      'how is my squat?'
+    );
+    expect(answer.substituted).toBe(false);
+  });
+
+  it('does not stop an authorised numeral reattached to a different claim', async () => {
+    /*
+     * THE SHARPEST ONE. 475 is in the facts — as LAST WEEK'S TONNAGE. The guard
+     * checks membership, not meaning, so the coach may attach it to any claim
+     * it likes and the reply passes. This is the gap between "every numeral
+     * appeared in the payload", which is enforced, and "no unverifiable
+     * figure", which is not. ADR 0015 §4 states it in the first form.
+     */
+    const answer = await ask(
+      harness([onTopic('Your one-rep max on the squat is 475 kg.')]),
+      'what is my max?'
+    );
+    expect(answer.text).toContain('475');
+    expect(answer.substituted).toBe(false);
+  });
+
+  it('DOES stop a total composed from two authorised figures', async () => {
+    /*
+     * The one of this family that was closed rather than recorded. 100 and 900
+     * are both in the facts, and "100,900" used to scan as those two numbers —
+     * so a reply could compose a lifetime total that appears in no source. The
+     * grouping separator is part of the token now, so this is 100900 and is
+     * rejected. FOUND IN REVIEW, 2026-09-07.
+     */
+    const h = harness([
+      onTopic('You have moved 100,900 kg lifetime.'),
+      onTopic('A lot, lifetime.'),
+    ]);
+    const answer = await ask(h, 'how much have I lifted?');
+    expect(answer.text).toBe('A lot, lifetime.');
+    expect(answer.attempts).toBe(2);
   });
 
   it("does not stop a number laundered through the user's own message", async () => {
@@ -361,6 +408,37 @@ describe('what this stage does NOT stop, recorded rather than implied', () => {
     );
     expect(answer.text).toContain('500');
     expect(answer.substituted).toBe(false);
+  });
+
+  it('does not let an exercise name license the digits inside it', async () => {
+    /*
+     * FOUND IN REVIEW and closed — kept here because the shape is instructive.
+     * `exercises` lets any authenticated user insert their own row, so a lift
+     * named "Squat 4242" would put 4242 in the rendered facts block. The
+     * allowed set is built from the TYPED LEAVES now, so the name contributes
+     * nothing. Seeded catalogue names like "3/4 Sit-Up" were the same bug
+     * without an attacker.
+     */
+    const h = harness([
+      onTopic('Your 4242 is looking good.'),
+      onTopic('That lift is looking good.'),
+    ]);
+
+    const answer = await askCoach(
+      'u1',
+      {
+        facts: {
+          ...FACTS,
+          top_lifts: [{ name: 'Squat 4242', heaviest_kg: 100, on_date: '2026-09-08' }],
+        },
+        history: [],
+        message: 'how is it going?',
+      },
+      { call: h.call }
+    );
+
+    expect(answer.text).toBe('That lift is looking good.');
+    expect(answer.attempts).toBe(2);
   });
 
   it('spends a call on every message, including the ones it refuses', async () => {
