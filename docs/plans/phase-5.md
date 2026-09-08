@@ -194,6 +194,12 @@ recorded in `CLAUDE.md`.
 - **`progression_nodes` has no rows and no reader.**
   `.claude/skills/add-progression/SKILL.md` documents that plainly rather than
   implying the trees exist.
+
+  **Closed 2026-09-08.** Four trees, a reader, a pure evaluator and a surface at
+  `/progression-trees`, with the criteria contract in
+  [ADR 0020](../adr/0020-progression-unlock-criteria.md) — see
+  [`phase-5-content-fill.md`](phase-5-content-fill.md).
+
 - **The chat's topical confinement is a mitigation, not a guarantee**, and
   ADR 0015 says so in a table. The model classifies itself; what is guaranteed
   is that it has no tools, no write path, and cannot state a figure the metrics

@@ -2284,3 +2284,80 @@ details.quick-log[open] > summary {
      itself is sized by the platform, which is what people recognise. */
   accent-color: var(--accent-text);
 }
+
+/*
+ * The progression trees — ADR 0020.
+ *
+ * An ordered list rather than a drawn graph: every tree in this project is a
+ * single chain, so a list IS the shape, and it stays readable at 375px where a
+ * node-and-edge diagram would need horizontal scroll — the thing
+ * docs/specs/mobile-interface.md exists to prevent.
+ */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-rung {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tree-rung + .tree-rung {
+  margin-top: 8px;
+}
+
+/* The rung the user is working on, given its own ground so it is findable
+   without reading every row — the same device .you-chip uses. */
+.tree-rung.is-next {
+  border-color: var(--accent-text);
+}
+
+.tree-mark {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.tree-rung.is-unlocked .tree-mark {
+  color: var(--accent-text);
+}
+
+.tree-body h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.tree-body p {
+  margin: 2px 0 0;
+}
+
+/* Chips inside a rung are labels, not controls, so they lose the 44px floor
+   .chip carries for thumbs — the same exemption .badge-card makes. */
+.tree-rung .chip,
+.tree-rung .chip-on {
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 8px;
+  margin-right: 6px;
+}
+
+/* A whole card that is one link. Profile uses it to reach the progression
+   trees; the chevron is the affordance, and the tap target is the card itself,
+   which clears 44px from its own padding — docs/specs/mobile-interface.md. */
+.row-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.row-link:hover {
+  border-color: var(--accent-text);
+}

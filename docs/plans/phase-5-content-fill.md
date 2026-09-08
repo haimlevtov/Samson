@@ -376,6 +376,52 @@ standing warning against treating the two as the same thing.
 
 ## Outcome
 
+### PR 5 — progression trees, 2026-09-08
+
+Four trees, twenty nodes, a reader, a pure evaluator and a surface. The table
+had been in the schema since migration 0002 with no rows and no reader; this is
+both, in one change, with the contract committed ahead of it.
+
+**ADR 0020 was written before the code**, which the three ADRs before it in this
+phase were not. The decision it records is a security one dressed as a data
+one: the obvious implementation is SQL text in a column, exactly like
+`achievements.predicate` — and `progression_nodes` carries the same catalogue
+write policy, so a user can own a row, and executing one would be privilege
+escalation available to anyone who can sign up. ADR 0009 §3 defends that with a
+single `where user_id is null` clause and a test. Structured JSON has no
+execution semantics to defend, so there is no clause for a future refactor to
+drop.
+
+**Two things the migration got wrong first, both silent.** A single
+`INSERT ... SELECT` sees the table as it was at statement start, so every parent
+lookup returned null and the trees arrived flat — and `parent_id` is nullable,
+so nothing errored. Inserting one level at a time fixes it. And half the slugs
+an author would guess do not exist: the catalogue has no `push-up`, no
+`pistol-squat`, no `hollow-hold`. Every slug was checked before being written,
+and `tests/db` asserts every `exercise_id` resolved.
+
+**The core tree opens two rungs where the others open one**, because
+`public.sets` has no duration column and a plank cannot have criteria. Asserted
+in a test rather than left as a surprise, and recorded in the ADR as a schema
+gap whose fix is a column — not a criterion pretending reps are seconds.
+
+**Found while surveying the catalogue for this PR:** `tests/db/rls.test.ts` had
+been leaking a shared exercise and a shared hidden achievement on every run
+since phase 0. 29 and 8 of them on hosted, so `evaluate_achievements` was
+running 39 predicates per workout completion, 28 of them junk, against a
+64-subtransaction ceiling. Fixed, and the rows deleted; 39 system achievements
+are now 11.
+
+21 unit cases on the evaluator, 10 database cases on the rows. 867 unit tests,
+156 database cases, `verify` and `build` clean. Checked at 375×812: four trees,
+5 of 20 unlocked for a user with no bodyweight history, one "next" per tree, no
+horizontal overflow.
+
+A dead CSS rule was written and removed in the same session: `.tree-heading`
+set `text-transform: capitalize` and `h2.section` already sets `uppercase` at
+higher specificity, so it never applied. Uppercase is right anyway — it matches
+every other section heading.
+
 ### PR 4 — the remaining personas, 2026-09-08
 
 The Sergeant and the Physio, taking the roster from three to five.
