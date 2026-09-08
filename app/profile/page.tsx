@@ -215,7 +215,16 @@ export default async function ProfilePage() {
               <h3>{b.name}</h3>
               <p className="muted small">{b.description}</p>
               <p className="muted small">
-                <span className="chip chip-on">{b.tier}</span> earned {displayDate(b.localDate)}
+                <span className="chip chip-on">{b.tier}</span>
+                {/*
+                 * A hidden badge is shown to the person who earned it and to
+                 * nobody else — migration 20260908090100. The marker is the
+                 * whole reward: without it a badge whose definition was secret
+                 * arrives looking like any other, and the fact that you found
+                 * something nobody told you about is the point of the tier.
+                 */}
+                {b.hidden && <span className="chip chip-on">found</span>} earned{' '}
+                {displayDate(b.localDate)}
               </p>
               {b.sourceHint !== null && <p className="muted small">{b.sourceHint}</p>}
             </article>

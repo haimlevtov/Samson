@@ -352,4 +352,31 @@ standing warning against treating the two as the same thing.
 
 ## Outcome
 
-_Filled in as each PR merges._
+### PR 2 — achievements, 2026-09-08
+
+Nine rows, one in every tier the schema has allowed since phase 0. Fourteen
+`tests/db` cases, each with the near miss the skill asks for.
+
+**The date-line test was proved load-bearing rather than assumed to be.** The
+`new-years-day` predicate was temporarily swapped for a server-date one against
+the hosted project and the suite re-run: the Kiritimati assertion failed with
+`expected [ 'before-the-birds' ] to include 'new-years-day'`, and passed again
+once the predicate was restored. A test for a timezone bug that would also pass
+with the bug present is worth nothing, and this one would not have been.
+
+**Adding achievements broke a test that had been accidentally right.**
+`gamification.test.ts`'s "does not award the same workout twice" counted _all_
+`xp_events` rows for the week and expected one. It got two — an adherence award
+and an achievement award — because the fixture user now clears
+`three-weeks-away`. The index that guarantees the property was narrowed to
+`source = 'adherence'` on purpose in migration 20260902095100, so the assertion
+is now narrowed to match it. Until there were nine achievements, the unfiltered
+count happened to be the same number.
+
+It also makes live the path migration 20260902095100 was written for and called
+"latent rather than live": a session that unlocks two achievements at once.
+
+801 unit tests, 120 database cases, `verify` and `build` clean. Checked in the
+browser at 375×812 with a hidden badge granted to a seeded user and revoked
+afterwards — it renders with its full definition and both chips, which is what
+the reader change exists to make possible.

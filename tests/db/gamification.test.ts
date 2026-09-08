@@ -303,11 +303,23 @@ describe('awards fire exactly once', () => {
     // The regression this exists for: the second call used to pay again.
     expect((second.data as { awarded: number }).awarded).toBe(0);
 
+    /*
+     * ADHERENCE rows specifically, which is what the guarantee is about.
+     *
+     * This filter was added when the achievement set landed: `xp_events_one_
+     * adherence_per_workout` (migration 20260902095100) was deliberately
+     * narrowed to `source = 'adherence'`, because a session can legitimately
+     * unlock more than one achievement and pay for each. Until there were nine
+     * achievements, bob unlocked none here and an unfiltered count of 1 was
+     * accidentally the same number. It is now 2 — one adherence award and one
+     * achievement award — and only the first of them is what this test is for.
+     */
     const { data: rows } = await admin
       .from('xp_events')
       .select('amount')
       .eq('user_id', bob.id)
-      .eq('week_start', week);
+      .eq('week_start', week)
+      .eq('source', 'adherence');
     expect(rows ?? []).toHaveLength(1);
   });
 });
