@@ -175,7 +175,7 @@ cues (rest over, set logged, PR hit, last set) are spoken live by the browser,
 with a tone as the fallback where speech is unavailable — not precomputed audio,
 for the same reason as above.
 
-### 5.5 Progression and rewards — **Specified** (phases 4–5)
+### 5.5 Progression and rewards — **Built** (phases 4–5)
 
 XP from adherence with a weekly ceiling and diminishing returns. Streaks that
 count planned days, so scheduled rest sustains them. Achievements as database
@@ -183,6 +183,20 @@ rows with SQL predicates — including hidden ones, and calendar-triggered ones
 that fire on _your_ local date rather than the server's. Daily quests and weekly
 challenges from a validated pool. Progression trees for push, pull, legs and
 core.
+
+**Progression trees — built 2026-09-08**, at `/progression-trees`, reached from
+Profile. Four ladders of four to six rungs; a rung opens when you have done the
+one below it, measured as **sets within a single session** rather than a
+lifetime total — three sets of ten spread over three months says nothing about
+whether the next step is reachable. Nothing is stored: unlocks are recomputed
+from your logged sets on every page load, so correcting a session corrects the
+tree. The criteria are structured data a validator reads, never code the server
+runs — [ADR 0020](adr/0020-progression-unlock-criteria.md) explains why that
+distinction is a security one rather than a stylistic one.
+
+_Not yet expressible: a timed hold._ There is no duration column on a set, so
+the plank at the root of the core tree has no criteria and the rung above it
+inherits none. Recorded in the ADR rather than faked with reps.
 
 **A hidden badge is hidden until you earn it, then it is yours.** Its
 definition is withheld from every client while it is locked, and shown in full

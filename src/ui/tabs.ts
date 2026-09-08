@@ -37,6 +37,14 @@ export type TabHref = (typeof TAB_HREFS)[number];
  */
 export const OWNED_BY: Record<string, TabHref> = {
   '/settings': '/profile',
+  // ADR 0020. Reached from Profile, not from the tab bar — five tabs is the
+  // budget ADR 0012 set. FOUND IN REVIEW: shipped without this entry, so the
+  // page lit no tab at all, which is precisely what the AI-NOTE above warns
+  // about. It also kept the route out of the orphan-link guard in
+  // tests/unit/invariants.test.ts, which iterates these keys — so the page that
+  // documents "the link on Profile is the only way in" was the one page nothing
+  // checked had a link.
+  '/progression-trees': '/profile',
 };
 
 /** True when `pathname` is `route` or sits underneath it. */

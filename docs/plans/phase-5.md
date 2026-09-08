@@ -37,8 +37,9 @@ curated supplement evidence table.
 | Supplement evidence table with DOIs        | Does not exist                                               |
 
 > **This table is a snapshot of 2026-09-07 and is deliberately not maintained.**
-> Three of its five rows are false as of 2026-09-08 — the achievements, the
-> tonnage comparisons and the personas all shipped in the content fill. What is
+> Four of its five rows are false as of 2026-09-08 — the achievements, the
+> tonnage comparisons, the personas and the progression trees all shipped in the
+> content fill. What is
 > outstanding is tracked in
 > [`phase-5-content-fill.md`](phase-5-content-fill.md)'s Outcome, which is the
 > live document; editing a dated record to keep it current would destroy the
@@ -194,6 +195,12 @@ recorded in `CLAUDE.md`.
 - **`progression_nodes` has no rows and no reader.**
   `.claude/skills/add-progression/SKILL.md` documents that plainly rather than
   implying the trees exist.
+
+  **Closed 2026-09-08.** Four trees, a reader, a pure evaluator and a surface at
+  `/progression-trees`, with the criteria contract in
+  [ADR 0020](../adr/0020-progression-unlock-criteria.md) — see
+  [`phase-5-content-fill.md`](phase-5-content-fill.md).
+
 - **The chat's topical confinement is a mitigation, not a guarantee**, and
   ADR 0015 says so in a table. The model classifies itself; what is guaranteed
   is that it has no tools, no write path, and cannot state a figure the metrics

@@ -71,6 +71,48 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  /*
+   * The two SYSTEM rows have to be deleted by hand. Deleting the fixture users
+   * cascades away everything they own, and `user_id is null` means these belong
+   * to nobody — so nothing was cleaning them up.
+   *
+   * FOUND 2026-09-08, surveying the catalogue for the progression trees.
+   * Measured on the hosted project at the moment they were deleted: 29 leaked
+   * "Secret Badge" achievements and 8 duplicate "Back Squat" exercises. The two
+   * counts differ because the achievement fixture predates the exercise one —
+   * they leak in lockstep now, but did not always.
+   *
+   * WHY it matters more than untidiness: a system achievement is executed by
+   * `evaluate_achievements` on EVERY workout completion for EVERY user, forever.
+   * The count had reached 39, of which 28 were these, and each predicate costs a
+   * plpgsql subtransaction against a ceiling of 64 —
+   * .claude/skills/add-achievement/SKILL.md. The demo database was accumulating
+   * its way toward a cliff, one test run at a time.
+   *
+   * CI never saw it: the db job resets a fresh local stack every time. Only a
+   * workstation running the suite against hosted accumulates, which is the
+   * configuration this project develops in.
+   *
+   * AI-NOTE: any fixture written with `user_id: null` outlives its test. If you
+   *          add one, delete it here.
+   */
+  const admin = adminClient();
+  const cleaned = await Promise.all([
+    admin.from('achievements').delete().eq('id', hiddenAchievementId),
+    admin.from('exercises').delete().eq('id', systemExerciseId),
+  ]);
+
+  /*
+   * FOUND IN REVIEW: a discarded error here is the same bug again, silently.
+   * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`
+   * AND from `progression_nodes.exercise_id`, so a future test that logs a set
+   * against this fixture makes the delete fail — and swallowing that would
+   * reintroduce the leak this block was added to stop, with nothing saying so.
+   */
+  for (const result of cleaned) {
+    if (result.error) throw new Error(`cleaning up a system fixture: ${result.error.message}`);
+  }
+
   await Promise.all([deleteTestUser(alice), deleteTestUser(bob)]);
 });
 

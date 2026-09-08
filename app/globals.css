@@ -2284,3 +2284,93 @@ details.quick-log[open] > summary {
      itself is sized by the platform, which is what people recognise. */
   accent-color: var(--accent-text);
 }
+
+/*
+ * The progression trees — ADR 0020.
+ *
+ * An ordered list rather than a drawn graph: every tree in this project is a
+ * single chain, so a list IS the shape, and it stays readable at 375px where a
+ * node-and-edge diagram would need horizontal scroll — the thing
+ * docs/specs/mobile-interface.md exists to prevent.
+ *
+ * A rung IS a `.card`, with this class adding only the row layout. FOUND IN
+ * REVIEW: it used to hand-roll four of that primitive's five declarations and
+ * got one of them wrong — `var(--line)` is not a token in this sheet, so the
+ * whole `border` shorthand was invalid at computed-value time, `border-style`
+ * fell back to `none`, and `.is-next` had no border left to colour. The "what
+ * to work on next" affordance never drew, and a browser check that read classes
+ * and text rather than computed styles did not see it. Reusing the primitive
+ * makes that class of mistake unavailable.
+ */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-rung {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.tree-rung + .tree-rung {
+  margin-top: 8px;
+}
+
+/* The rung the user is working on. Border only, and the word "next" beside it
+   is what actually carries the state — so this is emphasis rather than the
+   signal, and docs/specs/mobile-interface.md §3's "never colour alone" holds
+   without it. An earlier comment here claimed it used ".you-chip's device",
+   which changes a background; this changes a border. */
+.tree-rung.is-next {
+  border-color: var(--accent-text);
+}
+
+.tree-mark {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.tree-rung.is-unlocked .tree-mark {
+  color: var(--accent-text);
+}
+
+.tree-body h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.tree-body p {
+  margin: 2px 0 0;
+}
+
+/* Chips inside a rung are labels, not controls, so they lose the 44px floor
+   .chip carries for thumbs — the same exemption .badge-card makes, copied in
+   FULL. An earlier version dropped `display` and `font-size`, which left the
+   chips inline with padding that had no line box to affect. */
+.tree-rung .chip,
+.tree-rung .chip-on {
+  display: inline-block;
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 8px;
+  margin-right: 6px;
+  font-size: 0.75rem;
+}
+
+/* A whole card that is one link. Profile uses it to reach the progression
+   trees; the chevron is the affordance, and the tap target is the card itself,
+   which clears 44px from its own padding — docs/specs/mobile-interface.md. */
+.row-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.row-link:hover {
+  border-color: var(--accent-text);
+}

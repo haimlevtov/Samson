@@ -376,6 +376,127 @@ standing warning against treating the two as the same thing.
 
 ## Outcome
 
+### PR 5 — progression trees, 2026-09-08
+
+Four trees, twenty nodes, a reader, a pure evaluator and a surface. The table
+had been in the schema since migration 0002 with no rows and no reader; this is
+both, in one change, with the contract committed ahead of it.
+
+**ADR 0020 was written before the code**, which the three ADRs before it in this
+phase were not. The decision it records is a security one dressed as a data
+one: the obvious implementation is SQL text in a column, exactly like
+`achievements.predicate` — and `progression_nodes` carries the same catalogue
+write policy, so a user can own a row, and executing one would be privilege
+escalation available to anyone who can sign up. ADR 0009 §3 defends that with a
+single `where user_id is null` clause and a test. Structured JSON has no
+execution semantics to defend, so there is no clause for a future refactor to
+drop.
+
+**Three things the migration got wrong, all silent, and CI caught the worst.**
+
+A single `INSERT ... SELECT` sees the table as it was at statement start, so
+every parent lookup returned null and the trees arrived flat — `parent_id` is
+nullable, so nothing errored. Inserting one level at a time fixes it.
+
+Half the slugs an author would guess do not exist: no `push-up`, no
+`pistol-squat`, no `hollow-hold`. Every slug was checked before being written.
+
+And the one only CI could find: **a migration cannot depend on seeded data.**
+The nodes resolved `exercise_id` by slug, which passed against hosted — where
+the catalogue had been seeded weeks earlier — and produced twenty nulls on a
+fresh stack, because the catalogue is loaded by `scripts/seed.ts` and
+`npm run migrate` runs before `npm run seed`. The same migration was producing
+different content in different environments, which is exactly the fault the
+project's own comments warn about for UUIDs, reached by another road. It had
+also **broken `npm run seed` outright**: the column is `ON DELETE RESTRICT` and
+the seeder starts by deleting every shared catalogue row. Nothing read the
+column, so it is null everywhere now, and the two tests that used to assert it
+resolved now assert it does not.
+
+**The core tree opens two rungs where the others open one**, because
+`public.sets` has no duration column and a plank cannot have criteria. Asserted
+in a test rather than left as a surprise, and recorded in the ADR as a schema
+gap whose fix is a column — not a criterion pretending reps are seconds.
+
+**Found while surveying the catalogue for this PR:** `tests/db/rls.test.ts` had
+been leaking a shared exercise and a shared hidden achievement on every run
+since phase 0, because `afterAll` deleted only the fixture users and a
+`user_id is null` row belongs to nobody. At the moment of deletion there were
+**29 achievements and 8 exercises** on hosted; the earlier reading that produced
+the "39 system achievements" figure counted 28, one test run before. The counts
+are unequal because the achievement fixture predates the exercise one. 39 system
+achievements are now 11, which is the real number.
+
+### What review changed, which was again most of it
+
+**A raw NUL byte made `src/db/progression.ts` binary to git.** The sentinel for
+an unparseable criterion was a `sets_at` naming an "impossible" exercise slug,
+and the impossibility rested on one invisible character inside a string literal.
+Two consequences, both worse than the first one looks:
+
+- `git diff` rendered the entire reader — including its tenancy filter — as
+  "Binary files differ". The one file in the change carrying a tenancy boundary
+  was the one nobody could review, and no future change to it would be reviewable
+  either.
+- Strip the character with a formatter and the sentinel becomes the plain word
+  "unparseable", which any authenticated session can create as an exercise slug
+  and then satisfy — turning every malformed node into a free unlock.
+
+`src/llm/safety.ts` carries an AI-NOTE saying control characters are written as
+escapes and never embedded, for exactly this reason. It was written before this
+file. The replacement is a `{ kind: 'never' }` schema variant the evaluator
+refuses by construction, so no formatter can make it satisfiable.
+
+**A CSS token that does not exist, and a browser check that could not see it.**
+`.tree-rung` used `var(--line)`; the sheet's token is `--border`. An unresolvable
+`var()` invalidates the whole `border` shorthand, so `border-style` fell back to
+`none` and `.is-next` had no border left to colour — the "what to work on next"
+affordance never drew. The browser pass read class names and text and found
+everything correct. A rung is now a `.card`, which is the primitive it was
+badly reimplementing.
+
+**The page lit no tab.** `/progression-trees` was not in `OWNED_BY`, whose own
+AI-NOTE says leaving a route out "lights no tab at all, which is the exact
+failure `isCurrent` was written to prevent". It also kept the route out of the
+orphan-link guard — so the page whose comment says "the link on Profile is the
+only way in" was the one page nothing checked had a link.
+
+**ADR 0020 claimed something false about its own code**: that there was "no
+`user_id is null` filter a future refactor can drop". `loadProgressionTrees`
+carries exactly one, and it was the only thing keeping user-authored rows out —
+which mattered, because the slug uniqueness constraint is `nulls not distinct`,
+so a user row could reuse a system slug and the evaluator keys its map by slug.
+Corrected, and closed properly: migration `20260908120100` drops the write
+policy, because ADR 0002's amendment says the write half needs a named feature
+and node authoring is not one.
+
+Smaller: a NaN weight satisfied the weight floor (`NaN < 20` is false, and
+Postgres `numeric` accepts NaN); `weight_kg` accepted `0` and `null`, either of
+which silently makes a bodyweight node unsatisfiable; `loadUnlockSets` had no
+cap and no order, so past `max_rows` a rung could flip between locked and
+unlocked across two page loads; the page mapped over a hardcoded tree list, so a
+fifth tree would have rendered nowhere; and the reader cited `src/db/plans.ts`
+as re-validating jsonb on read, which it does not do at all.
+
+### Deviations from the plan, stated
+
+- The evaluator shipped as `src/gamification/unlocks.ts`, not
+  `progression.ts` as PR 5's section says — `src/metrics/progression.ts` already
+  means something else, and ADR 0018 had noted the word was overloading.
+  Argued in ADR 0020's Naming section.
+- The criteria vocabulary grew a `weight_kg` floor and a `never` kind beyond the
+  single `sets_at` the plan described.
+
+24 unit cases on the evaluator, 13 database cases on the rows. 867 unit tests,
+159 database cases (the runtime figure `npm run test:db` reports; the static
+`it(` count is 156, the difference being parameterised cases), `verify` and
+`build` clean.
+
+A dead CSS rule was written and removed in the same session: `.tree-heading`
+set `text-transform: capitalize` and `h2.section` already sets `uppercase` at
+higher specificity, so it never applied. Uppercase is right anyway — it matches
+every other section heading.
+
 ### PR 4 — the remaining personas, 2026-09-08
 
 The Sergeant and the Physio, taking the roster from three to five.

@@ -208,6 +208,25 @@ export default async function ProfilePage() {
         </p>
       </div>
 
+      {/*
+       * The only route into the progression trees — ADR 0020, the same
+       * arrangement ADR 0013's amendment made for /settings. Not a sixth tab:
+       * five is the budget ADR 0012 set, and deleting this link strands the
+       * page.
+       *
+       * Here rather than at the foot of the page for the reason ADR 0013 gives
+       * about this page's length — a control below every chart is a scroll
+       * target. It sits with Badges because both answer "what have I got".
+       */}
+      <h2 className="section">Progression</h2>
+      <Link href="/progression-trees" className="card row-link">
+        <span>
+          <strong>Progression trees</strong>
+          <span className="muted small"> push · pull · legs · core</span>
+        </span>
+        <span aria-hidden="true">›</span>
+      </Link>
+
       <h2 className="section">Badges</h2>
       {badges.length === 0 ? (
         <p className="card muted">
