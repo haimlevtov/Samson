@@ -51,6 +51,41 @@ export class BannedPhraseError extends Error {
   }
 }
 
+const REGEX_META = /[.*+?^${}()|[\]\\]/g;
+
+/**
+ * A banned phrase, matched on word boundaries rather than as a substring.
+ *
+ * FOUND IN REVIEW, 2026-09-08, by a test written for a different persona: this
+ * used `String.includes`, so a SHORT WORD BANNED EVERY WORD CONTAINING IT. The
+ * Rival has banned `weak` since phase 3, which under substring matching also
+ * bans **weakness** — and "your weakness is the lockout" is ordinary coaching
+ * language.
+ *
+ * WHY that was not a cosmetic problem: `deliverPlan` has no fallback, by
+ * design — ADR 0006 says a delivery that fails the guard is one the user must
+ * not be shown. So a plan whose prose happened to contain "weakness" was
+ * rejected, retried, rejected again, and the user was handed an error instead
+ * of the block the critic had already approved.
+ *
+ * `src/llm/safety.ts` had already reasoned its way to the same conclusion for
+ * the general scanner and written it down: "`fat` and `weak` are ordinary
+ * coaching vocabulary — body fat percentage, a weak point in a lift", which is
+ * why that guard matches second-person constructions instead of bare words.
+ * This is the persona-level half of the same lesson.
+ *
+ * AI-NOTE: a phrase now matches only as whole words. `quit` no longer catches
+ *          "quitter" — if a list wants both, it lists both. That is the trade
+ *          for `weak` not catching "weakness", and it is the right way round:
+ *          an over-broad ban fails closed on a user who did nothing wrong.
+ */
+export function phraseUsed(haystack: string, phrase: string): boolean {
+  const needle = phrase.trim().toLowerCase();
+  if (needle === '') return false;
+  const escaped = needle.replace(REGEX_META, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(haystack);
+}
+
 /**
  * WHY this is checked in code when the prompt already lists them: `never_say` is
  * a column someone fills in to stop a specific phrase reaching users. A list
@@ -58,7 +93,7 @@ export class BannedPhraseError extends Error {
  */
 function bannedPhrasesUsed(persona: Persona, text: string): string[] {
   const haystack = text.toLowerCase();
-  return persona.bannedPhrases.filter((phrase) => haystack.includes(phrase.toLowerCase()));
+  return persona.bannedPhrases.filter((phrase) => phraseUsed(haystack, phrase));
 }
 
 export async function deliverPlan(

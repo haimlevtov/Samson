@@ -161,6 +161,21 @@ modulo that pool's size. With one `en-GB` and two `en-US` voices installed, the
 two `en-GB` coaches still collide. Accurate wording is "three of the voices
 matching their language, where the language has three".
 
+> **Amended 2026-09-08 — there are five, and the pressure is on en-GB.** Phase
+> 5's content fill added the Sergeant (`en-GB`, variant 2) and the Physio
+> (`en-US`, variant 1), so the allocation is now three `en-GB` coaches and two
+> `en-US` ones. The sentence above generalises unchanged and gets sharper: a
+> device needs **three** installed `en-GB` voices before the Old Master, the
+> Rival and the Sergeant sound like three people, and most Windows machines
+> ship with fewer.
+>
+> That is a limit of the platform rather than a defect to fix here — ADR 0006's
+> first paragraph is that there is no TTS provider and a persona cannot carry a
+> voice. What the variant column guarantees is that the collision is the
+> device's doing and never the app's, which is what
+> `tests/db/personas.test.ts` asserts. Persona voice remains tone, rate and
+> word choice rather than timbre.
+
 **The speech clamp disagreed with the tone clamp.** `spokenIntensity` subtracted
 two where `resolveTone` clamps to `GENTLE_MAX_INTENSITY`. Those are different
 functions: on a gentle week the Old Master's words were generated at intensity 2

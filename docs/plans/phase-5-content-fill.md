@@ -375,6 +375,54 @@ standing warning against treating the two as the same thing.
 
 ## Outcome
 
+### PR 4 — the remaining personas, 2026-09-08
+
+The Sergeant and the Physio, taking the roster from three to five.
+
+**The Sergeant makes `docs/adr/0005-llm-safety.md` §1 true.** That ADR has said
+since phase 2 that "the persona layer ships a Rival and a Sergeant"; the Old
+Master shipped in its place, so the sentence described an intent for eight days.
+It is also the first row to reach `humor_level = 'crude'`, which
+`users.humor_max_level` has offered since the first migration with nothing
+behind it — until now, choosing crude changed nothing for anybody.
+
+**The Physio's justification is argued, not quoted, and the difference is
+recorded.** The obvious citation is PRD §5.4's tone override, and it is the
+wrong one: that applies "regardless of which persona is selected", so it is an
+argument _against_ needing a gentle coach. The real argument is that the three
+shipped coaches sat at intensity 2, 3 and 4 with two of three at `cheeky`, so
+choosing between them changed the jokes more than the register.
+
+**A test written for the Sergeant found a live bug in the Rival.**
+`banned_phrases` were matched with `String.includes`, so a short word banned
+every word containing it — and the Rival has banned `weak` since phase 3, which
+therefore also banned **weakness**. "Your weakness is the lockout" is ordinary
+coaching language, and `deliverPlan` has no fallback by design (ADR 0006), so a
+delivery containing it was rejected, retried, rejected again, and the user got
+an error instead of the block the critic had already approved.
+
+`src/llm/safety.ts` had already reached the same conclusion for the general
+scanner and written it down — "`fat` and `weak` are ordinary coaching
+vocabulary", which is why it matches second-person constructions instead of bare
+words. The persona layer had the lesson available and had not applied it. The
+matcher now uses word boundaries, with the trade stated: `quit` no longer
+catches "quitter", and a list that wants both lists both.
+
+**`SHIPPED_PERSONA_SLUGS` was a constant nobody read.** The skill says to keep
+it in step because "it is what tests and fixtures enumerate"; nothing enumerated
+it — it appeared in its own declaration and one doc comment. `tests/db/personas.test.ts`
+now asserts it equals the shipped rows, which is what makes updating it matter.
+
+Nine database cases, six unit cases on the matcher. 822 unit tests, 144 database
+cases, `verify` and `build` clean. Checked at 375×812: all five coaches render
+on `/coach`, selection works, no horizontal overflow.
+
+Documents updated: `docs/PRD.md` §5.4, `docs/PLAN.md` phase 3 and its drift
+criterion, `docs/adr/0005-llm-safety.md` §1, `docs/adr/0006-persona-boundary.md`
+(the voice allocation is now three en-GB coaches, and a device needs three
+installed en-GB voices before they sound like three people),
+`src/persona/schema.ts`, and `.claude/skills/add-persona/SKILL.md`.
+
 ### PR 3 — tonnage comparisons, 2026-09-08
 
 Fourteen objects from a domestic cat to the Eiffel Tower, and `compareTonnage`

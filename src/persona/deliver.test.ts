@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import type { CallOptions, LlmResult } from '../llm/types';
 import type { TrainingBlock } from '../planner/schema';
 import { InventedNumberError } from './guard';
-import { BannedPhraseError, MAX_DELIVERY_ATTEMPTS, deliverPlan } from './deliver';
+import { BannedPhraseError, MAX_DELIVERY_ATTEMPTS, deliverPlan, phraseUsed } from './deliver';
 import { GENTLE_OVERRIDE } from './tone';
 import type { DeliveredPlan, Persona } from './schema';
 
@@ -223,4 +223,44 @@ describe('deliverPlan — the tone override applies regardless of persona', () =
       expect(h.captured[0]?.messages[0]?.content).not.toContain(GENTLE_OVERRIDE);
     }
   );
+});
+
+describe('a banned phrase is a phrase, not a substring', () => {
+  /*
+   * FOUND 2026-09-08, by a database test written for the Sergeant. The matcher
+   * used String.includes, so `weak` — banned by the Rival since phase 3 — also
+   * banned "weakness", and deliverPlan has no fallback (ADR 0006): a plan whose
+   * prose contained an ordinary coaching word was rejected, retried, rejected
+   * again, and the user was handed an error instead of their block.
+   */
+  it('matches the word it was given', () => {
+    expect(phraseUsed('you are weak on the lockout', 'weak')).toBe(true);
+    expect(phraseUsed('no pain no gain, as they say', 'no pain no gain')).toBe(true);
+  });
+
+  it('does not match a longer word that contains it', () => {
+    expect(phraseUsed('your weakness is the lockout', 'weak')).toBe(false);
+    expect(phraseUsed('fatigue management matters', 'fat')).toBe(false);
+    expect(phraseUsed('soften the knees', 'soft')).toBe(false);
+    expect(phraseUsed('transverse plane work', 'trans')).toBe(false);
+  });
+
+  it('still matches at the edges of a sentence and beside punctuation', () => {
+    expect(phraseUsed('weak.', 'weak')).toBe(true);
+    expect(phraseUsed('"weak", he said', 'weak')).toBe(true);
+    expect(phraseUsed('weak', 'weak')).toBe(true);
+  });
+
+  it('treats a phrase with regex characters as text', () => {
+    // A row is authored by a person, not by a programmer. `(` must not throw.
+    expect(phraseUsed('give me twenty (now)', 'twenty (now)')).toBe(true);
+    expect(() => phraseUsed('anything', 'a+b')).not.toThrow();
+  });
+
+  it('ignores an empty or whitespace phrase rather than banning everything', () => {
+    // A regex built from '' matches at every position, which would reject every
+    // delivery for a persona whose array had a stray empty string in it.
+    expect(phraseUsed('any prose at all', '')).toBe(false);
+    expect(phraseUsed('any prose at all', '   ')).toBe(false);
+  });
 });

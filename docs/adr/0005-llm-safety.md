@@ -15,7 +15,11 @@ catalogue nobody on this project reviewed line by line. Both currently carry an
 `AI-NOTE` warning not to interpolate them into a system prompt. A comment is not
 a control: nothing fails if someone does.
 
-**Conduct.** The persona layer ships a Rival and a Sergeant. Personas are rows
+**Conduct.** The persona layer ships a Rival and a Sergeant. _True as of
+2026-09-08; when this ADR was written the Sergeant was planned and the Old
+Master shipped in its place, so this sentence described an intent for eight
+days. It is also now the app's only `crude` row, at intensity 5, which is the
+combination the paragraph below was written about._ Personas are rows
 containing a `system_prompt` — a column, therefore data, therefore a channel.
 The realistic harm in a fitness app is not exotic: it is a coach telling a
 beginner they are fat, lazy or pathetic, or drifting onto a protected attribute

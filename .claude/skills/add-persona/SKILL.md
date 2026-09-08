@@ -55,15 +55,24 @@ identically, under a control labelled "Voice".
 
 Current allocation:
 
-| Slug | `tts_voice_id` | `tts_voice_variant` |
-| --- | --- | --- |
-| `old-master` | en-GB | 0 |
-| `rival` | en-GB | 1 |
-| `analyst` | en-US | 0 |
+| Slug         | `tts_voice_id` | `tts_voice_variant` |
+| ------------ | -------------- | ------------------- |
+| `old-master` | en-GB          | 0                   |
+| `rival`      | en-GB          | 1                   |
+| `sergeant`   | en-GB          | 2                   |
+| `analyst`    | en-US          | 0                   |
+| `physio`     | en-US          | 1                   |
 
-**A fourth en-GB coach takes variant 2, not the default 0.** Nothing enforces
-this — the column defaults to 0 and no constraint spans rows — so it is checked
-by reading the table and by the test in §4.
+**The next en-GB coach takes variant 3 and the next en-US one takes 2, not the
+default 0.** Nothing enforces this — the column defaults to 0 and no constraint
+spans rows — so it is held by `tests/db/personas.test.ts`, which fails the
+moment two rows of one language share a number.
+
+Worth knowing before adding a fourth en-GB coach: a device needs three installed
+en-GB voices before the three that exist already sound like three people, and
+most Windows machines ship with fewer. That is the platform's limit rather than
+a bug (ADR 0006), but a new coach in a crowded language buys less separation
+than one in an empty one.
 
 There is no TTS provider (ADR 0006): delivery uses the browser's own
 `speechSynthesis`. The device decides which voices exist and they differ per
@@ -79,7 +88,37 @@ cooperates is a preference.
 Put the phrases the character must never use **and** the ones the product must
 never say — every shipped persona bans `no pain no gain` and
 `push through the pain`, because the user's body is a stakeholder that cannot
-complain (`docs/FRAMING.md`).
+complain (`docs/FRAMING.md`). A `tests/db/personas.test.ts` case asserts those
+two are on every row.
+
+### What this list is for, given the scanner already exists
+
+`src/llm/safety.ts` scans **every** completion for demeaning language, and it
+matches **second-person targeting** — "you're pathetic" — rather than bare
+words, deliberately, so that "your pathetic squat" and "body fat" stay sayable.
+Its own AI-NOTE explains why: a guard that fires on ordinary coaching
+vocabulary gets switched off, and then it protects nobody.
+
+So `banned_phrases` is for what that construction misses: the idiom **this
+character** would reach for, and advice that is dangerous rather than rude. The
+Sergeant's list is the longest in the table for exactly that reason.
+
+### The matcher matches whole words — and it did not always
+
+A phrase is matched on word boundaries (`phraseUsed`, `src/persona/deliver.ts`).
+`weak` catches "weak" and not "weakness"; `quit` does not catch "quitter", so a
+list that wants both lists both.
+
+It used `String.includes` until 2026-09-08, which meant a short word banned
+every word containing it. The Rival had banned `weak` since phase 3, so
+"your weakness is the lockout" — ordinary coaching language — failed the guard.
+`deliverPlan` has no fallback by design (ADR 0006), so that delivery was
+rejected, retried, rejected again, and the user got an error rather than the
+block the critic had already approved. It was found by a test written for a
+different persona.
+
+Still check a new entry against real vocabulary before adding it. The word
+boundaries make short words safe; they do not make a badly chosen one correct.
 
 ## 4. Tests, in the same commit
 
@@ -99,7 +138,13 @@ it('gives no two personas of one language the same voice variant', async () => {
 ```
 
 **Also update `SHIPPED_PERSONA_SLUGS`** in `src/persona/schema.ts`. It is not a
-source of truth — the rows are — but it is what tests and fixtures enumerate.
+source of truth — the rows are — but `tests/db/personas.test.ts` asserts the two
+agree, so a migration that adds a row without touching it fails there.
+
+_That sentence used to end "it is what tests and fixtures enumerate", and
+nothing enumerated it: the constant appeared only in its own declaration and one
+doc comment. A constant nobody reads cannot drift loudly. The test was written
+in the same change that added the fourth and fifth personas._
 
 ## What this skill does not cover
 
