@@ -13,7 +13,9 @@ meets its acceptance criteria.
 plan and recorded outcome of each. Phase 5 shipped, but **not the phase written
 below**: it became interface and feature work, and
 [`plans/phase-5.md`](plans/phase-5.md) records the divergence and what the
-content-fill brief still owes. One phase-6 item, the leaderboard, was pulled
+content-fill brief still owes. That debt is now being paid rather than written
+off — see [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
+One phase-6 item, the leaderboard, was pulled
 forward into it and shipped; see the entry under phase 6 for why and for the two
 ways it differs from what was written there. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
@@ -203,9 +205,16 @@ One of each, end to end. This is about plumbing, not content.
 > fill below was built. [`plans/phase-5.md`](plans/phase-5.md) records what
 > shipped, why it diverged, and which of the items below still do not exist.
 >
-> Rescheduling or cutting them is a decision nobody has made yet. The brief
-> calls them compressible, so cutting is legitimate — but it should be written
-> down rather than left as a section that quietly stopped being true.
+> **Settled 2026-09-08: rescheduled, not cut — and it was settled earlier than
+> that.** The sentence above was wrong to say nobody had decided.
+> [`FRAMING.md`](FRAMING.md) Q2 records the stakeholder answering exactly this
+> question, pressed on this brief's own "safe to cut down" line: **"Phase 5 is
+> not cut, only sequenced last."** What was actually open was whether the
+> content survived a phase that spent itself elsewhere. It does: two of the
+> three acceptance criteria below cannot be met without it, and §5.5 of
+> [`PRD.md`](PRD.md) specifies hidden achievements, calendar achievements and
+> progression trees that the build does not have. All five items ship, planned
+> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 

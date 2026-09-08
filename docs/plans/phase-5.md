@@ -167,6 +167,14 @@ recorded in `CLAUDE.md`.
   became, and the content-fill items either rescheduled or cut — they are marked
   "compressible and parallelisable" in the brief, so cutting is legitimate. That
   decision has not been made and is not made here.
+
+  **Settled 2026-09-08: rescheduled — and this bullet was wrong.** The decision
+  had been made, in `docs/FRAMING.md` Q2, where the stakeholder was pressed on
+  this exact brief and answered "Phase 5 is not cut, only sequenced last".
+  `CLAUDE.md` names FRAMING.md as the document to read when a decision is
+  disputed and it was not read here. All five items ship, planned in
+  [`phase-5-content-fill.md`](phase-5-content-fill.md).
+
 - **Phase 3's persona drift eval remains unmet** — "does turn 80 still sound
   like turn 3". The project's one outstanding acceptance criterion, waiting on
   live runs rather than on work.

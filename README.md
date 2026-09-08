@@ -6,7 +6,7 @@ Deterministic code computes all numbers. The LLM interprets them, plans within
 validated bounds, and speaks in a persona. It never calculates.
 
 - `CLAUDE.md` — the ten invariants. Read first.
-- `docs/PLAN.md` — phases and acceptance criteria. **Current phase: 2.**
+- `docs/PLAN.md` — phases and acceptance criteria. **Current phase: 5.**
 - `docs/plans/` — the agent plan for each phase, as approved.
 - `docs/adr/` — decisions and the reasoning behind them.
 
@@ -147,12 +147,12 @@ Live at **https://samson-fit.vercel.app**, auto-deployed from `main`.
 Vercel → Settings → Environment Variables. Copy the first two straight out of
 your working `.env.local` so they cannot drift:
 
-| Variable             | Required | Notes                                   |
-| -------------------- | -------- | --------------------------------------- |
-| `SUPABASE_URL`       | yes      | Without it every page 500s              |
-| `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                    |
-| `OPENROUTER_API_KEY` | not yet  | Nothing calls a model until phase 2     |
-| `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard |
+| Variable             | Required | Notes                                            |
+| -------------------- | -------- | ------------------------------------------------ |
+| `SUPABASE_URL`       | yes      | Without it every page 500s                       |
+| `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                             |
+| `OPENROUTER_API_KEY` | yes      | The coach, planner, critic and chat all call one |
+| `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard          |
 
 **WHY no `NEXT_PUBLIC_` prefix:** nothing client-side touches Supabase. The only
 client component is the rest timer, and it has no database access — every query
