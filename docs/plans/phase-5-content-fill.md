@@ -177,7 +177,10 @@ writing it, not after.
 **Every mass carries a source note**, because a number in a database with no
 provenance is indistinguishable from one somebody guessed. These are approximate
 by nature — an elephant is a range, not a value — and the note says so rather
-than implying a precision the figure does not have.
+than implying a precision the figure does not have. It is explicitly **not** a
+citation: PR 6's evidence table is where a claim needs a resolvable DOI, because
+a wrong dose can hurt somebody and a whale being twenty tonnes out changes a
+joke. The two tables' standards must not leak into each other.
 
 Surfaced on Profile beside the all-time tonnage figure it explains.
 
@@ -368,6 +371,46 @@ _good_, only that it is consistent. `docs/plans/phase-2.md`'s Lesson 8 is the
 standing warning against treating the two as the same thing.
 
 ## Outcome
+
+### PR 3 — tonnage comparisons, 2026-09-08
+
+Fourteen objects from a domestic cat to the Eiffel Tower, and `compareTonnage`
+in `src/metrics/comparisons.ts` picking the **heaviest object the user has
+actually passed**. Not the closest-fitting one: the sentence has to shrink as
+the user grows, and closest-fitting tells a five-year lifter they have moved
+thirty-one thousand cats, which is arithmetically perfect and reads as noise.
+
+Three decisions worth their lines:
+
+- **Null is a real answer.** Below the lightest object there is no comparison,
+  because "about half a cat" is both wrong and a strange thing to say to
+  somebody three sets into their first session.
+- **Two authored forms per row, not a pluraliser.** "a double-decker bus" and
+  "the Statue of Liberty" do not take the same article, and "rhinoceroses" is
+  not a suffix rule. A pluraliser in code would be a second thing to get wrong
+  about a row that is already content.
+- **The source note is not a citation, and the migration says so in an
+  AI-NOTE.** PR 6's table is where a claim needs a DOI.
+
+Twelve unit cases, five of them generated properties — never picks an object
+heavier than the total, never reports a count below one, never claims more mass
+than was lifted, returns null only below the lightest row, and never moves down
+the ladder as the total grows. Eight `tests/db` cases on the rows themselves,
+including one that asserts **no step in the ladder is more than twentyfold**:
+the largest count a user can be shown at any rung is the ratio to the next one,
+so a hundredfold gap would print "ninety-nine pianos", which is a bare number
+wearing a costume.
+
+817 unit tests, 132 database cases, coverage 98.8% statements / 97.3% branches
+on `src/metrics`, `verify` and `build` clean. Checked at 375×812 against hosted:
+39,480 kg all time reads "about a humpback whale", and the Tonnage hint carries
+the row's range.
+
+**Found while checking, and deliberately not fixed here:** opening a FieldHint
+in the right-hand column pushes the page sideways — `scrollWidth` goes 375 → 418
+with the Adherence bubble open, 43px past the edge, which
+`docs/specs/mobile-interface.md` forbids. It is pre-existing, it reproduces on
+hint copy this PR never touched, and it belongs in its own change.
 
 ### PR 2 — achievements, 2026-09-08
 

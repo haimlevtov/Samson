@@ -17,3 +17,4 @@ export * from './adherence';
 export * from './pr';
 export * from './progression';
 export * from './acwr';
+export * from './comparisons';

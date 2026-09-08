@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayDate, displayShortDate } from './format';
+import { comparisonPhrase, displayDate, displayShortDate } from './format';
 
 describe('displayDate', () => {
   it('renders DD/MM/YYYY', () => {
@@ -48,5 +48,36 @@ describe('displayShortDate', () => {
   it('handles the same edge cases as displayDate', () => {
     expect(displayShortDate(null)).toBe('—');
     expect(displayShortDate('nope')).toBe('nope');
+  });
+});
+
+describe('comparisonPhrase', () => {
+  const bus = {
+    slug: 'double-decker-bus',
+    singular: 'a double-decker bus',
+    plural: 'double-decker buses',
+    massKg: 12_000,
+    sourceNote: 'Unladen weight of a modern London double-decker, 11-13 tonnes',
+  };
+
+  it('uses the authored singular, article and all, for exactly one', () => {
+    expect(comparisonPhrase({ object: bus, count: 1 })).toBe('a double-decker bus');
+  });
+
+  it('counts the authored plural for more than one', () => {
+    expect(comparisonPhrase({ object: bus, count: 3 })).toBe('3 double-decker buses');
+  });
+
+  it('groups a large count, because 11482 buses is unreadable', () => {
+    expect(comparisonPhrase({ object: bus, count: 11_482 })).toMatch(/double-decker buses$/);
+    expect(comparisonPhrase({ object: bus, count: 11_482 })).not.toBe('11482 double-decker buses');
+  });
+
+  it('does not invent an article for a proper noun', () => {
+    // "the Statue of Liberty" carries its own determiner, which is why the row
+    // stores the whole phrase rather than a bare noun.
+    const statue = { ...bus, singular: 'the Statue of Liberty', plural: 'Statues of Liberty' };
+    expect(comparisonPhrase({ object: statue, count: 1 })).toBe('the Statue of Liberty');
+    expect(comparisonPhrase({ object: statue, count: 2 })).toBe('2 Statues of Liberty');
   });
 });

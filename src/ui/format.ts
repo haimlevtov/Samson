@@ -12,6 +12,7 @@
  * user's local date (CLAUDE.md #9) — it is a label, not an instant, and must
  * never be round-tripped through a timezone to be displayed.
  */
+import type { TonnageComparison } from '../metrics/comparisons';
 import type { LocalDate } from '../metrics/types';
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -32,4 +33,21 @@ export function displayShortDate(date: LocalDate | null | undefined): string {
   if (!match) return date;
   const [, , month, day] = match;
   return `${day}/${month}`;
+}
+
+/**
+ * `{ count: 3, object: bus }` → `3 double-decker buses`.
+ *
+ * WHY the singular carries its own article and this does not add one: "a
+ * double-decker bus" and "the Statue of Liberty" do not take the same word, and
+ * a rule in code for choosing between them would be a second thing to get wrong
+ * about a row that is already content — see the migration.
+ *
+ * INVARIANT: the number arrives already computed by `compareTonnage` —
+ *            CLAUDE.md #1. This function does no arithmetic beyond deciding
+ *            which of two authored strings to print.
+ */
+export function comparisonPhrase(comparison: TonnageComparison): string {
+  const { count, object } = comparison;
+  return count === 1 ? object.singular : `${count.toLocaleString()} ${object.plural}`;
 }
