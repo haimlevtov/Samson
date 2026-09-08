@@ -33,7 +33,19 @@ export function BadgeReveal({
         ★
       </div>
       <div className="badge-reveal-body">
-        <p className="badge-reveal-kicker">Achievement unlocked</p>
+        {/*
+         * A hidden badge reaches this component for the first time now that the
+         * reader returns held ones — ADR 0017. Before, it was filtered out and
+         * the reveal rendered nothing at all after a secret unlock.
+         *
+         * The kicker changes because the reveal IS the reward for that tier:
+         * there was no announcement, no progress bar and no name in the list
+         * beforehand, so "you found something" is the whole difference between
+         * this badge and every other one.
+         */}
+        <p className="badge-reveal-kicker">
+          {badge.hidden ? 'Something hidden, found' : 'Achievement unlocked'}
+        </p>
         <h2>{badge.name}</h2>
         <p className="muted small">{badge.description}</p>
       </div>

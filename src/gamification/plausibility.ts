@@ -159,9 +159,19 @@ export function checkPlausibility(
  * completed a distinct-exercises challenge, which is the cheapest possible way
  * to finish one.
  *
- * AI-NOTE: every reward path filters through this rather than reading `sets`
- *          directly. A second path that skipped it would be a second definition
- *          of what counts, and the two would drift.
+ * AI-NOTE: every reward path IN TYPESCRIPT filters through this rather than
+ *          reading `sets` directly, and should continue to. It is no longer the
+ *          only reward path: the achievement predicates added in migration
+ *          20260908090000 are SQL and cannot import this file, so they repeat
+ *          MAX_PLAUSIBLE_WEIGHT_KG and MAX_PLAUSIBLE_REPS as literals — pinned
+ *          by tests/db/achievements.test.ts, which reads them back out of the
+ *          predicate text so the copies cannot drift silently.
+ *
+ *          Those predicates are DELIBERATELY weaker than this file: they cannot
+ *          apply `exceeds_established_best`, which needs an e1RM, and a second
+ *          definition of Epley in SQL is a worse problem than the gap. What
+ *          bounds the gap is the prize — a badge pays a flat 75 XP once, where
+ *          a challenge pays repeatedly. See docs/specs/xp-and-challenges.md.
  */
 export function plausibleSets(
   sets: readonly SetRecord[],

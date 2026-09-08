@@ -31,6 +31,11 @@ export interface UnlockedAchievement {
   name: string;
   description: string;
   tier: string;
+  /**
+   * True for a badge whose definition is withheld until it is earned. The
+   * surface marks it; nothing else branches on it.
+   */
+  hidden: boolean;
   sourceHint: string | null;
   unlockedAt: string;
   localDate: string;
@@ -86,38 +91,35 @@ export async function loadXpSummary(db: Db, asOf: LocalDate): Promise<XpSummary>
 }
 
 /**
- * Badges this user holds.
+ * Badges this user holds, hidden ones included.
  *
- * AI-NOTE: hidden achievement DEFINITIONS are withheld by the
- *          `achievements_read_visible` policy, so a hidden badge the user has
- *          unlocked joins to nothing and its name comes back null. That is the
- *          policy working, not a bug — phase 5 owns deciding what a held hidden
- *          badge should look like. Until then it is filtered out rather than
- *          rendered as a blank card.
+ * WHY an RPC rather than a join: `achievements_read_visible` withholds every
+ * hidden DEFINITION — that is the phase 5 criterion and it is not being
+ * relaxed. A join through the user's own session therefore returned null for a
+ * hidden badge the user had already earned, and this function used to drop it,
+ * so unlocking one showed nothing at all. `unlocked_achievements()` is a
+ * definer function scoped to `auth.uid()` with no parameter, returning only
+ * rows the caller already holds an unlock event for — migration 20260908090100
+ * carries the argument for why that leaks nothing.
+ *
+ * AI-NOTE: do not "simplify" this back to a PostgREST join. It typechecks, it
+ *          passes every unit test, and it silently loses the hidden badges.
  */
 export async function loadUnlockedAchievements(db: Db): Promise<UnlockedAchievement[]> {
-  const { data, error } = await db
-    .from('achievement_events')
-    .select('unlocked_at, local_date, achievements (slug, name, description, tier, source_hint)')
-    .order('unlocked_at', { ascending: false });
+  const { data, error } = await db.rpc('unlocked_achievements');
 
   if (error) throw new Error(`loading achievements: ${error.message}`);
 
-  return (data ?? []).flatMap((row) => {
-    const a = row.achievements;
-    if (a === null) return [];
-    return [
-      {
-        slug: a.slug,
-        name: a.name,
-        description: a.description,
-        tier: a.tier,
-        sourceHint: a.source_hint,
-        unlockedAt: row.unlocked_at,
-        localDate: row.local_date,
-      },
-    ];
-  });
+  return (data ?? []).map((row) => ({
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    tier: row.tier,
+    hidden: row.hidden,
+    sourceHint: row.source_hint,
+    unlockedAt: row.unlocked_at,
+    localDate: row.local_date,
+  }));
 }
 
 /**

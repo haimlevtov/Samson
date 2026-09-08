@@ -907,6 +907,19 @@ export type Database = {
       accept_challenge: { Args: { p_challenge_id: string }; Returns: boolean }
       award_session_xp: { Args: { p_workout_id: string }; Returns: Json }
       evaluate_achievements: { Args: { p_user_id: string }; Returns: string[] }
+      unlocked_achievements: {
+        Args: never
+        Returns: {
+          description: string
+          hidden: boolean
+          local_date: string
+          name: string
+          slug: string
+          source_hint: string
+          tier: string
+          unlocked_at: string
+        }[]
+      }
       xp_totals: {
         Args: { p_week_start: string }
         Returns: {

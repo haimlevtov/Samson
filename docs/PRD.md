@@ -162,14 +162,25 @@ for the same reason as above.
 
 XP from adherence with a weekly ceiling and diminishing returns. Streaks that
 count planned days, so scheduled rest sustains them. Achievements as database
-rows with SQL predicates — including hidden ones, whose definitions are never
-sent to the client, and calendar-triggered ones that fire on _your_ local date
-rather than the server's. Daily quests and weekly challenges from a validated
-pool. Progression trees for push, pull, legs and core.
+rows with SQL predicates — including hidden ones, and calendar-triggered ones
+that fire on _your_ local date rather than the server's. Daily quests and weekly
+challenges from a validated pool. Progression trees for push, pull, legs and
+core.
+
+**A hidden badge is hidden until you earn it, then it is yours.** Its
+definition is withheld from every client while it is locked, and shown in full
+to the person holding it — [ADR 0017](adr/0017-held-hidden-achievements.md).
+This section previously said the definitions are "never sent to the client",
+which read as a privacy promise and was really a description of a policy; the
+effect was that unlocking a secret badge showed you nothing at all.
 
 Every completion is verified server-side. Nothing can be granted from the
 client, and submitted loads face plausibility checks — an empty bar spammed for
-reps must not unlock a volume badge.
+reps must not unlock a volume badge. The volume badge additionally requires its
+tonnage to accumulate over thirty separate logged days, because a weight floor
+would be an absolute claim about how strong a person ought to be and this
+project refuses those; see
+[`specs/xp-and-challenges.md`](specs/xp-and-challenges.md).
 
 ### 5.6 The leaderboard — **Built** (phase 5)
 

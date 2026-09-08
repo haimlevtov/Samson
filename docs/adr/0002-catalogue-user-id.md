@@ -53,3 +53,12 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
   instead of something a future endpoint has to remember. The consequence is that
   server-side unlock evaluation must run in a `SECURITY DEFINER` function, not
   through a user client, or hidden achievements can never fire.
+
+  **Amended 2026-09-08.** "Structural instead of something a future endpoint has
+  to remember" is still true of **locked** definitions, and there is now exactly
+  one endpoint that returns held ones —
+  [ADR 0017](0017-held-hidden-achievements.md) — because the same clause was
+  also hiding badges from the people who had earned them. The policy is
+  unchanged; the exception is a single parameterless definer function rather
+  than a relaxation of the rule, precisely so that this sentence keeps holding
+  for everything else.

@@ -231,7 +231,15 @@ Compressible and parallelisable. Safe to cut down if time runs short.
 
 **Acceptance criteria**
 
-- Hidden achievement definitions are never sent to the client
+- **Locked** hidden achievement definitions are never sent to the client.
+  _Narrowed 2026-09-08 by [ADR 0017](adr/0017-held-hidden-achievements.md), and
+  the word is load-bearing._ As written this said "hidden achievement
+  definitions", which also covered a badge the user had already **earned** — and
+  the effect was that unlocking one showed them nothing at all: the event was
+  written, the XP was paid, and the reward was invisible. A held hidden badge is
+  now returned to its holder by a parameterless definer function. Nothing else
+  changed: `achievements_read_visible` still withholds every definition the
+  caller has no unlock event for, which is what this criterion was for.
 - A test asserts every evidence-table claim has a resolvable DOI
 - Calendar achievements fire on the correct local date for a user in a
   non-server timezone

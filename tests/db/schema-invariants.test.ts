@@ -258,6 +258,38 @@ describe('functions pin their search_path', () => {
     );
     expect(rows.map((r) => r.proname)).toEqual([]);
   });
+
+  it('lets the anon role execute no SECURITY DEFINER function', async () => {
+    /*
+     * WHY this exists, and why it is scoped to definer functions:
+     *
+     * A definer function runs with its owner's privileges and therefore steps
+     * outside RLS on purpose. Every one in this schema derives its safety from
+     * `auth.uid()` — award_session_xp, accept_challenge, unlocked_achievements
+     * — which is NULL for a signed-out session. Each of them fails closed on
+     * that, so an anon EXECUTE grant is not currently reachable damage.
+     *
+     * It is asserted anyway for the reason CLAUDE.md #10 gives about tables:
+     * grants and policies are independent gates, and this project has already
+     * shipped two grant defects that were invisible because nothing looked
+     * (migrations 20260901145239 and 20260902094000). The next definer function
+     * added by someone who forgets its revoke should fail here rather than
+     * three months later.
+     *
+     * SECURITY INVOKER functions are deliberately out of scope: they run as the
+     * caller and are bounded by the same RLS as a query, so a grant on one
+     * grants nothing.
+     */
+    const { rows } = await db().query<{ proname: string }>(
+      `select p.proname
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.prosecdef
+          and has_function_privilege('anon', p.oid, 'EXECUTE')`
+    );
+    expect(rows.map((r) => r.proname)).toEqual([]);
+  });
 });
 
 describe('CLAUDE.md #8 and #9 — canonical units and UTC timestamps', () => {
