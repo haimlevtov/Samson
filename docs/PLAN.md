@@ -205,12 +205,16 @@ One of each, end to end. This is about plumbing, not content.
 > fill below was built. [`plans/phase-5.md`](plans/phase-5.md) records what
 > shipped, why it diverged, and which of the items below still do not exist.
 >
-> **Decided 2026-09-08: rescheduled, not cut.** Cutting was legitimate — the
-> brief calls these items compressible — but two of the three acceptance
-> criteria below cannot be met without them, and `docs/PRD.md` §5.5 already
-> describes hidden achievements, calendar achievements and progression trees to
-> the user as though they exist. All five items ship, in five PRs, planned in
-> [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
+> **Settled 2026-09-08: rescheduled, not cut — and it was settled earlier than
+> that.** The sentence above was wrong to say nobody had decided.
+> [`FRAMING.md`](FRAMING.md) Q2 records the stakeholder answering exactly this
+> question, pressed on this brief's own "safe to cut down" line: **"Phase 5 is
+> not cut, only sequenced last."** What was actually open was whether the
+> content survived a phase that spent itself elsewhere. It does: two of the
+> three acceptance criteria below cannot be met without it, and §5.5 of
+> [`PRD.md`](PRD.md) specifies hidden achievements, calendar achievements and
+> progression trees that the build does not have. All five items ship, planned
+> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
