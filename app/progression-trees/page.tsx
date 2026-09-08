@@ -137,7 +137,18 @@ function Rung({ state }: { state: UnlockState }) {
 
         {criteria === null ? (
           <p className="muted small">
-            {unparseable ? 'Requirement unavailable.' : 'Where this tree starts.'}
+            {unparseable
+              ? 'Requirement unavailable.'
+              : node.parentSlug === null
+                ? 'Where this tree starts.'
+                : // A `{}` node that is NOT a root. Today that is only
+                  // `core-leg-raise`, and ADR 0020 says why it exists: `sets`
+                  // has no duration column, so "hold a plank for sixty
+                  // seconds" cannot be written as a criterion and the rung
+                  // above the plank has nothing to gate on. Telling the user
+                  // it is where the tree starts, on the second rung, is just
+                  // wrong — and it read that way on the seeded demo.
+                  'No requirement of its own — opens with the rung below.'}
           </p>
         ) : (
           <p className="muted small">
