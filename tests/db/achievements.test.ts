@@ -600,6 +600,44 @@ describe('the boundary of each remaining tier', () => {
     await expectFiresOnce(user, 'twenty-percent-up', '2026-06-14');
   });
 
+  it('pr: "first" means the earliest session, not the earliest row', async () => {
+    /*
+     * The case the test above cannot see: it puts both sets in ONE workout, so
+     * `set_index` settles the order and any ordering key gets the right answer.
+     * Across workouts the predicate was ordering by `sets.created_at` and then
+     * by `workout_id` — write time, then a random uuid — which is migration
+     * 20260908130000's subject. That comment carries the measurement.
+     *
+     * The insert order here is deliberately the reverse of the training order,
+     * which is what makes this deterministic rather than a coin toss: the light
+     * sets are written FIRST, so they win on `created_at` outright and the old
+     * predicate cannot pick the heavy session however the uuids fall.
+     *
+     * It is also a real story. Logging a session you did last week, after
+     * logging this week's, must not mint a personal best out of nothing.
+     */
+    const user = await newUser('ach-pr-order');
+    const exerciseId = await anyExercise();
+
+    // Written first, trained second: 100 kg on the 12th.
+    const later = await addWorkout(user, { localDate: '2026-06-12' });
+    await addSets(user, later, { exerciseId, weightKg: 100, reps: 5, count: 6 });
+
+    // Written second, trained first: 120 kg on the 10th. This is where the
+    // user started, so their best is exactly their first and nothing is up.
+    const earlier = await addWorkout(user, { localDate: '2026-06-10' });
+    await addSets(user, earlier, { exerciseId, weightKg: 120, reps: 5, count: 6 });
+
+    // 120 / 100 is exactly the 20% the badge wants — so ordering by write time
+    // awards it here, and ordering by training date correctly does not.
+    expect(await awardFor(user, '2026-06-13')).not.toContain('twenty-percent-up');
+
+    // And the badge is still reachable: 145 kg is 20.8% up on the 120 kg start.
+    const third = await addWorkout(user, { localDate: '2026-06-14' });
+    await addSets(user, third, { exerciseId, weightKg: 145, reps: 5, count: 1 });
+    expect(await awardFor(user, '2026-06-14')).toContain('twenty-percent-up');
+  });
+
   it('comeback: twenty-one days away, not twenty', async () => {
     const user = await newUser('ach-comeback');
 

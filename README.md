@@ -69,7 +69,7 @@ SUPABASE_SERVICE_ROLE_KEY=<secret key — the seeder needs it to create users>
 Then:
 
 ```bash
-npm run seed        # five synthetic users, ~1s
+npm run seed        # five synthetic users with XP, levels and badges, ~30s
 npm run dev         # http://localhost:3000
 ```
 
@@ -99,17 +99,17 @@ supabase stop && wsl --shutdown
 
 ## Scripts
 
-| Command                                 | What it does                                                |
-| --------------------------------------- | ----------------------------------------------------------- |
-| `npm test`                              | Unit tests. No database, no network, no API key.            |
-| `npm run test:db`                       | RLS and schema tests. Local stack, or hosted via DB_URL.    |
-| `npm run migrate`                       | `supabase db reset` — local stack only, rebuilds from zero. |
-| `npm run db:push`                       | Applies new migrations to the hosted project.               |
-| `npm run seed`                          | Five synthetic users with 8+ weeks of history.              |
-| `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.           |
-| `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.                  |
-| `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI.        |
-| `npm run typecheck` / `lint` / `format` | The rest of what CI checks.                                 |
+| Command                                 | What it does                                                   |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `npm test`                              | Unit tests. No database, no network, no API key.               |
+| `npm run test:db`                       | RLS and schema tests. Local stack, or hosted via DB_URL.       |
+| `npm run migrate`                       | `supabase db reset` — local stack only, rebuilds from zero.    |
+| `npm run db:push`                       | Applies new migrations to the hosted project.                  |
+| `npm run seed`                          | Five synthetic users: 8+ weeks of history, XP, levels, badges. |
+| `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.              |
+| `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.                     |
+| `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI.           |
+| `npm run typecheck` / `lint` / `format` | The rest of what CI checks.                                    |
 
 After changing a migration, regenerate the types or CI will fail:
 

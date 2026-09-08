@@ -136,6 +136,25 @@ export interface UnlockSets {
  * and `meetsCriteria` unlocks by finding sets, never by failing to), so the
  * risk is an unlock that does not appear rather than one that should not —
  * but "wrong and nondeterministic" is still wrong.
+ *
+ * FOUND IN REVIEW AGAIN, 2026-09-08: that fix ordered by `workout_id`, which is
+ * a random uuid — so the order was stable but NOT newest-first, and the comment
+ * above said otherwise. The cap kept an arbitrary 900 rows rather than the most
+ * recent, which is not the fail-closed behaviour argued for: `meetsCriteria`
+ * counts qualifying sets per WORKOUT, so cutting a page mid-session can drop a
+ * session that satisfied a rung, and which sessions survive would change on
+ * every reseed. Exactly the defect ADR 0021 is about, one file away from the
+ * migration that fixes it.
+ *
+ * `completed_at` descending now, matching `recentSets` in src/db/training.ts —
+ * the sibling reader that already had this right, for the reason its own
+ * comment gives.
+ *
+ * WHY the warm-up filter: `meetsCriteria` discards warm-ups on the first line
+ * of its loop, so they were crossing the wire and being parsed only to be
+ * thrown away. MEASURED on the seeded demo — it takes the largest user from
+ * 805 rows to 599 against the 900 cap, which is headroom the progression
+ * accessories had otherwise spent.
  */
 export async function loadUnlockSets(db: Db): Promise<UnlockSets> {
   const { data, error } = await db
@@ -144,7 +163,8 @@ export async function loadUnlockSets(db: Db): Promise<UnlockSets> {
       'workout_id, weight_kg, reps, is_warmup, exercise_id, exercises (slug), workouts!inner (local_date, status)'
     )
     .eq('workouts.status', 'completed')
-    .order('workout_id', { ascending: false })
+    .eq('is_warmup', false)
+    .order('completed_at', { ascending: false, nullsFirst: false })
     .order('set_index', { ascending: true })
     .limit(UNLOCK_SET_CAP);
 

@@ -18,7 +18,7 @@ import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ARCHETYPES, generateHistory, type Archetype } from '../src/seed/archetypes';
 import { mulberry32 } from '../src/seed/rng';
-import { supabaseUrl } from '../src/db/client';
+import { createAnonClient, createUserClient, supabaseUrl, type Db } from '../src/db/client';
 import { buildPlannerContext } from '../src/planner/context';
 import { candidatesFor } from '../tests/planner/golden';
 import { compliantBlock } from '../tests/planner/stub-planner';
@@ -28,6 +28,9 @@ config({ path: '.env.local', quiet: true });
 
 /** Fixed so the database is byte-identical on every run. */
 const SEED = 42;
+
+/** Shared by every archetype, and shown on the sign-in page — docs/FRAMING.md. */
+const DEMO_PASSWORD = 'samson-demo-fixture';
 const SNAPSHOT = resolve(process.cwd(), 'data/exercises.snapshot.json');
 const BATCH = 500;
 
@@ -85,7 +88,17 @@ async function clean(admin: Admin): Promise<void> {
   if (error) throw new Error(`listing users: ${error.message}`);
 
   const seeded = data.users.filter((u) => u.email?.endsWith('@samson.test'));
-  for (const user of seeded) await admin.auth.admin.deleteUser(user.id);
+  for (const user of seeded) {
+    /*
+     * FOUND IN REVIEW: this discarded the result. deleteUser RETURNS an error
+     * rather than throwing, including for a retryable network failure, so a
+     * failed delete was silent — and the run then walked into createUser for
+     * the same address and failed with "email already exists", on this run and
+     * every rerun after it, reporting the wrong cause.
+     */
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+    if (deleteError) throw new Error(`deleting ${user.email}: ${deleteError.message}`);
+  }
 
   // System catalogue rows have a NULL user_id, so nothing cascades them.
   const catalogueTables: TableName[] = ['exercise_equipment', 'exercises', 'equipment_tags'];
@@ -212,10 +225,10 @@ async function seedArchetype(
   exerciseBySlug: Map<string, string>,
   endDate: string,
   tagBySlug: Map<string, string>
-): Promise<{ workouts: number; sets: number }> {
+): Promise<{ workouts: number; sets: number; awarded: number; badges: number }> {
   const created = await admin.auth.admin.createUser({
     email: archetype.email,
-    password: 'samson-demo-fixture',
+    password: DEMO_PASSWORD,
     email_confirm: true,
   });
   if (created.error || !created.data.user) {
@@ -248,45 +261,100 @@ async function seedArchetype(
 
   const history = generateHistory(archetype, endDate, mulberry32(SEED));
 
-  const { data: workouts, error: workoutError } = await admin
-    .from('workouts')
-    .insert(
-      history.map((w) => ({
-        user_id: userId,
-        local_date: w.localDate,
-        status: w.status,
-        notes: w.notes,
-        started_at: w.status === 'completed' ? `${w.localDate}T17:00:00Z` : null,
-        ended_at: w.status === 'completed' ? `${w.localDate}T18:15:00Z` : null,
-      }))
-    )
-    .select('id, local_date');
-  if (workoutError) throw new Error(`workouts for ${archetype.key}: ${workoutError.message}`);
+  /*
+   * History is written ONE SESSION AT A TIME, in date order, each kept day
+   * awarded before the next day exists.
+   *
+   * WHY, and this is the whole reason the function is shaped like this rather
+   * than two bulk inserts followed by an awarding pass: both of the things that
+   * turn history into progress read "the database as it is now", with no as-of
+   * bound.
+   *
+   *   * `award_session_xp` picks its point on the diminishing curve from
+   *     `count(*)` of the week's kept days — 20260902110000. That count is
+   *     correct when rows appear as they are lived, which is how `finishWorkout`
+   *     writes them. Against a pre-loaded week it is already the week's FINAL
+   *     size on the first call, so every session in the week is charged the
+   *     last one's discount. MEASURED that way round: a seven-day week paid
+   *     26 XP four times where `weeklyAwards` in src/gamification/xp.ts — the
+   *     deterministic definition, invariant #1 — says 100, 80, 64, 51.
+   *
+   *   * `evaluate_achievements` tests each predicate against the whole history,
+   *     so with everything pre-loaded EVERY badge a user will ever earn fires
+   *     on the first call, stamped with the oldest session's date, and their
+   *     75 XP each collide with that week's 500 ceiling. `achievement_events`
+   *     is once-only, so the XP past the ceiling is never paid at all.
+   *
+   * The plan's justification for going through the RPC at all was "a demo
+   * database whose numbers cannot be reproduced by using the app is worth very
+   * little". Bulk-loading and then awarding produced exactly that, one layer up
+   * from the shortcut it was avoiding.
+   *
+   * AI-NOTE: do not batch this back up. If it needs to be faster, make the
+   *          round trips cheaper — the ORDER is the correctness property, not
+   *          an implementation detail.
+   */
+  const user = await signInAs(archetype);
+  let setCount = 0;
+  let awarded = 0;
+  const badges = new Set<string>();
 
-  // A user can have several sessions on one date, so match by position rather
-  // than by date: insert order is preserved in the returned rows.
-  const rows: Record<string, unknown>[] = [];
-  history.forEach((workout, index) => {
-    const workoutId = workouts![index]!.id;
-    for (const set of workout.sets) {
-      const exerciseId = exerciseBySlug.get(set.exerciseSlug);
-      if (!exerciseId) continue;
-      rows.push({
+  for (const [index, workout] of history.entries()) {
+    const { data: row, error: workoutError } = await admin
+      .from('workouts')
+      .insert({
         user_id: userId,
-        workout_id: workoutId,
-        exercise_id: exerciseId,
-        set_index: set.setIndex,
-        weight_kg: set.weightKg,
-        reps: set.reps,
-        rpe: set.rpe,
-        rest_seconds: set.restSeconds,
-        is_warmup: set.isWarmup,
-        completed_at: `${workout.localDate}T17:30:00Z`,
-      });
+        local_date: workout.localDate,
+        status: workout.status,
+        notes: workout.notes,
+        started_at: workout.status === 'completed' ? `${workout.localDate}T17:00:00Z` : null,
+        ended_at: workout.status === 'completed' ? `${workout.localDate}T18:15:00Z` : null,
+      })
+      .select('id')
+      .single();
+    if (workoutError || !row) {
+      throw new Error(
+        `workout ${index} (${workout.localDate}) for ${archetype.key}: ${workoutError?.message}`
+      );
     }
-  });
 
-  await insertBatched(admin, 'sets', rows, `sets for ${archetype.key}`);
+    const rows = workout.sets.flatMap((set) => {
+      const exerciseId = exerciseBySlug.get(set.exerciseSlug);
+      if (!exerciseId) return [];
+      return [
+        {
+          user_id: userId,
+          workout_id: row.id,
+          exercise_id: exerciseId,
+          set_index: set.setIndex,
+          weight_kg: set.weightKg,
+          reps: set.reps,
+          rpe: set.rpe,
+          rest_seconds: set.restSeconds,
+          is_warmup: set.isWarmup,
+          completed_at: `${workout.localDate}T17:30:00Z`,
+        },
+      ];
+    });
+
+    if (rows.length > 0) {
+      const { error } = await admin.from('sets').insert(rows as never);
+      if (error) {
+        throw new Error(`sets for ${archetype.key} on ${workout.localDate}: ${error.message}`);
+      }
+      setCount += rows.length;
+    }
+
+    // INVARIANT: a rest day earns what a training day earns — CLAUDE.md #4,
+    //            migration 20260902100000. The RPC accepts both statuses; a
+    //            pass that awarded only 'completed' would leave most of each
+    //            week's kept days unpaid while they still moved the curve.
+    if (workout.status !== 'completed' && workout.status !== 'rest') continue;
+
+    const result = await awardSession(user, archetype, row.id, workout.localDate);
+    awarded += result.awarded;
+    for (const slug of result.unlocked) badges.add(slug);
+  }
 
   /*
    * One accepted plan per user, so /coach has something to render.
@@ -334,7 +402,94 @@ async function seedArchetype(
   });
   if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
 
-  return { workouts: history.length, sets: rows.length };
+  return { workouts: history.length, sets: setCount, awarded, badges: badges.size };
+}
+
+/**
+ * Retries a hosted round trip a couple of times before giving up.
+ *
+ * WHY a seed script has retries at all: a run is ~230 round trips per archetype
+ * and a single transient failure discards the whole database. Two real ones
+ * have been seen from this project — "JWT issued at future" from a few seconds
+ * of clock skew, and the password grant's per-IP rate limit while iterating.
+ * Both clear on their own within a second or two.
+ *
+ * INVARIANT: only wrap calls that are idempotent. `award_session_xp` is, by
+ *            construction rather than by convention —
+ *            `xp_events_one_adherence_per_workout` (20260902095100),
+ *            `xp_events_one_streak_per_workout` and `achievement_events_once`
+ *            all refuse a second row for the same workout. So a retry after a
+ *            lost response cannot double-award. Do not wrap a plain INSERT.
+ */
+async function withRetry<T>(label: string, attempt: () => Promise<T>): Promise<T> {
+  const delays = [400, 1200];
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      const delay = delays[i];
+      if (delay === undefined) throw error;
+      console.log(`  retrying ${label} after ${(error as Error).message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
+ * A session bound to one archetype, for the awarding calls.
+ *
+ * WHY a real sign-in when the script already holds the service role:
+ * `award_session_xp` filters on `auth.uid()` and takes no user parameter —
+ * deliberately, per ADR 0009, so the caller does not get to say who they are.
+ * The service role cannot stand in for a session, which is the invariant
+ * working rather than an inconvenience.
+ *
+ * AI-NOTE: `autoRefreshToken: false` is not merely tidy. An auto-refresh timer
+ *          keeps the Node event loop alive and the script would never exit —
+ *          and `createUserClient` pins the token into a static Authorization
+ *          header anyway, so a refreshed session would never reach the RPC. If
+ *          a run ever outgrows the hour-long JWT, sign in again rather than
+ *          flipping this flag.
+ */
+async function signInAs(archetype: Archetype): Promise<Db> {
+  const anon = createAnonClient();
+
+  return withRetry(`sign-in for ${archetype.key}`, async () => {
+    const signIn = await anon.auth.signInWithPassword({
+      email: archetype.email,
+      password: DEMO_PASSWORD,
+    });
+    if (signIn.error || !signIn.data.session) {
+      throw new Error(`signing in ${archetype.key}: ${signIn.error?.message ?? 'no session'}`);
+    }
+    return createUserClient(signIn.data.session.access_token);
+  });
+}
+
+/**
+ * One kept day, awarded the way `finishWorkout` awards it.
+ *
+ * INVARIANT: `award_session_xp` is the only path that writes XP — ADR 0009.
+ *            This script holds the service role and could insert `xp_events`
+ *            directly in one statement, saving several hundred round trips. It
+ *            does not, and that is the point: XP inserted by hand is XP the
+ *            rules did not produce, and a demo of a rules engine whose numbers
+ *            cannot be reproduced by using the app is worth very little.
+ */
+async function awardSession(
+  user: Db,
+  archetype: Archetype,
+  workoutId: string,
+  localDate: string
+): Promise<{ awarded: number; unlocked: string[] }> {
+  return withRetry(`${archetype.key} ${localDate}`, async () => {
+    const { data, error } = await user.rpc('award_session_xp', { p_workout_id: workoutId });
+    if (error) {
+      throw new Error(`awarding ${archetype.key} ${localDate} (${workoutId}): ${error.message}`);
+    }
+    const result = data as { awarded?: number; unlocked?: string[] } | null;
+    return { awarded: result?.awarded ?? 0, unlocked: result?.unlocked ?? [] };
+  });
 }
 
 async function main(): Promise<void> {
@@ -356,16 +511,46 @@ async function main(): Promise<void> {
   const { data: tags } = await admin.from('equipment_tags').select('id, slug').is('user_id', null);
   const tagBySlug = new Map((tags ?? []).map((t) => [t.slug, t.id]));
 
-  console.log('Seeding synthetic users');
-  for (const archetype of ARCHETYPES) {
-    const { workouts, sets } = await seedArchetype(
-      admin,
+  /*
+   * WHY the users run in parallel and their own sessions do not: order matters
+   * WITHIN a user, because every session's award depends on the week that
+   * exists when it is made — see the comment in `seedArchetype`. It does not
+   * matter BETWEEN users: the ceiling is per user per week, and migration
+   * 20260902110000 takes an advisory lock on exactly that pair, so two users
+   * can never contend.
+   *
+   * This is also what keeps the pass inside PLAN.md phase 1's 60-second seed
+   * budget, which CI enforces against a local stack. Five sequential passes
+   * would be five times the latency for no extra correctness.
+   */
+  console.log('Seeding synthetic users, one session at a time');
+  const results = await Promise.allSettled(
+    ARCHETYPES.map(async (archetype) => ({
       archetype,
-      exerciseBySlug,
-      endDate,
-      tagBySlug
+      ...(await seedArchetype(admin, archetype, exerciseBySlug, endDate, tagBySlug)),
+    }))
+  );
+
+  /*
+   * allSettled rather than all, so a failure names every user that failed
+   * instead of only whichever rejected first. `clean()` makes a rerun recover —
+   * deleting the auth user cascades the partial XP away — but only if the
+   * operator can see which users to look at.
+   */
+  const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue;
+    const { archetype, workouts, sets, awarded, badges } = result.value;
+    console.log(
+      `  ${archetype.key.padEnd(13)} ${workouts} workouts, ${String(sets).padStart(3)} sets, ` +
+        `${String(awarded).padStart(5)} XP, ${badges} badge(s)`
     );
-    console.log(`  ${archetype.key.padEnd(13)} ${workouts} workouts, ${sets} sets`);
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `${failures.length} archetype(s) failed:\n` +
+        failures.map((f) => `  ${f instanceof Error ? f.message : String(f)}`).join('\n')
+    );
   }
 
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);

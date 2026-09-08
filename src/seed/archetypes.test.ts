@@ -119,6 +119,65 @@ describe('every archetype', () => {
     expect(generate(byKey('beginner'), 7)).not.toEqual(generate(byKey('beginner'), 8));
   });
 
+  describe('an appended entry draws from the side stream', () => {
+    /*
+     * The property the `appended` flag exists for, which the determinism case
+     * above cannot see: it compares a seed against ITSELF, so it passes whether
+     * or not an appended entry perturbs the shared stream.
+     *
+     * WHY it needs guarding: `generateHistory` runs one RNG through the whole
+     * history, so an entry that draws from it shifts every draw after it — each
+     * load's jitter and each adherence roll, in every archetype sharing the
+     * programme. That is not theoretical; it broke
+     * `tests/unit/planner-golden.test.ts` when these accessories were first
+     * added, and the golden fixtures are built on the exact numbers.
+     *
+     * AI-NOTE: if you add an entry WITHOUT `appended`, this goes red and it is
+     *          telling the truth. Either mark it appended or accept the
+     *          re-baseline and re-read the golden suite. Do not delete this.
+     */
+    const APPENDED_SLUGS = new Set(
+      ARCHETYPES.flatMap((a) => a.programme)
+        .filter((e) => e.appended === true)
+        .map((e) => e.exerciseSlug)
+    );
+
+    /** The same archetype with every appended entry removed. */
+    function withoutAppended(archetype: Archetype): Archetype {
+      return { ...archetype, programme: archetype.programme.filter((e) => e.appended !== true) };
+    }
+
+    it('leaves every other set byte-identical', () => {
+      expect(APPENDED_SLUGS.size, 'nothing is marked appended').toBeGreaterThan(0);
+
+      for (const archetype of ARCHETYPES) {
+        const strip = (workouts: GeneratedWorkout[]) =>
+          workouts.map((w) => ({
+            ...w,
+            sets: w.sets.filter((s) => !APPENDED_SLUGS.has(s.exerciseSlug)),
+          }));
+
+        expect(strip(generate(archetype)), archetype.key).toEqual(
+          strip(generate(withoutAppended(archetype)))
+        );
+      }
+    });
+
+    it('still varies the appended sets session to session', () => {
+      // WHY this is the second half: suppressing the draws entirely would also
+      // pass the test above, and would give every accessory set in twelve weeks
+      // the same rest and the same RPE — the "reads as fake on sight" failure
+      // roundToPlate exists to avoid. The side stream keeps the variety.
+      const appendedSets = generate(byKey('beginner'))
+        .flatMap((w) => w.sets)
+        .filter((s) => APPENDED_SLUGS.has(s.exerciseSlug));
+
+      expect(appendedSets.length, 'the beginner logs no appended sets').toBeGreaterThan(20);
+      expect(new Set(appendedSets.map((s) => s.restSeconds)).size).toBeGreaterThan(1);
+      expect(new Set(appendedSets.map((s) => s.rpe)).size).toBeGreaterThan(1);
+    });
+  });
+
   it('never logs a session in the future', () => {
     for (const archetype of ARCHETYPES) {
       for (const w of generate(archetype)) expect(w.localDate <= END, archetype.key).toBe(true);

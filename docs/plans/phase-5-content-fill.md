@@ -351,6 +351,110 @@ Surfaced at `/evidence`, linked from Coach. A table with no reader is the
 
 ---
 
+## PR 7 — the demo database has no progress in it
+
+**Branch `seed-progress`.** Not in the original six; added 2026-09-08 from a
+direct product request, and written here before the code as the ordering rule
+requires.
+
+### The problem, measured
+
+The five seeded users have 79–93 workout rows each (measured 2026-09-08; the
+seeder generates relative to today, so this range moves with the calendar) and:
+
+|             |                                 |
+| ----------- | ------------------------------- |
+| XP          | **0**                           |
+| Level       | 1, for all five                 |
+| Badges      | **0**                           |
+| Leaderboard | five people **tied at nothing** |
+
+Every surface phase 4 and phase 5 built is therefore empty in the demo. The
+level card reads 1, the XP meter reads 0 of 500, the badge shelf says "nothing
+unlocked yet", and the leaderboard — the one place in the app where you see
+another person — is five names against a column of zeroes.
+
+The history is real; nothing has ever been _evaluated_ against it. `npm run seed`
+writes workouts and sets with the service role and stops there.
+
+### The decision, and the alternative rejected
+
+**Award through the real path.** The seeder signs in as each archetype and calls
+`award_session_xp` once per completed workout, in date order.
+
+The alternative is to insert `xp_events` rows directly with the service role,
+which is one statement instead of four hundred round trips. **Rejected**, and not
+on style: ADR 0009 makes `award_session_xp` the only path that writes XP, derives
+every figure from rows already in the database, and enforces the weekly ceiling
+in a trigger. XP inserted directly would be XP that the rules did not produce —
+a demo database whose numbers cannot be reproduced by using the app, which is
+the one property a demo of a rules engine needs.
+
+Going through the real path also means the rest arrives for free and correctly:
+
+- **Badges** unlock from the ten predicates evaluating real history, not from a
+  list of slugs somebody chose.
+- **Levels** are read from lifetime XP by `levelForXp`, so they cannot disagree.
+- **The leaderboard** becomes a genuine ranking, because it reads `xp_events`.
+
+### The constraint
+
+`npm run seed` is timed in CI against a **60-second budget** (PLAN.md phase 1),
+and this adds one RPC per kept day. Sequential per user so the weekly ceiling and
+the diminishing-returns curve see sessions in the order they happened; the five
+users run in parallel. Measured, not assumed — and if it does not fit, the
+awarding window shortens rather than the budget moving.
+
+> **Corrected in review**, twice, and both corrections are the same mistake:
+> counting workout ROWS rather than the thing being counted.
+>
+> "Roughly four hundred RPCs" was the total row count, 417. The first
+> implementation awarded only `completed` sessions, which is **160** — and that
+> was itself a bug, because `award_session_xp` awards `rest` identically and
+> deliberately (CLAUDE.md #4, migration 20260902100000). Every kept day is now
+> awarded: **365** calls across the five users, against 417 rows.
+
+### What this is not
+
+Not new content, not a new surface, and no schema change. If a badge does not
+unlock for anybody, that is a fact about the predicates and the seeded history,
+and the fix is a better fixture rather than a hand-written `achievement_events`
+row.
+
+### Addendum, written mid-PR: two of those three claims did not survive
+
+Written after the work it describes and before it was committed, so the plan is
+not quietly overtaken by its own implementation. Both changes below were
+discoveries made by running the thing, not decisions available at planning time
+— which is the honest reason this is an addendum rather than a revision.
+
+**"Not new content" is now false, deliberately.** Awarding worked first time,
+and reading the result back showed the progression trees at 5 of 20 rungs for
+every user — because the seeded history is barbell work and the trees are
+bodyweight progressions. Six bodyweight accessories were added to the two shared
+programmes. The clause above still holds in the sense that mattered: nothing was
+hand-written into `achievement_events`, and no threshold was moved. The fixture
+got better, which is what that paragraph asked for.
+
+Two of the six are prerequisites rather than accessories — an incline push-up
+and a lying leg raise — added once the trees were read back a second time. A
+tree only unlocks downward, so a rung whose parent wants an exercise nobody does
+is unreachable no matter what is below it, and the surface rendered as a wall.
+Their prescriptions are written to clear the rung they sit under. Stated plainly
+because it is the kind of thing a plan should not let a reader discover on their
+own: this is content authored to demonstrate the feature.
+
+**"No schema change" is now false.** Adding those sets made `returning` lose a
+badge, which should have been impossible — the predicate ignores unloaded sets,
+and the pre-existing sets were proved byte-identical. Chasing it found
+`twenty-percent-up` deciding "the user's first working set" by random uuid.
+[ADR 0021](../adr/0021-training-order-is-local-date.md) and migration
+`20260908130000` are the fix; there is no schema change in the DDL sense, but a
+migration is a migration and the plan said there would not be one.
+
+**The rule this came out of holds.** "If a badge does not unlock for anybody,
+that is a fact about the predicates" — it was, and the predicate was wrong.
+
 ## Verification
 
 Each PR: `npm run verify`, `npm run build`, `npm run test:db` where a migration
@@ -375,6 +479,67 @@ _good_, only that it is consistent. `docs/plans/phase-2.md`'s Lesson 8 is the
 standing warning against treating the two as the same thing.
 
 ## Outcome
+
+### PR 7 — the demo database has progress in it, 2026-09-08
+
+Shipped. Measured on the hosted project, `npm run seed` in **27.3s** against the
+60-second budget; CI times it against a local stack, where the round trips are
+roughly twenty times cheaper.
+
+|       |   XP | Level | Badges | Tree rungs |
+| ----- | ---: | ----: | -----: | ---------: |
+| Dan   | 5798 |     8 |      7 |       8/20 |
+| Yossi | 5012 |     8 |      5 |       8/20 |
+| Noa   | 4984 |     8 |      5 |       8/20 |
+| Maya  | 4555 |     8 |      6 |       8/20 |
+| Tom   | 3994 |     7 |      4 |       8/20 |
+
+**The number that matters is not the size, it is the agreement.** The seeded
+adherence XP equals what `weeklyAwards` in `src/gamification/xp.ts` — the
+deterministic definition, invariant #1 — computes over the same history, exactly,
+for three of five users. The other two are 45 and 26 XP lower, which is the
+weekly 500 ceiling: `weeklyAwards` deliberately does not apply it and the RPC
+does. Both users have weeks pinned at exactly 500. An exact match on all five
+would have meant the ceiling was not working.
+
+**Three things went wrong on the way, all found by review, all worth recording
+because none was visible from the output.**
+
+1. **The first implementation awarded 20–27% of the correct XP, and reordered the
+   leaderboard.** It bulk-inserted a user's whole history and then awarded it.
+   `award_session_xp` reads the week's kept-day count with no as-of bound — which
+   is right when rows appear as they are lived — so against a pre-loaded week
+   every session was charged the LAST one's discount: a seven-day week paid 26 XP
+   four times where the engine says 100, 80, 64, 51. History is now written one
+   session at a time, in date order, each kept day awarded before the next exists.
+   The RPC was not changed: it is correct for the way the app writes, and the
+   seeder was the thing lying about being a user.
+
+2. **Every badge unlocked on the first call.** Same cause: `evaluate_achievements`
+   tests the whole history, so with everything pre-loaded all eleven fired at
+   once, stamped with the oldest session's date, their 75 XP each colliding with
+   that week's ceiling — and `achievement_events` is once-only, so the XP past
+   the ceiling was never paid. Badges now land on 4–7 distinct dates spread
+   across months, which is both correct and the better demo.
+
+3. **Rest days were not awarded at all.** `award_session_xp` awards `rest`
+   identically and deliberately, and the pass filtered to `completed`, leaving
+   most of each week's kept days unpaid while they still moved the curve — the
+   exact defect migration 20260902100000 was written to fix, recreated one layer
+   up.
+
+**Also fixed, found by the same review round:** a user could attach a set to
+another user's workout (`sets_own` checked `user_id` and nothing about
+`workout_id`), which two predicates then read across the boundary — migration
+`20260908140000`, reproduced before it was fixed and asserted in
+`tests/db/rls.test.ts`. And `loadUnlockSets` was ordering by `workout_id` under
+a comment claiming newest-first: a random uuid, the same defect as ADR 0021, one
+file from the migration that fixes it.
+
+**What is authored rather than observed.** Six bodyweight accessories were added
+to the two shared programmes, two of them prerequisites whose prescriptions are
+written to clear the rung above them. Recorded in `docs/FRAMING.md`'s
+invented-content list, where the project keeps that kind of admission.
 
 ### PR 5 — progression trees, 2026-09-08
 
@@ -721,6 +886,11 @@ with `array_agg(... order by created_at)`, and `created_at` defaults to
 transaction time — so every set written by one INSERT ties, and the seeder
 writes them in batches. Two evaluations over identical data could disagree,
 which is the first thing the skill's §2 forbids. Now ordered by a total order.
+
+> **Superseded, PR 7.** A total order was the narrower answer: the added keys
+> were `workout_id, set_index`, and `workout_id` is a random uuid. The result was
+> stable within one database and still arbitrary, so the badge kept being decided
+> by a draw. See [ADR 0021](../adr/0021-training-order-is-local-date.md).
 
 **`users.timezone` was unvalidated input to a definer function.** The column is
 bare text; its validation lived only in Zod at the app boundary, and
