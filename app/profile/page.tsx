@@ -270,8 +270,15 @@ export default async function ProfilePage() {
               {comparison !== null && (
                 <>
                   {' '}
-                  The comparison is approximate and rounded down to whole ones —{' '}
-                  {comparison.object.sourceNote.toLowerCase()}.
+                  The comparison is approximate and rounded down to whole ones.{' '}
+                  {/*
+                   * The note is printed exactly as it was authored. An earlier
+                   * version lowercased it to sit mid-sentence and turned two of
+                   * the fourteen rows into "a modern london double-decker" and
+                   * "a european supermini" — CLAUDE.md #7 covers the display
+                   * form of a row as much as its value.
+                   */}
+                  {comparison.object.sourceNote}.
                 </>
               )}
             </FieldHint>
@@ -288,9 +295,11 @@ export default async function ProfilePage() {
            * into their first session.
            *
            * The row's source_note goes in the Tonnage hint above rather than a
-           * `title` attribute: a title on a non-interactive element is invisible
-           * to a keyboard and to every touch device, which is most of this app's
-           * traffic — docs/specs/mobile-interface.md.
+           * `title` attribute. FieldHint's own doc comment gives the reason it
+           * is a real focusable button rather than a hover target: "hover does
+           * not exist on a phone, and this app is used in a gym." A `title` on
+           * a non-interactive span is worse still — it reaches neither a
+           * keyboard nor a touch device.
            */}
           {comparison !== null && (
             <div className="muted small">about {comparisonPhrase(comparison)}</div>

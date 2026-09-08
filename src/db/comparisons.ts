@@ -7,26 +7,34 @@
  *            where it is pure and unit-tested.
  */
 import type { Db } from './client';
-import type { ComparisonObject } from '../metrics/comparisons';
+import type { ComparisonObject } from '../metrics/types';
 
 /**
  * Every shared comparison object, heaviest last.
  *
- * WHY there is no limit and no pagination: the table is authored content with
- * fourteen rows and no path by which a user adds one — `tonnage_comparisons_write`
- * would let somebody insert their own, and nothing in the app offers to. If it
- * ever grows past a page, `compareTonnage` would silently start choosing from a
- * truncated ladder and simply pick a lighter object, which is the kind of wrong
- * that looks right. A row count that approaches PostgREST's `max_rows` is the
- * signal to make this a targeted query rather than to raise a limit.
+ * WHY `is('user_id', null)` rather than leaning on RLS: the read policy admits
+ * shared rows OR the caller's own, and this table has no user-authored rows by
+ * design — migration 20260908100100 dropped the write policy because there is
+ * no feature behind it. Filtering here says that in the query rather than in a
+ * comment, and it is what keeps the paragraph below true.
  *
- * RLS scopes the read to shared rows plus the caller's own (CLAUDE.md #10), so
- * there is no user_id filter to forget.
+ * FOUND IN REVIEW: the first version said there was "no path by which a user
+ * adds one", which was a statement about the UI and not about the security
+ * boundary. The write policy granted INSERT to every authenticated session and
+ * PostgREST is a path whether or not a button is.
+ *
+ * WHY there is no limit and no pagination: fourteen authored rows, and now
+ * nothing can add a fifteenth without a migration. If the ladder ever grows
+ * past a page, `compareTonnage` would silently choose from a truncated one and
+ * pick a lighter object — the kind of wrong that looks right. A row count
+ * approaching PostgREST's `max_rows` is the signal to make this a targeted
+ * query rather than to raise a limit.
  */
 export async function loadComparisonObjects(db: Db): Promise<ComparisonObject[]> {
   const { data, error } = await db
     .from('tonnage_comparisons')
     .select('slug, singular, plural, mass_kg, source_note')
+    .is('user_id', null)
     .order('mass_kg', { ascending: true });
 
   if (error) throw new Error(`loading tonnage comparisons: ${error.message}`);

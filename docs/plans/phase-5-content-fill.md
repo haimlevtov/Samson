@@ -177,10 +177,13 @@ writing it, not after.
 **Every mass carries a source note**, because a number in a database with no
 provenance is indistinguishable from one somebody guessed. These are approximate
 by nature — an elephant is a range, not a value — and the note says so rather
-than implying a precision the figure does not have. It is explicitly **not** a
-citation: PR 6's evidence table is where a claim needs a resolvable DOI, because
-a wrong dose can hurt somebody and a whale being twenty tonnes out changes a
-joke. The two tables' standards must not leak into each other.
+than implying a precision the figure does not have.
+
+_Added while building, not planned:_ the note is explicitly **not** a citation.
+PR 6's evidence table is where a claim needs a resolvable DOI, because a wrong
+dose can hurt somebody and a whale being twenty tonnes out changes a joke. The
+two tables' standards must not leak into each other, and the migration says so
+in an AI-NOTE.
 
 Surfaced on Profile beside the all-time tonnage figure it explains.
 
@@ -248,7 +251,7 @@ has ever used it. Whoever fills it first defines the shape, and
 `.claude/skills/add-progression/SKILL.md` says that is ADR-sized rather than
 migration-sized.
 
-**ADR 0018 — structured criteria, interpreted, never executed.** The obvious
+**ADR 0019 — structured criteria, interpreted, never executed.** The obvious
 thing to copy is `achievements.predicate`, which is SQL text run server-side —
 and which ADR 0009 §3 restricts to `user_id is null` rows because executing a
 user-authored one is privilege escalation for anyone who can sign up. A
@@ -295,7 +298,7 @@ a null rather than failing.
 **Branch `supplement-evidence`.** ADR first: this is the project's first table
 of **external claims**, and it needs a rule for what may go in it.
 
-**ADR 0019 — one row, one claim, one DOI.** Rows carry a supplement, a single
+**ADR 0020 — one row, one claim, one DOI.** Rows carry a supplement, a single
 claim, an evidence grade, a dose range in canonical units, interaction flags,
 and a DOI that backs _that_ claim. No row summarises a literature; a row nobody
 can check is worse than an absent row, because it looks checked.
@@ -395,22 +398,74 @@ Three decisions worth their lines:
 Twelve unit cases, five of them generated properties — never picks an object
 heavier than the total, never reports a count below one, never claims more mass
 than was lifted, returns null only below the lightest row, and never moves down
-the ladder as the total grows. Eight `tests/db` cases on the rows themselves,
+the ladder as the total grows. Ten `tests/db` cases on the rows themselves,
 including one that asserts **no step in the ladder is more than twentyfold**:
 the largest count a user can be shown at any rung is the ratio to the next one,
 so a hundredfold gap would print "ninety-nine pianos", which is a bare number
 wearing a costume.
 
-817 unit tests, 132 database cases, coverage 98.8% statements / 97.3% branches
+### What review changed, again
+
+**A grant to `anon` that had been there since phase 0.** The security reviewer
+asked whether the new table inherits the right privileges; it does — and
+measuring it turned up that `anon` held `TRUNCATE`, `REFERENCES` and `TRIGGER`
+on all eighteen tables. Migration 0006 revokes four verbs of the seven Supabase
+grants, and `schema-invariants.test.ts` filtered its assertion to the same four,
+so the test written to prove "anon holds nothing" could not see the three it
+held. TRUNCATE is the one that matters: no policy filters it, because a policy
+cannot make a TRUNCATE affect fewer rows. Nothing could reach it — PostgREST has
+no TRUNCATE verb — which is the same shape as migration 0011's finding, and the
+same reason to fix it rather than file it. ADR 0003 amended; the test now
+asserts over every privilege type.
+
+**`check (mass_kg > 0)` did not exclude `NaN`.** PostgreSQL orders NaN above
+every non-NaN numeric so that it can be indexed, so `'NaN'::numeric > 0` is
+true — measured against hosted, not assumed — and PostgREST will cast the JSON
+string `"NaN"` into the column. Nothing rendered it, because `compareTonnage`
+guards with `Number.isFinite`; what was wrong was the stated guarantee, which
+that guard's own comment cited. Now `> 0 and < 1e10`.
+
+**A write policy with no feature behind it.** The table copied the ADR 0002
+catalogue policy pair, and the ADR justifies the write half by a named future
+feature: user-authored custom exercises. There is no equivalent here, so the
+pair granted `INSERT` on a joke ladder to every authenticated session, and
+PostgREST is a path whether or not the UI has a button. Dropped, grant revoked,
+ADR 0002 amended with the rule that the write half needs a feature — and with
+the negative test no catalogue table had: that a session cannot insert a row
+with a null `user_id`, which is the escalation from self-only row to content
+served to everybody.
+
+**The worked example in the migration was wrong.** It said 140,000 kg is "about
+a double-decker bus"; run through the shipped rule against the shipped rows it
+is one Space Shuttle orbiter, and a bus would have been eleven. Three separate
+"five-year lifter" figures in the same PR disagreed by 21×, none of them from
+running anything. All replaced with computed ones. This is the one number in a
+file that a reader checks.
+
+**And this decision was missing its ADR, which is PR 2's lesson repeated.**
+[ADR 0018](../adr/0018-tonnage-comparisons.md) now carries heaviest-passed over
+closest-fitting, and says plainly that the plan stated only the chosen rule, so
+the rejection was made at the keyboard rather than recorded first.
+
+Smaller: the page lowercased `source_note` to fit mid-sentence and turned two
+rows into "a modern london double-decker" and "a european supermini"; the db
+test hand-rolled the reader's query instead of calling it, so the shipped
+column list and `Number()` coercion were asserted nowhere; a comment cited
+`mobile-interface.md` for a claim that document does not make; and the table
+carried an index on a fourteen-row column nothing seeks on.
+
+817 unit tests, 135 database cases, coverage 98.8% statements / 97.3% branches
 on `src/metrics`, `verify` and `build` clean. Checked at 375×812 against hosted:
 39,480 kg all time reads "about a humpback whale", and the Tonnage hint carries
 the row's range.
 
 **Found while checking, and deliberately not fixed here:** opening a FieldHint
 in the right-hand column pushes the page sideways — `scrollWidth` goes 375 → 418
-with the Adherence bubble open, 43px past the edge, which
-`docs/specs/mobile-interface.md` forbids. It is pre-existing, it reproduces on
-hint copy this PR never touched, and it belongs in its own change.
+with the Adherence bubble open, 43px past the edge. `docs/specs/mobile-interface.md`
+requires it of wide content specifically rather than in general, but a page that
+scrolls sideways on a phone is against everything that document is for. It is
+pre-existing, it reproduces on hint copy this PR never touched, and it belongs
+in its own change.
 
 ### PR 2 — achievements, 2026-09-08
 

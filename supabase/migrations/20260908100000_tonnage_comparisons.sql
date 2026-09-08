@@ -8,8 +8,15 @@
 --            like every other number in this project (CLAUDE.md #1).
 --
 -- WHY this exists at all: Profile prints a lifetime tonnage in kilograms, and
--- nobody has any intuition for 140,000 of them. "About a double-decker bus" is
--- the one place in this app where a number is allowed to stop being a number.
+-- nobody has any intuition for 39,480 of them. "About a humpback whale" is the
+-- one place in this app where a number is allowed to stop being a number.
+--
+-- That example is the real answer for the real figure, run through the shipped
+-- rule against the shipped rows. FOUND IN REVIEW: it used to say 140,000 kg was
+-- "about a double-decker bus", which the selector this migration exists to
+-- serve does not agree with — at that total it says one Space Shuttle orbiter,
+-- and a bus would have been eleven of them. A worked example nobody ran is the
+-- one number in a file that a reader will check.
 --
 -- INVARIANT: units are stored canonically — CLAUDE.md #8. mass_kg, converted at
 --            display only, like every other mass in the schema.
@@ -30,11 +37,19 @@
 --          being 20 tonnes out changes a joke. Do not add DOIs here and do not
 --          let the two tables' standards leak into each other.
 --
--- WHY the ladder runs past anything anybody will reach: the top three rows are
+-- WHY the ladder runs past anything anybody will reach: the top two rows are
 -- aspirational on purpose. `compareTonnage` picks the heaviest object the user
--- has actually passed, so an unreachable row is inert until it is not, and a
--- ladder that stops at the elephant tells a five-year lifter they have lifted
--- forty elephants — which is a worse sentence than one whale.
+-- has actually passed, so an unreachable row is inert until it is not — and a
+-- ladder that stopped at the elephant would tell somebody at 240,000 kg that
+-- they had lifted forty elephants, where the shipped ladder says one Statue of
+-- Liberty. Both are true; only one is a sentence.
+--
+-- AI-NOTE: the ranges in `source_note` are written in metric, because the whole
+--          column is. `users.unit_preference` allows 'imperial' and nothing
+--          converts at display yet; when something does, these notes are
+--          authored content and will not convert with it. That is a decision
+--          for whoever builds the toggle — probably a second column rather than
+--          a parser.
 
 create table public.tonnage_comparisons (
   id uuid primary key default gen_random_uuid(),
@@ -68,9 +83,12 @@ create index tonnage_comparisons_mass_idx on public.tonnage_comparisons (mass_kg
 
 alter table public.tonnage_comparisons enable row level security;
 
--- AI-NOTE: both policies, copied from the catalogue pattern. Forgetting the
---          read policy makes the rows invisible; forgetting the write policy
---          makes them writable by the wrong user — ADR 0002.
+-- AI-NOTE: both policies, copied from the catalogue pattern — ADR 0002.
+--          SUPERSEDED for this table by migration 20260908100100, which drops
+--          the write half. The ADR justifies it by a named future feature,
+--          user-authored custom exercises; there is no equivalent here, so the
+--          pair granted INSERT to every authenticated session in exchange for
+--          nothing. Read that migration before restoring it.
 create policy tonnage_comparisons_read on public.tonnage_comparisons
   for select to authenticated using (user_id is null or user_id = auth.uid());
 create policy tonnage_comparisons_write on public.tonnage_comparisons

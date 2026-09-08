@@ -125,6 +125,13 @@ than a confident wrong number.
 Every figure carries a "?" explaining what it measures and how it is computed,
 because "acute:chronic 1.23" means nothing to someone who has not met the term.
 
+**And one figure is allowed to stop being a figure.** Lifetime tonnage is the
+largest number on the page and the one nobody can picture, so it is also given
+as the heaviest thing you have moved the weight of — "about a humpback whale".
+The objects are rows with a stated range apiece, and the rule for choosing one
+is [ADR 0018](adr/0018-tonnage-comparisons.md), which explains why it is the
+heaviest object you have passed rather than the one that divides most neatly.
+
 ### 5.3 Coaching — **Specified** (phase 2)
 
 Given your history, goal, equipment and available days, produce a training block

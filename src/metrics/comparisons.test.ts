@@ -9,7 +9,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { compareTonnage, type ComparisonObject } from './comparisons';
+import { compareTonnage } from './comparisons';
+import type { ComparisonObject } from './types';
 
 const object = (slug: string, massKg: number): ComparisonObject => ({
   slug,
@@ -70,8 +71,14 @@ describe('picking a comparison', () => {
     const broken = [...LADDER, object('glitch', 0), object('worse', -100)];
     expect(compareTonnage(13_000, broken)?.object.slug).toBe('bus');
 
-    // And a mass that is not a number at all, which the column's CHECK cannot
-    // produce but a future caller with a literal can.
+    /*
+     * And a mass that is not a number at all. This one was not theoretical:
+     * the column shipped with `check (mass_kg > 0)`, and PostgreSQL orders NaN
+     * ABOVE every non-NaN numeric so that it can be indexed — so
+     * `'NaN'::numeric > 0` is true and the constraint admitted one. Tightened
+     * to `> 0 and < 1e10` in migration 20260908100100; this guard stays as the
+     * second gate.
+     */
     const nonFinite = [...LADDER, { ...object('nan', 0), massKg: Number.NaN }];
     expect(compareTonnage(13_000, nonFinite)?.object.slug).toBe('bus');
   });

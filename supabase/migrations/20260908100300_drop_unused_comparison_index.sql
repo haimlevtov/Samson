@@ -1,0 +1,22 @@
+-- Samson 0043 — remove an index nothing will ever use
+--
+-- FOUND IN REVIEW, 2026-09-08, on the migration three files earlier.
+--
+-- `tonnage_comparisons_mass_idx` was added out of habit: the reader has an
+-- `order by mass_kg`, so an index looked warranted. It is not. The table holds
+-- fourteen authored rows, the only reader selects every one of them, and
+-- nothing seeks or filters on the column — Postgres will sequentially scan
+-- fourteen rows and sort them in memory whatever indexes exist.
+--
+-- WHY bother removing it rather than leaving something harmless: CLAUDE.md's
+-- "Out of scope" section defers scaling work explicitly, and an index with no
+-- reader is the smallest possible version of the thing it is deferring. It also
+-- costs nothing until somebody copies the pattern onto a table where the write
+-- cost matters. The two indexes on the exercise catalogue both serve real joins;
+-- this one served an instinct.
+--
+-- AI-NOTE: if this table ever grows past a few hundred rows, the thing to add
+--          is not this index — it is a query that stops selecting all of them.
+--          See the comment on loadComparisonObjects in src/db/comparisons.ts.
+
+drop index if exists public.tonnage_comparisons_mass_idx;

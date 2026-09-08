@@ -88,14 +88,14 @@ against "how did last month go" and could only lose.
 
 **Profile — `/profile`**
 
-| Rank | What                                                        |
-| ---- | ----------------------------------------------------------- |
-| 1    | Level, and progress into the next one                       |
-| 2    | Streak and adherence — the retention numbers, per PRD §3    |
-| 3    | XP this week against the ceiling                            |
-| 4    | Badges                                                      |
-| 5    | Tonnage, acute:chronic, weekly chart, best e1RM             |
-| 6    | — (settings moved to `/settings`; the cog is in the header) |
+| Rank | What                                                                          |
+| ---- | ----------------------------------------------------------------------------- |
+| 1    | Level, and progress into the next one                                         |
+| 2    | Streak and adherence — the retention numbers, per PRD §3                      |
+| 3    | XP this week against the ceiling                                              |
+| 4    | Badges                                                                        |
+| 5    | Tonnage and what it weighs as much as, acute:chronic, weekly chart, best e1RM |
+| 6    | — (settings moved to `/settings`; the cog is in the header)                   |
 
 **A consequence worth stating:** the stat tiles are equal in weight and are not
 equal in rank. Streak and adherence are the mechanic the product retains people
