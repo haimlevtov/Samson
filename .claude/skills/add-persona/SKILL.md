@@ -1,6 +1,6 @@
 ---
 name: add-persona
-description: Add or change a coach persona in Samson. Use when adding a fourth coach, editing a shipped one's character, changing its banned phrases, intensity or humour tier, or assigning its device voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
+description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity or humour tier, or assigning its device voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
 ---
 
 # Adding a persona
@@ -68,7 +68,7 @@ default 0.** Nothing enforces this — the column defaults to 0 and no constrain
 spans rows — so it is held by `tests/db/personas.test.ts`, which fails the
 moment two rows of one language share a number.
 
-Worth knowing before adding a fourth en-GB coach: a device needs three installed
+Worth knowing before adding another en-GB coach: a device needs three installed
 en-GB voices before the three that exist already sound like three people, and
 most Windows machines ship with fewer. That is the platform's limit rather than
 a bug (ADR 0006), but a new coach in a crowded language buys less separation
@@ -105,9 +105,21 @@ Sergeant's list is the longest in the table for exactly that reason.
 
 ### The matcher matches whole words — and it did not always
 
-A phrase is matched on word boundaries (`phraseUsed`, `src/persona/deliver.ts`).
-`weak` catches "weak" and not "weakness"; `quit` does not catch "quitter", so a
-list that wants both lists both.
+A phrase matches on whole words **plus its plural**, after both sides are
+lowercased, stripped of invisible characters and cleared of punctuation —
+`phraseUsed` in `src/persona/deliver.ts`, argued in
+[ADR 0019](../../../docs/adr/0019-banned-phrase-matching.md).
+
+So `quitter` catches "quitters", and `no pain no gain` catches "no pain, no
+gain". But `weak` catches neither "weakness" nor **"weakling"**. The plural is
+free; every other inflection is not.
+
+**State the cost with the example that bites.** An earlier version of this
+section said "`quit` does not catch quitter" — true, and worthless, because
+`quit` is on no persona's list. The one that mattered was `weakling`: the Rival
+banned `weak`, substring matching had been catching "weakling" by accident, and
+`src/llm/safety.ts` does not catch "you are a weakling" either. Both rows now
+list it explicitly.
 
 It used `String.includes` until 2026-09-08, which meant a short word banned
 every word containing it. The Rival had banned `weak` since phase 3, so
@@ -116,6 +128,11 @@ every word containing it. The Rival had banned `weak` since phase 3, so
 rejected, retried, rejected again, and the user got an error rather than the
 block the critic had already approved. It was found by a test written for a
 different persona.
+
+**Prefer the shortest unambiguous fragment.** The Physio shipped with
+`it is probably nothing` and `you will be fine`, and neither could ever fire,
+because a model writes "it's probably nothing" and "you'll be fine". A whole
+sentence matches that sentence; a model has a hundred ways to write one.
 
 Still check a new entry against real vocabulary before adding it. The word
 boundaries make short words safe; they do not make a badly chosen one correct.
@@ -146,6 +163,17 @@ nothing enumerated it: the constant appeared only in its own declaration and one
 doc comment. A constant nobody reads cannot drift loudly. The test was written
 in the same change that added the fourth and fifth personas._
 
+## 5. Verify
+
+```bash
+npm run verify && npm run test:db
+```
+
+A persona is a migration plus a database test, so `npm test` alone proves
+nothing about the row — the unit run has no database and cannot see it. The db
+suite is where the roster, the voice allocation and the banned-phrase lists are
+actually checked.
+
 ## What this skill does not cover
 
 **The persona drift eval does not exist.** `CLAUDE.md` describes this skill as
@@ -161,6 +189,8 @@ been evaluated for drift — it has not.
 
 - `docs/adr/0006-persona-boundary.md` — the persona changes delivery, never content
 - `docs/adr/0005-llm-safety.md` §1 — why a column is fenced, not concatenated
-- `supabase/migrations/20260901154757_shipped_personas.sql` — the three to copy
+- `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
+  pair, and the closest model to copy
+- `supabase/migrations/20260901154757_shipped_personas.sql` — the original three
 - `supabase/migrations/20260907120000_persona_voice_variant.sql` — why the
   variant is a column rather than an array index

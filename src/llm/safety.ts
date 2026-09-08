@@ -117,6 +117,9 @@ export function sanitizeUntrusted(value: string, maxChars = MAX_UNTRUSTED_CHARS)
   return `${cleaned.slice(0, maxChars)}… [truncated at ${maxChars} characters]`;
 }
 
+/** A fence label names a field. Long enough for one, short enough to be one. */
+export const MAX_LABEL_CHARS = 80;
+
 /**
  * Wraps a sanitised value in the fence the preamble tells the model to distrust.
  *
@@ -127,8 +130,29 @@ export function sanitizeUntrusted(value: string, maxChars = MAX_UNTRUSTED_CHARS)
  *          user string through.
  */
 export function fenceUntrusted(label: string, value: string, maxChars?: number): string {
+  /*
+   * FOUND IN REVIEW, 2026-09-08: the LABEL was interpolated raw while only the
+   * value was sanitised, and a caller was already building one from user data —
+   * `fenceUntrusted(\`persona voice: ${persona.name}\`, …)` in
+   * src/persona/prompts.ts, where `personas.name` is a column an authenticated
+   * user can write on a row they own.
+   *
+   * A label containing the fence token closed the fence early and wrote into
+   * the region the preamble tells the model to TRUST, landing next to the tone
+   * override — the one piece of text ADR 0006 promises applies regardless of
+   * which persona is selected. The `<<<` neutralisation existed and never saw
+   * the string, because it was applied one argument over.
+   *
+   * INVARIANT: everything interpolated into this envelope is sanitised, not
+   *            just the part called "the value". A label is a channel too.
+   *
+   * AI-NOTE: MAX_LABEL_CHARS is deliberately small. A label names a field; a
+   *          long one is either a mistake or an attempt to push the payload out
+   *          of attention, and neither should be passed through.
+   */
+  const safeLabel = sanitizeUntrusted(label, MAX_LABEL_CHARS);
   const body = sanitizeUntrusted(value, maxChars);
-  return `${FENCE} ${label} ${FENCE}\n${body}\n${FENCE} end ${label} ${FENCE}`;
+  return `${FENCE} ${safeLabel} ${FENCE}\n${body}\n${FENCE} end ${safeLabel} ${FENCE}`;
 }
 
 /** Generous enough for a serialised stage payload, still bounded. */
@@ -182,8 +206,24 @@ const PROTECTED_ATTRIBUTE =
  *          "your pathetic squat" is the right trade: that targets the lift,
  *          not the person.
  */
+/*
+ * FOUND BY THE ADVERSARIAL SUITE, 2026-09-08, while growing it for the app's
+ * first crude persona — ADR 0005 §5 requires that every phase, and this is what
+ * it was for.
+ *
+ * "You are such a failure." was NOT caught. The intensifier group consumed
+ * `such a `, and the noun alternatives were written as `a\s+loser`,
+ * `a\s+joke`, `a\s+failure` — so the pattern needed the article twice and
+ * matched only "such a a failure". The plain "you are a failure" matched, which
+ * is why nothing had noticed.
+ *
+ * The article is now its own optional group after the intensifier, and the
+ * nouns are bare. "you are a failure", "you're such a failure" and "you are
+ * just a joke" all match; the guard against ordinary coaching language is
+ * unchanged, because the change adds an article rather than a word.
+ */
 const DEMEANING =
-  /\b(?:you(?:'re| are)\s+(?:so\s+|such\s+a\s+|just\s+|being\s+|too\s+)?(?:fat|obese|lazy|pathetic|worthless|useless|hopeless|disgusting|weak|embarrassing|a\s+loser|a\s+joke|a\s+failure)|shut\s+up|kill\s+yourself|nobody\s+cares)\b/i;
+  /\b(?:you(?:'re| are)\s+(?:so\s+|such\s+|just\s+|being\s+|too\s+)?(?:a\s+)?(?:fat|obese|lazy|pathetic|worthless|useless|hopeless|disgusting|weak|embarrassing|loser|joke|failure)|shut\s+up|kill\s+yourself|nobody\s+cares)\b/i;
 
 /** Anything that looks like the instructions leaking back out. */
 const PROMPT_LEAK =

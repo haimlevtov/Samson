@@ -17,7 +17,7 @@ a control: nothing fails if someone does.
 
 **Conduct.** The persona layer ships a Rival and a Sergeant. _True as of
 2026-09-08; when this ADR was written the Sergeant was planned and the Old
-Master shipped in its place, so this sentence described an intent for eight
+Master shipped in its place, so this sentence described an intent for seven
 days. It is also now the app's only `crude` row, at intensity 5, which is the
 combination the paragraph below was written about._ Personas are rows
 containing a `system_prompt` — a column, therefore data, therefore a channel.

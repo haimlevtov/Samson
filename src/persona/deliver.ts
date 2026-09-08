@@ -11,8 +11,10 @@
 import { PERSONA_MAX_TOKENS } from '../llm/config';
 import type { LlmCaller } from '../planner/types';
 import type { TrainingBlock } from '../planner/schema';
+import { stripInvisible } from '../llm/safety';
 import { InventedNumberError, assertNoInventedNumbers, deliveredText } from './guard';
 import {
+  BANNED_PHRASE_CORRECTION,
   PERSONA_SYSTEM,
   inventedNumberCorrection,
   personaUserMessage,
@@ -54,36 +56,77 @@ export class BannedPhraseError extends Error {
 const REGEX_META = /[.*+?^${}()|[\]\\]/g;
 
 /**
- * A banned phrase, matched on word boundaries rather than as a substring.
+ * Lowercased, stripped of invisible characters, and with every run of
+ * punctuation or whitespace collapsed to one space.
+ *
+ * Applied to BOTH sides of the comparison, which is what makes three separate
+ * bypasses go away at once rather than becoming three special cases in a regex:
+ *
+ * - **Invisible characters.** `src/llm/safety.ts` strips these before its own
+ *   scanner looks at anything, for the reason its comment gives — a zero-width
+ *   space reads normally to a model and defeats any check matching on literal
+ *   words. This guard did not, so `qui<U+200B>tter` walked straight through it.
+ * - **Punctuation.** Every persona bans `no pain no gain`, and a model writes
+ *   it "no pain, no gain". The most-repeated ban in the table did not fire on
+ *   its own canonical form.
+ * - **Case.** The lowercasing lived in the caller, one frame up, so the newly
+ *   exported matcher returned false on mixed-case prose — a ban that fails
+ *   open for whoever calls it next.
+ *
+ * It also makes possessives work for free: "quitter's" normalises to
+ * "quitter s", so a ban on `quitter` fires on it.
+ */
+function normalisePhrase(value: string): string {
+  return stripInvisible(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Whether a delivery used a phrase its persona forbids. Whole words, plus the
+ * plural — never a substring.
  *
  * FOUND IN REVIEW, 2026-09-08, by a test written for a different persona: this
- * used `String.includes`, so a SHORT WORD BANNED EVERY WORD CONTAINING IT. The
- * Rival has banned `weak` since phase 3, which under substring matching also
- * bans **weakness** — and "your weakness is the lockout" is ordinary coaching
+ * used `String.includes`, so A SHORT WORD BANNED EVERY WORD CONTAINING IT. The
+ * Rival has banned `weak` since phase 3, which therefore also banned
+ * **weakness** — and "your weakness is the lockout" is ordinary coaching
  * language.
  *
- * WHY that was not a cosmetic problem: `deliverPlan` has no fallback, by
- * design — ADR 0006 says a delivery that fails the guard is one the user must
- * not be shown. So a plan whose prose happened to contain "weakness" was
- * rejected, retried, rejected again, and the user was handed an error instead
- * of the block the critic had already approved.
+ * WHY that was not cosmetic: `deliverPlan` has no fallback, by design — ADR
+ * 0006 says a delivery that fails the guard is one the user must not be shown.
+ * So a plan whose prose happened to contain "weakness" was rejected, retried,
+ * rejected again, and the user was handed an error instead of the block the
+ * critic had already approved.
  *
- * `src/llm/safety.ts` had already reasoned its way to the same conclusion for
- * the general scanner and written it down: "`fat` and `weak` are ordinary
- * coaching vocabulary — body fat percentage, a weak point in a lift", which is
- * why that guard matches second-person constructions instead of bare words.
- * This is the persona-level half of the same lesson.
+ * `src/llm/safety.ts` had reached the same conclusion for the general scanner
+ * and written it down — "`fat` and `weak` are ordinary coaching vocabulary" is
+ * exactly why that guard matches second-person constructions rather than bare
+ * words. This is the persona-level half of the same lesson.
  *
- * AI-NOTE: a phrase now matches only as whole words. `quit` no longer catches
- *          "quitter" — if a list wants both, it lists both. That is the trade
- *          for `weak` not catching "weakness", and it is the right way round:
- *          an over-broad ban fails closed on a user who did nothing wrong.
+ * THE PLURAL IS INCLUDED because the first fix did not include it, and a second
+ * review measured what escaped: `quitters` and `princesses` both passed a list
+ * banning the singulars. Plural is the natural register for the barracks idiom
+ * the Sergeant's list exists to catch, and `scanOutput` does not cover it —
+ * that matches "you're <adjective>", and "no princesses in my gym" is neither.
+ *
+ * AI-NOTE: a phrase covers itself and its plural, and nothing else. `weak`
+ *          matches "weak" and "weaks"; it does not match "weakness",
+ *          "weakling" or "weakly". If a list wants another inflection it lists
+ *          it — that is the trade for `fat` not banning "fatigue", and it is
+ *          the right way round: an over-broad ban fails closed on a user who
+ *          did nothing wrong.
  */
 export function phraseUsed(haystack: string, phrase: string): boolean {
-  const needle = phrase.trim().toLowerCase();
+  const needle = normalisePhrase(phrase);
   if (needle === '') return false;
+
   const escaped = needle.replace(REGEX_META, '\\$&');
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(haystack);
+  // Only letters, digits and single spaces survive normalisation, so the
+  // lookarounds do their boundary work against spaces rather than punctuation.
+  const pattern = `(?<![\\p{L}\\p{N}])${escaped}(?:s|es)?(?![\\p{L}\\p{N}])`;
+
+  return new RegExp(pattern, 'u').test(normalisePhrase(haystack));
 }
 
 /**
@@ -92,8 +135,7 @@ export function phraseUsed(haystack: string, phrase: string): boolean {
  * that only holds when the model cooperates is a preference, not a ban.
  */
 function bannedPhrasesUsed(persona: Persona, text: string): string[] {
-  const haystack = text.toLowerCase();
-  return persona.bannedPhrases.filter((phrase) => phraseUsed(haystack, phrase));
+  return persona.bannedPhrases.filter((phrase) => phraseUsed(text, phrase));
 }
 
 export async function deliverPlan(
@@ -140,7 +182,7 @@ export async function deliverPlan(
       lastError = new BannedPhraseError(banned);
       messages.push({
         role: 'user' as const,
-        content: `Do not use: ${banned.join(', ')}. Rewrite without them.`,
+        content: BANNED_PHRASE_CORRECTION,
       });
       continue;
     }

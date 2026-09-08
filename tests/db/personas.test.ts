@@ -119,11 +119,53 @@ describe('the shipped roster', () => {
 });
 
 describe('the humour ceiling, now that a row finally reaches crude', () => {
-  it('ships exactly one crude persona', async () => {
-    // users.humor_max_level has offered `crude` since the phase-0 schema. Until
-    // this migration nothing had it, so choosing it changed nothing for anyone.
-    const crude = (await roster()).filter((p) => p.humorLevel === 'crude');
-    expect(crude.map((p) => p.slug)).toEqual(['sergeant']);
+  it('makes the crude tier reachable at all', async () => {
+    /*
+     * `users.humor_max_level` has offered `crude` since the phase-0 schema.
+     * Until the Sergeant shipped, nothing had it, so choosing it changed
+     * nothing for anybody — the setting was a control wired to nothing.
+     *
+     * Asserted as REACHABILITY rather than as `toEqual(['sergeant'])`. Under
+     * invariant #7 a second crude coach is a migration and nothing else, and a
+     * test that failed on it would be pinning a content decision rather than a
+     * property of the system.
+     */
+    const roles = await roster();
+    expect(roles.some((p) => p.humorLevel === 'crude')).toBe(true);
+    expect(roles.find((p) => p.slug === 'sergeant')?.humorLevel).toBe('crude');
+  });
+
+  it('bans the dangerous advice in the form a model would write it', async () => {
+    /*
+     * FOUND IN REVIEW: the Physio's two most important entries were authored as
+     * full sentences — `it is probably nothing`, `you will be fine` — and a
+     * model writes contractions. Neither fired on "it's probably nothing" or
+     * "you'll be fine", which are exactly the sentences the gentle coach must
+     * never produce about pain. Migration 20260908110100 replaced them with the
+     * fragment that carries the meaning.
+     */
+    const physio = (await roster()).find((p) => p.slug === 'physio')!;
+
+    const dismissive = [
+      "It's probably nothing — carry on.",
+      'It is probably nothing.',
+      'That knee? Nothing to worry about.',
+      'Just walk it off.',
+    ];
+
+    for (const line of dismissive) {
+      const fired = physio.bannedPhrases.some((phrase) => phraseUsed(line, phrase));
+      expect(fired, `nothing caught: ${line}`).toBe(true);
+    }
+  });
+
+  it('bans the barracks idiom in the plural, which is how it is said', async () => {
+    const sergeant = (await roster()).find((p) => p.slug === 'sergeant')!;
+
+    for (const line of ['Quitters never win.', 'No princesses in my gym.', 'You are a weakling.']) {
+      const fired = sergeant.bannedPhrases.some((phrase) => phraseUsed(line, phrase));
+      expect(fired, `nothing caught: ${line}`).toBe(true);
+    }
   });
 
   it('lets no shipped persona exceed a user who chose clean', async () => {

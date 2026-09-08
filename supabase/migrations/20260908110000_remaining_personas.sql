@@ -32,8 +32,9 @@
 -- coach, not for one. The actual argument: the three shipped coaches sit at
 -- intensity 2, 3 and 4 and two of the three are `cheeky`, so choosing between
 -- them changes the jokes more than the register. Intensity 1 is the one setting
--- the product does not have, and the returning and injured seed archetypes are
--- the people who would pick it.
+-- the product does not have, and the returning and inconsistent seed archetypes
+-- are the people who would pick it. (There is no injured archetype — the seed
+-- has beginner, plateaued, returning, home-gym and inconsistent.)
 
 insert into public.personas (
   user_id, slug, name, system_prompt,
@@ -75,12 +76,19 @@ values
     -- would otherwise reach for, and two pieces of advice that are dangerous
     -- rather than rude.
     --
-    -- AI-NOTE: banned_phrases are matched with String.includes on the
-    --          lowercased text — src/persona/deliver.ts — so a SHORT WORD BANS
-    --          EVERY WORD CONTAINING IT. `fat` would ban "fatigue" and `soft`
-    --          would ban "soften", which is why neither is here and why every
-    --          entry below is either a phrase or a word with no innocent
-    --          superstring. Check any addition the same way.
+    -- AI-NOTE: banned_phrases are matched by `phraseUsed` in
+    --          src/persona/deliver.ts, on WHOLE WORDS plus the plural, after
+    --          both sides are lowercased and stripped of punctuation. `weak`
+    --          matches "weak" and "weaks", never "weakness"; `no pain no gain`
+    --          matches "no pain, no gain".
+    --
+    --          An earlier draft of this note said the opposite, because the
+    --          matcher used String.includes when the row was written and the
+    --          same commit replaced it. The rule that survives: a phrase covers
+    --          itself and its plural and NOTHING else, so an entry that needs
+    --          another inflection lists it. Check any addition against real
+    --          coaching vocabulary either way — tests/db/personas.test.ts runs
+    --          every list over a paragraph of it.
     array[
       'no pain no gain',
       'push through the pain',

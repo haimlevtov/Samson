@@ -36,6 +36,14 @@ curated supplement evidence table.
 | Progression trees: push, pull, legs, core  | Table exists, **no rows and no reader**                      |
 | Supplement evidence table with DOIs        | Does not exist                                               |
 
+> **This table is a snapshot of 2026-09-07 and is deliberately not maintained.**
+> Three of its five rows are false as of 2026-09-08 — the achievements, the
+> tonnage comparisons and the personas all shipped in the content fill. What is
+> outstanding is tracked in
+> [`phase-5-content-fill.md`](phase-5-content-fill.md)'s Outcome, which is the
+> live document; editing a dated record to keep it current would destroy the
+> thing it exists to record.
+
 What happened instead was **interface and feature work**: a session set grid, a
 five-tab navigation, workout templates, a theme, a re-cut of what Profile and
 Hub own, exercise progression charts, an open coach chat, a settings route, and

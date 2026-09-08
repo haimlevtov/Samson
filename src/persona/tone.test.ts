@@ -3,7 +3,7 @@
  * missed-session flags, REGARDLESS of selected persona."
  *
  * The word doing the work is "regardless", so every case here runs across all
- * three shipped personas rather than one.
+ * five shipped personas rather than one.
  */
 import { describe, expect, it } from 'vitest';
 import type { Persona } from './schema';
@@ -20,11 +20,27 @@ const persona = (over: Partial<Persona> = {}): Persona => ({
   ...over,
 });
 
-/** The three shipped personas at their configured settings. */
+/**
+ * The five shipped personas at the settings their ROWS actually carry.
+ *
+ * FOUND IN REVIEW: this list said "at their configured settings" and put the
+ * Rival at intensity 5 / crude, which is the SERGEANT's configuration — the
+ * shipped Rival is 4 / cheeky and has been since phase 3. So the file asserting
+ * "regardless of persona" was covering an imaginary roster, and after the
+ * Sergeant shipped the repository claimed in one place that the Rival is crude
+ * and in another (tests/db/personas.test.ts) that only the Sergeant is.
+ *
+ * AI-NOTE: these values mirror the migrations — 20260901154757 and
+ *          20260908110000. tests/db/personas.test.ts is what checks the mirror
+ *          against the rows; this file cannot, having no database.
+ */
 const ALL: Persona[] = [
-  persona({ slug: 'rival', intensity: 5, humorLevel: 'crude' }),
+  persona({ slug: 'rival', intensity: 4, humorLevel: 'cheeky' }),
   persona({ slug: 'analyst', name: 'The Analyst', intensity: 2, humorLevel: 'clean' }),
   persona({ slug: 'old-master', name: 'The Old Master', intensity: 3, humorLevel: 'cheeky' }),
+  // The two that made the extremes of both scales reachable for the first time.
+  persona({ slug: 'sergeant', name: 'The Sergeant', intensity: 5, humorLevel: 'crude' }),
+  persona({ slug: 'physio', name: 'The Physio', intensity: 1, humorLevel: 'clean' }),
 ];
 
 const calm = { notes: ['felt good'], adherenceRate: 0.95 };
