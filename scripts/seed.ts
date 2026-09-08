@@ -18,7 +18,7 @@ import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ARCHETYPES, generateHistory, type Archetype } from '../src/seed/archetypes';
 import { mulberry32 } from '../src/seed/rng';
-import { supabaseUrl } from '../src/db/client';
+import { createUserClient, supabaseAnonKey, supabaseUrl } from '../src/db/client';
 import { buildPlannerContext } from '../src/planner/context';
 import { candidatesFor } from '../tests/planner/golden';
 import { compliantBlock } from '../tests/planner/stub-planner';
@@ -28,6 +28,9 @@ config({ path: '.env.local', quiet: true });
 
 /** Fixed so the database is byte-identical on every run. */
 const SEED = 42;
+
+/** The archetypes all share it, and it is printed at the end of a run. */
+const DEMO_PASSWORD = 'samson-demo-fixture';
 const SNAPSHOT = resolve(process.cwd(), 'data/exercises.snapshot.json');
 const BATCH = 500;
 
@@ -212,10 +215,10 @@ async function seedArchetype(
   exerciseBySlug: Map<string, string>,
   endDate: string,
   tagBySlug: Map<string, string>
-): Promise<{ workouts: number; sets: number }> {
+): Promise<{ workouts: number; sets: number; completedWorkoutIds: string[] }> {
   const created = await admin.auth.admin.createUser({
     email: archetype.email,
-    password: 'samson-demo-fixture',
+    password: DEMO_PASSWORD,
     email_confirm: true,
   });
   if (created.error || !created.data.user) {
@@ -334,7 +337,81 @@ async function seedArchetype(
   });
   if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
 
-  return { workouts: history.length, sets: rows.length };
+  /*
+   * Completed sessions in the order they happened, for the awarding pass.
+   * `history` is chronological and `workouts` came back in insert order, so the
+   * index lines up — the same assumption the set loop above already makes, and
+   * for the same reason: a user can log twice on one date, so a date is not a
+   * key.
+   */
+  const completedWorkoutIds = history.flatMap((workout, index) =>
+    workout.status === 'completed' ? [workouts![index]!.id] : []
+  );
+
+  return { workouts: history.length, sets: rows.length, completedWorkoutIds };
+}
+
+/**
+ * Everything the gamification layer would have produced if these sessions had
+ * been logged by a person — plan: docs/plans/phase-5-content-fill.md, PR 7.
+ *
+ * INVARIANT: `award_session_xp` is the only path that writes XP — ADR 0009.
+ *            This script holds the service role and could insert `xp_events`
+ *            directly in one statement, saving several hundred round trips. It
+ *            does not, and that is the point: XP inserted by hand is XP the
+ *            rules did not produce, and a demo of a rules engine whose numbers
+ *            cannot be reproduced by using the app is worth very little.
+ *
+ * Everything else follows from going the long way rather than being arranged:
+ * badges unlock because the ten predicates evaluate real history, levels are
+ * read from lifetime XP so the card and the bar cannot disagree, and the
+ * leaderboard becomes a ranking because it reads `xp_events`.
+ */
+async function awardProgress(
+  archetype: Archetype,
+  workoutIds: string[]
+): Promise<{ awarded: number; badges: number }> {
+  /*
+   * A user-scoped client, because the RPC filters on `auth.uid()` and takes no
+   * user parameter — deliberately, per ADR 0009: the caller does not get to say
+   * who they are. The service role cannot stand in for a session here, which is
+   * the invariant working rather than an inconvenience.
+   */
+  const anon = createClient<Database>(supabaseUrl(), supabaseAnonKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const signIn = await anon.auth.signInWithPassword({
+    email: archetype.email,
+    password: DEMO_PASSWORD,
+  });
+  if (signIn.error || !signIn.data.session) {
+    throw new Error(`signing in ${archetype.key}: ${signIn.error?.message}`);
+  }
+
+  const user = createUserClient(signIn.data.session.access_token);
+
+  let awarded = 0;
+  const badges = new Set<string>();
+
+  /*
+   * Sequentially, in the order the sessions happened. `award_session_xp` counts
+   * how many kept days the week already has to pick a point on the diminishing
+   * curve, and clamps against what that week has already spent — so the answer
+   * depends on the order the calls arrive in. Out of order the numbers would
+   * still be legal, and would not be the ones a person living this history
+   * would have earned.
+   */
+  for (const workoutId of workoutIds) {
+    const { data, error } = await user.rpc('award_session_xp', { p_workout_id: workoutId });
+    if (error) throw new Error(`awarding for ${archetype.key}: ${error.message}`);
+
+    const result = data as { awarded?: number; unlocked?: string[] } | null;
+    awarded += result?.awarded ?? 0;
+    for (const slug of result?.unlocked ?? []) badges.add(slug);
+  }
+
+  return { awarded, badges: badges.size };
 }
 
 async function main(): Promise<void> {
@@ -357,8 +434,10 @@ async function main(): Promise<void> {
   const tagBySlug = new Map((tags ?? []).map((t) => [t.slug, t.id]));
 
   console.log('Seeding synthetic users');
+  const seeded: { archetype: Archetype; completedWorkoutIds: string[] }[] = [];
+
   for (const archetype of ARCHETYPES) {
-    const { workouts, sets } = await seedArchetype(
+    const { workouts, sets, completedWorkoutIds } = await seedArchetype(
       admin,
       archetype,
       exerciseBySlug,
@@ -366,6 +445,32 @@ async function main(): Promise<void> {
       tagBySlug
     );
     console.log(`  ${archetype.key.padEnd(13)} ${workouts} workouts, ${sets} sets`);
+    seeded.push({ archetype, completedWorkoutIds });
+  }
+
+  /*
+   * WHY the users run in parallel and their sessions do not: order matters
+   * WITHIN a user, because `award_session_xp` reads how much the week has
+   * already spent. It does not matter between users — the ceiling is per user
+   * per week, and migration 20260902110000 takes an advisory lock on exactly
+   * that pair, so two users can never contend.
+   *
+   * This is also what keeps the pass inside PLAN.md phase 1's 60-second seed
+   * budget, which CI enforces. Five sequential passes would be five times the
+   * latency for no extra correctness.
+   */
+  console.log('Awarding XP and evaluating achievements');
+  const progress = await Promise.all(
+    seeded.map(async ({ archetype, completedWorkoutIds }) => ({
+      archetype,
+      ...(await awardProgress(archetype, completedWorkoutIds)),
+    }))
+  );
+
+  for (const { archetype, awarded, badges } of progress) {
+    console.log(
+      `  ${archetype.key.padEnd(13)} ${String(awarded).padStart(5)} XP, ${badges} badge(s)`
+    );
   }
 
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);

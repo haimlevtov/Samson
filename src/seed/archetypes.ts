@@ -11,7 +11,7 @@
  */
 import { addDays, startOfWeek } from '../metrics/dates';
 import type { LocalDate, WorkoutStatus } from '../metrics/types';
-import { chance, jitter, randomInt, roundToPlate, type Rng } from './rng';
+import { chance, jitter, mulberry32, randomInt, roundToPlate, type Rng } from './rng';
 
 export interface ProgrammeEntry {
   exerciseSlug: string;
@@ -23,6 +23,35 @@ export interface ProgrammeEntry {
   incrementKg: number;
   /** Which day of the training week this lift appears on, 0-indexed. */
   day: number;
+  /**
+   * Draw this entry's randomness from the side stream instead of the shared one.
+   *
+   * WHY this exists, which is not "these sets are special": `generateHistory`
+   * runs one seeded RNG through the whole history, so ANY entry that consumes a
+   * draw shifts every draw after it — every load's jitter and every adherence
+   * roll, for every session that follows, in every archetype sharing the
+   * programme. The seed's contract is that the database is byte-identical on
+   * every run, and thirty golden planner cases are built on those exact numbers.
+   *
+   * MEASURED when the bodyweight accessories were added 2026-09-08: drawing
+   * from the shared stream moved the `returning` archetype's baseline weekly
+   * tonnage enough that `tests/unit/planner-golden.test.ts` failed its most
+   * important assertion — that a week matching a user's own recent training
+   * passes every rule. Nothing was wrong with the accessories; the history had
+   * simply been re-rolled underneath the fixture.
+   *
+   * WHY a side stream rather than "make the entry deterministic": a set draws
+   * three times — rep drift, the RPE coin flip, and rest seconds. Suppressing
+   * all three would give every accessory set in twelve weeks the same RPE and
+   * the same rest, which is the "reads as fake on sight" failure `roundToPlate`
+   * exists to avoid. The side stream keeps the variety and spends it out of a
+   * different purse.
+   *
+   * AI-NOTE: set this on an entry ADDED after a golden baseline exists. An
+   *          entry that legitimately belongs in the middle of a programme has
+   *          to accept the re-baseline and the golden suite has to be re-read.
+   */
+  appended?: boolean;
 }
 
 export interface EquipmentGrant {
@@ -113,6 +142,66 @@ const BARBELL_PROGRAMME: ProgrammeEntry[] = [
     day: 2,
   },
   { exerciseSlug: 'plank', sets: 3, reps: 1, startingKg: 0, incrementKg: 0, day: 2 },
+  /*
+   * Bodyweight accessories, added 2026-09-08 alongside the progression trees.
+   *
+   * WHY they belong in the programme rather than being bolted on by the seeder:
+   * `generateHistory` is the single description of what an archetype did, and
+   * the planner context, the golden suite and the database all read it. History
+   * invented somewhere else would make those three disagree about the same
+   * person.
+   *
+   * These are ordinary accessory prescriptions for a barbell lifter, written to
+   * read like training rather than to clear a particular rung. `buildSets`
+   * drifts a rep off later sets, so some sessions land below the number here —
+   * which is realistic, and is why a tree may open one rung where the
+   * prescription looks like it should open two.
+   *
+   * `appended` is not decoration: these arrived after the golden planner
+   * fixtures existed. See the field's comment.
+   */
+  {
+    exerciseSlug: 'inverted-row',
+    sets: 3,
+    reps: 14,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 2,
+    appended: true,
+  },
+  {
+    exerciseSlug: 'hanging-leg-raise',
+    sets: 3,
+    reps: 12,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 0,
+    appended: true,
+  },
+  /*
+   * The rung BELOW the hanging leg raise, added once the trees were seeded and
+   * read back.
+   *
+   * A tree only unlocks downward: `core-pike` wants hanging leg raises, but its
+   * parent `core-hanging` wants lying leg raises, and until someone had done
+   * those the hanging ones above them were unreachable. The demo showed a
+   * feature that looked broken rather than empty.
+   *
+   * The prescription is chosen so the archetype clears the rung — 16 where the
+   * criterion asks 15, because `buildSets` drifts a rep off later sets. Saying
+   * that plainly: this is content authored to demonstrate the trees, not an
+   * independent observation that happens to satisfy them. It is also what a
+   * real progression looks like, which is why it is defensible as history.
+   */
+  {
+    exerciseSlug: 'flat-bench-lying-leg-raise',
+    sets: 3,
+    reps: 16,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 1,
+    appended: true,
+  },
 ];
 
 const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
@@ -142,6 +231,40 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
     day: 1,
   },
   { exerciseSlug: 'pullups', sets: 3, reps: 8, startingKg: 0, incrementKg: 0, day: 1 },
+  // Bodyweight accessories — see the note on BARBELL_PROGRAMME. A home-gym
+  // trainee doing push-ups and air squats needs no justification beyond having
+  // a floor.
+  {
+    exerciseSlug: 'pushups',
+    sets: 3,
+    reps: 16,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 0,
+    appended: true,
+  },
+  {
+    exerciseSlug: 'chair-squat',
+    sets: 3,
+    reps: 16,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 2,
+    appended: true,
+  },
+  // The rung below the push-up, for the same reason as the barbell lifter's
+  // lying leg raise — see the note there. `push-decline` wants push-ups but
+  // `push-full` above it wants incline push-ups, so without these the push
+  // chain stopped at its root for everyone.
+  {
+    exerciseSlug: 'incline-push-up',
+    sets: 3,
+    reps: 14,
+    startingKg: 0,
+    incrementKg: 0,
+    day: 1,
+    appended: true,
+  },
   {
     exerciseSlug: 'bodyweight-walking-lunge',
     sets: 3,
@@ -278,6 +401,13 @@ function progressedWeeks(archetype: Archetype, earned: number): number {
  */
 const DETRAINING_RETENTION = 0.35;
 
+/**
+ * Seeds the side stream `appended` entries draw from — see ProgrammeEntry.
+ *
+ * Any constant would do; it is fixed only so the database stays byte-identical.
+ */
+const ASIDE_SEED = 0x5ab1e;
+
 function workingLoad(
   archetype: Archetype,
   entry: ProgrammeEntry,
@@ -296,12 +426,17 @@ function buildSets(
   archetype: Archetype,
   entries: readonly ProgrammeEntry[],
   earned: number,
-  rng: Rng
+  rng: Rng,
+  aside: Rng
 ): GeneratedSet[] {
   const sets: GeneratedSet[] = [];
 
   for (const entry of entries) {
-    const load = workingLoad(archetype, entry, earned, rng);
+    // INVARIANT: an appended entry touches `rng` nowhere — see ProgrammeEntry.
+    //            Every draw below goes through `draw`, including the load, so
+    //            marking a LOADED entry appended stays correct too.
+    const draw = entry.appended ? aside : rng;
+    const load = workingLoad(archetype, entry, earned, draw);
     let index = 0;
 
     // A warmup or two on loaded barbell work, as anyone actually training would.
@@ -321,14 +456,14 @@ function buildSets(
 
     for (let s = 0; s < entry.sets; s++) {
       // Reps drift down across a hard set or two; RPE drifts up.
-      const dropped = s > 0 && chance(rng, 0.25) ? 1 : 0;
+      const dropped = s > 0 && chance(draw, 0.25) ? 1 : 0;
       sets.push({
         exerciseSlug: entry.exerciseSlug,
         weightKg: load === 0 ? null : load,
         reps: Math.max(1, entry.reps - dropped),
-        rpe: Math.min(10, 7 + s * 0.5 + (chance(rng, 0.3) ? 0.5 : 0)),
+        rpe: Math.min(10, 7 + s * 0.5 + (chance(draw, 0.3) ? 0.5 : 0)),
         isWarmup: false,
-        restSeconds: entry.reps <= 5 ? randomInt(rng, 150, 240) : randomInt(rng, 60, 120),
+        restSeconds: entry.reps <= 5 ? randomInt(draw, 150, 240) : randomInt(draw, 60, 120),
         setIndex: index++,
       });
     }
@@ -350,6 +485,23 @@ export function generateHistory(
   rng: Rng
 ): GeneratedWorkout[] {
   const workouts: GeneratedWorkout[] = [];
+
+  /*
+   * The side stream, for entries marked `appended`.
+   *
+   * Fixed seed, deliberately not derived from `rng`: deriving it would take a
+   * draw, which is the exact thing the flag exists to avoid. It advances across
+   * the whole history like the main stream, so an accessory's rest and RPE
+   * still vary session to session — they are just no longer interleaved with
+   * the draws the golden fixtures were built on.
+   *
+   * The consequence, stated because it is a real one: two archetypes sharing a
+   * programme see the same accessory draws in the same order. Nothing reads
+   * across archetypes, and RPE and rest on a set of push-ups are not what any
+   * assertion is about.
+   */
+  const aside = mulberry32(ASIDE_SEED);
+
   // Anchor to a Monday so training weeks line up with the ISO weeks that weekly
   // tonnage and the phase 4 XP ceiling both use.
   const lastWeekStart = startOfWeek(endDate);
@@ -399,7 +551,7 @@ export function generateHistory(
         localDate,
         status: 'completed',
         notes: null,
-        sets: buildSets(archetype, entries, earned, rng),
+        sets: buildSets(archetype, entries, earned, rng, aside),
       });
       earned += 1 / archetype.daysPerWeek;
     }
