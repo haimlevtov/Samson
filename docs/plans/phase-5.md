@@ -167,6 +167,13 @@ recorded in `CLAUDE.md`.
   became, and the content-fill items either rescheduled or cut — they are marked
   "compressible and parallelisable" in the brief, so cutting is legitimate. That
   decision has not been made and is not made here.
+
+  **Made 2026-09-08: rescheduled.** All five items ship, planned in
+  [`phase-5-content-fill.md`](phase-5-content-fill.md). The argument against
+  cutting is that two of phase 5's three acceptance criteria are unreachable
+  without the content, so cutting would have deleted the criteria rather than
+  met them.
+
 - **Phase 3's persona drift eval remains unmet** — "does turn 80 still sound
   like turn 3". The project's one outstanding acceptance criterion, waiting on
   live runs rather than on work.

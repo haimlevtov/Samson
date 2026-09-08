@@ -13,7 +13,9 @@ meets its acceptance criteria.
 plan and recorded outcome of each. Phase 5 shipped, but **not the phase written
 below**: it became interface and feature work, and
 [`plans/phase-5.md`](plans/phase-5.md) records the divergence and what the
-content-fill brief still owes. One phase-6 item, the leaderboard, was pulled
+content-fill brief still owes. That debt is now being paid rather than written
+off — see [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
+One phase-6 item, the leaderboard, was pulled
 forward into it and shipped; see the entry under phase 6 for why and for the two
 ways it differs from what was written there. Phase 3 carries one unmet
 criterion (persona drift), waiting on live runs rather than on work. Phase 4
@@ -203,9 +205,12 @@ One of each, end to end. This is about plumbing, not content.
 > fill below was built. [`plans/phase-5.md`](plans/phase-5.md) records what
 > shipped, why it diverged, and which of the items below still do not exist.
 >
-> Rescheduling or cutting them is a decision nobody has made yet. The brief
-> calls them compressible, so cutting is legitimate — but it should be written
-> down rather than left as a section that quietly stopped being true.
+> **Decided 2026-09-08: rescheduled, not cut.** Cutting was legitimate — the
+> brief calls these items compressible — but two of the three acceptance
+> criteria below cannot be met without them, and `docs/PRD.md` §5.5 already
+> describes hidden achievements, calendar achievements and progression trees to
+> the user as though they exist. All five items ship, in five PRs, planned in
+> [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
