@@ -212,7 +212,8 @@ _against_ needing a gentle persona, not for one. The actual argument is that the
 three shipped coaches sit at intensity 2, 3 and 4, and two of the three are
 `cheeky`: choosing between them changes the jokes more than the register. A
 coach at intensity 1 is the one register the product does not currently have,
-and the returning and injured seed archetypes are the users who need it.
+and the returning and inconsistent seed archetypes are the users who would pick
+it.
 
 Voice variants: en-GB 0 and 1 and en-US 0 are taken. The Sergeant takes en-GB 2
 and the Physio en-US 1 — the rule in the skill that nothing enforces and the
@@ -251,7 +252,7 @@ has ever used it. Whoever fills it first defines the shape, and
 `.claude/skills/add-progression/SKILL.md` says that is ADR-sized rather than
 migration-sized.
 
-**ADR 0019 — structured criteria, interpreted, never executed.** The obvious
+**ADR 0020 — structured criteria, interpreted, never executed.** The obvious
 thing to copy is `achievements.predicate`, which is SQL text run server-side —
 and which ADR 0009 §3 restricts to `user_id is null` rows because executing a
 user-authored one is privilege escalation for anyone who can sign up. A
@@ -298,7 +299,7 @@ a null rather than failing.
 **Branch `supplement-evidence`.** ADR first: this is the project's first table
 of **external claims**, and it needs a rule for what may go in it.
 
-**ADR 0020 — one row, one claim, one DOI.** Rows carry a supplement, a single
+**ADR 0021 — one row, one claim, one DOI.** Rows carry a supplement, a single
 claim, an evidence grade, a dose range in canonical units, interaction flags,
 and a DOI that backs _that_ claim. No row summarises a literature; a row nobody
 can check is worse than an absent row, because it looks checked.
@@ -374,6 +375,107 @@ _good_, only that it is consistent. `docs/plans/phase-2.md`'s Lesson 8 is the
 standing warning against treating the two as the same thing.
 
 ## Outcome
+
+### PR 4 — the remaining personas, 2026-09-08
+
+The Sergeant and the Physio, taking the roster from three to five.
+
+**The Sergeant makes `docs/adr/0005-llm-safety.md` §1 true.** That ADR has said
+since phase 2 that "the persona layer ships a Rival and a Sergeant"; the Old
+Master shipped in its place, so the sentence described an intent for eight days.
+It is also the first row to reach `humor_level = 'crude'`, which
+`users.humor_max_level` has offered since the first migration with nothing
+behind it — until now, choosing crude changed nothing for anybody.
+
+**The Physio's justification is argued, not quoted, and the difference is
+recorded.** The obvious citation is PRD §5.4's tone override, and it is the
+wrong one: that applies "regardless of which persona is selected", so it is an
+argument _against_ needing a gentle coach. The real argument is that the three
+shipped coaches sat at intensity 2, 3 and 4 with two of three at `cheeky`, so
+choosing between them changed the jokes more than the register.
+
+**A test written for the Sergeant found a live bug in the Rival.**
+`banned_phrases` were matched with `String.includes`, so a short word banned
+every word containing it — and the Rival has banned `weak` since phase 3, which
+therefore also banned **weakness**. "Your weakness is the lockout" is ordinary
+coaching language, and `deliverPlan` has no fallback by design (ADR 0006), so a
+delivery containing it was rejected, retried, rejected again, and the user got
+an error instead of the block the critic had already approved.
+
+`src/llm/safety.ts` had already reached the same conclusion for the general
+scanner and written it down — "`fat` and `weak` are ordinary coaching
+vocabulary", which is why it matches second-person constructions instead of bare
+words. The persona layer had the lesson available and had not applied it. The
+matcher now uses word boundaries, with the trade stated: `quit` no longer
+catches "quitter", and a list that wants both lists both.
+
+**`SHIPPED_PERSONA_SLUGS` was a constant nobody read.** The skill says to keep
+it in step because "it is what tests and fixtures enumerate"; nothing enumerated
+it — it appeared in its own declaration and one doc comment. `tests/db/personas.test.ts`
+now asserts it equals the shipped rows, which is what makes updating it matter.
+
+### What review changed, and the habit it exposed
+
+Three reviewers, and between them they found that **the fix itself was wrong in
+three ways and the comment describing it was wrong in one.**
+
+- **The matcher let plurals through.** `quitters` and `princesses` both escaped
+  lists banning the singulars — measured, not guessed — and plural is the
+  natural register for the idiom the Sergeant's list exists to catch. It now
+  matches a phrase and its plural.
+- **It did not see punctuation.** Every persona bans `no pain no gain`, and a
+  model writes "no pain, no gain". The most-repeated ban in the table did not
+  fire on its own canonical form.
+- **It did not strip invisible characters**, where `scanOutput` does and says
+  why. `qui<U+200B>tter` walked through.
+- **Its own migration comment described the matcher this same commit deleted**,
+  and instructed the next author to keep applying the rule that had just been
+  removed.
+
+Normalising both sides — lowercase, strip invisibles, collapse punctuation —
+closes the first three at once instead of adding three special cases.
+
+**The recorded trade-off was itself wrong.** The docs said the cost was "`quit`
+no longer catches quitter", which is free, because `quit` is on nobody's list.
+The real cost was `weakling`: substring matching had been catching it by
+accident via the Rival's `weak`, and `src/llm/safety.ts` does not catch "you are
+a weakling" either. Both rows now list it, and the ADR states the cost with the
+example that bites.
+
+**Two of the Physio's phrases could never fire.** `it is probably nothing` and
+`you will be fine` were authored as full sentences; a model writes contractions.
+Those were the two dangerous-advice entries on the coach whose whole character
+is not being dismissive about pain. Replaced with the fragment that carries the
+meaning.
+
+**Growing the adversarial suite found a hole in the scanner it was testing.**
+ADR 0005 §5 requires that suite to grow every phase, and this is what it is for:
+`DEMEANING` consumed `such a ` in its intensifier group while its noun
+alternatives carried their own article, so **"you are such a failure" did not
+match** while the plain form did. Fixed, with both forms pinned.
+
+**And a fence label was never sanitised.** `fenceUntrusted` cleaned its value
+and interpolated its label raw — and `src/persona/prompts.ts` builds that label
+from `personas.name`, a column a user can write on a row they own. A name
+carrying the fence token closed the fence early and wrote into the region the
+preamble tells the model to trust. One line, and it fixes every caller.
+
+**The habit worth naming:** this is the third ADR in this phase written after
+its code at a reviewer's prompting. [ADR 0019](../adr/0019-banned-phrase-matching.md)
+says so in its own first paragraph. Three times is not an accident — the lesson
+is that "changing how a check behaves" is a decision even when the change is
+four lines.
+
+Eleven database cases, ten unit cases on the matcher, four on the persona layer
+in the adversarial suite. 846 unit tests, 146 database cases, `verify` and
+`build` clean. Checked at 375×812: all five coaches render on `/coach`,
+selection works, no horizontal overflow.
+
+Documents updated: `docs/PRD.md` §5.4, `docs/PLAN.md` phase 3 and its drift
+criterion, `docs/adr/0005-llm-safety.md` §1, `docs/adr/0006-persona-boundary.md`
+(the voice allocation is now three en-GB coaches, and a device needs three
+installed en-GB voices before they sound like three people),
+`src/persona/schema.ts`, and `.claude/skills/add-persona/SKILL.md`.
 
 ### PR 3 — tonnage comparisons, 2026-09-08
 

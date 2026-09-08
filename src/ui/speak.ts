@@ -36,8 +36,17 @@ export interface SpeakOptions {
    * Which voice to take when the language leaves several to choose from.
    *
    * The caller owns this because only the caller knows how many speakers it is
-   * trying to keep apart — the coach console passes each persona's index, so
-   * three personas take three different voices whenever the device has three.
+   * trying to keep apart. The coach console passes `personas.tts_voice_variant`
+   * — a COLUMN since migration 20260907120000, not a list index, because an
+   * index is reassigned by adding any persona before it in the ordering.
+   *
+   * AI-NOTE: this said "each persona's index, so three personas take three
+   *          different voices". Both halves went stale: the index became a
+   *          column, and there are five personas, three of them en-GB. The
+   *          accurate claim is ADR 0006's — the voices matching a persona's
+   *          LANGUAGE are what get allocated, so three en-GB coaches need three
+   *          installed en-GB voices to sound like three people, and most
+   *          machines have fewer. That is the platform's limit, not the app's.
    */
   variant?: number;
   /**

@@ -57,10 +57,19 @@ describe('pickVoice', () => {
   });
 
   /*
-   * The regression itself. These are the three shipped personas as seeded:
-   * analyst en-US, old-master en-GB, rival en-GB — two sharing a language — on
-   * a machine that has no en-GB voice at all, so every one of them resolves
-   * through the prefix fallback into the same pool.
+   * The regression itself: several coaches, two languages, and a machine that
+   * has no en-GB voice at all, so every one of them resolves through the prefix
+   * fallback into the same pool.
+   *
+   * The variants below are the ARGUMENT SHAPE, not the seeded values — this
+   * file tests `pickVoice`, which never sees a persona row. The live allocation
+   * is en-GB 0/1/2 and en-US 0/1 (migrations 20260901154757 and
+   * 20260908110000), maintained in .claude/skills/add-persona/SKILL.md §2 and
+   * checked against the rows by tests/db/personas.test.ts.
+   *
+   * FOUND IN REVIEW: this used to claim these WERE "the three shipped personas
+   * as seeded", which was wrong on the count once two more shipped and had
+   * never matched the seeded variants anyway.
    */
   it('gives three personas three different voices on a single-language device', () => {
     const picked = [

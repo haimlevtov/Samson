@@ -149,6 +149,16 @@ Three coach personas at launch: the Rival, the Analyst, and one of the Sergeant
 or the Old Master. Each is a database row — system prompt, language and voice
 variant, intensity, humour tier, banned phrases — not a code branch.
 
+**Five as of 2026-09-08**, phase 5's content fill. The Old Master was the one
+picked at launch; the **Sergeant** is the other half of that sentence, finally
+built, and it is the first row to reach the `crude` humour tier that
+`users.humor_max_level` has offered since the first migration with nothing
+behind it. The **Physio** is an argued addition rather than a promised one: the
+three shipped coaches sat at intensity 2, 3 and 4, so choosing between them
+changed the jokes more than the register. Note that it is _not_ the tone
+override below — that applies regardless of which persona is selected and is
+therefore an argument against needing a gentle coach, not for one.
+
 **Corrected 2026-09-07.** This said "TTS voice", which promised something the
 project does not have: there is no TTS provider and the only key here is for
 text ([ADR 0006](adr/0006-persona-boundary.md)). Delivery uses the browser's own

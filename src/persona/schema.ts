@@ -28,8 +28,25 @@ export const deliveredPlanSchema = z.strictObject({
 });
 export type DeliveredPlan = z.infer<typeof deliveredPlanSchema>;
 
-/** The three shipped personas. Rows in `personas`, not values in code — CLAUDE.md #7. */
-export const SHIPPED_PERSONA_SLUGS = ['rival', 'analyst', 'old-master'] as const;
+/**
+ * The five shipped personas. Rows in `personas`, not values in code —
+ * CLAUDE.md #7. This list is a mirror of the migrations, never the source: the
+ * database decides which personas exist, and `tests/db/personas.test.ts`
+ * asserts the two agree.
+ *
+ * AI-NOTE: that test is what makes this constant worth having. Before it, the
+ *          skill said to keep this in step because "it is what tests and
+ *          fixtures enumerate" and nothing enumerated it at all — it was
+ *          referenced only by its own declaration and a doc comment, so it
+ *          could drift from the rows indefinitely without anything noticing.
+ */
+export const SHIPPED_PERSONA_SLUGS = [
+  'rival',
+  'analyst',
+  'old-master',
+  'sergeant',
+  'physio',
+] as const;
 
 /**
  * The scale, least to most, as a tuple so it can be both a Zod enum and the

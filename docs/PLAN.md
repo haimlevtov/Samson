@@ -157,7 +157,8 @@ analysis is measuring.
   tier, banned phrases. There is no TTS provider; delivery is the browser's own
   speechSynthesis — ADR 0006, corrected 2026-09-07
 - Ship three personas: the Rival, the Analyst, and one of the Sergeant or the
-  Old Master
+  Old Master. _The Old Master was picked; the Sergeant shipped in phase 5's
+  content fill, along with a fifth, the Physio._
 - Precomputed audio clips for high-frequency live events (rest over, set
   logged, PR hit, last set), generated once at persona creation
 - Persona drift eval: does turn 80 still sound like turn 3
@@ -166,7 +167,9 @@ analysis is measuring.
 
 - Persona layer cannot alter any number in the plan it receives — asserted by
   test, not by prompt
-- Drift eval scores recorded for all three personas
+- Drift eval scores recorded for every shipped persona. _Was "all three"; there
+  are five as of 2026-09-08 — phase 5 shipped the Sergeant and the Physio. The
+  criterion is still unmet either way, and it is now unmet for five._
 - Tone override forces a gentler register on injury or missed-session flags,
   regardless of selected persona
 
