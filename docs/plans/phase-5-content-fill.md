@@ -392,13 +392,26 @@ single `where user_id is null` clause and a test. Structured JSON has no
 execution semantics to defend, so there is no clause for a future refactor to
 drop.
 
-**Two things the migration got wrong first, both silent.** A single
-`INSERT ... SELECT` sees the table as it was at statement start, so every parent
-lookup returned null and the trees arrived flat — and `parent_id` is nullable,
-so nothing errored. Inserting one level at a time fixes it. And half the slugs
-an author would guess do not exist: the catalogue has no `push-up`, no
-`pistol-squat`, no `hollow-hold`. Every slug was checked before being written,
-and `tests/db` asserts every `exercise_id` resolved.
+**Three things the migration got wrong, all silent, and CI caught the worst.**
+
+A single `INSERT ... SELECT` sees the table as it was at statement start, so
+every parent lookup returned null and the trees arrived flat — `parent_id` is
+nullable, so nothing errored. Inserting one level at a time fixes it.
+
+Half the slugs an author would guess do not exist: no `push-up`, no
+`pistol-squat`, no `hollow-hold`. Every slug was checked before being written.
+
+And the one only CI could find: **a migration cannot depend on seeded data.**
+The nodes resolved `exercise_id` by slug, which passed against hosted — where
+the catalogue had been seeded weeks earlier — and produced twenty nulls on a
+fresh stack, because the catalogue is loaded by `scripts/seed.ts` and
+`npm run migrate` runs before `npm run seed`. The same migration was producing
+different content in different environments, which is exactly the fault the
+project's own comments warn about for UUIDs, reached by another road. It had
+also **broken `npm run seed` outright**: the column is `ON DELETE RESTRICT` and
+the seeder starts by deleting every shared catalogue row. Nothing read the
+column, so it is null everywhere now, and the two tests that used to assert it
+resolved now assert it does not.
 
 **The core tree opens two rungs where the others open one**, because
 `public.sets` has no duration column and a plank cannot have criteria. Asserted

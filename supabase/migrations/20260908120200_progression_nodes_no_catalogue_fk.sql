@@ -1,0 +1,54 @@
+-- Samson 0048 — a migration cannot depend on seeded data
+--
+-- FOUND BY CI, 2026-09-08, on the migration two files earlier. It is the most
+-- useful failure of this phase and it is worth writing down properly.
+--
+-- 20260908120000 looks each node's `exercise_id` up by slug:
+--
+--   (select e.id from public.exercises e
+--     where e.slug = t.exercise_slug and e.user_id is null)
+--
+-- The exercise catalogue is NOT in a migration. It is loaded by
+-- `scripts/seed.ts` from data/exercises.snapshot.json, and CI runs
+-- `npm run migrate` BEFORE `npm run seed`. So on a fresh stack the table is
+-- empty when that lookup runs, every subquery returns null, and all twenty
+-- nodes arrive with no catalogue reference at all.
+--
+-- TWO FAILURES, and the second is worse than the first.
+--
+-- 1. THE SAME MIGRATION PRODUCES DIFFERENT DATA IN DIFFERENT ENVIRONMENTS.
+--    Against hosted, where the catalogue had been seeded weeks earlier, all
+--    twenty resolved. Against CI's fresh stack, none did. That is precisely the
+--    fault the skill and this project's own comments warn about for UUIDs —
+--    "correct in exactly one environment" — arrived by a different route.
+--
+-- 2. IT BROKE `npm run seed`. `progression_nodes.exercise_id` references
+--    `exercises (id) ON DELETE RESTRICT`, and the seeder begins by deleting
+--    every shared catalogue row so it can reload the snapshot. MEASURED against
+--    hosted before this migration: that delete fails with
+--    "update or delete on table exercises violates foreign key constraint
+--    progression_nodes_exercise_id_fkey". Seeding the demo database was broken
+--    by a feature that never touched the seeder.
+--
+-- THE FIX: do not reference the catalogue from a migration at all. Every node's
+-- `exercise_id` becomes NULL, in every environment, deterministically.
+--
+-- WHAT IS LOST: nothing that exists. Nothing reads `exercise_id` — the page
+-- renders `progression_nodes.name`, and the unlock criteria carry their own
+-- exercise SLUG which `src/gamification/unlocks.ts` matches against logged sets
+-- rather than against the catalogue. The column was decorative.
+--
+-- WHAT IT COSTS LATER: a node cannot yet link to "log this exercise", which is
+-- what `.claude/skills/add-progression/SKILL.md` means by "a node without one
+-- cannot be logged into". When that feature is built, the join belongs in the
+-- READER, resolved by slug at query time, where a missing catalogue row is a
+-- missing link rather than a permanently wrong id — or the catalogue moves into
+-- a migration and this becomes safe. Either is a decision; neither is this one.
+--
+-- AI-NOTE: do not reintroduce a catalogue lookup in a migration. The exercise
+--          table is owned by the seed, and the seed runs after migrations and
+--          deletes the rows it owns first.
+
+update public.progression_nodes
+set exercise_id = null
+where user_id is null and exercise_id is not null;

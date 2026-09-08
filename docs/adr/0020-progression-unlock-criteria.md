@@ -34,9 +34,13 @@ achievement row, so `evaluate_achievements` restricts execution to
 `user_id is null` and a test asserts a user-owned predicate never runs. Removing
 that clause is privilege escalation available to anyone who can sign up.
 
-`progression_nodes` carries **the same write policy**, from the same catalogue
-pattern (ADR 0002). So SQL-in-a-column here would inherit the identical hazard,
-and the identical one-clause defence that must never be forgotten.
+`progression_nodes` carried **the same write policy** when this was written,
+from the same catalogue pattern (ADR 0002). So SQL-in-a-column here would have
+inherited the identical hazard, and the identical one-clause defence that must
+never be forgotten. (That policy was dropped later the same day — migration
+`20260908120100` — which removes the hazard from this table but not the reason
+the shape below is the right one: a structured criterion needs no policy to stay
+safe.)
 
 ## Decision
 
@@ -97,8 +101,8 @@ schema grows by adding a variant with its own validation and its own test.
 
 **Nothing, visibly.** It is treated as locked, and the tree renders without it
 rather than throwing. A malformed row is a content bug, and a content bug must
-not take out a page — `src/db/personas.ts` and `src/db/plans.ts` already
-re-validate jsonb on read for the same reason: "the database will hand back
+not take out a page — `src/db/personas.ts` already re-validates jsonb on read
+for the same reason: "the database will hand back
 whatever was written, including a row written by an older schema version."
 
 ## Naming
@@ -121,9 +125,27 @@ is named for the question it answers.
   content should be cheap and vocabulary should not.
 - **`exercise` is a slug, not a UUID.** Catalogue ids differ between a local
   stack, CI's fresh stack and hosted, so a criterion carrying an id would be
-  correct in exactly one environment — the same trap
-  `.claude/skills/add-progression/SKILL.md` already flags for `exercise_id`, and
-  `tests/db` asserts every node's own `exercise_id` resolved.
+  correct in exactly one environment.
+
+- **`progression_nodes.exercise_id` is left NULL, and that is not an oversight.**
+  Found by CI after this ADR was written: the migration originally resolved it
+  by slug, which passed against hosted — where the catalogue had been seeded
+  weeks earlier — and produced twenty nulls on a fresh stack, because the
+  exercise catalogue is loaded by `scripts/seed.ts` and `npm run migrate` runs
+  before `npm run seed`. **A migration cannot depend on seeded data.** The same
+  migration was producing different content in different environments, which is
+  the trap this ADR warns about for UUIDs, arrived at by another road.
+
+  It also broke the seeder outright: the column references
+  `exercises (id) ON DELETE RESTRICT`, and the seed begins by deleting every
+  shared catalogue row to reload the snapshot.
+
+  Nothing reads the column — the page renders `progression_nodes.name`, and the
+  criteria carry their own slug, matched against logged sets rather than against
+  the catalogue. When a "log this exercise" link is wanted, the join belongs in
+  the READER, resolved by slug at query time, where a missing catalogue row is a
+  missing link rather than a permanently wrong id.
+
 - **A timed hold cannot be expressed yet.** `public.sets` has `weight_kg`,
   `reps`, `rpe` and `rest_seconds` but no duration column, so "hold a plank for
   60 seconds" has nowhere to come from. The core tree's root is the plank with

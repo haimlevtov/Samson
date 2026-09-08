@@ -41,7 +41,7 @@ row.** `tests/db/progression.test.ts` is what catches it; run `npm run test:db`.
 | `tree` | `push`, `pull`, `legs` or `core` — the CHECK enumerates them |
 | `slug` | stable, lowercase, unique per user (null user = shared) |
 | `name` | shown to the user |
-| `exercise_id` | the catalogue row this node is. Nullable, but a node without one cannot be logged into |
+| `exercise_id` | LEAVE NULL. See below — a migration cannot resolve it. |
 | `parent_id` | the node before it. Null for a root |
 | `level` | depth from the root, ≥ 0. Redundant with `parent_id` and worth it — see below |
 | `unlock_criteria` | jsonb — the shape is ADR 0020, see below |
@@ -87,12 +87,14 @@ Three sets of ten spread over three months is not three sets of ten, and says
 nothing about whether the next rung is reachable.
 
 **Why not SQL in the column, which is what `achievements.predicate` does:**
-ADR 0009 §3 restricts execution of those to `user_id is null` rows, because
-`progression_nodes` carries the same catalogue write policy — a user can own a
-row, and executing one would be privilege escalation available to anyone who can
-sign up. A structured criterion has no execution semantics, so there is no
-clause for a future refactor to drop. The defence is structural rather than
-conditional.
+ADR 0009 §3 restricts execution of those to `user_id is null` rows, because a
+user can own an achievement row and executing one would be privilege escalation
+available to anyone who can sign up. `progression_nodes` carried the same write
+policy when this was decided — it was dropped in `20260908120100`, but the
+argument does not depend on that: a structured criterion has no execution
+semantics at all, so there is no clause for a future refactor to drop and no
+policy whose removal has to be remembered. The defence is structural rather
+than conditional.
 
 Two constraints any new KIND must still satisfy:
 
@@ -117,16 +119,24 @@ surprise. The fix is a column, not a criterion pretending reps are seconds.
 
 ## The migration
 
-Look the `exercise_id` up **by slug in the migration**, never by pasting a UUID
-— the catalogue is seeded per environment and the ids differ between your
-machine, CI's fresh stack and hosted.
+### Do not set `exercise_id` at all
+
+FOUND BY CI, 2026-09-08. The first version of the trees resolved it by slug in
+the migration. That passed against hosted — where the catalogue had been seeded
+weeks earlier — and produced twenty nulls on a fresh stack, because **the
+exercise catalogue is loaded by `scripts/seed.ts`, and `npm run migrate` runs
+before `npm run seed`.** A migration cannot depend on seeded data.
+
+It also broke the seeder: the column is `ON DELETE RESTRICT`, and the seed
+begins by deleting every shared catalogue row to reload the snapshot.
+
+So a node carries a `name` and its criteria carry an exercise SLUG, and that
+is all. When a "log this exercise" link is wanted, the join belongs in the
+reader, by slug, at query time.
 
 ```sql
-insert into public.progression_nodes (user_id, tree, slug, name, exercise_id, parent_id, level)
-select
-  null, 'push', 'push-incline', 'Incline Push-Up',
-  (select id from public.exercises where slug = 'incline-push-up' and user_id is null),
-  null, 0;
+insert into public.progression_nodes (user_id, tree, slug, name, parent_id, level, unlock_criteria)
+values (null, 'push', 'push-incline', 'Incline Push-Up', null, 0, '{}'::jsonb);
 ```
 
 ### A child cannot find its parent in the same statement

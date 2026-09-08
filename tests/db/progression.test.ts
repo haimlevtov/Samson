@@ -2,22 +2,24 @@
  * The progression trees, as content.
  *
  * The evaluator is unit-tested in `src/gamification/unlocks.test.ts` against
- * literals. What needs a database is the shape of the ROWS, and the skill names
- * the properties worth asserting — `.claude/skills/add-progression/SKILL.md`:
- * every `exercise_id` resolves, `level` agrees with `parent_id`, no cycles, and
- * a chain never changes tree.
+ * literals. What needs a database is the shape of the ROWS: `level` agrees with
+ * `parent_id`, no cycles, a chain never changes tree, and every criterion names
+ * an exercise the catalogue actually has.
  *
- * The first of those is the one that bites. A `select` with no match inserts a
- * NULL rather than failing, so a typo'd slug produces a node pointing at
- * nothing and no migration complains. It is not hypothetical: the catalogue has
- * no `push-up`, no `pistol-squat` and no `hollow-hold` — all obvious guesses,
- * and all wrong.
+ * That last one is not hypothetical — the catalogue has no `push-up`, no
+ * `pistol-squat` and no `hollow-hold`, all obvious guesses, all wrong, and a
+ * criterion naming one is a rung nobody can ever open.
+ *
+ * The skill also asks for "every `exercise_id` resolves". That property is now
+ * inverted, and the two cases below say why: a migration cannot depend on the
+ * exercise catalogue, because the catalogue is seeded and the seed runs after
+ * migrations. CI found it; hosted could not have.
  *
  * INVARIANT: the service role creates fixtures; every assertion runs through a
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
 import { loadProgressionTrees } from '../../src/db/progression';
 import { unlockStates } from '../../src/gamification/unlocks';
 
@@ -42,14 +44,40 @@ describe('the shipped trees', () => {
     expect([...TREES].filter((t) => !present.has(t))).toEqual([]);
   });
 
-  it('resolved every exercise slug it looked up', async () => {
+  it('references no catalogue row, in any environment', async () => {
     /*
-     * The lookup-missed case. `exercise_id` is nullable and the insert uses a
-     * subquery, so a slug that matches nothing writes a null and the node
-     * silently points at no exercise.
+     * THIS TEST USED TO ASSERT THE OPPOSITE, and CI is what corrected it.
+     *
+     * The migration looked each node's `exercise_id` up by slug. That passed
+     * against hosted, where the catalogue had been seeded weeks earlier, and
+     * failed on CI's fresh stack — because the catalogue is loaded by
+     * `scripts/seed.ts`, and `npm run migrate` runs BEFORE `npm run seed`. The
+     * same migration produced different content in different environments.
+     *
+     * It also broke the seeder: `exercise_id` references
+     * `exercises (id) ON DELETE RESTRICT`, and the seed begins by deleting every
+     * shared catalogue row to reload the snapshot.
+     *
+     * `exercise_id` is null everywhere now — migration 20260908120200 — and this
+     * asserts it stays that way, because the failure mode of reintroducing the
+     * lookup is a green suite locally and a red one on CI.
      */
-    const orphans = (await trees()).filter((n) => n.exerciseSlug === null);
-    expect(orphans.map((n) => n.slug)).toEqual([]);
+    const referencing = (await trees()).filter((n) => n.exerciseSlug !== null);
+    expect(referencing.map((n) => n.slug)).toEqual([]);
+  });
+
+  it('lets the seeder delete and reload the catalogue', async () => {
+    // The consequence that made the above more than a tidiness question. A
+    // shared exercise must remain deletable, or `npm run seed` cannot run.
+    const { data } = await user.client.from('exercises').select('id').is('user_id', null).limit(1);
+    expect(data?.length, 'the catalogue is seeded before this suite runs').toBe(1);
+
+    const { count } = await adminClient()
+      .from('progression_nodes')
+      .select('id', { count: 'exact', head: true })
+      .not('exercise_id', 'is', null);
+
+    expect(count, 'no node holds a catalogue row hostage').toBe(0);
   });
 
   it('gives every tree exactly one root', async () => {
