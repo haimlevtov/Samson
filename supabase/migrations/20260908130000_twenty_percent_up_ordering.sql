@@ -1,4 +1,6 @@
--- Samson 0046 — twenty-percent-up asks WHEN, and `created_at` cannot answer
+-- Samson 0049 — twenty-percent-up asks WHEN, and `created_at` cannot answer
+--
+-- Contract: docs/adr/0021-training-order-is-local-date.md, committed first.
 --
 -- FOUND 2026-09-08, seeding progression history. Adding bodyweight accessories
 -- to two programmes made `returning` lose a badge it had held on the previous
@@ -22,8 +24,9 @@
 --     The first sort key contributed nothing at all.
 --
 --   * That left `workout_id` deciding, and workout_id is a random uuid. "The
---     first working set" was the set belonging to whichever of 87 sessions
---     drew the alphabetically lowest uuid.
+--     first working set" was the set from whichever session drew the
+--     alphabetically lowest one — per exercise, one of the 8 to 10 sessions
+--     holding a qualifying working set for it.
 --
 -- So the badge was awarded on a coin toss, and reseeding re-tossed it. MEASURED
 -- for `returning`, best-over-first per exercise, uuid pick against true first:
@@ -31,11 +34,12 @@
 --   barbell-full-squat      1.15 vs 1.25      standing-military-press 1.07 vs 1.25
 --   bent-over-barbell-row   1.12 vs 1.19      incline-dumbbell-press  1.10 vs 1.38
 --   barbell-deadlift        1.09 vs 1.19      romanian-deadlift       1.13 vs 1.24
---   barbell-bench-press     1.16 vs 1.22
+--   barbell-bench-press-medium-grip 1.16 vs 1.22
 --
--- Every ratio is understated, because a random session out of eighty-seven is
--- on average far heavier than the session the user actually started on. The
--- user had earned the badge four times over and was told they had not.
+-- Every ratio is understated, because a session drawn at random from a
+-- progressing history is on average far heavier than the one the user actually
+-- started on. They had earned the badge four times over and were told they had
+-- not.
 --
 -- THE FIX
 --

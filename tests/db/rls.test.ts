@@ -153,6 +153,46 @@ describe('cross-user isolation', () => {
     expect(data![0]!.notes).toBe('bob only');
   });
 
+  it('stops alice hanging a set off one of bob workouts', async () => {
+    /*
+     * FOUND IN REVIEW 2026-09-08, and it was accepted when first tried.
+     *
+     * `sets_own` checked `user_id = auth.uid()` and nothing about `workout_id`.
+     * The two columns are independent, and the foreign key runs as the
+     * referenced table's owner rather than under RLS, so it resolved bob's
+     * workout without complaint.
+     *
+     * WHY it is worth a policy and not just tidiness: `evaluate_achievements`
+     * is `security definer` on tables with no FORCE row level security, so a
+     * predicate reads `workouts` with RLS off. `hundred-tonnes` counts
+     * `distinct w.local_date` straight off that join — bob's training days
+     * would have counted toward alice's thirty. Migration 20260908140000 has
+     * the full account.
+     *
+     * AI-NOTE: this asserts the WRITE half only. `using` was deliberately left
+     *          alone so that a row written before the fix stays visible to the
+     *          user who has to delete it.
+     */
+    const { data: exercise } = await alice.client
+      .from('exercises')
+      .select('id')
+      .eq('id', systemExerciseId)
+      .single();
+
+    const { error } = await alice.client.from('sets').insert({
+      user_id: alice.id,
+      workout_id: bobWorkoutId,
+      exercise_id: exercise!.id,
+      set_index: 0,
+      weight_kg: 100,
+      reps: 5,
+      is_warmup: false,
+    });
+
+    expect(error, 'alice attached a set to a workout she does not own').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
   it('stops a user erasing their own spend to reset the budget', async () => {
     // WHY: llm_calls has select and insert policies only. Without this, the
     //      weekly budget check reads a table the user can empty.
