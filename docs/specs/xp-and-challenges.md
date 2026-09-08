@@ -212,6 +212,29 @@ plausible does not count toward a challenge or an achievement. It is **not**
 deleted, and the user is not accused of anything — it is logged as their data
 and excluded from rewards.
 
+**Amended 2026-09-08, when achievements stopped being one row.** There are now
+two implementations of that sentence, not one, and they are not equally strict.
+`plausibleSets` below is the TypeScript path and covers challenges. Achievement
+unlock conditions are **SQL predicates stored in rows** (CLAUDE.md #7), so they
+cannot call it and instead repeat `MAX_PLAUSIBLE_WEIGHT_KG` and
+`MAX_PLAUSIBLE_REPS` as literals — pinned by `tests/db/achievements.test.ts`,
+which reads the numbers back out of the predicate text.
+
+What the SQL side **cannot** do is `exceeds_established_best`: that check needs
+an e1RM, and a second definition of Epley in SQL would let a badge and the
+progression chart disagree about the same set. So a 140 kg entry from a lifter
+whose best is 90 kg is implausible to a challenge and counts in full toward an
+achievement.
+
+Three things bound that gap rather than closing it:
+
+- an achievement pays a flat 75 XP **once, ever**, where a challenge pays again
+  every window;
+- `hundred-tonnes`, the one badge where a big number is the whole condition,
+  additionally requires the tonnage to be spread over **30 distinct logged
+  days** — see below;
+- both numbers stay pinned to this file's constants by test.
+
 ```ts
 export type ImplausibleCode = 'exceeds_established_best' | 'impossible_volume' | 'nonsense_value';
 
@@ -244,10 +267,38 @@ export function checkPlausibility(
 
 **Warmups are not implausible, and still earn nothing.** `checkPlausibility`
 returns no finding for a warmup — it is honest data and the user did nothing
-wrong — but `plausibleSets`, which is what every reward path reads, drops them.
-The two exclusions are separate on purpose: one is distrust, the other is simply
-that a warmup is not the work being rewarded. Without the second, three
-empty-bar sets on three movements complete a distinct-exercises challenge.
+wrong — but `plausibleSets`, which is what every TypeScript reward path reads,
+drops them. Every achievement predicate carries `is_warmup = false` for the same
+reason. The two exclusions are separate on purpose: one is distrust, the other
+is simply that a warmup is not the work being rewarded. Without the second,
+three empty-bar sets on three movements complete a distinct-exercises challenge.
+
+### The volume tier, and why it does not breach invariant #4
+
+`achievements.tier` includes `volume`, and `hundred-tonnes` uses it. Invariant
+#4 says XP derives from adherence, never volume — so the tier needs an argument
+rather than an assumption.
+
+**What the invariant forbids is XP that _scales_ with volume**, because scaling
+makes one more set always the rational move and the app ends up paying people to
+overtrain. `hundred-tonnes` pays `ACHIEVEMENT_XP` — a flat 75 — once and forever.
+Passing 100 t earns exactly what passing 900 t earns, so there is no marginal
+reward for the next set and nothing to farm.
+
+**It also has to survive the promise `docs/PRD.md` §5.5 makes by name:** "an
+empty bar spammed for reps must not unlock a volume badge." The first version of
+the predicate did not — fifty sets of 20 kg for 100 reps is a hundred tonnes,
+and every set of it is inside the plausibility bounds and inside
+`checkPlausibility` too.
+
+**The gate is time, not load.** A minimum weight would be an absolute strength
+claim, and `plausibility.ts` refuses those on principle: an absolute threshold
+"either insults a strong lifter or waves through a beginner's typo, and it
+cannot be tuned to do both." The same objection applies to a floor. What can be
+said without any claim about how strong anyone is: **a hundred tonnes is not
+moved in a weekend.** The predicate requires 30 distinct logged days, so faking
+it costs thirty days of logging — which is adherence, the only thing this app
+pays for anyway.
 
 **Why it is relative to the user's own history and not an absolute table:** an
 absolute ceiling either insults a strong lifter or waves through a beginner

@@ -307,6 +307,11 @@ variables, the slug was already in `unlocked` — the badge would have fired whi
 the `achievement_events` row vanished. Latent only because one achievement
 exists.
 
+> **No longer latent, 2026-09-08.** Ten more achievements shipped in phase 5's
+> content fill, so a session unlocking two at once is now an ordinary event —
+> and the narrowed index written here is what holds. See
+> [`phase-5-content-fill.md`](phase-5-content-fill.md).
+
 The through-line: nearly every finding is a guarantee that was stated correctly
 in prose and implemented for the path someone had in mind. The migrations and
 ADR 0009 §2 now carry the corrections inline rather than being edited to look

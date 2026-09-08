@@ -165,6 +165,23 @@ half-feature — a user could insert a row that never unlocks. Phase 5 should
 either revoke that policy or give user achievements their own non-SQL predicate
 form. Written down here rather than discovered later.
 
+> **Answered 2026-09-08: neither, deliberately, and here is the reason.** Phase
+> 5's achievement PR left the policy exactly as it is. Revoking it would remove
+> the thing §3's whole security argument is written against — the reason
+> `evaluate_achievements` filters `user_id is null` is that a user CAN own a
+> row, and a test asserts that such a row is never executed. Delete the ability
+> and the test becomes vacuous, the clause looks redundant, and the next person
+> reading it removes it too.
+>
+> Giving user achievements a non-SQL predicate form is a real feature with a
+> real design, and nothing in phase 5's brief asks for it.
+>
+> So the half-feature stays, now stated as a decision rather than an omission: a
+> user-owned achievement row is inert by design, it is what the privilege-escalation
+> defence is tested against, and `unlocked_achievements()`
+> ([ADR 0017](0017-held-hidden-achievements.md)) cannot surface one either —
+> there is no way to write the `achievement_events` row it would need.
+
 **The RPC is the only completion path**, so anything that should award XP has to
 go through it. A future feature that awards XP from somewhere else will find the
 table unwritable and will have to add a function, which is the intended friction.

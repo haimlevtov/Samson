@@ -2248,6 +2248,20 @@ details.quick-log[open] > summary {
   border-color: var(--accent-text);
 }
 
+/*
+ * The marker on a hidden badge you have earned — ADR 0017.
+ *
+ * WHY it is not a second .chip-on: it sits immediately beside the tier chip,
+ * and two chips in a row with identical fills read as one label that wrapped.
+ * Same reasoning as .you-chip directly above, and the same solution — an
+ * outline against the card rather than a second filled block.
+ */
+.chip-found {
+  background: var(--surface);
+  color: var(--accent-text);
+  border-color: var(--accent-text);
+}
+
 /* The opt-out sits in its own fieldset; the checkbox and its label share a row
    rather than stacking, because a checkbox on its own line reads as a heading. */
 /*

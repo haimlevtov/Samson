@@ -137,6 +137,23 @@ hidden definitions never cross the network, which is the criterion as written.
   `CLAUDE.md`'s comment rules forbid leaving a stale one in place.
 - `src/db/types.ts`, regenerated for the new function.
 
+**Found by review, and added to this list rather than skipped.** Going from one
+achievement to eleven falsifies more than the AI-NOTE:
+
+- `docs/PLAN.md` phase 5's first acceptance criterion, and `docs/PRD.md` §5.5 —
+  both said hidden definitions are "never sent to the client", unqualified.
+- `src/gamification/plausibility.ts`'s AI-NOTE — "every reward path filters
+  through this" stopped being true the moment a predicate read `sets` in SQL.
+- `docs/specs/xp-and-challenges.md` — the same claim, plus the volume-tier
+  argument, which had no written home.
+- `.claude/skills/add-achievement/SKILL.md` — the `hidden` column's description,
+  §4.5's test requirement, and a Verify step (`npm test -- achievements`) that
+  never ran these tests at all.
+- `docs/adr/0002` and `docs/adr/0009` — one whose consequence said the
+  hidden-definition rule was "structural instead of something a future endpoint
+  has to remember", and one carrying an open question addressed to this phase.
+- `docs/plans/phase-4.md` — "latent only because one achievement exists".
+
 ---
 
 ## PR 3 — cumulative-tonnage comparisons
@@ -228,7 +245,7 @@ has ever used it. Whoever fills it first defines the shape, and
 `.claude/skills/add-progression/SKILL.md` says that is ADR-sized rather than
 migration-sized.
 
-**ADR 0017 — structured criteria, interpreted, never executed.** The obvious
+**ADR 0018 — structured criteria, interpreted, never executed.** The obvious
 thing to copy is `achievements.predicate`, which is SQL text run server-side —
 and which ADR 0009 §3 restricts to `user_id is null` rows because executing a
 user-authored one is privilege escalation for anyone who can sign up. A
@@ -275,7 +292,7 @@ a null rather than failing.
 **Branch `supplement-evidence`.** ADR first: this is the project's first table
 of **external claims**, and it needs a rule for what may go in it.
 
-**ADR 0018 — one row, one claim, one DOI.** Rows carry a supplement, a single
+**ADR 0019 — one row, one claim, one DOI.** Rows carry a supplement, a single
 claim, an evidence grade, a dose range in canonical units, interaction flags,
 and a DOI that backs _that_ claim. No row summarises a literature; a row nobody
 can check is worse than an absent row, because it looks checked.
@@ -354,8 +371,56 @@ standing warning against treating the two as the same thing.
 
 ### PR 2 — achievements, 2026-09-08
 
-Nine rows, one in every tier the schema has allowed since phase 0. Fourteen
-`tests/db` cases, each with the near miss the skill asks for.
+**Ten** rows, one in every tier the schema has allowed since phase 0, taking the
+system total to eleven. Every one of the ten has the near miss and the
+fires-once re-run the skill asks for, plus four cases about the set as a whole.
+
+### What review changed, which was most of it
+
+Four reviewers ran and every one of them found something the tests did not.
+
+**The volume badge did not honour the promise the PRD makes by name.** §5.5 says
+"an empty bar spammed for reps must not unlock a volume badge", and fifty sets
+of 20 kg for 100 reps is a hundred tonnes with every set inside the plausibility
+bounds — `checkPlausibility` waves it through too, because 20 kg is not 1.5× of
+anything. A load floor was the obvious fix and is the wrong one:
+`plausibility.ts` refuses absolute strength claims on principle, and a floor is
+one. **The gate is time.** Thirty distinct logged days, which claims nothing
+about how strong anybody is and costs a faker thirty days of adherence — the
+only thing the app pays for anyway.
+
+**Rule 2 in the migration header was false about its own file.** It stated the
+plausibility bounds as universal; `groundhog-set` and `five-patterns` carried
+none. Both now carry the nonsense bounds, and the header says which rows are
+gated and why `five-patterns` deliberately still counts a bodyweight set with no
+external load at all.
+
+**"The first working set" had no defined answer.** `twenty-percent-up` picked it
+with `array_agg(... order by created_at)`, and `created_at` defaults to
+transaction time — so every set written by one INSERT ties, and the seeder
+writes them in batches. Two evaluations over identical data could disagree,
+which is the first thing the skill's §2 forbids. Now ordered by a total order.
+
+**`users.timezone` was unvalidated input to a definer function.** The column is
+bare text; its validation lived only in Zod at the app boundary, and
+`users_update_own` lets a session PATCH the row straight past it. One bad value
+gave two unrelated symptoms — `before-the-birds` silently never firing, because
+`evaluate_achievements` swallows the error, and `accept_challenge` throwing,
+because it does not. A trigger now validates against `pg_timezone_names`, fixing
+both call sites at once.
+
+**The evaluator re-ran predicates for badges the user already held.** Every one
+of them, on every completion, forever — and the two most expensive are the ones
+earned early and kept for life. Skipping held rows is behaviour-preserving for a
+reason worth stating precisely: it is the `achievement_events_once` **constraint**
+that makes a second unlock impossible, not the predicates being monotone. Two of
+them are not.
+
+**And the decision itself was missing its ADR.** The reasoning lived in a
+migration header. Reviewers on two different lenses said the same thing
+independently, and the project's own doc coupling agrees: a decision with a
+rejected alternative belongs in `docs/adr/`. [ADR 0017](../adr/0017-held-hidden-achievements.md)
+now carries it, and says plainly that it was written after the migration.
 
 **The date-line test was proved load-bearing rather than assumed to be.** The
 `new-years-day` predicate was temporarily swapped for a server-date one against
@@ -370,7 +435,7 @@ with the bug present is worth nothing, and this one would not have been.
 and an achievement award — because the fixture user now clears
 `three-weeks-away`. The index that guarantees the property was narrowed to
 `source = 'adherence'` on purpose in migration 20260902095100, so the assertion
-is now narrowed to match it. Until there were nine achievements, the unfiltered
+is now narrowed to match it. Until there were ten more achievements, the unfiltered
 count happened to be the same number.
 
 It also makes live the path migration 20260902095100 was written for and called

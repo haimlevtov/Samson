@@ -6,7 +6,9 @@ description: Add a new achievement to Samson. Use when adding, editing, or remov
 # Adding an achievement
 
 Achievements are database rows with SQL predicates, never hardcoded checks.
-Adding one is a migration plus a test — no application logic changes.
+Adding one is a migration plus a test — no application logic changes. The
+rendering code branches on the generic columns (`tier`, `hidden`), never on a
+slug, so a new row needs nothing in `src/` or `app/`.
 
 ## Steps
 
@@ -22,7 +24,7 @@ Insert into `achievements` via a new migration:
 | `predicate`   | SQL boolean over the user's logged data                                                |
 | `tier`        | `volume`, `consistency`, `comeback`, `pr`, `recovery`, `variety`, `hidden`, `calendar` |
 | `humor_level` | `clean`, `cheeky`, or `crude`                                                          |
-| `hidden`      | if true, the definition is never sent to the client                                    |
+| `hidden`      | if true, the definition is withheld until the user earns it — ADR 0017                 |
 | `source_hint` | optional playful nod to the reference, shown on the detail screen                      |
 
 ### 2. Write the predicate
@@ -64,7 +66,10 @@ Every achievement ships with a test in the same commit asserting:
 3. It fires exactly once — re-running evaluation does not duplicate the event
 4. For `calendar` tier: it fires on the correct local date for a fixture user
    in a non-server timezone
-5. For `hidden`: the definition is absent from the client payload
+5. For `hidden`: the definition is absent from the client payload while it is
+   LOCKED, and present for the holder once earned. Both halves — ADR 0017
+   narrowed the criterion, and a test for only the first half would pass on a
+   version that never showed the badge to anyone.
 
 Use the seeder's synthetic users where one fits; add a fixture only if none
 does.
@@ -72,7 +77,7 @@ does.
 ### 5. Verify
 
 ```bash
-npm run migrate && npm test -- achievements
+npm run migrate && npm run test:db
 ```
 
 ## Do not
@@ -82,3 +87,21 @@ npm run migrate && npm test -- achievements
   is wrong — raise it rather than working around it.
 - Grant an unlock from the client under any circumstances.
 - Reuse a released `slug` for different criteria. Users already hold it.
+
+## Two costs that only appear in bulk
+
+Adding one achievement is free. Adding forty is not, and neither limit is
+visible from a single migration.
+
+**`evaluate_achievements` runs every unheld predicate on every completion.**
+Migration 20260908090200 made it skip achievements the user already holds, so
+the cost is proportional to what is still to earn rather than to how many exist
+— but a large content fill still means a large number of full-history scans on
+the session-completion path. Write predicates that can short-circuit (`exists`
+beats `count(*) >= n`) and that lead with `user_id`.
+
+**There is a ceiling at 64.** Each predicate is evaluated inside its own plpgsql
+`begin ... exception` block, which is a subtransaction, and Postgres degrades
+sharply past 64 subtransactions in one transaction (PGPROC subxid cache
+overflow). With eleven system achievements there is headroom for roughly forty
+more. Past that, the loop needs restructuring rather than one more row.

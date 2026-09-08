@@ -17,12 +17,13 @@
  *
  * AI-NOTE: each test owns its own fixture user. Sharing one between cases here
  *          is not a tidiness question — every predicate reads the user's WHOLE
- *          history, so one test's sets change another test's answer. Measured
- *          on this project before: three of nine tests passed only because of
- *          data a different test had written.
+ *          history, so one test's sets change another test's answer. The
+ *          leaderboard suite in the previous phase was measured doing exactly
+ *          that: neutering its per-test setup failed a third of its cases,
+ *          which had been passing on data a different test had written.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
 import { MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_WEIGHT_KG } from '../../src/gamification/plausibility';
 
 const admin = adminClient();
@@ -81,12 +82,23 @@ async function addWorkout(user: TestUser, fields: WorkoutFields): Promise<string
   return data.id;
 }
 
-/** One round trip for a run of days. Nineteen sequential inserts against the
- *  hosted project is most of a test's time budget spent on latency. */
-async function addWorkouts(user: TestUser, days: readonly WorkoutFields[]): Promise<void> {
-  const { error } = await admin.from('workouts').insert(days.map((d) => workoutRow(user, d)));
-  if (error) throw new Error(`inserting workouts: ${error.message}`);
+/**
+ * One round trip for a run of days, returning their ids in the order given.
+ * Nineteen sequential inserts against the hosted project is most of a test's
+ * time budget spent on latency.
+ */
+async function addWorkouts(user: TestUser, days: readonly WorkoutFields[]): Promise<string[]> {
+  const { data, error } = await admin
+    .from('workouts')
+    .insert(days.map((d) => workoutRow(user, d)))
+    .select('id');
+
+  if (error || !data) throw new Error(`inserting workouts: ${error?.message}`);
+  return data.map((row) => row.id);
 }
+
+/** `2026-06-07` for 7. Keeps a thirty-day fixture from being thirty literals. */
+const june = (day: number) => `2026-06-${String(day).padStart(2, '0')}`;
 
 interface SetFields {
   exerciseId: string;
@@ -97,9 +109,9 @@ interface SetFields {
   from?: number;
 }
 
-async function addSets(user: TestUser, workoutId: string, fields: SetFields): Promise<void> {
+function setRows(user: TestUser, workoutId: string, fields: SetFields) {
   const from = fields.from ?? 0;
-  const rows = Array.from({ length: fields.count }, (_, n) => ({
+  return Array.from({ length: fields.count }, (_, n) => ({
     user_id: user.id,
     workout_id: workoutId,
     exercise_id: fields.exerciseId,
@@ -108,7 +120,19 @@ async function addSets(user: TestUser, workoutId: string, fields: SetFields): Pr
     reps: fields.reps,
     is_warmup: false,
   }));
+}
 
+async function addSets(user: TestUser, workoutId: string, fields: SetFields): Promise<void> {
+  await addSetGroups(user, workoutId, [fields]);
+}
+
+/** Several groups, one round trip. The `from` offsets keep set_index unique. */
+async function addSetGroups(
+  user: TestUser,
+  workoutId: string,
+  groups: readonly SetFields[]
+): Promise<void> {
+  const rows = groups.flatMap((group) => setRows(user, workoutId, group));
   const { error } = await admin.from('sets').insert(rows);
   if (error) throw new Error(`inserting sets: ${error.message}`);
 }
@@ -133,26 +157,81 @@ async function heldBy(user: TestUser): Promise<string[]> {
   return (data ?? []).map((row) => row.slug);
 }
 
-/** Exercise ids for `count` distinct movement patterns, from shared catalogue rows. */
+/** System achievement ids by slug, read once. */
+const achievementIds = (async () => {
+  const { data, error } = await admin.from('achievements').select('id, slug').is('user_id', null);
+  if (error) throw new Error(`reading achievements: ${error.message}`);
+  return new Map((data ?? []).map((row) => [row.slug, row.id]));
+})();
+
+/**
+ * SKILL.md §4.3 — "it fires exactly once. Re-running evaluation does not
+ * duplicate the event."
+ *
+ * Asked of every achievement rather than one of them, because `on`
+ * `achievement_events_once` being a unique constraint is the reason it holds
+ * and a constraint is easy to drop by accident. `evaluate_achievements` also
+ * skips held rows now (migration 20260908090200), so this is the assertion that
+ * would notice if that skip ever started swallowing a first unlock.
+ */
+async function expectFiresOnce(user: TestUser, slug: string, onDate: string): Promise<void> {
+  const unlocked = await awardFor(user, onDate);
+  expect(unlocked, `${slug} was reported unlocked a second time`).not.toContain(slug);
+
+  const id = (await achievementIds).get(slug);
+  const { count } = await admin
+    .from('achievement_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('achievement_id', id!);
+
+  expect(count, `${slug} has more than one unlock event`).toBe(1);
+}
+
+/** The values `exercises_movement_pattern_check` allows — migration 0002. */
+const MOVEMENT_PATTERNS = ['push', 'pull', 'squat', 'hinge', 'carry', 'core', 'isolation'] as const;
+
+/**
+ * One shared exercise per movement pattern, read once for the whole file.
+ *
+ * WHY one small query per pattern rather than one big read of the catalogue:
+ * PostgREST caps a response at `max_rows` (1000, supabase/config.toml), and a
+ * page that hits the cap is indistinguishable from a complete one — the trap
+ * src/db/training.ts already documents. Reading the catalogue and picking
+ * distinct patterns out of it would silently start failing as
+ * `catalogue has 4 movement patterns, needed 5` once the catalogue passed a
+ * thousand rows, with nothing pointing at the cause. Seven single-row lookups
+ * cannot truncate.
+ */
+const catalogue = (async () => {
+  const found = new Map<string, string>();
+
+  await Promise.all(
+    MOVEMENT_PATTERNS.map(async (pattern) => {
+      const { data, error } = await admin
+        .from('exercises')
+        .select('id')
+        .is('user_id', null)
+        .eq('movement_pattern', pattern)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw new Error(`reading catalogue for ${pattern}: ${error.message}`);
+      if (data) found.set(pattern, data.id);
+    })
+  );
+
+  return found;
+})();
+
+/** Exercise ids covering `count` distinct movement patterns. */
 async function exercisesAcrossPatterns(count: number): Promise<string[]> {
-  const { data, error } = await admin
-    .from('exercises')
-    .select('id, movement_pattern')
-    .is('user_id', null)
-    .not('movement_pattern', 'is', null)
-    .limit(1000);
-
-  if (error) throw new Error(`reading catalogue: ${error.message}`);
-
-  const byPattern = new Map<string, string>();
-  for (const row of data ?? []) {
-    const pattern = row.movement_pattern;
-    if (pattern !== null && !byPattern.has(pattern)) byPattern.set(pattern, row.id);
-  }
-
-  const ids = [...byPattern.values()].slice(0, count);
+  const found = await catalogue;
+  const ids = [...found.values()].slice(0, count);
   if (ids.length < count) {
-    throw new Error(`catalogue has ${ids.length} movement patterns, needed ${count}`);
+    throw new Error(
+      `catalogue covers ${found.size} of ${MOVEMENT_PATTERNS.length} movement patterns, needed ${count}`
+    );
   }
   return ids;
 }
@@ -213,6 +292,52 @@ describe('the shipped achievement set', () => {
       .eq('hidden', true);
     expect(count ?? 0).toBeGreaterThan(0);
   });
+
+  it('refuses a signed-out caller the definer function outright', async () => {
+    /*
+     * INVARIANT: RLS and grants are two independent gates — ADR 0003.
+     *
+     * `unlocked_achievements()` already fails closed for a signed-out session
+     * without this: `achievement_events.user_id` is NOT NULL, so a null
+     * auth.uid() makes the comparison NULL rather than true and the result is
+     * empty. The grant is the second gate, and this is the assertion that it
+     * exists — both of this project's grant defects were invisible until a test
+     * looked (migrations 20260901145239 and 20260902094000).
+     */
+    const { error } = await anonClient().rpc('unlocked_achievements');
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses a timezone Postgres does not recognise', async () => {
+    /*
+     * `before-the-birds` evaluates `started_at at time zone u.timezone`, which
+     * made users.timezone the input to a definer function for the first time.
+     * The column is bare text and its validation lived only in Zod at the app
+     * boundary — but `users_update_own` lets an authenticated session PATCH the
+     * row directly, straight past Zod. Migration 20260908090300 moved the check
+     * into the database.
+     *
+     * The consequence if it were missing is silence, not a crash:
+     * evaluate_achievements swallows the error and the badge stops firing for
+     * that user with nothing said. accept_challenge, which does not catch,
+     * would throw instead — one bad value, two unrelated symptoms.
+     */
+    const user = await newUser('ach-badtz');
+
+    const { error } = await user.client
+      .from('users')
+      .update({ timezone: 'Pacific/Nowhere' })
+      .eq('user_id', user.id);
+    expect(error).not.toBeNull();
+
+    // A real one still goes through, so the trigger is a validator and not a
+    // wall.
+    const ok = await user.client
+      .from('users')
+      .update({ timezone: 'Asia/Jerusalem' })
+      .eq('user_id', user.id);
+    expect(ok.error).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -221,8 +346,10 @@ describe('the shipped achievement set', () => {
 
 describe('a hidden badge', () => {
   it('reaches the person who earned it, and no one else', async () => {
-    const owner = await newUser('ach-groundhog');
-    const stranger = await newUser('ach-stranger');
+    const [owner, stranger] = await Promise.all([
+      newUser('ach-groundhog'),
+      newUser('ach-stranger'),
+    ]);
     const exerciseId = await anyExercise();
 
     // groundhog-set wants twenty sets of one lift at one weight for one rep
@@ -274,21 +401,26 @@ describe('a hidden badge', () => {
     // before-the-birds asks whether the session began before 05:00 LOCAL.
     // 08:30Z in April is 04:30 in New York and 10:30 in Berlin, so one instant
     // is an answer of yes for one user and no for the other.
-    const earlyRiser = await newUser('ach-early', 'America/New_York');
-    const normalHours = await newUser('ach-normal', 'Europe/Berlin');
+    const [earlyRiser, normalHours] = await Promise.all([
+      newUser('ach-early', 'America/New_York'),
+      newUser('ach-normal', 'Europe/Berlin'),
+    ]);
 
-    await addWorkout(earlyRiser, {
-      localDate: '2026-04-14',
-      status: 'completed',
-      startedAt: '2026-04-14T08:30:00Z', // 04:30 in New York
-    });
-    await addWorkout(normalHours, {
-      localDate: '2026-04-14',
-      status: 'completed',
-      startedAt: '2026-04-14T08:30:00Z', // 10:30 in Berlin
-    });
+    await Promise.all([
+      addWorkouts(earlyRiser, [
+        { localDate: '2026-04-14', startedAt: '2026-04-14T08:30:00Z' }, // 04:30 in New York
+      ]),
+      addWorkouts(normalHours, [
+        { localDate: '2026-04-14', startedAt: '2026-04-14T08:30:00Z' }, // 10:30 in Berlin
+        // And the boundary itself. 03:00Z is 05:00 CEST exactly, which the
+        // predicate's `< 5` must exclude — the "one rep short" case SKILL.md
+        // §4.2 asks for, and the one an off-by-one in the hour would pass.
+        { localDate: '2026-04-13', startedAt: '2026-04-13T03:00:00Z' },
+      ]),
+    ]);
 
     expect(await awardFor(earlyRiser, '2026-04-15')).toContain('before-the-birds');
+    await expectFiresOnce(earlyRiser, 'before-the-birds', '2026-04-16');
     expect(await awardFor(normalHours, '2026-04-15')).not.toContain('before-the-birds');
   });
 });
@@ -313,26 +445,26 @@ describe('a calendar achievement', () => {
      * passes either assertion alone. Only a local-date predicate passes both,
      * which is why neither user is here without the other.
      */
-    const aheadOfUtc = await newUser('ach-kiritimati', 'Pacific/Kiritimati');
-    const behindUtc = await newUser('ach-niue', 'Pacific/Niue');
+    const [aheadOfUtc, behindUtc] = await Promise.all([
+      newUser('ach-kiritimati', 'Pacific/Kiritimati'),
+      newUser('ach-niue', 'Pacific/Niue'),
+    ]);
 
-    await addWorkout(aheadOfUtc, {
-      localDate: '2026-01-01',
-      status: 'completed',
-      startedAt: '2025-12-31T10:30:00Z',
-    });
-    await addWorkout(behindUtc, {
-      localDate: '2025-12-31',
-      status: 'completed',
-      startedAt: '2026-01-01T10:00:00Z',
-    });
+    await Promise.all([
+      addWorkouts(aheadOfUtc, [{ localDate: '2026-01-01', startedAt: '2025-12-31T10:30:00Z' }]),
+      addWorkouts(behindUtc, [{ localDate: '2025-12-31', startedAt: '2026-01-01T10:00:00Z' }]),
+    ]);
 
     expect(await awardFor(aheadOfUtc, '2026-01-02')).toContain('new-years-day');
+    await expectFiresOnce(aheadOfUtc, 'new-years-day', '2026-01-03');
     expect(await awardFor(behindUtc, '2026-01-02')).not.toContain('new-years-day');
   });
 
   it('marks an anniversary and not the day after it', async () => {
-    const user = await newUser('ach-anniversary');
+    // Non-UTC on purpose: SKILL.md §4.4 asks for a calendar achievement to be
+    // proved against a fixture in a timezone that is not the server's, and a
+    // default-'UTC' fixture is the one case that cannot distinguish the two.
+    const user = await newUser('ach-anniversary', 'Pacific/Auckland');
 
     await addWorkout(user, { localDate: '2025-03-10' });
     // One year and one day. Same season, wrong date.
@@ -341,6 +473,7 @@ describe('a calendar achievement', () => {
 
     await addWorkout(user, { localDate: '2026-03-10' });
     expect(await awardFor(user, '2026-03-13')).toContain('one-year-on');
+    await expectFiresOnce(user, 'one-year-on', '2026-03-14');
   });
 });
 
@@ -369,50 +502,86 @@ describe('the boundary of each remaining tier', () => {
     expect(await awardFor(user, '2026-05-19')).not.toContain('twenty-of-twenty-eight');
 
     expect(await awardFor(user, '2026-05-20')).toContain('twenty-of-twenty-eight');
+    await expectFiresOnce(user, 'twenty-of-twenty-eight', '2026-05-21');
   });
 
-  it('volume: a hundred tonnes, and an implausible set that does not help', async () => {
+  it('volume: a hundred tonnes, without an implausible set helping', async () => {
     const user = await newUser('ach-volume');
     const exerciseId = await anyExercise();
 
-    // Nine groups of ten sets at 101..109 kg for ten reps: 94,500 kg, which is
-    // under the line. Weights vary so this cannot also trip groundhog-set and
-    // leave the assertion ambiguous about which badge did not fire.
-    const workoutId = await addWorkout(user, { localDate: '2026-06-01' });
-    for (let n = 0; n < 9; n += 1) {
-      await addSets(user, workoutId, {
-        exerciseId,
-        weightKg: 101 + n,
-        reps: 10,
-        count: 10,
-        from: n * 10,
-      });
-    }
+    // Thirty days of ten sets at 105 kg for three reps: 3,150 kg a day and
+    // 94,500 in total — past the day gate, short of the tonnage one.
+    //
+    // Other badges fire along the way and that is fine: every assertion here
+    // names the one slug under test, and vitest prints the rest of the list on
+    // failure, which is information rather than noise.
+    const ids = await addWorkouts(
+      user,
+      Array.from({ length: 30 }, (_, n) => ({ localDate: june(n + 1) }))
+    );
+
+    await Promise.all(
+      ids.map((workoutId) =>
+        addSets(user, workoutId, { exerciseId, weightKg: 105, reps: 3, count: 10 })
+      )
+    );
 
     // Two sets nobody lifted, one past each bound. Either alone would clear the
-    // badge if the predicate counted it: 900 x 100 is 90,000 kg and 200 x 150 is
-    // 30,000, against the 5,500 actually missing.
-    await addSets(user, workoutId, {
-      exerciseId,
-      weightKg: MAX_PLAUSIBLE_WEIGHT_KG + 400,
-      reps: MAX_PLAUSIBLE_REPS,
-      count: 1,
-      from: 200,
-    });
-    await addSets(user, workoutId, {
-      exerciseId,
-      weightKg: 200,
-      reps: MAX_PLAUSIBLE_REPS + 50,
-      count: 1,
-      from: 201,
-    });
+    // badge if the predicate counted it: 900 x 100 is 90,000 kg and 200 x 150
+    // is 30,000, against the 5,500 actually missing.
+    await addSetGroups(user, ids[0]!, [
+      {
+        exerciseId,
+        weightKg: MAX_PLAUSIBLE_WEIGHT_KG + 400,
+        reps: MAX_PLAUSIBLE_REPS,
+        count: 1,
+        from: 200,
+      },
+      { exerciseId, weightKg: 200, reps: MAX_PLAUSIBLE_REPS + 50, count: 1, from: 201 },
+    ]);
 
-    expect(await awardFor(user, '2026-06-01')).not.toContain('hundred-tonnes');
+    expect(await awardFor(user, june(30))).not.toContain('hundred-tonnes');
 
-    // Now enough real work to cross the line: 12,000 kg more.
-    const second = await addWorkout(user, { localDate: '2026-06-02' });
-    await addSets(user, second, { exerciseId, weightKg: 120, reps: 10, count: 10 });
-    expect(await awardFor(user, '2026-06-02')).toContain('hundred-tonnes');
+    // 12,000 kg more of real work, on a day already counted, so only the
+    // tonnage moves.
+    await addSets(user, ids[0]!, { exerciseId, weightKg: 120, reps: 10, count: 10, from: 300 });
+    expect(await awardFor(user, june(30))).toContain('hundred-tonnes');
+    await expectFiresOnce(user, 'hundred-tonnes', '2026-07-01');
+  });
+
+  it('volume: a hundred tonnes in twenty-nine days is not a hundred tonnes', async () => {
+    /*
+     * The day gate, added in 20260908090400. docs/PRD.md §5.5 and the
+     * add-achievement skill both promise that "an empty bar spammed for reps
+     * must not unlock a volume badge", and the first version of this predicate
+     * did not honour it — fifty sets of 20 kg for 100 reps is a hundred tonnes
+     * and every one of them is inside the plausibility bounds.
+     *
+     * A load floor was rejected: plausibility.ts refuses absolute strength
+     * claims on principle. A hundred tonnes not being moved in a weekend claims
+     * nothing about how strong anybody is.
+     */
+    const user = await newUser('ach-volume-fast');
+    const exerciseId = await anyExercise();
+
+    // 348,000 kg — three and a half times the threshold — inside 29 days.
+    const ids = await addWorkouts(
+      user,
+      Array.from({ length: 29 }, (_, n) => ({ localDate: june(n + 1) }))
+    );
+    await Promise.all(
+      ids.map((workoutId) =>
+        addSets(user, workoutId, { exerciseId, weightKg: 120, reps: 10, count: 10 })
+      )
+    );
+
+    expect(await awardFor(user, june(29))).not.toContain('hundred-tonnes');
+
+    // A thirtieth day, carrying almost nothing. Time was the missing ingredient.
+    const [last] = await addWorkouts(user, [{ localDate: june(30) }]);
+    await addSets(user, last!, { exerciseId, weightKg: 20, reps: 5, count: 1 });
+    expect(await awardFor(user, june(30))).toContain('hundred-tonnes');
+    await expectFiresOnce(user, 'hundred-tonnes', '2026-07-02');
   });
 
   it('pr: twenty percent over the first working set, not nineteen', async () => {
@@ -428,6 +597,7 @@ describe('the boundary of each remaining tier', () => {
     const second = await addWorkout(user, { localDate: '2026-06-12' });
     await addSets(user, second, { exerciseId, weightKg: 120, reps: 5, count: 1 });
     expect(await awardFor(user, '2026-06-12')).toContain('twenty-percent-up');
+    await expectFiresOnce(user, 'twenty-percent-up', '2026-06-14');
   });
 
   it('comeback: twenty-one days away, not twenty', async () => {
@@ -440,6 +610,7 @@ describe('the boundary of each remaining tier', () => {
     // A gap of exactly twenty-one, after the run above.
     await addWorkout(user, { localDate: '2026-08-12' });
     expect(await awardFor(user, '2026-08-13')).toContain('three-weeks-away');
+    await expectFiresOnce(user, 'three-weeks-away', '2026-08-14');
   });
 
   it('recovery: ten rest days, not nine', async () => {
@@ -456,6 +627,7 @@ describe('the boundary of each remaining tier', () => {
 
     await addWorkout(user, { localDate: '2026-09-11', status: 'rest' });
     expect(await awardFor(user, '2026-09-12')).toContain('ten-rest-days');
+    await expectFiresOnce(user, 'ten-rest-days', '2026-09-13');
   });
 
   it('variety: five movement patterns, not four', async () => {
@@ -463,13 +635,21 @@ describe('the boundary of each remaining tier', () => {
     const exercises = await exercisesAcrossPatterns(5);
 
     const workoutId = await addWorkout(user, { localDate: '2026-10-01' });
-    for (const [index, exerciseId] of exercises.slice(0, 4).entries()) {
-      await addSets(user, workoutId, { exerciseId, weightKg: 20 + index, reps: 10, count: 1 });
-    }
+    await addSetGroups(
+      user,
+      workoutId,
+      exercises.slice(0, 4).map((exerciseId, index) => ({
+        exerciseId,
+        weightKg: 20 + index,
+        reps: 10,
+        count: 1,
+      }))
+    );
     expect(await awardFor(user, '2026-10-01')).not.toContain('five-patterns');
 
     const second = await addWorkout(user, { localDate: '2026-10-02' });
     await addSets(user, second, { exerciseId: exercises[4]!, weightKg: 25, reps: 10, count: 1 });
     expect(await awardFor(user, '2026-10-02')).toContain('five-patterns');
+    await expectFiresOnce(user, 'five-patterns', '2026-10-03');
   });
 });

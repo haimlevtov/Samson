@@ -4,8 +4,9 @@
 -- Skill: .claude/skills/add-achievement/SKILL.md — the row, the predicate, the
 --        humour tier and the tests, in one change.
 --
--- INVARIANT: content lives in the database, not in code — CLAUDE.md #7. Nine
---            rows and no application branch.
+-- INVARIANT: content lives in the database, not in code — CLAUDE.md #7. Ten
+--            rows and no per-achievement application logic: the surface branches
+--            once on the generic `hidden` column, never on a slug.
 --
 -- `achievements.tier` has allowed eight tiers since the phase-0 schema and
 -- exactly one was ever used. Every tier now has at least one row.
@@ -19,18 +20,30 @@
 --    disagree about the same set, and the one the user believes is whichever
 --    they saw last. PR-tier work is written against raw logged weight instead.
 --
--- 2. IMPLAUSIBLE SETS EARN NOTHING. src/gamification/plausibility.ts states the
---    rule and the reason: an implausible set stays in the log as the user's own
---    data and is excluded from REWARDS only. The bounds below are its
---    MAX_PLAUSIBLE_WEIGHT_KG and MAX_PLAUSIBLE_REPS, and
---    tests/db/achievements.test.ts reads them out of these predicates so the
---    two cannot drift apart silently.
+-- 2. IMPLAUSIBLE SETS EARN NOTHING WHERE A SET'S SIZE IS THE REWARD.
+--    src/gamification/plausibility.ts states the rule and the reason: an
+--    implausible set stays in the log as the user's own data and is excluded
+--    from REWARDS only. The bounds are its MAX_PLAUSIBLE_WEIGHT_KG and
+--    MAX_PLAUSIBLE_REPS, and tests/db/achievements.test.ts reads them back out
+--    of these predicates so the two copies cannot drift apart silently.
+--
+--    WHICH ROWS IT COVERS, because "all of them" would be false:
+--      * hundred-tonnes and twenty-percent-up multiply or compare weight, so a
+--        mistyped number changes the answer. Both are gated.
+--      * groundhog-set and five-patterns count sets and patterns, so a bad
+--        weight cannot inflate them. They carry the nonsense bounds for
+--        consistency and nothing more.
+--      * five-patterns must keep counting BODYWEIGHT sets, which have no
+--        external load at all — a weight floor there would lock a calisthenics
+--        user out of the badge permanently. That is why there is none.
 --
 --    This gate is DELIBERATELY WEAKER than the TypeScript one, which also
 --    rejects a set past 1.5x the user's established best — that comparison
 --    needs an e1RM and rule 1 forbids one here. So these bounds catch a typed
---    2000 and not a typed 140-for-100. What makes that acceptable is the size
---    of the prize: 75 XP, once, ever.
+--    2000 and not a typed 140-for-100. Two things bound the damage: the prize
+--    is 75 XP once and forever, and hundred-tonnes additionally requires the
+--    tonnage to be spread across 30 distinct logged days (added in
+--    20260908090400 — see there for why time, not load, is the honest gate).
 --
 --    It also means the tonnage this predicate sums can be slightly LESS than
 --    the all-time figure on Profile, which applies no plausibility filter
@@ -238,13 +251,16 @@ values
   -- hidden
   -- -------------------------------------------------------------------------
   --
-  -- INVARIANT: hidden achievement definitions are never sent to the client —
-  --            PLAN.md phase 5. Enforced by the achievements_read_visible
-  --            policy from the phase-0 schema, not by any query.
+  -- INVARIANT: LOCKED hidden achievement definitions are never sent to the
+  --            client — PLAN.md phase 5, as narrowed by ADR 0017. Enforced by
+  --            the achievements_read_visible policy from the phase-0 schema,
+  --            not by any query.
   --
-  -- AI-NOTE: a HELD hidden badge is a different question, answered by the
-  --          companion migration 20260908090100. Its definitions reach the one
-  --          user who has already unlocked it and nobody else.
+  -- The word "locked" is load-bearing and was added in the same change that
+  -- made it necessary. A HELD hidden badge IS sent, to the one person who
+  -- earned it — companion migration 20260908090100, argued in ADR 0017.
+  -- Quoting the criterion unqualified above the code that narrows it would tell
+  -- the next auditor "no" directly above the line that says "yes".
   (
     null,
     'groundhog-set',
@@ -277,6 +293,16 @@ values
     -- converted through users.timezone. Reading it raw would award this to a
     -- user in Auckland training at a perfectly civilised hour, and withhold it
     -- from one in Los Angeles who genuinely got up at four.
+    --
+    -- KNOWN AND ACCEPTED: this re-derives a local time from the user's CURRENT
+    -- timezone, which is the thing workouts.local_date exists to avoid —
+    -- migration 0003 resolves the local DATE once at write time and never
+    -- again. There is no local-time column to read, only a local-date one, so
+    -- an hour cannot be had any other way without a schema change. The
+    -- consequence is real: someone who moves and updates Settings can gain this
+    -- badge for a session they logged elsewhere, and there is no revocation
+    -- path. It is one hidden badge, so the schema change is not worth it — but
+    -- the trade is stated rather than left for someone to discover.
     $pred$
       (select exists (
         select 1
