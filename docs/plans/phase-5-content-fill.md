@@ -413,6 +413,40 @@ unlock for anybody, that is a fact about the predicates and the seeded history,
 and the fix is a better fixture rather than a hand-written `achievement_events`
 row.
 
+### Addendum, written mid-PR: two of those three claims did not survive
+
+Written after the work it describes and before it was committed, so the plan is
+not quietly overtaken by its own implementation. Both changes below were
+discoveries made by running the thing, not decisions available at planning time
+— which is the honest reason this is an addendum rather than a revision.
+
+**"Not new content" is now false, deliberately.** Awarding worked first time,
+and reading the result back showed the progression trees at 5 of 20 rungs for
+every user — because the seeded history is barbell work and the trees are
+bodyweight progressions. Six bodyweight accessories were added to the two shared
+programmes. The clause above still holds in the sense that mattered: nothing was
+hand-written into `achievement_events`, and no threshold was moved. The fixture
+got better, which is what that paragraph asked for.
+
+Two of the six are prerequisites rather than accessories — an incline push-up
+and a lying leg raise — added once the trees were read back a second time. A
+tree only unlocks downward, so a rung whose parent wants an exercise nobody does
+is unreachable no matter what is below it, and the surface rendered as a wall.
+Their prescriptions are written to clear the rung they sit under. Stated plainly
+because it is the kind of thing a plan should not let a reader discover on their
+own: this is content authored to demonstrate the feature.
+
+**"No schema change" is now false.** Adding those sets made `returning` lose a
+badge, which should have been impossible — the predicate ignores unloaded sets,
+and the pre-existing sets were proved byte-identical. Chasing it found
+`twenty-percent-up` deciding "the user's first working set" by random uuid.
+[ADR 0021](../adr/0021-training-order-is-local-date.md) and migration
+`20260908130000` are the fix; there is no schema change in the DDL sense, but a
+migration is a migration and the plan said there would not be one.
+
+**The rule this came out of holds.** "If a badge does not unlock for anybody,
+that is a fact about the predicates" — it was, and the predicate was wrong.
+
 ## Verification
 
 Each PR: `npm run verify`, `npm run build`, `npm run test:db` where a migration
