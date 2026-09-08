@@ -3,14 +3,16 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
 import { loadUnlockedAchievements, loadXpSummary } from '@/src/db/gamification';
+import { loadComparisonObjects } from '@/src/db/comparisons';
 import { acwr, acwrBand } from '@/src/metrics/acwr';
 import { adherence, currentStreak } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { exerciseBests } from '@/src/metrics/pr';
 import { tonnageByWeek, totalTonnage } from '@/src/metrics/tonnage';
+import { compareTonnage } from '@/src/metrics/comparisons';
 import { levelProgress } from '@/src/gamification/level';
 import { STREAK_MILESTONES } from '@/src/gamification/xp';
-import { displayDate, displayShortDate } from '@/src/ui/format';
+import { comparisonPhrase, displayDate, displayShortDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 
 export const dynamic = 'force-dynamic';
@@ -40,10 +42,11 @@ export default async function ProfilePage() {
   if (!user) redirect('/sign-in');
 
   const today = localDateFor(user.timezone);
-  const [history, xp, badges] = await Promise.all([
+  const [history, xp, badges, comparisonObjects] = await Promise.all([
     loadHistory(db),
     loadXpSummary(db, today),
     loadUnlockedAchievements(db),
+    loadComparisonObjects(db),
   ]);
 
   const first = history.workouts[0];
@@ -59,6 +62,8 @@ export default async function ProfilePage() {
   const nextMilestone = STREAK_MILESTONES.find((m) => m > streak) ?? null;
 
   const load = acwr(history.sets, today);
+  const allTime = totalTonnage(history.sets);
+  const comparison = compareTonnage(allTime, comparisonObjects);
   const weekly = [...tonnageByWeek(history.sets).entries()];
   const thisWeek = weekly.at(-1);
   const peak = Math.max(...weekly.map(([, v]) => v), 1);
@@ -262,10 +267,43 @@ export default async function ProfilePage() {
               Total load moved: weight × reps, warm-ups excluded. Bodyweight movements count as zero
               — there is no external load to measure, and estimating it would rewrite your past
               numbers every time your weight changed.
+              {comparison !== null && (
+                <>
+                  {' '}
+                  The comparison is approximate and rounded down to whole ones.{' '}
+                  {/*
+                   * The note is printed exactly as it was authored. An earlier
+                   * version lowercased it to sit mid-sentence and turned two of
+                   * the fourteen rows into "a modern london double-decker" and
+                   * "a european supermini" — CLAUDE.md #7 covers the display
+                   * form of a row as much as its value.
+                   */}
+                  {comparison.object.sourceNote}.
+                </>
+              )}
             </FieldHint>
           </div>
           <div className="value">{thisWeek ? kg(thisWeek[1]) : '—'}</div>
-          <div className="muted small">{kg(totalTonnage(history.sets))} all time</div>
+          <div className="muted small">{kg(allTime)} all time</div>
+          {/*
+           * The one place in this app where a number is allowed to stop being a
+           * number. Nobody has an intuition for 140,000 kg.
+           *
+           * Absent rather than approximated below the lightest object in the
+           * table — `compareTonnage` returns null there, because "about half a
+           * cat" is both wrong and a strange thing to tell somebody three sets
+           * into their first session.
+           *
+           * The row's source_note goes in the Tonnage hint above rather than a
+           * `title` attribute. FieldHint's own doc comment gives the reason it
+           * is a real focusable button rather than a hover target: "hover does
+           * not exist on a phone, and this app is used in a gym." A `title` on
+           * a non-interactive span is worse still — it reaches neither a
+           * keyboard nor a touch device.
+           */}
+          {comparison !== null && (
+            <div className="muted small">about {comparisonPhrase(comparison)}</div>
+          )}
         </div>
       </div>
 

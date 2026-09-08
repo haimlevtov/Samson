@@ -218,7 +218,10 @@ One of each, end to end. This is about plumbing, not content.
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
-**Build**
+**Build** — kept as briefed rather than ticked off. What has actually shipped
+against it is recorded in
+[`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md)'s Outcome; two
+of the five are done as of 2026-09-08.
 
 - Remaining achievements across all tiers, including hidden ones and calendar
   events evaluated in local date

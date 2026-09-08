@@ -48,6 +48,29 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
   the wrong user. `tests/db/schema-invariants.test.ts` catches a table with no
   policy at all, but it cannot catch a wrong one, so this is called out in an
   `AI-NOTE` at the top of the catalogue migration.
+
+  **Amended 2026-09-08 — the write half needs a feature behind it.** The reason
+  given for it above is that "user-authored custom exercises work later with no
+  migration": it is justified by a named future feature, not by symmetry.
+  `tonnage_comparisons` copied the pair verbatim and there is no such feature
+  for it — nothing in the app offers to author a comparison object, and a
+  user-owned one would be read back by nobody but its author. So the pair
+  granted `INSERT` on that table to every authenticated session in exchange for
+  nothing, and PostgREST is a path whether or not the UI has a button.
+
+  The write policy was dropped there, and the DML grant revoked with it. That
+  is not a hole in the rule above: dropping it cannot make rows writable by the
+  wrong user, it makes them writable by nobody, which is what shared authored
+  content should be. The read policy is unchanged and the `user_id` column
+  stays — it is what makes CLAUDE.md #10 literally true and what the RLS
+  coverage test looks for.
+
+  **The test to write when copying the pair** is the one that was missing:
+  assert that an authenticated session cannot insert a row with a null
+  `user_id`. That is the escalation the `WITH CHECK` exists to stop — a
+  self-only row promoted into content served to every user — and no catalogue
+  table asserted it before `tests/db/comparisons.test.ts`.
+
 - Hidden achievements ride on this same mechanism: the read policy adds
   `and hidden = false`, which makes PLAN.md's phase 5 requirement structural
   instead of something a future endpoint has to remember. The consequence is that

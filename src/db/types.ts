@@ -597,6 +597,47 @@ export type Database = {
           },
         ]
       }
+      tonnage_comparisons: {
+        Row: {
+          created_at: string
+          id: string
+          mass_kg: number
+          plural: string
+          singular: string
+          slug: string
+          source_note: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mass_kg: number
+          plural: string
+          singular: string
+          slug: string
+          source_note: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mass_kg?: number
+          plural?: string
+          singular?: string
+          slug?: string
+          source_note?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tonnage_comparisons_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       user_equipment: {
         Row: {
           created_at: string

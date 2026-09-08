@@ -39,3 +39,23 @@ export interface ExerciseMuscles {
   primaryMuscle: string;
   secondaryMuscles: string[];
 }
+
+/**
+ * One row of `tonnage_comparisons`, in this layer's shape.
+ *
+ * Here rather than in `comparisons.ts` for the reason this file exists: it is a
+ * database row mapped onto a plain shape, the same category as
+ * `ExerciseMuscles`, and `index.ts` promises that everything the engine exports
+ * is a pure function over the shapes in *this* file. `TonnageComparison`, which
+ * is an output rather than an input, stays beside the function that builds it.
+ */
+export interface ComparisonObject {
+  slug: string;
+  /** With its article: "a double-decker bus", "the Statue of Liberty". */
+  singular: string;
+  /** Bare plural: "double-decker buses". */
+  plural: string;
+  massKg: number;
+  /** The range this figure stands in for. Not a citation — see the migration. */
+  sourceNote: string;
+}

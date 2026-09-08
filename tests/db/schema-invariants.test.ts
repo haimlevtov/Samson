@@ -204,14 +204,39 @@ describe('CLAUDE.md #10 — RLS is on for every table, and every table has user_
     expect(missing).toEqual([]);
   });
 
-  it('grants the anon role no DML on any table', async () => {
-    // WHY: RLS and grants are separate gates. anon has no policy anywhere, so a
-    //      DML grant would be dead weight that a future policy could silently
-    //      turn into a public read.
+  it('grants the anon role nothing at all on any table', async () => {
+    /*
+     * WHY: RLS and grants are separate gates. anon has no policy anywhere, so a
+     * grant would be dead weight that a future policy could silently turn into
+     * a public read.
+     *
+     * WIDENED 2026-09-08, and it is worth saying what the narrow version
+     * missed. It filtered to `privilege_type in ('SELECT','INSERT','UPDATE',
+     * 'DELETE')` — the same four verbs migrations 0006 and 0011 revoke — while
+     * Supabase's default privileges grant seven. anon held TRUNCATE,
+     * REFERENCES and TRIGGER on all eighteen tables, and this test could not
+     * see them because it was written from the same assumption as the revoke.
+     *
+     * TRUNCATE is the one that mattered: it is not DML, so no policy filters
+     * it, and every other protection in this schema is row-level. Fixed in
+     * migration 20260908100200; asserted here over EVERY privilege type so the
+     * next verb Supabase adds to its defaults cannot arrive unnoticed.
+     */
     const { rows } = await db().query<{ table_name: string; privilege_type: string }>(
       `select table_name, privilege_type from information_schema.role_table_grants
-        where table_schema = 'public' and grantee = 'anon'
-          and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')`
+        where table_schema = 'public' and grantee = 'anon'`
+    );
+    expect(rows.map((r) => `${r.table_name}.${r.privilege_type}`)).toEqual([]);
+  });
+
+  it('grants the authenticated role nothing beyond the DML it uses', async () => {
+    // Same finding, lower stakes: authenticated held TRUNCATE too, which no
+    // policy would have filtered either. It keeps the four verbs its policies
+    // are written against and nothing else.
+    const { rows } = await db().query<{ table_name: string; privilege_type: string }>(
+      `select table_name, privilege_type from information_schema.role_table_grants
+        where table_schema = 'public' and grantee = 'authenticated'
+          and privilege_type not in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')`
     );
     expect(rows.map((r) => `${r.table_name}.${r.privilege_type}`)).toEqual([]);
   });
