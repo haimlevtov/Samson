@@ -77,9 +77,10 @@ afterAll(async () => {
    * to nobody — so nothing was cleaning them up.
    *
    * FOUND 2026-09-08, surveying the catalogue for the progression trees.
-   * Measured on the hosted project before the fix: 28 leaked "Secret Badge"
-   * achievements and 7 duplicate "Back Squat" exercises, one pair per run of
-   * this file since phase 0.
+   * Measured on the hosted project at the moment they were deleted: 29 leaked
+   * "Secret Badge" achievements and 8 duplicate "Back Squat" exercises. The two
+   * counts differ because the achievement fixture predates the exercise one —
+   * they leak in lockstep now, but did not always.
    *
    * WHY it matters more than untidiness: a system achievement is executed by
    * `evaluate_achievements` on EVERY workout completion for EVERY user, forever.
@@ -96,10 +97,21 @@ afterAll(async () => {
    *          add one, delete it here.
    */
   const admin = adminClient();
-  await Promise.all([
+  const cleaned = await Promise.all([
     admin.from('achievements').delete().eq('id', hiddenAchievementId),
     admin.from('exercises').delete().eq('id', systemExerciseId),
   ]);
+
+  /*
+   * FOUND IN REVIEW: a discarded error here is the same bug again, silently.
+   * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`
+   * AND from `progression_nodes.exercise_id`, so a future test that logs a set
+   * against this fixture makes the delete fail — and swallowing that would
+   * reintroduce the leak this block was added to stop, with nothing saying so.
+   */
+  for (const result of cleaned) {
+    if (result.error) throw new Error(`cleaning up a system fixture: ${result.error.message}`);
+  }
 
   await Promise.all([deleteTestUser(alice), deleteTestUser(bob)]);
 });

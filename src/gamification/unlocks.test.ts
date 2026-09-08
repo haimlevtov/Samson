@@ -217,3 +217,61 @@ describe('unlockStates', () => {
     expect(unlockStates(orphan, [])[0]?.unlocked).toBe(false);
   });
 });
+
+describe('the `never` criterion', () => {
+  /*
+   * FOUND IN REVIEW, 2026-09-08. This variant exists so `src/db/progression.ts`
+   * has something safe to fall back to when a row's jsonb does not parse, and
+   * the first version of that fallback was a `sets_at` naming a slug believed
+   * impossible — unsatisfiable only because of one invisible character in a
+   * string literal. A formatter would have turned it into a word any user can
+   * create as an exercise slug and then satisfy.
+   *
+   * ADR 0020 said a malformed node does "nothing, visibly" and nothing tested
+   * it. This is that test.
+   */
+  it('is met by nothing at all', () => {
+    const never = unlockCriteriaSchema.parse({ kind: 'never' });
+    expect(meetsCriteria(never, [])).toBe(false);
+
+    // Including a history that would satisfy any reasonable criterion.
+    const plenty = Array.from({ length: 50 }, () => set({ reps: 100 }));
+    expect(meetsCriteria(never, plenty)).toBe(false);
+  });
+
+  it('locks the node and everything above it', () => {
+    const broken: ProgressionNode[] = [
+      node({ slug: 'a', level: 0, parentSlug: null, criteria: {} }),
+      node({ slug: 'b', level: 1, parentSlug: 'a', criteria: { kind: 'never' } }),
+      node({ slug: 'c', level: 2, parentSlug: 'b', criteria: {} }),
+    ];
+
+    const states = unlockStates(broken, []);
+    expect(states.map((s) => s.unlocked)).toEqual([true, false, false]);
+
+    // `c` has empty criteria — a ROOT's worth — and is still locked, which is
+    // the cascade that makes falling back to `{}` unsafe.
+    expect(states[2]?.met).toBe(true);
+  });
+});
+
+describe('a weight floor and NaN', () => {
+  it('is not satisfied by a NaN weight', () => {
+    /*
+     * FOUND IN REVIEW. Postgres `numeric` accepts NaN and `NaN >= 0` is TRUE
+     * there, so `sets.weight_kg`'s CHECK admits it — and in JavaScript
+     * `NaN < 20` is false, so the old `set.weightKg < criteria.weight_kg`
+     * comparison let it through the floor. The guard is `Number.isFinite`.
+     */
+    const weighted = unlockCriteriaSchema.parse({
+      kind: 'sets_at',
+      exercise: 'pushups',
+      sets: 3,
+      reps: 5,
+      weight_kg: 20,
+    });
+
+    const nan = Array.from({ length: 3 }, () => set({ reps: 5, weightKg: Number.NaN }));
+    expect(meetsCriteria(weighted, nan)).toBe(false);
+  });
+});

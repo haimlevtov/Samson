@@ -37,8 +37,9 @@ curated supplement evidence table.
 | Supplement evidence table with DOIs        | Does not exist                                               |
 
 > **This table is a snapshot of 2026-09-07 and is deliberately not maintained.**
-> Three of its five rows are false as of 2026-09-08 — the achievements, the
-> tonnage comparisons and the personas all shipped in the content fill. What is
+> Four of its five rows are false as of 2026-09-08 — the achievements, the
+> tonnage comparisons, the personas and the progression trees all shipped in the
+> content fill. What is
 > outstanding is tracked in
 > [`phase-5-content-fill.md`](phase-5-content-fill.md)'s Outcome, which is the
 > live document; editing a dated record to keep it current would destroy the

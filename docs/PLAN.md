@@ -215,15 +215,16 @@ One of each, end to end. This is about plumbing, not content.
 > not cut, only sequenced last."** What was actually open was whether the
 > content survived a phase that spent itself elsewhere. It does: two of the
 > three acceptance criteria below cannot be met without it, and §5.5 of
-> [`PRD.md`](PRD.md) specifies hidden achievements, calendar achievements and
-> progression trees that the build does not have. All five items ship, planned
-> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
+> [`PRD.md`](PRD.md) specified hidden achievements, calendar achievements and
+> progression trees that the build did not have. All five items ship, planned
+> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md) — four of
+> them as of 2026-09-08, including all three §5.5 named.
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
 **Build** — kept as briefed rather than ticked off. What has actually shipped
 against it is recorded in
-[`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md)'s Outcome; two
+[`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md)'s Outcome; four
 of the five are done as of 2026-09-08.
 
 - Remaining achievements across all tiers, including hidden ones and calendar

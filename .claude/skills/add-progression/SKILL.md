@@ -6,8 +6,13 @@ description: Add a node to an exercise progression tree in Samson. Use when addi
 # Adding a progression node
 
 Progression trees are **rows** in `public.progression_nodes`, not code —
-CLAUDE.md #7. A node is one step in a skill ladder: knee push-up → push-up →
-diamond push-up, each unlocked by what the user has actually logged.
+CLAUDE.md #7. A node is one step in a skill ladder, each unlocked by what the
+user has actually logged — the shipped push tree runs incline push-up →
+push-up → decline push-up → parallel bar dip → handstand push-up.
+
+_The example here used to be "knee push-up → push-up → diamond push-up", none of
+which are slugs the catalogue has. Illustrating this skill with exercises that
+do not exist was a small version of the mistake the whole file warns about._
 
 ## Read this first: the feature exists now
 
@@ -42,8 +47,15 @@ row.** `tests/db/progression.test.ts` is what catches it; run `npm run test:db`.
 | `unlock_criteria` | jsonb — the shape is ADR 0020, see below |
 
 `user_id = null` makes a node shared with every authenticated user, the same
-pattern the exercise catalogue and the shipped personas use. A non-null
-`user_id` is a node only that user sees.
+pattern the exercise catalogue and the shipped personas use.
+
+**A user-owned node is read by nobody, including its author.** The write policy
+was dropped in migration `20260908120100` — ADR 0002's amendment says the write
+half of the catalogue pair needs a named feature behind it, and node authoring
+is not one — and `loadProgressionTrees` reads only `user_id is null` rows
+anyway. The column stays because CLAUDE.md #10 wants it and the RLS coverage
+test looks for it. If node authoring ever becomes a feature, the policy comes
+back with the null-`user_id` negative test that ADR 0002 now requires.
 
 ### `level` is denormalised on purpose
 

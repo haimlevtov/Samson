@@ -175,7 +175,7 @@ cues (rest over, set logged, PR hit, last set) are spoken live by the browser,
 with a tone as the fallback where speech is unavailable — not precomputed audio,
 for the same reason as above.
 
-### 5.5 Progression and rewards — **Specified** (phases 4–5)
+### 5.5 Progression and rewards — **Built** (phases 4–5)
 
 XP from adherence with a weekly ceiling and diminishing returns. Streaks that
 count planned days, so scheduled rest sustains them. Achievements as database

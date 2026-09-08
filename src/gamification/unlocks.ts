@@ -38,6 +38,23 @@ import type { SetRecord } from '../metrics/types';
 export const unlockCriteriaSchema = z.union([
   /** A root. Nothing to meet, so it starts unlocked. */
   z.strictObject({}),
+  /**
+   * Never met, whatever the history.
+   *
+   * WHY it exists: `src/db/progression.ts` needs something to fall back to when
+   * a row's jsonb does not parse, and it must NOT be `{}` — an empty object is
+   * a root, so falling back to it would unlock the malformed node and cascade
+   * to its children. Failing open on exactly the input nobody understood.
+   *
+   * FOUND IN REVIEW, 2026-09-08: the first version of that fallback was a
+   * `sets_at` naming an exercise slug thought to be impossible. Its
+   * unsatisfiability rested on one invisible character in a string literal —
+   * strip it with a formatter and the sentinel becomes the plain word
+   * "unparseable", which any authenticated user can create as an exercise slug
+   * and then satisfy. A variant the evaluator refuses by construction cannot be
+   * edited away by a whitespace tool.
+   */
+  z.strictObject({ kind: z.literal('never') }),
   z.strictObject({
     kind: z.literal('sets_at'),
     /**
@@ -48,8 +65,20 @@ export const unlockCriteriaSchema = z.union([
     exercise: z.string().min(1).max(120),
     sets: z.number().int().min(1).max(20),
     reps: z.number().int().min(1).max(100),
-    /** Optional floor. Bodyweight nodes leave it out rather than setting zero. */
-    weight_kg: z.number().min(0).max(500).nullish(),
+    /**
+     * Optional floor. A bodyweight node leaves it OUT rather than setting zero.
+     *
+     * FOUND IN REVIEW: this was `.min(0).nullish()`, which accepted both `0`
+     * and `null` while the skill's prose said to omit it — and the two
+     * misbehaved quietly. `weight_kg: 0` makes `meetsCriteria` demand a
+     * RECORDED weight, so a bodyweight set carrying `null` fails the node,
+     * while the page's truthiness check hides the floor from the user. An
+     * unsatisfiable requirement nobody could see.
+     *
+     * `.positive().optional()` puts the rule in the schema, which CLAUDE.md
+     * makes the single source of truth, instead of in a sentence beside it.
+     */
+    weight_kg: z.number().positive().max(500).optional(),
   }),
 ]);
 
@@ -93,6 +122,8 @@ export interface SlugSet extends SetRecord {
 export function meetsCriteria(criteria: UnlockCriteria, sets: readonly SlugSet[]): boolean {
   // A root has nothing to meet.
   if (!('kind' in criteria)) return true;
+  // And `never` is met by nothing, by construction rather than by arithmetic.
+  if (criteria.kind === 'never') return false;
 
   const qualifying = new Map<string, number>();
 
@@ -104,8 +135,14 @@ export function meetsCriteria(criteria: UnlockCriteria, sets: readonly SlugSet[]
     // A weight floor is only applied when the criterion names one, so a
     // bodyweight node is not locked out by a null weight — the same call
     // src/metrics/tonnage.ts makes, for the same reason.
-    if (criteria.weight_kg !== null && criteria.weight_kg !== undefined) {
-      if (set.weightKg === null || set.weightKg < criteria.weight_kg) continue;
+    //
+    // FOUND IN REVIEW: `Number.isFinite` rather than a null check. Postgres
+    // `numeric` accepts NaN and `NaN >= 0` is TRUE there, so the column's CHECK
+    // admits it — and in JavaScript `NaN < 20` is false, so a NaN weight
+    // SATISFIED the floor. The same class of bug as the tonnage comparison
+    // table's own CHECK, found the same day.
+    if (criteria.weight_kg !== undefined) {
+      if (!Number.isFinite(set.weightKg) || (set.weightKg ?? 0) < criteria.weight_kg) continue;
     }
 
     // Keyed by the workout, because the sets have to be from one session.

@@ -407,15 +407,77 @@ gap whose fix is a column — not a criterion pretending reps are seconds.
 
 **Found while surveying the catalogue for this PR:** `tests/db/rls.test.ts` had
 been leaking a shared exercise and a shared hidden achievement on every run
-since phase 0. 29 and 8 of them on hosted, so `evaluate_achievements` was
-running 39 predicates per workout completion, 28 of them junk, against a
-64-subtransaction ceiling. Fixed, and the rows deleted; 39 system achievements
-are now 11.
+since phase 0, because `afterAll` deleted only the fixture users and a
+`user_id is null` row belongs to nobody. At the moment of deletion there were
+**29 achievements and 8 exercises** on hosted; the earlier reading that produced
+the "39 system achievements" figure counted 28, one test run before. The counts
+are unequal because the achievement fixture predates the exercise one. 39 system
+achievements are now 11, which is the real number.
 
-21 unit cases on the evaluator, 10 database cases on the rows. 867 unit tests,
-156 database cases, `verify` and `build` clean. Checked at 375×812: four trees,
-5 of 20 unlocked for a user with no bodyweight history, one "next" per tree, no
-horizontal overflow.
+### What review changed, which was again most of it
+
+**A raw NUL byte made `src/db/progression.ts` binary to git.** The sentinel for
+an unparseable criterion was a `sets_at` naming an "impossible" exercise slug,
+and the impossibility rested on one invisible character inside a string literal.
+Two consequences, both worse than the first one looks:
+
+- `git diff` rendered the entire reader — including its tenancy filter — as
+  "Binary files differ". The one file in the change carrying a tenancy boundary
+  was the one nobody could review, and no future change to it would be reviewable
+  either.
+- Strip the character with a formatter and the sentinel becomes the plain word
+  "unparseable", which any authenticated session can create as an exercise slug
+  and then satisfy — turning every malformed node into a free unlock.
+
+`src/llm/safety.ts` carries an AI-NOTE saying control characters are written as
+escapes and never embedded, for exactly this reason. It was written before this
+file. The replacement is a `{ kind: 'never' }` schema variant the evaluator
+refuses by construction, so no formatter can make it satisfiable.
+
+**A CSS token that does not exist, and a browser check that could not see it.**
+`.tree-rung` used `var(--line)`; the sheet's token is `--border`. An unresolvable
+`var()` invalidates the whole `border` shorthand, so `border-style` fell back to
+`none` and `.is-next` had no border left to colour — the "what to work on next"
+affordance never drew. The browser pass read class names and text and found
+everything correct. A rung is now a `.card`, which is the primitive it was
+badly reimplementing.
+
+**The page lit no tab.** `/progression-trees` was not in `OWNED_BY`, whose own
+AI-NOTE says leaving a route out "lights no tab at all, which is the exact
+failure `isCurrent` was written to prevent". It also kept the route out of the
+orphan-link guard — so the page whose comment says "the link on Profile is the
+only way in" was the one page nothing checked had a link.
+
+**ADR 0020 claimed something false about its own code**: that there was "no
+`user_id is null` filter a future refactor can drop". `loadProgressionTrees`
+carries exactly one, and it was the only thing keeping user-authored rows out —
+which mattered, because the slug uniqueness constraint is `nulls not distinct`,
+so a user row could reuse a system slug and the evaluator keys its map by slug.
+Corrected, and closed properly: migration `20260908120100` drops the write
+policy, because ADR 0002's amendment says the write half needs a named feature
+and node authoring is not one.
+
+Smaller: a NaN weight satisfied the weight floor (`NaN < 20` is false, and
+Postgres `numeric` accepts NaN); `weight_kg` accepted `0` and `null`, either of
+which silently makes a bodyweight node unsatisfiable; `loadUnlockSets` had no
+cap and no order, so past `max_rows` a rung could flip between locked and
+unlocked across two page loads; the page mapped over a hardcoded tree list, so a
+fifth tree would have rendered nowhere; and the reader cited `src/db/plans.ts`
+as re-validating jsonb on read, which it does not do at all.
+
+### Deviations from the plan, stated
+
+- The evaluator shipped as `src/gamification/unlocks.ts`, not
+  `progression.ts` as PR 5's section says — `src/metrics/progression.ts` already
+  means something else, and ADR 0018 had noted the word was overloading.
+  Argued in ADR 0020's Naming section.
+- The criteria vocabulary grew a `weight_kg` floor and a `never` kind beyond the
+  single `sets_at` the plan described.
+
+24 unit cases on the evaluator, 13 database cases on the rows. 867 unit tests,
+159 database cases (the runtime figure `npm run test:db` reports; the static
+`it(` count is 156, the difference being parameterised cases), `verify` and
+`build` clean.
 
 A dead CSS rule was written and removed in the same session: `.tree-heading`
 set `text-transform: capitalize` and `h2.section` already sets `uppercase` at

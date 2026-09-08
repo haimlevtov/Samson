@@ -93,7 +93,7 @@ against "how did last month go" and could only lose.
 | 1    | Level, and progress into the next one                                         |
 | 2    | Streak and adherence — the retention numbers, per PRD §3                      |
 | 3    | XP this week against the ceiling                                              |
-| 4    | Badges                                                                        |
+| 4    | Badges, and the link into the progression trees                               |
 | 5    | Tonnage and what it weighs as much as, acute:chronic, weekly chart, best e1RM |
 | 6    | — (settings moved to `/settings`; the cog is in the header)                   |
 

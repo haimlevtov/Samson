@@ -117,7 +117,7 @@ describe('the shipped trees', () => {
     for (const row of data ?? []) known.add(row.slug);
 
     for (const node of nodes) {
-      if (!('kind' in node.criteria)) continue;
+      if (!('kind' in node.criteria) || node.criteria.kind !== 'sets_at') continue;
       expect(
         known.has(node.criteria.exercise),
         `${node.slug} wants ${node.criteria.exercise}`
@@ -185,5 +185,62 @@ describe('a brand new account', () => {
       const open = states.filter((s) => s.node.tree === tree && s.unlocked);
       expect(open, tree).toHaveLength(1);
     }
+  });
+});
+
+describe('a user cannot author a node', () => {
+  /*
+   * The two cases `docs/adr/0002-catalogue-user-id.md`'s 2026-09-08 amendment
+   * names, written here because progression_nodes is the table that made the
+   * amendment necessary a second time.
+   *
+   * The write half of the catalogue policy pair is justified in that ADR by a
+   * NAMED future feature. There is no node-authoring feature, nothing under
+   * src/ or app/ writes one, and the reader deliberately returns only shared
+   * rows — so the pair granted INSERT to every authenticated session for
+   * nothing. Dropped in migration 20260908120100.
+   *
+   * WHY it was not merely untidy: progression_nodes_slug_unique is
+   * `unique nulls not distinct (user_id, slug)`, so a user row could REUSE a
+   * system slug — and `unlockStates` keys its map by slug. A user row carrying
+   * `{}` at the right level would have marked an ancestor unlocked and cascaded
+   * down the tree.
+   */
+  it('refuses a node of their own', async () => {
+    const { error } = await user.client.from('progression_nodes').insert({
+      user_id: user.id,
+      tree: 'push',
+      slug: `mine-${Date.now()}`,
+      name: 'A node I made up',
+      level: 0,
+    });
+
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses a node that would be shared with everyone', async () => {
+    // The escalation: a null user_id is what makes a row visible to every user
+    // in the project, so it is the insert that must never succeed.
+    const { error } = await user.client.from('progression_nodes').insert({
+      user_id: null,
+      tree: 'push',
+      slug: `shared-${Date.now()}`,
+      name: 'A node everyone gets',
+      level: 0,
+    });
+
+    expect(error).not.toBeNull();
+  });
+
+  it('refuses to rewrite a shipped node', async () => {
+    const before = await trees();
+    const target = before[0]!;
+
+    const { error } = await user.client
+      .from('progression_nodes')
+      .update({ unlock_criteria: {} })
+      .eq('slug', target.slug);
+
+    expect(error).not.toBeNull();
   });
 });

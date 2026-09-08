@@ -6,8 +6,12 @@
 > Written **before** the code it governs, which the three ADRs before it in this
 > phase were not. `docs/plans/phase-5-content-fill.md` said PR 5 would need one
 > — "whoever fills `unlock_criteria` first defines the shape, and that is
-> ADR-sized rather than migration-sized" — and this is that document, committed
-> on its own ahead of the migration.
+> ADR-sized rather than migration-sized" — and this is that document, in a
+> commit ahead of the migration and the evaluator.
+>
+> _Precisely: that commit also carried an unrelated test-fixture fix, so it is
+> not literally "its own commit". The ordering the rule is for holds; the
+> wording claimed slightly more than the log shows, and review caught it._
 
 ## Context
 
@@ -40,16 +44,23 @@ and the identical one-clause defence that must never be forgotten.
 executed, and there is no code path that could execute it.**
 
 Validated by a Zod schema (`src/gamification/unlocks.ts`), which is the single
-source of truth for the shape per the project's conventions. One kind to begin
-with:
+source of truth for the shape per the project's conventions.
 
 ```json
+{}                                                   a root: nothing to meet
+{ "kind": "never" }                                  met by nothing, ever
 { "kind": "sets_at", "exercise": "pushups", "sets": 3, "reps": 10 }
+{ "kind": "sets_at", "exercise": "weighted-pull-ups", "sets": 3, "reps": 5, "weight_kg": 20 }
 ```
 
-"Three sets of at least ten reps of this exercise, **within one completed
-workout**." An empty object `{}` is a root — nothing to meet, unlocked from the
-start.
+`sets_at` means "N sets of at least R reps of this exercise, **within one
+completed workout**". `weight_kg` is an optional **floor**, omitted entirely for
+a bodyweight node — the schema takes `.positive().optional()` rather than
+allowing `0` or `null`, because either would demand a recorded weight and lock a
+bodyweight movement out permanently.
+
+`never` exists for `src/db/progression.ts`'s fallback and is described in
+Consequences.
 
 A node is unlocked when its criteria are met **and its parent is unlocked**.
 That is what makes it a tree rather than a checklist, and it is what lets the
@@ -57,11 +68,26 @@ surface say what is next rather than only what is done.
 
 ### Why not SQL, stated as the security argument it is
 
-A structured criterion has no execution semantics at all. There is no clause to
-forget, no `user_id is null` filter that a future refactor can drop, and no way
-for a user-authored row to become code. The defence is structural rather than
-conditional, which is the difference between ADR 0009's achievement predicates —
-where the defence is one `where` clause and a test — and this.
+A structured criterion has no execution semantics at all. There is no way for a
+user-authored row to become code, and no `where user_id is null` clause guarding
+an `EXECUTE`. The defence is structural rather than conditional, which is the
+difference between ADR 0009's achievement predicates — where the defence is one
+`where` clause and a test — and this.
+
+> **Corrected 2026-09-08, the day this was written.** The sentence above
+> originally also claimed there was "no `user_id is null` filter that a future
+> refactor can drop". That was false about the shipped code:
+> `loadProgressionTrees` carries exactly such a filter, and it was the only
+> thing keeping user-authored rows out of the rendered tree — which mattered,
+> because `progression_nodes_slug_unique` is `nulls not distinct`, so a user row
+> could reuse a system slug and `unlockStates` keys its map by slug.
+>
+> The hazard this decision removes is **execution**, not that filter. The filter
+> moved from a SQL clause into TypeScript, where it is arguably less visible.
+> Migration `20260908120100` closes the gap properly by dropping the write
+> policy — there is no node-authoring feature, so per ADR 0002's amendment the
+> write half of the catalogue pair had nothing behind it — and
+> `tests/db/progression.test.ts` now asserts both directions.
 
 The cost is expressiveness: a criterion can only say what the schema has a word
 for. That is the right trade for content authored by this project, and the
