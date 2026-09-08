@@ -71,6 +71,36 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  /*
+   * The two SYSTEM rows have to be deleted by hand. Deleting the fixture users
+   * cascades away everything they own, and `user_id is null` means these belong
+   * to nobody — so nothing was cleaning them up.
+   *
+   * FOUND 2026-09-08, surveying the catalogue for the progression trees.
+   * Measured on the hosted project before the fix: 28 leaked "Secret Badge"
+   * achievements and 7 duplicate "Back Squat" exercises, one pair per run of
+   * this file since phase 0.
+   *
+   * WHY it matters more than untidiness: a system achievement is executed by
+   * `evaluate_achievements` on EVERY workout completion for EVERY user, forever.
+   * The count had reached 39, of which 28 were these, and each predicate costs a
+   * plpgsql subtransaction against a ceiling of 64 —
+   * .claude/skills/add-achievement/SKILL.md. The demo database was accumulating
+   * its way toward a cliff, one test run at a time.
+   *
+   * CI never saw it: the db job resets a fresh local stack every time. Only a
+   * workstation running the suite against hosted accumulates, which is the
+   * configuration this project develops in.
+   *
+   * AI-NOTE: any fixture written with `user_id: null` outlives its test. If you
+   *          add one, delete it here.
+   */
+  const admin = adminClient();
+  await Promise.all([
+    admin.from('achievements').delete().eq('id', hiddenAchievementId),
+    admin.from('exercises').delete().eq('id', systemExerciseId),
+  ]);
+
   await Promise.all([deleteTestUser(alice), deleteTestUser(bob)]);
 });
 
