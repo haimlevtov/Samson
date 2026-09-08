@@ -351,6 +351,68 @@ Surfaced at `/evidence`, linked from Coach. A table with no reader is the
 
 ---
 
+---
+
+## PR 7 — the demo database has no progress in it
+
+**Branch `seed-progress`.** Not in the original six; added 2026-09-08 from a
+direct product request, and written here before the code as the ordering rule
+requires.
+
+### The problem, measured
+
+The five seeded users have 78–92 workouts each and:
+
+|             |                                 |
+| ----------- | ------------------------------- |
+| XP          | **0**                           |
+| Level       | 1, for all five                 |
+| Badges      | **0**                           |
+| Leaderboard | five people **tied at nothing** |
+
+Every surface phase 4 and phase 5 built is therefore empty in the demo. The
+level card reads 1, the XP meter reads 0 of 500, the badge shelf says "nothing
+unlocked yet", and the leaderboard — the one place in the app where you see
+another person — is five names against a column of zeroes.
+
+The history is real; nothing has ever been _evaluated_ against it. `npm run seed`
+writes workouts and sets with the service role and stops there.
+
+### The decision, and the alternative rejected
+
+**Award through the real path.** The seeder signs in as each archetype and calls
+`award_session_xp` once per completed workout, in date order.
+
+The alternative is to insert `xp_events` rows directly with the service role,
+which is one statement instead of four hundred round trips. **Rejected**, and not
+on style: ADR 0009 makes `award_session_xp` the only path that writes XP, derives
+every figure from rows already in the database, and enforces the weekly ceiling
+in a trigger. XP inserted directly would be XP that the rules did not produce —
+a demo database whose numbers cannot be reproduced by using the app, which is
+the one property a demo of a rules engine needs.
+
+Going through the real path also means the rest arrives for free and correctly:
+
+- **Badges** unlock from the ten predicates evaluating real history, not from a
+  list of slugs somebody chose.
+- **Levels** are read from lifetime XP by `levelForXp`, so they cannot disagree.
+- **The leaderboard** becomes a genuine ranking, because it reads `xp_events`.
+
+### The constraint
+
+`npm run seed` is timed in CI against a **60-second budget** (PLAN.md phase 1),
+and this adds roughly four hundred RPCs. Sequential per user so the weekly
+ceiling and the diminishing-returns curve see sessions in the order they
+happened; the five users run in parallel. Measured, not assumed — and if it does
+not fit, the awarding window shortens rather than the budget moving.
+
+### What this is not
+
+Not new content, not a new surface, and no schema change. If a badge does not
+unlock for anybody, that is a fact about the predicates and the seeded history,
+and the fix is a better fixture rather than a hand-written `achievement_events`
+row.
+
 ## Verification
 
 Each PR: `npm run verify`, `npm run build`, `npm run test:db` where a migration
