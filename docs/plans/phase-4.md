@@ -199,8 +199,11 @@ both eval modes), `npm run test:db`, `npm run build`.
 
 - The plan and both artifacts are committed **before** the code they govern, in
   their own commit.
-- `npm run seed` gains XP and achievement history for the archetypes, so
-  `/progress` is not empty on a fresh demo.
+- ~~`npm run seed` gains XP and achievement history for the archetypes, so
+  `/progress` is not empty on a fresh demo.~~ **Not delivered in phase 4**, and
+  phase 4 Outcome did not record it as outstanding. The five users sat at 0 XP,
+  level 1 and no badges until PR 7 of
+  [phase-5-content-fill.md](phase-5-content-fill.md). **Closed** there.
 - Docker is not needed — the hosted project takes the migrations via
   `npm run db:push`, per the leave-nothing-running rule in `CLAUDE.md`.
 - `fast-check` goes through the `dependency-versioning` skill before install,

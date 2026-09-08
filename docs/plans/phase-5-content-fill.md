@@ -351,8 +351,6 @@ Surfaced at `/evidence`, linked from Coach. A table with no reader is the
 
 ---
 
----
-
 ## PR 7 — the demo database has no progress in it
 
 **Branch `seed-progress`.** Not in the original six; added 2026-09-08 from a
@@ -361,7 +359,8 @@ requires.
 
 ### The problem, measured
 
-The five seeded users have 78–92 workouts each and:
+The five seeded users have 79–93 workout rows each (measured 2026-09-08; the
+seeder generates relative to today, so this range moves with the calendar) and:
 
 |             |                                 |
 | ----------- | ------------------------------- |
@@ -401,10 +400,19 @@ Going through the real path also means the rest arrives for free and correctly:
 ### The constraint
 
 `npm run seed` is timed in CI against a **60-second budget** (PLAN.md phase 1),
-and this adds roughly four hundred RPCs. Sequential per user so the weekly
-ceiling and the diminishing-returns curve see sessions in the order they
-happened; the five users run in parallel. Measured, not assumed — and if it does
-not fit, the awarding window shortens rather than the budget moving.
+and this adds one RPC per kept day. Sequential per user so the weekly ceiling and
+the diminishing-returns curve see sessions in the order they happened; the five
+users run in parallel. Measured, not assumed — and if it does not fit, the
+awarding window shortens rather than the budget moving.
+
+> **Corrected in review**, twice, and both corrections are the same mistake:
+> counting workout ROWS rather than the thing being counted.
+>
+> "Roughly four hundred RPCs" was the total row count, 417. The first
+> implementation awarded only `completed` sessions, which is **160** — and that
+> was itself a bug, because `award_session_xp` awards `rest` identically and
+> deliberately (CLAUDE.md #4, migration 20260902100000). Every kept day is now
+> awarded: **365** calls across the five users, against 417 rows.
 
 ### What this is not
 
@@ -471,6 +479,67 @@ _good_, only that it is consistent. `docs/plans/phase-2.md`'s Lesson 8 is the
 standing warning against treating the two as the same thing.
 
 ## Outcome
+
+### PR 7 — the demo database has progress in it, 2026-09-08
+
+Shipped. Measured on the hosted project, `npm run seed` in **27.3s** against the
+60-second budget; CI times it against a local stack, where the round trips are
+roughly twenty times cheaper.
+
+|       |   XP | Level | Badges | Tree rungs |
+| ----- | ---: | ----: | -----: | ---------: |
+| Dan   | 5798 |     8 |      7 |       8/20 |
+| Yossi | 5012 |     8 |      5 |       8/20 |
+| Noa   | 4984 |     8 |      5 |       8/20 |
+| Maya  | 4555 |     8 |      6 |       8/20 |
+| Tom   | 3994 |     7 |      4 |       8/20 |
+
+**The number that matters is not the size, it is the agreement.** The seeded
+adherence XP equals what `weeklyAwards` in `src/gamification/xp.ts` — the
+deterministic definition, invariant #1 — computes over the same history, exactly,
+for three of five users. The other two are 45 and 26 XP lower, which is the
+weekly 500 ceiling: `weeklyAwards` deliberately does not apply it and the RPC
+does. Both users have weeks pinned at exactly 500. An exact match on all five
+would have meant the ceiling was not working.
+
+**Three things went wrong on the way, all found by review, all worth recording
+because none was visible from the output.**
+
+1. **The first implementation awarded 20–27% of the correct XP, and reordered the
+   leaderboard.** It bulk-inserted a user's whole history and then awarded it.
+   `award_session_xp` reads the week's kept-day count with no as-of bound — which
+   is right when rows appear as they are lived — so against a pre-loaded week
+   every session was charged the LAST one's discount: a seven-day week paid 26 XP
+   four times where the engine says 100, 80, 64, 51. History is now written one
+   session at a time, in date order, each kept day awarded before the next exists.
+   The RPC was not changed: it is correct for the way the app writes, and the
+   seeder was the thing lying about being a user.
+
+2. **Every badge unlocked on the first call.** Same cause: `evaluate_achievements`
+   tests the whole history, so with everything pre-loaded all eleven fired at
+   once, stamped with the oldest session's date, their 75 XP each colliding with
+   that week's ceiling — and `achievement_events` is once-only, so the XP past
+   the ceiling was never paid. Badges now land on 4–7 distinct dates spread
+   across months, which is both correct and the better demo.
+
+3. **Rest days were not awarded at all.** `award_session_xp` awards `rest`
+   identically and deliberately, and the pass filtered to `completed`, leaving
+   most of each week's kept days unpaid while they still moved the curve — the
+   exact defect migration 20260902100000 was written to fix, recreated one layer
+   up.
+
+**Also fixed, found by the same review round:** a user could attach a set to
+another user's workout (`sets_own` checked `user_id` and nothing about
+`workout_id`), which two predicates then read across the boundary — migration
+`20260908140000`, reproduced before it was fixed and asserted in
+`tests/db/rls.test.ts`. And `loadUnlockSets` was ordering by `workout_id` under
+a comment claiming newest-first: a random uuid, the same defect as ADR 0021, one
+file from the migration that fixes it.
+
+**What is authored rather than observed.** Six bodyweight accessories were added
+to the two shared programmes, two of them prerequisites whose prescriptions are
+written to clear the rung above them. Recorded in `docs/FRAMING.md`'s
+invented-content list, where the project keeps that kind of admission.
 
 ### PR 5 — progression trees, 2026-09-08
 
@@ -817,6 +886,11 @@ with `array_agg(... order by created_at)`, and `created_at` defaults to
 transaction time — so every set written by one INSERT ties, and the seeder
 writes them in batches. Two evaluations over identical data could disagree,
 which is the first thing the skill's §2 forbids. Now ordered by a total order.
+
+> **Superseded, PR 7.** A total order was the narrower answer: the added keys
+> were `workout_id, set_index`, and `workout_id` is a random uuid. The result was
+> stable within one database and still arbitrary, so the badge kept being decided
+> by a draw. See [ADR 0021](../adr/0021-training-order-is-local-date.md).
 
 **`users.timezone` was unvalidated input to a definer function.** The column is
 bare text; its validation lived only in Zod at the app boundary, and

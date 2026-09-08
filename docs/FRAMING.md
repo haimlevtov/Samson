@@ -179,6 +179,7 @@ the product if wrong.
 
 - **Detraining costs 65% of accumulated progress** after a layoff (`archetypes.ts`). Invented, then tuned when a test proved the first value invisible.
 - **Every archetype's parameters** — weeks of history, days per week, adherence rate, starting loads, progression increments, and their timezones (Jerusalem, Berlin, New York, London).
+- **Six bodyweight accessories in the shared programmes** (2026-09-08), added so the progression trees have someone standing on them. Two are prerequisites for the rung above them, and their rep counts are chosen to clear that rung: 16 where the criterion asks 15. Ordinary training to read, authored to demonstrate a feature in fact, and the distinction is the reason this line exists.
 - **Which exercise categories count as programmable** — strength, powerlifting, olympic, strongman, plyometrics. Stretching and cardio are filtered out of every planner candidate list.
 - **The canonical equipment vocabulary** and which source names collapse onto which tag.
 - **Movement patterns for ~30 compound lifts**, curated by keyword; everything else is left NULL.

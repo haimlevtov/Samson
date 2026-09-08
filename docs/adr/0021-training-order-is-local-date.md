@@ -39,26 +39,31 @@ reason this document exists. **A total order is not the same as the right
 order.** Measured on the hosted project while seeding progression history, for
 the `returning` archetype: all **179** qualifying working sets carried **one
 distinct `created_at`**. The first sort key was not merely tie-prone, it was
-constant. That left `workout_id` — a random uuid — deciding which of eighty-seven
-sessions counted as "the one they started on".
+constant. That left `workout_id` — a random uuid — deciding which session
+counted as "the one they started on": per exercise, one of the 8 to 10 sessions
+that hold a qualifying working set for it. (An earlier draft of this paragraph
+said "one of eighty-seven", which is that user's total workout row count. Rest
+and skipped days carry no sets and could never have been picked. Corrected in
+review, and worth keeping visible in a document whose argument is that the
+population you are drawing from is the whole question.)
 
 The badge was therefore awarded by lottery, and re-running `npm run seed`
 re-drew it. Best-over-first per exercise, the uuid's pick against the true
 earliest session:
 
-| Exercise                | uuid pick | true first |
-| ----------------------- | --------- | ---------- |
-| barbell-full-squat      | 1.15      | 1.25       |
-| barbell-bench-press     | 1.16      | 1.22       |
-| bent-over-barbell-row   | 1.12      | 1.19       |
-| barbell-deadlift        | 1.09      | 1.19       |
-| standing-military-press | 1.07      | 1.25       |
-| incline-dumbbell-press  | 1.10      | 1.38       |
-| romanian-deadlift       | 1.13      | 1.24       |
+| Exercise                        | uuid pick | true first |
+| ------------------------------- | --------- | ---------- |
+| barbell-full-squat              | 1.15      | 1.25       |
+| barbell-bench-press-medium-grip | 1.16      | 1.22       |
+| bent-over-barbell-row           | 1.12      | 1.19       |
+| barbell-deadlift                | 1.09      | 1.19       |
+| standing-military-press         | 1.07      | 1.25       |
+| incline-dumbbell-press          | 1.10      | 1.38       |
+| romanian-deadlift               | 1.13      | 1.24       |
 
-Every one is understated, and in the same direction: a session drawn uniformly
-from a progressing history is on average much heavier than the first one, so the
-ratio is always too small. This user had earned the badge on four lifts and was
+Every one is understated, and in the same direction: a session drawn at random
+from a progressing history is on average much heavier than the one the user
+actually started on, so the ratio is always too small. This user had earned the badge on four lifts and was
 told they had earned it on none.
 
 ## Decision
@@ -89,9 +94,17 @@ decorative. It is not: `.claude/skills/add-achievement/SKILL.md` §2 puts
 against the same data on two different databases.
 
 **Make `sets.created_at` meaningful by inserting one row at a time.** Rejected
-without much argument — it makes `npm run seed` several hundred round trips
-slower to fix a column that would still mean "write time", and the seeder is
-already timed against a 60-second budget.
+as a fix for _this_ — it would leave the column meaning "write time", so any
+future bulk write breaks the predicate again, and ordering on a column whose
+correctness depends on how a script happens to insert is the fault rather than
+the repair.
+
+> **Amended the same day.** The seeder now does write one session at a time, for
+> an unrelated reason: awarding a pre-loaded history charges every session in a
+> week the last one's place on the XP curve, and fires every badge at once. So
+> `created_at` would in fact order the seeded data correctly today. It changes
+> nothing here — the predicate must not depend on that, which is exactly the
+> argument above.
 
 ## Consequences
 
@@ -99,6 +112,16 @@ already timed against a 60-second budget.
   `20260908090200` already names `twenty-percent-up` as the one that groups and
   `array_agg`s every set. `sets.workout_id` is `not null` and foreign-keyed, so
   the join matches exactly one row and cannot change which sets are considered.
+
+  > **Amended in review.** That sentence is true about how MANY rows the join
+  > matches and says nothing about **whose**, which turned out to be the
+  > omission that mattered: `sets.user_id` and `workouts.user_id` were unrelated
+  > by anything, and `evaluate_achievements` is `security definer`, so the join
+  > read every user's workouts. Migration `20260908140000` scopes both this
+  > predicate and `hundred-tonnes`, and closes the write path that made it
+  > reachable. Measured there too: without a filter on `w`, the plan is a
+  > sequential scan of the whole `workouts` table on every evaluation.
+
 - Users who hold the badge keep it. `achievement_events` has no memory of which
   version of a predicate let them in, and the slug is never reused — the
   AI-NOTE on `20260908090400` says so and this follows it.

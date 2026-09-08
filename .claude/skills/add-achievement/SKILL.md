@@ -40,6 +40,19 @@ Predicates run server-side against logged workout data only. They must be:
 For `calendar` tier, evaluate against the **user's local date** derived from
 their stored IANA timezone. Never `now()` in server time.
 
+**Any predicate that needs training ORDER — "the first set", "the nth session",
+"since they started" — orders by `workouts.local_date`, never `sets.created_at`.**
+That column defaults to `now()`, which is transaction time: a bulk write gives
+every row in it one identical value, so it does not merely tie, it can be
+constant across a user's whole history. `workout_id` is a random uuid and settles
+nothing either. `twenty-percent-up` got this wrong twice and awarded a badge on a
+coin toss both times — [ADR 0021](../../../docs/adr/0021-training-order-is-local-date.md).
+
+A predicate that reads `public.workouts` must also filter it by the evaluating
+user. `s.user_id = $1` on the sets alone is not enough: `evaluate_achievements`
+is `security definer`, so the join sees every user's rows — migration
+`20260908140000`.
+
 ```sql
 -- INVARIANT: calendar achievements use the user's local date — see CLAUDE.md #9
 -- WHY: New Year's Eve is a different absolute moment per timezone; server-date
