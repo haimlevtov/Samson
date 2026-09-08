@@ -253,9 +253,10 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
     appended: true,
   },
   // The rung below the push-up, for the same reason as the barbell lifter's
-  // lying leg raise — see the note there. `push-decline` wants push-ups but
-  // `push-full` above it wants incline push-ups, so without these the push
-  // chain stopped at its root for everyone.
+  // lying leg raise — see the note there. `push-decline` wants push-ups, but
+  // `push-full` BELOW it wants incline push-ups (level 1 against level 2, and
+  // the reader orders by level ascending), so without these the push chain
+  // stopped at its root for everyone.
   {
     exerciseSlug: 'incline-push-up',
     sets: 3,
@@ -541,6 +542,27 @@ export function generateHistory(
 
       const entries = archetype.programme.filter((e) => e.day === day % 3);
       if (entries.length === 0) continue;
+
+      /*
+       * FOUND IN REVIEW: `appended` protects the shared stream only INSIDE
+       * `buildSets`. Whether a day is trained at all is decided out here, and
+       * it costs a draw — `chance(rng, adherence)` below — and advances
+       * `earned`, which drives every later working load. So an appended entry
+       * that is the ONLY entry on its day turns a skipped day into a session
+       * and re-rolls the history anyway, which is the exact re-baseline the
+       * flag exists to prevent. Measured while this was being written: one such
+       * entry changed 21 of the beginner's 68 rows, loads included.
+       *
+       * INVARIANT: an appended entry never decides that a day happens.
+       */
+      if (entries.every((e) => e.appended === true)) {
+        throw new Error(
+          `${archetype.key}: day ${day % 3} holds only appended entries ` +
+            `(${entries.map((e) => e.exerciseSlug).join(', ')}). ` +
+            'An appended entry must share its day with a non-appended one, or it ' +
+            'creates the session it is supposed to be invisible to.'
+        );
+      }
 
       if (!chance(rng, archetype.adherence)) {
         workouts.push({ localDate, status: 'skipped', notes: null, sets: [] });
