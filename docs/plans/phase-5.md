@@ -2,6 +2,15 @@
 
 Branch: many. 2026-09-05 to 2026-09-07, PRs #7 to #19.
 
+> **Phase 5 is three documents.** This is the first — the record of what the
+> phase became. The other two are
+> [`rework-profile-hub-coach.md`](rework-profile-hub-coach.md), the plan that
+> governed PRs #11–#17, and
+> [`phase-5-content-fill.md`](phase-5-content-fill.md), the plan for the content
+> the brief actually asked for, built afterwards.
+> [`README.md`](README.md) has the whole phase in one PR table and explains why
+> the three are separate rather than merged.
+
 > **This is a record, not a plan, and the difference is the point.**
 >
 > `CLAUDE.md` says the artifact trail is graded **and so is its order** — a plan

@@ -9,8 +9,9 @@ Each phase is written as a brief. Hand one to an agent in plan mode, review the
 plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
-**Current phase: 5** — phases 0 to 4 are complete; see `docs/plans/` for the
-plan and recorded outcome of each. Phase 5 shipped, but **not the phase written
+**Current phase: 5** — phases 0 to 4 are complete; see
+[`plans/README.md`](plans/README.md) for what each plan is, which genre it
+belongs to, and the whole PR history in one table. Phase 5 shipped, but **not the phase written
 below**: it became interface and feature work, and
 [`plans/phase-5.md`](plans/phase-5.md) records the divergence and what the
 content-fill brief still owes. That debt is **now paid in full** rather than written
