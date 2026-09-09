@@ -12,13 +12,25 @@ export default defineConfig({
     //     near-total coverage of the metrics engine, and invariant #1 puts every
     //     user-visible number in there. A threshold turns that from a claim into
     //     something CI fails on.
-    // AI-NOTE: scoped to src/metrics deliberately. Widening this to all of src/
-    //          would drag in the Next.js app and the Supabase clients, whose
-    //          coverage is not meaningful and would force the number back down.
+    //
+    // WHY src/diet joined it in phase 6: the same argument, one invariant along.
+    //     CLAUDE.md #6 puts the calorie clamp here, and the clamp is the whole
+    //     safety property of the diet advisor — an untested branch in it is a
+    //     path by which a floor is not applied. It is the second module in the
+    //     project whose output a user cannot sanity-check by looking at it.
+    //
+    // AI-NOTE: scoped to these two deliberately. Widening to all of src/ would
+    //          drag in the Next.js app and the Supabase clients, whose coverage
+    //          is not meaningful and would force the number back down.
     coverage: {
       provider: 'v8',
-      include: ['src/metrics/**/*.ts'],
-      exclude: ['src/metrics/**/*.test.ts', 'src/metrics/index.ts', 'src/metrics/types.ts'],
+      include: ['src/metrics/**/*.ts', 'src/diet/**/*.ts'],
+      exclude: [
+        'src/metrics/**/*.test.ts',
+        'src/metrics/index.ts',
+        'src/metrics/types.ts',
+        'src/diet/**/*.test.ts',
+      ],
       reporter: ['text-summary', 'html'],
       thresholds: { lines: 95, functions: 95, branches: 90, statements: 95 },
     },

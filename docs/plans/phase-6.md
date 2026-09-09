@@ -15,14 +15,14 @@ planned until a scope question is answered.
 
 ## Status — planned
 
-| PR  | What                                                                       | Branch              | State                                            |
-| --- | -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------ |
-| 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | shipped 09-09                                    |
-| 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09) |
-| 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | planned                                          |
-| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned                                          |
-| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                          |
-| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                          |
+| PR  | What                                                                       | Branch              | State                                                              |
+| --- | -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------ |
+| 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | shipped 09-09                                                      |
+| 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09)                   |
+| 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
+| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned                                                            |
+| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                                            |
+| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
 
 PR 6 is marked blocked rather than planned, and [the reason](#pr-6--file-import)
 is a scope question that has to be answered before it can be estimated. Nothing
@@ -689,6 +689,58 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### PR 3 — the arithmetic and the clamp, 2026-09-09
+
+**The sweep earned its place on its first run**, which is the answer to whether
+35,280 combinations is proportionate for six functions.
+
+Mifflin–St Jeor goes **negative** for inputs every column admits: one kilogram at
+one centimetre, aged 120, female is `10 + 6.25 − 600 − 161 = −745 kcal`. The
+floor did exactly what it exists to do and produced a target of 1,200 — and that
+is what made it dangerous, because the page would have rendered a perfectly
+reasonable calorie target beside "your resting burn is −745 kcal". A body the
+equation returns nothing positive for is now refused (`no-resting-rate`) rather
+than clamped into looking sane. No example test would have gone looking there.
+
+**Two of the properties as first written were wrong, and the sweep said so.**
+
+- The upper bound was asserted unconditionally. It fails legitimately for a small
+  person whose BMR is under 1,200: the absolute floor can exceed TDEE + 15%,
+  which is what an absolute floor is for. The property is now "bounded by the
+  goal **or** by the floor, and `floorReached` says which" — stronger than the
+  original, and true.
+- `Math.round(tdee * 1.15)` and `Math.round(tdee + tdee * 0.15)` disagree by one
+  kcal at `tdee = 1470`, because `1470 * 1.15` is `1690.4999999999998` in
+  IEEE754. The bound uses `floor`/`ceil` now, which is what "bounded after
+  rounding to whole kcal" actually means.
+
+**Everything is rounded once, at the source.** `bmrKcal` is rounded, `tdeeKcal`
+is derived from the rounded BMR, and the floor is computed from the same rounded
+BMR — so `target >= floor` holds exactly rather than to within half a kcal.
+`src/gamification/level.ts` carries the same lesson about rounding per step
+rather than at the end of a sum.
+
+**The coverage gate now includes `src/diet/**`**, which the plan assigned to this
+PR. 99.13% statements, 97.94% branches, 100% functions and lines, against
+thresholds of 95/95/90/95.
+
+**Proof the tests are load-bearing**, each break run and reverted:
+
+| Break                                     | Red |
+| ----------------------------------------- | --- |
+| Floor removed from the clamp              | 3   |
+| `unspecified` given the `female` constant | 1   |
+| Age gate deleted                          | 3   |
+| Non-positive BMR refusal removed          | 2   |
+
+The second is worth naming honestly: only the unit test caught it. The property
+"`unspecified` never yields less than `female`" is a `>=`, and making the two
+constants equal satisfies it. The property is still the right one — it forbids
+the dangerous direction — but it is not the test that pins the constant.
+
+**Deviation from the plan:** none in substance. The plan's pseudocode omitted the
+non-positive BMR refusal, because nobody had run the sweep yet.
 
 ### PR 2 — the inputs, 2026-09-09
 

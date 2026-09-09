@@ -4,13 +4,14 @@ The behaviour `src/diet/` is tested against. Design and threat model:
 [ADR 0024](../adr/0024-diet-advisor.md). Read that first; this is the part with
 the numbers in it.
 
-> **§1 describes code that exists. §2 to §5 do not yet.** The advisor ships over
-> four PRs ([`plans/phase-6.md`](../plans/phase-6.md)) and this spec was written
-> whole, before them, so the tests can be written from it. As of **2026-09-09**
-> only the inputs in §1 are built — `src/diet/biometrics.ts`, the settings
-> fields, and the column bounds. `energy.ts`, the clamp, `dietReplySchema` and
-> the surface are PRs 3 and 4. Nothing below §1 should be read as a description
-> of the running app.
+> **Each section says whether it describes code that exists.** The advisor ships
+> over four PRs ([`plans/phase-6.md`](../plans/phase-6.md)) and this spec was
+> written whole, before them, so the tests can be written from it.
+>
+> As of **2026-09-09**: §1 (the inputs), §2 (the equation and the clamp) and §3
+> (the refusals) are built, in `src/diet/biometrics.ts` and `src/diet/energy.ts`.
+> §4 — `dietReplySchema`, the payload and the surface — is PR 4 and does not
+> exist yet.
 
 ## 1. What is collected, and where — **built**
 
@@ -99,7 +100,7 @@ detects, and it feeds the age comparison that decides whether a target is shown
 at all. `isRealDate` builds the date from its parts and requires the parts to
 survive.
 
-## 2. The equation — **PR 3, not built**
+## 2. The equation — **built**
 
 Mifflin–St Jeor, in kilograms, centimetres and years:
 
@@ -160,21 +161,29 @@ validates it with `z.enum` and the default branch is the safe direction.
 computed and rendered; it is never sent to a model — it is bodyweight one
 division away.
 
-## 3. The refusals — **PR 3, not built**
+## 3. The refusals — **built**
 
 The engine returns a discriminated result, never a partial number. Each of these
 is a distinct case the surface renders in its own words:
 
-| Case                | When                                                       |
-| ------------------- | ---------------------------------------------------------- |
-| `missing-biometric` | any of the four is null — the result **names which**       |
-| `under-18`          | `ageYears < 18` against the user's local date              |
-| `implausible-input` | any input non-finite, or the computed target reaches 6,000 |
+| Case                | When                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `missing-biometric` | any of the four is null — the result **names which**                                                                                                               |
+| `under-18`          | `ageYears < 18` against the user's local date; the result carries the age                                                                                          |
+| `implausible-input` | reason `non-finite` (a non-finite or out-of-range measurement), `unreal-date`, `no-resting-rate` (see below), or `ceiling` (the target or the floor reaches 6,000) |
 
-`under-18` and `implausible-input` are checked before any figure is produced. A
-non-finite input is refused **before the first multiplication**: `Math.min` and
+A non-finite input is refused **before the first multiplication**: `Math.min` and
 `Math.max` propagate NaN, and a NaN target is not null, so it would pass the
 missing-biometric branch and render.
+
+**`no-resting-rate` was found by the sweep, on its first run.** Mifflin–St Jeor
+goes negative for combinations every column admits — one kilogram at one
+centimetre, aged 120, female is 10 + 6.25 − 600 − 161 = **−745 kcal**. The floor
+still rescued the target, which came out at a perfectly reasonable 1,200, and
+that is exactly why it needed catching: the clamp did its job and the page would
+have shown "your resting burn is −745 kcal" beside a sensible-looking number. A
+body the equation returns nothing positive for is refused rather than clamped
+into looking sane.
 
 ## 4. What the model is given, and what comes back — **PR 4, not built**
 
@@ -199,8 +208,9 @@ figure, the band. The model's prose sits beside them.
 
 ## 5. What the tests must cover
 
-**Property sweeps over generated inputs** — PR 3, not written — not a handful of
-examples, because the acceptance criterion is adversarial:
+**Property sweeps over generated inputs** — built, `src/diet/energy.test.ts`,
+35,280 combinations — not a handful of examples, because the acceptance criterion
+is adversarial:
 
 - No combination of weight, height, age, sex, session count and goal produces a
   target below `max(bmr, 1200)`.
@@ -208,13 +218,21 @@ examples, because the acceptance criterion is adversarial:
   admit before this PR's bounds, and after them.
 - `NaN`, `Infinity` and `-Infinity` in each numeric input return
   `implausible-input`, never a number.
-- The adjustment is bounded in both directions regardless of goal, and an
-  unrecognised goal never produces a deficit.
+- Every figure is a **positive** whole number, not merely a finite one — a
+  negative BMR passed the clamp once, and the target it produced looked fine.
+- The target is bounded by the goal **or** by the floor, and `floorReached` says
+  which. There is no third source. An unrecognised goal never produces a deficit.
 - Monotonic where it must be: heavier is never fewer calories, more sessions is
   never fewer calories.
 - `unspecified` never yields less than `female` would.
 - `under-18` is evaluated against a supplied `today`, so the boundary is testable
-  on both sides of a birthday.
+  on both sides of a birthday — including a 29 February one, which ages on 1
+  March in a non-leap year, a day late rather than a day early.
+
+**Proof the sweep is load-bearing.** Each of these was broken deliberately and
+the failures recorded before the PR opened: removing the floor from the clamp
+(3 tests red), flipping the `unspecified` constant to `female`'s (1), dropping
+the age gate (3), and removing the non-positive BMR refusal (2).
 
 **Database, in `tests/db` — built, `tests/db/biometrics.test.ts`:**
 
