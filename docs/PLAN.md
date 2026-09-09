@@ -152,8 +152,10 @@ analysis is measuring.
 - **Every rule in `rules.ts` has a test that fails a plan violating it**, and a
   plan that passes the rules but is rejected by the critic is recorded as such —
   the two rejection sources are never conflated in the ledger
-- Cache hit rate measured and recorded in the report notes
-- Cost per plan generation recorded per model tried
+- Cache hit rate measured and recorded in the report notes — **unmet.** Blocked
+  on an OpenRouter key, not on work: no live call has ever run.
+- Cost per plan generation recorded per model tried — **unmet**, same reason.
+  `npm run eval:planner -- --live` is written and unrun.
 
 ---
 

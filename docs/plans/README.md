@@ -51,7 +51,7 @@ whether the feature exists.
 | [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
-| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | **in progress**              |
+| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | in progress                  |
 
 ## Phase 5 is three documents, and here is why
 
@@ -130,7 +130,7 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — five of the nine open items
+**Blocked on an OpenRouter key, not on work** — five of the ten open items
 below, and worth
 grouping because one `.env.local` line closes them:
 
@@ -146,12 +146,13 @@ grouping because one `.env.local` line closes them:
 
 **Known gaps that need work:**
 
-| From                     | Item                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                    |
-| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                      |
-| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                            |
-| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred |
+| From                     | Item                                                                                                                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                                                                            |
+| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                                                                              |
+| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                    |
+| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                         |
+| [phase-6.md](phase-6.md) | **A decision, not work:** which file-import formats are meant. Three of the four are endurance formats and this is a strength app. PR 6 is blocked until it is answered |
 
 **Not a gap, a property to keep stating accurately:** the chat's topical
 confinement is a mitigation rather than a guarantee, and

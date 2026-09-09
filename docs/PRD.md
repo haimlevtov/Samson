@@ -250,11 +250,25 @@ a different thing from a page a user browses — the table now exists for that t
 retrieve from. Acceptance is adversarial: no prompt, persona or framing moves
 the floor, and every attempt is logged.
 
+**Planned 2026-09-09 in [`plans/phase-6.md`](plans/phase-6.md).** Its surface is
+**the Coach tab**, as a disclosure beside the plan, not a sixth tab and not its
+own route — a calorie target for the training you are being coached on is the
+same subject as the plan above it. How the floor is actually held: the model is
+sent categories rather than figures, may write no numeral at all, and code
+renders every number the user sees.
+
 ### 5.8 Import — **Deferred** (phase 6)
 
 `.fit`, `.tcx`, `.gpx` and Apple Health XML. File import is the primary path and
-must demo without any native module. Health Connect and HealthKit only if a test
-device exists.
+must demo without any native module. ~~Health Connect and HealthKit only if a
+test device exists.~~ **Out as of 2026-09-09** — the condition was a test device
+and there is none; naming it as out beats leaving it ambiguous.
+
+**The file formats are an open question, not a plan.** Three of the four are
+endurance formats and this is a strength app; there is no table a GPS track
+belongs in. [`plans/phase-6.md`](plans/phase-6.md) states the three readings —
+Apple Health only, all four with a decision about what a run becomes, or cut —
+and does not choose between them.
 
 ---
 
