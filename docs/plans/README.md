@@ -51,7 +51,7 @@ whether the feature exists.
 | [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
-| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | in progress                  |
+| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
 
 ## Phase 5 is three documents, and here is why
 
@@ -80,32 +80,33 @@ the live document. The snapshot table at the top of
 
 None of the three carries this list end to end.
 
-| PR                                                  | Merged | What                                                | Where it is planned or recorded                  |
-| --------------------------------------------------- | ------ | --------------------------------------------------- | ------------------------------------------------ |
-| [#7](https://github.com/haimlevtov/Samson/pull/7)   | 09-07  | Schema invariants against hosted, without Docker    | [phase-5.md](phase-5.md)                         |
-| [#8](https://github.com/haimlevtov/Samson/pull/8)   | 09-07  | A distinct device voice per coach                   | [phase-5.md](phase-5.md)                         |
-| [#9](https://github.com/haimlevtov/Samson/pull/9)   | 09-05  | The training page rebuilt as a set grid             | [phase-5.md](phase-5.md)                         |
-| [#10](https://github.com/haimlevtov/Samson/pull/10) | 09-05  | Five-tab navigation, a theme, consistent routes     | [phase-5.md](phase-5.md)                         |
-| [#11](https://github.com/haimlevtov/Samson/pull/11) | 09-07  | Profile owns what you earned; Hub owns other people | [rework](rework-profile-hub-coach.md) PR 1       |
-| [#12](https://github.com/haimlevtov/Samson/pull/12) | 09-07  | Accepting a challenge is what puts it in play       | [rework](rework-profile-hub-coach.md) PR 2       |
-| [#13](https://github.com/haimlevtov/Samson/pull/13) | 09-07  | Exercise progression charts in History              | [rework](rework-profile-hub-coach.md) PR 3       |
-| [#14](https://github.com/haimlevtov/Samson/pull/14) | 09-07  | The coach chat                                      | [rework](rework-profile-hub-coach.md) PR 4       |
-| [#15](https://github.com/haimlevtov/Samson/pull/15) | 09-07  | Settings as a route, and `OWNED_BY`                 | [rework](rework-profile-hub-coach.md), unplanned |
-| [#16](https://github.com/haimlevtov/Samson/pull/16) | 09-07  | A running session kept out of History               | [rework](rework-profile-hub-coach.md), unplanned |
-| [#17](https://github.com/haimlevtov/Samson/pull/17) | 09-07  | The leaderboard                                     | [rework](rework-profile-hub-coach.md) PR 5       |
-| [#18](https://github.com/haimlevtov/Samson/pull/18) | 09-07  | The skills `CLAUDE.md` advertised and did not have  | [rework](rework-profile-hub-coach.md), unplanned |
-| [#19](https://github.com/haimlevtov/Samson/pull/19) | 09-07  | Two cards that met with no space between them       | [rework](rework-profile-hub-coach.md), unplanned |
-| [#20](https://github.com/haimlevtov/Samson/pull/20) | 09-07  | The phase-5 record itself                           | [phase-5.md](phase-5.md)                         |
-| [#21](https://github.com/haimlevtov/Samson/pull/21) | 09-08  | The content-fill plan, committed before its code    | [content-fill](phase-5-content-fill.md) PR 1     |
-| [#22](https://github.com/haimlevtov/Samson/pull/22) | 09-08  | Achievements across every tier                      | [content-fill](phase-5-content-fill.md) PR 2     |
-| [#23](https://github.com/haimlevtov/Samson/pull/23) | 09-08  | Cumulative-tonnage comparisons                      | [content-fill](phase-5-content-fill.md) PR 3     |
-| [#24](https://github.com/haimlevtov/Samson/pull/24) | 09-08  | The remaining personas                              | [content-fill](phase-5-content-fill.md) PR 4     |
-| [#25](https://github.com/haimlevtov/Samson/pull/25) | 09-08  | Progression trees                                   | [content-fill](phase-5-content-fill.md) PR 5     |
-| [#26](https://github.com/haimlevtov/Samson/pull/26) | 09-08  | Progress in the demo database                       | [content-fill](phase-5-content-fill.md) PR 7     |
-| [#27](https://github.com/haimlevtov/Samson/pull/27) | 09-09  | The hint bubble stopped scrolling the page sideways | [ADR 0022](../adr/0022-popover-clamping.md)      |
-| [#28](https://github.com/haimlevtov/Samson/pull/28) | 09-09  | The supplement evidence table                       | [content-fill](phase-5-content-fill.md) PR 6     |
-| [#29](https://github.com/haimlevtov/Samson/pull/29) | 09-09  | Navigation and an Outcome for the plans             | —                                                |
-| [#30](https://github.com/haimlevtov/Samson/pull/30) | 09-09  | The seeder refuses to silently drop prescribed work | —                                                |
+| PR                                                  | Merged | What                                                    | Where it is planned or recorded                  |
+| --------------------------------------------------- | ------ | ------------------------------------------------------- | ------------------------------------------------ |
+| [#7](https://github.com/haimlevtov/Samson/pull/7)   | 09-07  | Schema invariants against hosted, without Docker        | [phase-5.md](phase-5.md)                         |
+| [#8](https://github.com/haimlevtov/Samson/pull/8)   | 09-07  | A distinct device voice per coach                       | [phase-5.md](phase-5.md)                         |
+| [#9](https://github.com/haimlevtov/Samson/pull/9)   | 09-05  | The training page rebuilt as a set grid                 | [phase-5.md](phase-5.md)                         |
+| [#10](https://github.com/haimlevtov/Samson/pull/10) | 09-05  | Five-tab navigation, a theme, consistent routes         | [phase-5.md](phase-5.md)                         |
+| [#11](https://github.com/haimlevtov/Samson/pull/11) | 09-07  | Profile owns what you earned; Hub owns other people     | [rework](rework-profile-hub-coach.md) PR 1       |
+| [#12](https://github.com/haimlevtov/Samson/pull/12) | 09-07  | Accepting a challenge is what puts it in play           | [rework](rework-profile-hub-coach.md) PR 2       |
+| [#13](https://github.com/haimlevtov/Samson/pull/13) | 09-07  | Exercise progression charts in History                  | [rework](rework-profile-hub-coach.md) PR 3       |
+| [#14](https://github.com/haimlevtov/Samson/pull/14) | 09-07  | The coach chat                                          | [rework](rework-profile-hub-coach.md) PR 4       |
+| [#15](https://github.com/haimlevtov/Samson/pull/15) | 09-07  | Settings as a route, and `OWNED_BY`                     | [rework](rework-profile-hub-coach.md), unplanned |
+| [#16](https://github.com/haimlevtov/Samson/pull/16) | 09-07  | A running session kept out of History                   | [rework](rework-profile-hub-coach.md), unplanned |
+| [#17](https://github.com/haimlevtov/Samson/pull/17) | 09-07  | The leaderboard                                         | [rework](rework-profile-hub-coach.md) PR 5       |
+| [#18](https://github.com/haimlevtov/Samson/pull/18) | 09-07  | The skills `CLAUDE.md` advertised and did not have      | [rework](rework-profile-hub-coach.md), unplanned |
+| [#19](https://github.com/haimlevtov/Samson/pull/19) | 09-07  | Two cards that met with no space between them           | [rework](rework-profile-hub-coach.md), unplanned |
+| [#20](https://github.com/haimlevtov/Samson/pull/20) | 09-07  | The phase-5 record itself                               | [phase-5.md](phase-5.md)                         |
+| [#21](https://github.com/haimlevtov/Samson/pull/21) | 09-08  | The content-fill plan, committed before its code        | [content-fill](phase-5-content-fill.md) PR 1     |
+| [#22](https://github.com/haimlevtov/Samson/pull/22) | 09-08  | Achievements across every tier                          | [content-fill](phase-5-content-fill.md) PR 2     |
+| [#23](https://github.com/haimlevtov/Samson/pull/23) | 09-08  | Cumulative-tonnage comparisons                          | [content-fill](phase-5-content-fill.md) PR 3     |
+| [#24](https://github.com/haimlevtov/Samson/pull/24) | 09-08  | The remaining personas                                  | [content-fill](phase-5-content-fill.md) PR 4     |
+| [#25](https://github.com/haimlevtov/Samson/pull/25) | 09-08  | Progression trees                                       | [content-fill](phase-5-content-fill.md) PR 5     |
+| [#26](https://github.com/haimlevtov/Samson/pull/26) | 09-08  | Progress in the demo database                           | [content-fill](phase-5-content-fill.md) PR 7     |
+| [#27](https://github.com/haimlevtov/Samson/pull/27) | 09-09  | The hint bubble stopped scrolling the page sideways     | [ADR 0022](../adr/0022-popover-clamping.md)      |
+| [#28](https://github.com/haimlevtov/Samson/pull/28) | 09-09  | The supplement evidence table                           | [content-fill](phase-5-content-fill.md) PR 6     |
+| [#29](https://github.com/haimlevtov/Samson/pull/29) | 09-09  | Navigation and an Outcome for the plans                 | —                                                |
+| [#30](https://github.com/haimlevtov/Samson/pull/30) | 09-09  | The seeder refuses to silently drop prescribed work     | —                                                |
+| [#31](https://github.com/haimlevtov/Samson/pull/31) | 09-09  | This file: one way into the plans, phase 5 as one story | —                                                |
 
 Two things the table makes visible that the individual files do not:
 
@@ -130,35 +131,64 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — five of the ten open items
+**Blocked on an OpenRouter key, not on work** — seven of the fifteen open items
 below, and worth
 grouping because one `.env.local` line closes them:
 
-| From                     | Item                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------ |
-| [phase-2.md](phase-2.md) | Cache hit rate measured and recorded — **unmet acceptance criterion**                            |
-| [phase-2.md](phase-2.md) | Cost per plan generation recorded per model — **unmet acceptance criterion**                     |
-| [phase-2.md](phase-2.md) | Live acceptance rate across the thirty golden cases                                              |
-| [phase-3.md](phase-3.md) | The persona drift eval — "does turn 80 still sound like turn 3" — **unmet acceptance criterion** |
-| [phase-3.md](phase-3.md) | No persona has ever spoken; every delivery in the suite is scripted                              |
+| From                     | Item                                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md) | Cache hit rate measured and recorded — **unmet acceptance criterion**                                                              |
+| [phase-2.md](phase-2.md) | Cost per plan generation recorded per model — **unmet acceptance criterion**                                                       |
+| [phase-2.md](phase-2.md) | Live acceptance rate across the thirty golden cases                                                                                |
+| [phase-3.md](phase-3.md) | The persona drift eval — "does turn 80 still sound like turn 3" — **unmet acceptance criterion**                                   |
+| [phase-3.md](phase-3.md) | No persona has ever spoken; every delivery in the suite is scripted                                                                |
+| [phase-0.md](phase-0.md) | A gateway call writes a complete `llm_calls` row — **unmet acceptance criterion**, and this list did not carry it until 2026-09-09 |
+| [phase-6.md](phase-6.md) | No live model has ever answered a diet question; every adversarial result is against a scripted one                                |
 
 `npm run eval:planner -- --live` and the drift eval are written and unrun.
 
 **Known gaps that need work:**
 
-| From                     | Item                                                                                                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                                                                            |
-| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                                                                              |
-| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                    |
-| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                         |
-| [phase-6.md](phase-6.md) | **A decision, not work:** which file-import formats are meant. Three of the four are endurance formats and this is a strength app. PR 6 is blocked until it is answered |
+| From                     | Item                                                                                                                                                                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                                                                                                                                                                                  |
+| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                                                                                                                                                                                    |
+| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                                                                                                                          |
+| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                                                                                                                               |
+| [phase-6.md](phase-6.md) | **File import — an unmet acceptance criterion, by decision rather than by an API key.** Deferred 2026-09-09: Apple Health was the only one of the four formats with somewhere to land, and it is saved for later. The other three are endurance formats with no table to fill |
+| [phase-6.md](phase-6.md) | Apple Health would have closed two older notes — the bodyweight time series in `PRD.md` §8, and `tonnage.ts`'s AI-NOTE saying bodyweight-inclusive tonnage needs one first. Both stay open                                                                                    |
+| [phase-6.md](phase-6.md) | The browser pass at 375×812 was not run on PRs 2, 4 or 5. Review found a width bug and a colour-only state in that markup, so it is the check that catches exactly this                                                                                                       |
+| [phase-6.md](phase-6.md) | The mangled comment at `src/evidence/doi.test.ts:89`, a backtick casualty that reached `main`. A one-line fix that keeps being rediscovered                                                                                                                                   |
 
 **Not a gap, a property to keep stating accurately:** the chat's topical
 confinement is a mitigation rather than a guarantee, and
 [ADR 0015](../adr/0015-coach-chat.md) says so in a table. It came out of phase 5
 (PR #14), as did the start-action race (PR #16); only phase 3's and phase 2's
 items are inherited from earlier phases.
+
+## Phase 6, the last one, in one table
+
+Closed 2026-09-09. **One plan PR, four code PRs, and a sixth item deferred.** The
+plan was committed before any of the code — which is the difference between this
+phase and phase 5, and the reason phase 5 needed three documents. The deferred
+item is the exception and says so: it was explicitly never planned, because the
+plan could not choose between three readings of what "file import" meant.
+
+| PR                                                  | Merged | What                                                                         |
+| --------------------------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| [#32](https://github.com/haimlevtov/Samson/pull/32) | 09-09  | The plan, committed before its code                                          |
+| [#33](https://github.com/haimlevtov/Samson/pull/33) | 09-09  | ADR 0024, the diet contract, and the four numbers nothing had ever asked for |
+| [#34](https://github.com/haimlevtov/Samson/pull/34) | 09-09  | The calorie clamp, and the negative BMR the sweep found                      |
+| [#35](https://github.com/haimlevtov/Samson/pull/35) | 09-09  | The diet stage: a model that may not write a number                          |
+| [#36](https://github.com/haimlevtov/Samson/pull/36) | 09-09  | Retrieval-only supplement answers                                            |
+| [#37](https://github.com/haimlevtov/Samson/pull/37) | 09-09  | The import decision and the phase close-out                                  |
+| —                                                   | —      | File import, **deferred by decision** — the phase's one unmet criterion      |
+
+**Each of the four CODE PRs carried a defect that would have reached a user**, and
+three of them were invisible to the tests written for them, because each test
+shared its code's assumption. Review found all but one; PR 3's negative BMR was
+found by its own property sweep, which is the one test shape that does not have
+to think of the case first. `phase-6.md`'s close-out has the table.
 
 ## Where else to look
 

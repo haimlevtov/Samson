@@ -6,7 +6,8 @@ Deterministic code computes all numbers. The LLM interprets them, plans within
 validated bounds, and speaks in a persona. It never calculates.
 
 - `CLAUDE.md` — the ten invariants. Read first.
-- `docs/PLAN.md` — phases and acceptance criteria. **Current phase: 6.**
+- `docs/PLAN.md` — phases and acceptance criteria. **Phase 6 is the last one,
+  and it is closed:** five PRs shipped, file import deferred by decision.
 - [`docs/plans/`](docs/plans/README.md) — a plan and a recorded outcome per
   phase, plus two documents that are not phase plans. Its README says which is
   which and when each was written, because they are not all the same thing.
