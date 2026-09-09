@@ -44,14 +44,14 @@ import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import {
   challengeSpecSchema,
-  validateCandidate,
   type ChallengeContext,
   type ValidationReason,
 } from '../src/gamification/challenge';
+import { assignFromPool } from '../src/gamification/assignment';
 import { settleChallenges, type AssignedChallenge } from '../src/gamification/settlement';
-import { addDays, startOfWeek } from '../src/metrics/dates';
+import { localDateIn, startOfWeek } from '../src/metrics/dates';
 import type { Database } from '../src/db/types';
-import type { LocalDate, SetRecord, WorkoutRecord } from '../src/metrics/types';
+import type { SetRecord, WorkoutRecord } from '../src/metrics/types';
 
 config({ path: '.env.local', quiet: true });
 
@@ -65,22 +65,12 @@ function admin() {
   return createClient<Database>(url, key, { auth: { persistSession: false } });
 }
 
-/** Today in the user's timezone, without pulling in a date library. */
-function localToday(timezone: string): LocalDate {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
-  } catch {
-    // An unknown IANA zone must not fail the whole batch for every other user.
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date());
-  }
-}
-
 async function main(): Promise<void> {
   const db = admin();
 
   const [{ data: pool, error: poolErr }, { data: users, error: userErr }] = await Promise.all([
     db.from('challenges').select('slug, kind, spec').is('user_id', null),
-    db.from('users').select('user_id, timezone, display_name'),
+    db.from('users').select('user_id, timezone'),
   ]);
   if (poolErr) throw new Error(`reading pool: ${poolErr.message}`);
   if (userErr) throw new Error(`reading users: ${userErr.message}`);
@@ -95,9 +85,19 @@ async function main(): Promise<void> {
   let settled = 0;
   let assigned = 0;
   let rejected = 0;
+  /*
+   * Collected rather than thrown, and reported at the end.
+   *
+   * FOUND IN REVIEW: throwing here aborted the batch mid-pass, AFTER settlement
+   * had already paid XP for earlier users — so one bad row denied every later
+   * user that week's challenges. Re-running converges (the status filter is the
+   * idempotency guard) but only if somebody notices, and a batch that stops
+   * halfway is exactly the run nobody reads to the end.
+   */
+  const writeFailures: string[] = [];
 
   for (const user of users ?? []) {
-    const asOf = localToday(user.timezone ?? 'UTC');
+    const asOf = localDateIn(user.timezone ?? 'UTC');
 
     const [{ data: workouts }, { data: sets }, { data: owned }] = await Promise.all([
       db.from('workouts').select('id, local_date, status').eq('user_id', user.user_id),
@@ -132,7 +132,15 @@ async function main(): Promise<void> {
     context.history = context.sets;
 
     const already = new Set((owned ?? []).map((c) => c.slug));
-    const label = user.display_name ?? user.user_id.slice(0, 8);
+    /*
+     * The id prefix, never the display name.
+     *
+     * FOUND IN REVIEW: this logged `display_name` — user-authored personal
+     * data — for every user on every run, into a GitHub Actions log that is
+     * retained and read by a human. A short id is enough to follow one user
+     * down the report and to look them up, and it is not their name.
+     */
+    const label = user.user_id.slice(0, 8);
 
     /*
      * Settle before generating.
@@ -200,57 +208,54 @@ async function main(): Promise<void> {
       }
     }
 
-    for (const template of pool ?? []) {
-      if (already.has(template.slug)) continue;
+    /*
+     * The decision is `assignFromPool`; everything below it is I/O and logging.
+     * scripts/seed.ts calls the same function, so the demo database and the
+     * cron cannot disagree about what gets offered — see the module header.
+     */
+    const plan = assignFromPool(
+      (pool ?? []).map((t) => ({ slug: t.slug, kind: t.kind as 'daily' | 'weekly', spec: t.spec })),
+      context,
+      already
+    );
 
-      const parsed = challengeSpecSchema.safeParse(template.spec);
-      if (!parsed.success) {
-        console.log(`  ${label} · ${template.slug}: unparseable spec, skipped`);
-        continue;
+    for (const skip of plan.skipped) {
+      // 'already_assigned' is the ordinary case and was never logged; an
+      // unparseable pool row is a content bug and has to be visible.
+      if (skip.reason === 'unparseable_spec') {
+        console.log(`  ${label} · ${skip.slug}: unparseable spec, skipped`);
       }
+    }
 
-      const kind = template.kind as 'daily' | 'weekly';
-      const verdict = validateCandidate(parsed.data, kind, context);
-
-      const windowStart = asOf;
-      const windowEnd = addDays(asOf, parsed.data.window_days - 1);
-
-      if (verdict.ok) {
+    for (const row of plan.assignments) {
+      if (row.status === 'offered') {
         assigned += 1;
-        console.log(`  ${label} · ${template.slug}: offered`);
-        if (APPLY) {
-          await db.from('challenges').insert({
-            user_id: user.user_id,
-            slug: template.slug,
-            kind,
-            spec: parsed.data,
-            status: 'offered',
-            window_start: windowStart,
-            window_end: windowEnd,
-            validation_reasons: [],
-          });
-        }
+        console.log(`  ${label} · ${row.slug}: offered`);
       } else {
         rejected += 1;
-        const codes = verdict.reasons.map((r: ValidationReason) => r.code).join(', ');
-        console.log(`  ${label} · ${template.slug}: rejected (${codes})`);
-        if (APPLY) {
-          // Written, not dropped. This is the inspectability criterion.
-          await db.from('challenges').insert({
-            user_id: user.user_id,
-            slug: template.slug,
-            kind,
-            spec: parsed.data,
-            status: 'rejected',
-            window_start: windowStart,
-            window_end: windowEnd,
-            // The generated Json type does not accept an interface with named
-            // fields, only an index-signature shape. The cast is at the jsonb
-            // boundary, where the column genuinely is untyped.
-            validation_reasons: verdict.reasons.map((r) => ({ code: r.code, detail: r.detail })),
-          });
-        }
+        const codes = row.reasons.map((r: ValidationReason) => r.code).join(', ');
+        console.log(`  ${label} · ${row.slug}: rejected (${codes})`);
       }
+      if (!APPLY) continue;
+
+      // A rejected row is WRITTEN, not dropped. That is the inspectability
+      // criterion — a row nobody can see is not inspectable.
+      const { error: writeErr } = await db.from('challenges').insert({
+        user_id: user.user_id,
+        slug: row.slug,
+        kind: row.kind,
+        spec: row.spec,
+        status: row.status,
+        window_start: row.windowStart,
+        window_end: row.windowEnd,
+        // The generated Json type does not accept an interface with named
+        // fields, only an index-signature shape. The cast is at the jsonb
+        // boundary, where the column genuinely is untyped.
+        validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })),
+      });
+      // WHY the result is read at all: both inserts used to discard it, so a
+      // failed write was reported to the Actions log as an assignment.
+      if (writeErr) writeFailures.push(`${label} · ${row.slug}: ${writeErr.message}`);
     }
   }
 

@@ -85,3 +85,37 @@ export function eachDay(start: LocalDate, end: LocalDate): LocalDate[] {
   for (let day = from; day <= to; day++) out.push(fromEpochDay(day));
   return out;
 }
+
+/**
+ * Today, as the user's calendar sees it.
+ *
+ * INVARIANT: calendar logic evaluates against the user's local date, never the
+ *            server's — CLAUDE.md #9. A session logged at 23:30 in Jerusalem
+ *            belongs to that day; a challenge window written from a UTC date is
+ *            a window judged against a date it was not measured in.
+ *
+ * WHY it lives here rather than beside each caller: there were two definitions
+ * of it — one in `scripts/generate-challenges.ts` and one in `src/db/server.ts`
+ * — and they disagreed about an unparseable timezone. This is the single one,
+ * and `localDateFor` now delegates.
+ *
+ * An unknown IANA zone falls back to UTC rather than throwing. The `users`
+ * table has a CHECK that validates the zone (20260908090300), so the fallback
+ * should be unreachable; it exists because the alternative in a batch that
+ * walks every user is one bad row ending everybody else's run.
+ */
+export function localDateIn(timezone: string, now: Date = new Date()): LocalDate {
+  const format = (zone: string): string =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+
+  try {
+    return format(timezone) as LocalDate;
+  } catch {
+    return format('UTC') as LocalDate;
+  }
+}

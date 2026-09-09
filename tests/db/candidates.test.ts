@@ -10,44 +10,17 @@
  * Requires `npm run migrate && npm run seed` first.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createClient } from '@supabase/supabase-js';
-import { ANON_KEY, SUPABASE_URL, adminClient, type Client } from './helpers';
+import { adminClient, signInAsArchetype, type Client, type TestUser } from './helpers';
 import { availableExercises, userEquipment } from '../../src/db/exercises';
 import type { Db } from '../../src/db/client';
 
-interface Seeded {
-  id: string;
-  client: Db;
-}
-
-async function signIn(email: string): Promise<Seeded> {
-  const anon = createClient(SUPABASE_URL, ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await anon.auth.signInWithPassword({
-    email,
-    password: 'samson-demo-fixture',
-  });
-  if (error || !data.session) {
-    throw new Error(
-      `could not sign in ${email} (${error?.message}). Run: npm run migrate && npm run seed`
-    );
-  }
-
-  const client = createClient(SUPABASE_URL, ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${data.session.access_token}` } },
-  });
-  return { id: data.session.user.id, client: client as unknown as Db };
-}
-
-let homeGym: Seeded;
-let beginner: Seeded;
+let homeGym: TestUser;
+let beginner: TestUser;
 
 beforeAll(async () => {
   [homeGym, beginner] = await Promise.all([
-    signIn('homegym@samson.test'),
-    signIn('beginner@samson.test'),
+    signInAsArchetype('homegym@samson.test'),
+    signInAsArchetype('beginner@samson.test'),
   ]);
 });
 
@@ -123,7 +96,7 @@ describe('seeded history', () => {
       'homegym@samson.test',
       'inconsistent@samson.test',
     ]) {
-      const user = await signIn(email);
+      const user = await signInAsArchetype(email);
       const { data, error } = await user.client
         .from('workouts')
         .select('local_date')

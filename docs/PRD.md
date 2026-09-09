@@ -184,6 +184,17 @@ that fire on _your_ local date rather than the server's. Daily quests and weekly
 challenges from a validated pool. Progression trees for push, pull, legs and
 core.
 
+**Amended 2026-09-09 — the challenge pool is a ladder.** The validator refuses
+to offer a challenge you already meet, which is right: a target you hit without
+changing anything is a free reward, not a challenge. The consequence, found by
+measuring rather than reasoning, is that a pool whose targets all sit at or
+below a consistent lifter's week has **nothing at all** to offer that lifter —
+three of the five demo users were in exactly that state, every candidate
+rejected under the same code. The pool now carries a second rung above what the
+most consistent user already does. Two kinds can have no harder rung at all and
+one could but does not; which, and why, is in
+[`specs/xp-and-challenges.md`](specs/xp-and-challenges.md).
+
 **Progression trees — built 2026-09-08**, at `/progression-trees`, reached from
 Profile. Four ladders of four to six rungs; a rung opens when you have done the
 one below it, measured as **sets within a single session** rather than a
