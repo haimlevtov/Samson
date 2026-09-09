@@ -21,6 +21,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { levelForXp } from '../../src/gamification/level';
 import { loadLeaderboard } from '../../src/db/leaderboard';
 
 let alice: TestUser;
@@ -286,7 +287,14 @@ describe('loadLeaderboard — the function the page actually calls', () => {
     );
 
     const bobRow = mine.find((r) => r.displayName === 'Bob Lifts');
-    expect(bobRow?.lifetimeXp).toBe(500);
+    /*
+     * The LOADER hands back a level, not the XP it derived it from — the field
+     * was dropped from LeaderboardRow in review. The view still returns
+     * lifetime_xp and `authenticated` may still read it directly, which the
+     * case at the top of this file asserts on purpose; this line is about what
+     * the app carries, not about what the boundary permits.
+     */
+    expect(bobRow?.level).toBe(levelForXp(500));
     expect(bobRow?.isYou).toBe(false);
     expect(mine.find((r) => r.displayName === 'Alice Lifts')?.isYou).toBe(true);
   });

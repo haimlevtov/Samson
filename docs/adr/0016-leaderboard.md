@@ -105,6 +105,63 @@ this paragraph.
 An unauthenticated leaderboard is a public directory of names and scores, and
 `is_you` would be meaningless with no `auth.uid()`.
 
+## Amended 2026-09-09 — the board shows a level, and the view did not move
+
+The Hub printed `lifetime_xp`. It now prints the **level** that total earns.
+
+**The four columns are unchanged, and no migration was needed.** `levelForXp` is
+monotonic non-decreasing, so `rank() over (order by lifetime_xp desc, …)` already
+produces a level ordering: it can never put a lower level above a higher one. The
+change is a mapping in `src/db/leaderboard.ts`, not a query.
+
+**The level is derived in TypeScript, deliberately.**
+`src/gamification/level.ts` is the single definition of the curve, including the
+per-step rounding whose AI-NOTE explains why a closed-form sum drifts at the
+edges. Reimplementing it in SQL would be a second definition of one number — the
+failure this project has recorded three times over, and the reason
+`sessions_last_28_days` is read rather than recounted.
+
+**The total order was kept rather than sharing ranks within a level**, which was
+the stakeholder's call on 2026-09-09. Level buckets XP, so ranking by level alone
+would put a third of the table on one position, and a ladder where that happens
+stops being a ladder. XP remains the tiebreak and is never printed.
+
+### This changed nothing about privacy, and the first version of this section said it did
+
+That paragraph is kept as a heading rather than deleted, because the error is
+the useful part.
+
+**It claimed §2's privacy argument was strengthened, and that "`lifetime_xp` …
+no longer reaches another user's browser."** Both were wrong, and §1 of this
+same ADR says why in as many words: **the view is the security boundary, not the
+render.** `grant select on public.leaderboard to authenticated` still covers
+`lifetime_xp`; `tests/db/leaderboard.test.ts` asserts one user reading another's
+exact total straight from PostgREST, on purpose, as the boundary's intended
+behaviour. Changing which column the Hub prints revokes nothing.
+
+**The weakened inference caveat was wrong too**, and it contradicted the
+"A polled XP total is an activity signal" paragraph below — which was itself
+written in response to an earlier review finding. `rank` is a **strict total
+order over exact XP** and it _is_ printed, so any gain that crosses a
+neighbour's total moves a visible number. In a cohort with clustered totals that
+happens more often than a level-up, not less.
+
+**So the copy was corrected rather than the claim defended.** The Hub's hint and
+the settings opt-out now say the board shows a level, that XP decides the order,
+and that anyone signed in can read it.
+
+**What would actually close the exposure, and why none of it is in this change.**
+Two options exist — project the level in SQL and drop `lifetime_xp` from the
+view, or revoke direct select and serve through a definer function. **Both
+require the curve in SQL**, which is the second definition this amendment's first
+paragraph rejects. That tradeoff is recorded here rather than resolved by
+wording: the exposure predates this change, it is unchanged by it, and closing it
+means paying a price the project has so far declined to pay.
+
+`LeaderboardRow` no longer carries `lifetimeXp` — nothing consumed it, and it is
+the field that would serialise every listed user's total into the page HTML the
+day the table becomes sortable. That is a smaller blast radius, not a fix.
+
 ## What this does not guarantee
 
 **The row count is a population count.** Anyone authenticated can page the view
@@ -130,7 +187,8 @@ like. Invariant #4 ties XP to adherence, so a total that moves means _that named
 person trained_. Nobody's sessions are exposed, but somebody watching closely
 enough can infer roughly when they happen.
 
-This is why the settings copy says "when you last trained can be inferred"
+This is why the settings copy says a total that only ever rises means "roughly
+when you last trained can be worked out from it"
 rather than the flat "not your sessions" it said first — the app makes a factual
 privacy claim at the moment of consent, and that claim has to be true. Rate
 limiting is out of scope (`CLAUDE.md`), so the honest move is to say it.

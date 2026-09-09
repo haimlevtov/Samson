@@ -11,13 +11,44 @@
  *            like every other read in the app; the view is what makes it return
  *            rows the caller does not own.
  */
+import { levelForXp } from '../gamification/level';
 import { stripInvisible } from '../llm/safety';
 import type { Db } from './client';
 
 export interface LeaderboardRow {
   rank: number;
   displayName: string;
-  lifetimeXp: number;
+  /**
+   * The figure the board shows — `levelForXp(lifetimeXp)`.
+   *
+   * INVARIANT: derived here, in TypeScript, from the XP the view returns —
+   *            never computed in SQL. `src/gamification/level.ts` is the single
+   *            definition of the curve, including the per-step rounding whose
+   *            AI-NOTE explains why a closed-form sum drifts at the edges. A
+   *            second copy in a view would be the failure this repo has now
+   *            recorded three times: a badge and a chart disagreeing about one
+   *            set, the seeder recounting sessions, and `sessions_last_28_days`.
+   */
+  level: number;
+  /*
+   * There is NO `lifetimeXp` here, and its absence is deliberate.
+   *
+   * FOUND IN REVIEW: the first version of this change carried it with a comment
+   * saying it was "the tiebreak". That was wrong — the tiebreak is
+   * `rank() over (order by lifetime_xp desc, display_name asc)`, computed in
+   * Postgres before the row leaves the database. No TypeScript reads this field
+   * to order anything, and nothing in the app rendered it.
+   *
+   * A load-bearing WHY naming a reason that does not exist is how a field
+   * survives the next cleanup — and this one is the field that would serialise
+   * every listed user's exact XP into the page HTML the day somebody makes the
+   * table sortable and passes a row into a client component.
+   *
+   * AI-NOTE: the view still EXPOSES `lifetime_xp` and `authenticated` may still
+   *          read it directly — dropping it here changes what this app renders,
+   *          not what the boundary permits. Do not describe that as a privacy
+   *          fix; ADR 0016's amendment says why.
+   */
   /** True for the signed-in user's own row — `auth.uid()`, computed in the view. */
   isYou: boolean;
 }
@@ -124,6 +155,12 @@ export function clampDisplayName(value: string): string {
  * Rank comes from the view rather than the array index: a user outside the
  * limit still has a real position, and computing it here would make the number
  * depend on how many rows this particular call happened to fetch.
+ *
+ * **The view is untouched by the move to levels**, and that is the point. Rank
+ * is still `rank() over (order by xp desc, display_name asc)`, so the ordering
+ * is unchanged — `levelForXp` is monotonic non-decreasing, so an XP ordering
+ * never puts a lower level above a higher one. What changed is the figure a
+ * reader sees, which is a mapping and not a query.
  */
 export async function loadLeaderboard(
   db: Db,
@@ -159,7 +196,9 @@ export async function loadLeaderboard(
       {
         rank: row.rank ?? 0,
         displayName,
-        lifetimeXp: row.lifetime_xp ?? 0,
+        // INVARIANT: the level is code's, not SQL's — see LeaderboardRow. The
+        // XP is read, used, and not carried any further than this line.
+        level: levelForXp(row.lifetime_xp ?? 0),
         isYou: row.is_you ?? false,
       },
     ];

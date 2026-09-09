@@ -244,10 +244,28 @@ export function SettingsForm({
          * can be worked out from them — ADR 0016, "What this does not
          * guarantee". FOUND IN REVIEW, 2026-09-07.
          */}
+        {/*
+         * Updated when the board moved from XP to level — and then CORRECTED IN
+         * REVIEW, because the first version claimed a privacy improvement that
+         * had not happened.
+         *
+         * It said "not your XP". That is false. ADR 0016 §1 makes the VIEW the
+         * security boundary, not this render: `grant select on
+         * public.leaderboard to authenticated` still covers `lifetime_xp`, and
+         * tests/db/leaderboard.test.ts asserts one user reading another's exact
+         * total straight from PostgREST. Changing which column the Hub prints
+         * revokes nothing.
+         *
+         * The inference caveat is restored for the same reason. `rank` is a
+         * strict total order over exact XP and it IS printed, so any gain that
+         * crosses a neighbour's total moves a visible number — more often than a
+         * level-up, not less.
+         */}
         <p className="muted small">
-          Other people see your display name and your total XP — not your email and not your
-          sessions, though a total that only ever rises means roughly when you last trained can be
-          inferred from it. Without a display name you are not listed at all.
+          The board shows your display name and your level. Your XP total is what puts you in order,
+          and anyone signed in can read it — a total that only ever rises means roughly when you
+          last trained can be worked out from it. Not your email and not your sessions. Without a
+          display name you are not listed at all.
         </p>
       </fieldset>
 
