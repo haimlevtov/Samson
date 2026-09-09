@@ -403,6 +403,52 @@ expressible. It currently means "the candidate list is empty". Either the spec
 shape grows an exercise field or this code should be retired; recorded here
 rather than left as a name that promises more than it does.
 
+### The pool is a ladder, not a list
+
+`challenges` rows with a null `user_id` are unassigned templates — the pool the
+batch and the seeder draw from. What matters about a pool row is not which kind
+it uses but **what it is calibrated against**, because `validateCandidate`
+rejects anything the user already does as `below_current_ability`.
+
+That rule is right, and its consequence is easy to miss: **a pool whose targets
+all sit at or below a consistent lifter's rolling week has nothing to offer that
+lifter at all.** Not "fewer challenges" — none. Measured on the five seeded
+archetypes against the original seven-row pool, three of them were offered
+nothing, every candidate rejected under that one code.
+
+So the pool ships **two tiers per kind where a harder rung is expressible**:
+
+| Tier       | Calibrated for                                      |
+| ---------- | --------------------------------------------------- |
+| The first  | someone returning, or training inconsistently       |
+| The second | someone already training three to five times a week |
+
+A tier is not a difficulty label on the row — nothing in `spec` records it, and
+nothing needs to. It is a statement about who the validator will let it reach,
+and the validator decides that per user from their own history. Adding a rung
+means adding a row above what the top archetype already does.
+
+**The window is rolling, so the seeded Hub is stable across weekdays.**
+`evaluateChallenge` measures backward from `asOf`, not from the start of the
+calendar week, so a 7-day window holds the same number of a fixed rotation's
+sessions on any day. Only `daily` rows swing — they see one day, so a rest day
+scores zero and a training day scores a full session. A pool row intended to be
+offerable to everyone therefore has to clear the top archetype's **rolling**
+week, and the seed's own coverage is checked on all seven weekdays rather than
+on whichever one it happened to be written.
+
+**`streak_days` has no second rung, and cannot have one.** `maxAchievable`
+bounds it by `window_days`, the schema caps that at 14, and `evaluateChallenge`
+returns `min(currentStreak, window_days)`. So once a user's streak reaches 14
+days, **every legal streak challenge is already met** and there is no target
+that would validate. Rest days keep a streak (invariant #4), so this is the
+normal state for anyone using the app rather than an edge case — the seeded
+archetypes sit at 51, 21 and 16 days. Fixing it means either raising the
+`window_days` cap or measuring something other than the current streak
+(`extend your streak by n`, which is a new kind). Recorded rather than resolved:
+the streak rows the pool has still reach the users a streak challenge suits,
+which is people whose streak is short.
+
 ### Completion — `evaluateChallenge`
 
 Returns `{ met: boolean; progress: number; target: number }`.
@@ -432,6 +478,13 @@ A challenge moves through these states, and nothing else moves it:
 | —         | `rejected`  | the weekly batch, for one that did not                    |
 | `offered` | `active`    | **the user, by accepting it, inside its window**          |
 | `active`  | `completed` | the weekly batch, when `evaluateChallenge` says it is met |
+
+**`scripts/seed.ts` is the batch for a demo database**, and it takes the same
+two routes rather than a shortcut: it assigns through the shared
+`assignFromPool`, then makes one challenge active by calling
+`accept_challenge` **as the signed-in archetype** — the same discipline that
+keeps seeded XP going through `award_session_xp`. An `active` row written by
+hand would be a state the app itself cannot produce.
 
 **Only `active` settles.** A challenge the user never accepted does not pay,
 however completely their training happens to satisfy it.

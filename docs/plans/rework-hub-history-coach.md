@@ -116,21 +116,64 @@ all three are empty. **Nothing is broken: nothing has ever created a row.**
 `scripts/generate-challenges.ts` is a GitHub Actions cron (`challenges.yml`), and
 `npm run seed` does not call it.
 
-So this is a seeding gap, not a feature gap, and the fix is mostly to run
-machinery that already exists.
+So this is a seeding gap rather than a feature gap, and most of the fix is
+running machinery that already exists. **Most, not all** — the first bullet
+below was written on that assumption and measurement contradicted it.
 
 - **The seeder assigns challenges.** After the history is written, generate a
   pool and assign from it, so every archetype has offered ones to accept and at
   least one already active. The validator's rejection reasons are phase 4's
   inspectability criterion, so seeding a rejected one too is worth doing —
   it is the only way that half of the Hub is ever seen.
-- **The pool does NOT need content.** `20260902090200_challenge_pool.sql` ships
-  **seven rows in one insert**, covering every kind the validator supports —
-  three `sessions`, two `distinct_exercises`, two `sets_at_rpe`, one
-  `streak_days` — in both `daily` and `weekly` windows. _An earlier version of
-  this bullet read "ships one insert" and asked for more content, which would
-  have sent the next session to write a redundant migration. Corrected in
-  review: the gap is assignment, and only assignment._
+- **The pool DOES need content, and this bullet has now been wrong twice.** Its
+  first version asked for more content without saying what was missing. Review
+  replaced it with "the gap is assignment, and only assignment", which reads as
+  the more rigorous claim and is false. **Measured before writing any code**, by
+  running each archetype's real generated history through the real validator:
+
+  | Archetype      | Offered | Rejected | Why                           |
+  | -------------- | ------- | -------- | ----------------------------- |
+  | `beginner`     | **0**   | 7        | all `below_current_ability`   |
+  | `plateaued`    | **0**   | 7        | all `below_current_ability`   |
+  | `home-gym`     | **0**   | 7        | all `below_current_ability`   |
+  | `returning`    | 4       | 3        | mid-layoff, so little to beat |
+  | `inconsistent` | 4       | 3        | same                          |
+
+  `20260902090200_challenge_pool.sql` does ship seven rows covering every kind
+  the validator supports — that part was right. What neither version checked is
+  **what they are calibrated against**: every target sits at or below what a
+  consistent lifter already does in a rolling week, and `validateCandidate`
+  rejects anything already met, correctly, as not a challenge. So three of five
+  demo users would still open a Hub with an empty "Open to you" section — the
+  exact complaint this PR exists to fix — after running the machinery the bullet
+  said was sufficient.
+
+  The pool has **one rung per kind, not a ladder**. This PR adds a harder tier
+  in a migration (content lives in the database, CLAUDE.md #7), calibrated above
+  every archetype's rolling week and verified offered on **all seven weekdays**,
+  because a rolling window makes the seeded Hub depend on which day the seed ran.
+
+- **`streak_days` cannot be made harder, and that is a spec limit rather than a
+  calibration one.** `maxAchievable` bounds a streak challenge by
+  `window_days`, the schema caps that at 14, and `evaluateChallenge` returns
+  `min(currentStreak, window_days)` — so for a user whose streak is already 14
+  days or longer, **every legal streak challenge is `below_current_ability`**.
+  Three archetypes are at 51, 21 and 16 days, because a rest day keeps a streak
+  (invariant #4). No row can fix that; it is recorded in the spec instead.
+
+- **The seeder and the cron must not each have their own assignment loop.** The
+  decision half — pool row plus history in, offered-or-rejected plus a window
+  out — comes out of `scripts/generate-challenges.ts` into a pure function both
+  call. It is the same reasoning that keeps `evaluateChallenge` shared between
+  the batch and the Hub: two copies of "what gets offered" drift, and the one in
+  the seeder would drift silently because nobody reads a demo database.
+
+- **The active one is ACCEPTED, not inserted.** The seeder signs in as each
+  archetype already, so it calls `accept_challenge` the way the app does —
+  exactly the discipline `awardSession` follows for XP, and for the same
+  reason: a demo whose state cannot be reproduced by using the app is worth
+  very little.
+
 - **Quests need no second mechanism, and the answer is already written down.**
   `docs/specs/xp-and-challenges.md`: _"A daily quest is a challenge with
   `window_days: 1`."_ The pool already carries daily rows. Nothing to
