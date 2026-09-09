@@ -597,6 +597,62 @@ export type Database = {
           },
         ]
       }
+      supplement_evidence: {
+        Row: {
+          caution: string | null
+          claim: string
+          created_at: string
+          display_order: number
+          doi: string
+          dose: string | null
+          grade: string
+          id: string
+          slug: string
+          source_title: string
+          source_year: number
+          supplement: string
+          user_id: string | null
+        }
+        Insert: {
+          caution?: string | null
+          claim: string
+          created_at?: string
+          display_order?: number
+          doi: string
+          dose?: string | null
+          grade: string
+          id?: string
+          slug: string
+          source_title: string
+          source_year: number
+          supplement: string
+          user_id?: string | null
+        }
+        Update: {
+          caution?: string | null
+          claim?: string
+          created_at?: string
+          display_order?: number
+          doi?: string
+          dose?: string | null
+          grade?: string
+          id?: string
+          slug?: string
+          source_title?: string
+          source_year?: number
+          supplement?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplement_evidence_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       tonnage_comparisons: {
         Row: {
           created_at: string

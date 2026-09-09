@@ -480,6 +480,55 @@ standing warning against treating the two as the same thing.
 
 ## Outcome
 
+### PR 6 — the supplement evidence table, 2026-09-09
+
+Shipped, and **this completes the five content items phase 5 was briefed to
+build.** Thirteen rows at `/evidence`, reached from Coach: 3 graded A, 2 B, 5 C
+and **3 D**, where the evidence does not support the popular claim.
+
+All 13 DOIs resolve against the DOI Handle API. `npm run verify:doi` prints each
+one beside its source title, because the title is the part a person has to check
+and no machine can.
+
+**The ADR's central argument is measured rather than asserted, which was not the
+plan's doing.** The plan cited two DOIs that resolve to the wrong subject; while
+assembling the rows, three more were guessed from plausible shapes and every one
+of them resolved — to an obituary for a powerlifting historian, a review of
+sprint training in football codes, and a paper on ferroptosis in carcinoma cells.
+A row citing any of them would have looked checked. That is now the opening of
+[ADR 0023](../adr/0023-evidence-rows.md) with the DOIs in it.
+
+**What the criterion did not cover, recorded because nothing enforces it.** Every
+claim was written from the source's ABSTRACT, fetched from PubMed, not from its
+full text. That is more than a title match and less than a literature review, and
+it means a row can cite a real paper on the right subject and still put its
+conclusion more strongly than the paper does. The page says so where a user can
+see it rather than only in the ADR.
+
+One source was dropped for exactly that reason. The 2018 ISSN review update was
+going to back three of the D rows, and its abstract turns out to conclude only
+that it is "a foundational basis for determining efficacy" — it does not state
+the negatives. Citing it would have been the failure this table is against, so
+the D rows cite papers whose abstracts say the thing: no human study has measured
+muscle protein synthesis from oral BCAAs alone; eight weeks of ZMA changed
+nothing against placebo; a review of 52 studies found most "testosterone
+boosters" fail to raise testosterone.
+
+**Deviations from the plan.** The ADR is 0023, not the 0021 the plan reserved —
+two ADRs were written in between. NIH ODS fact sheets are named as a source in
+the plan and carry no DOI, so rows cite the peer-reviewed work instead. And the
+table ships with a read policy and **no write policy at all**, following
+migration `20260908120100` rather than the catalogue pattern: the unique
+constraint is `nulls not distinct`, so a user-authored row could take a system
+slug, and these rows are health claims with citations attached.
+
+Docker was started once, for the one thing that needs it — `src/db/types.ts`
+regenerated from a **local** stack with the CLI version `verify.yml` pins. The
+workstation's own CLI is 2.117.0, the version that changed the generator's output
+and turned every open PR red; the file was generated with 2.116.0 via `npx`, and
+carries no `__InternalSupabase.PostgrestVersion`, which is the tell for a
+`--linked` regeneration. Stopped, with `wsl --shutdown`, in the same turn.
+
 ### PR 7 — the demo database has progress in it, 2026-09-08
 
 Shipped. Measured on the hosted project, `npm run seed` in **27.3s** against the

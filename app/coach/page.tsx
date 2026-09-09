@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/personas';
@@ -33,6 +34,18 @@ export default async function CoachPage() {
             {plan ? `Plan accepted ${displayDate(plan.createdAt.slice(0, 10))}` : 'No plan yet'}
           </span>
         </div>
+        {/*
+         * The only way into /evidence — ADR 0023, and `OWNED_BY` in
+         * src/ui/tabs.ts carries the route so the orphan-link guard in
+         * tests/unit/invariants.test.ts can see it.
+         *
+         * WHY here rather than on Profile: a supplement question is a coaching
+         * question. The chat is confined to training (ADR 0015) and will decline
+         * to recommend a supplement, so this is the answer it points at.
+         */}
+        <Link className="btn ghost" href="/evidence">
+          Supplements
+        </Link>
       </header>
 
       {plan === null ? (

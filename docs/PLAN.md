@@ -247,7 +247,16 @@ of the five are done as of 2026-09-08.
   now returned to its holder by a parameterless definer function. Nothing else
   changed: `achievements_read_visible` still withholds every definition the
   caller has no unlock event for, which is what this criterion was for.
-- A test asserts every evidence-table claim has a resolvable DOI
+- A test asserts every evidence-table claim has a resolvable DOI — **met, by
+  three checks rather than one.** One test could not do it:
+  `verify.yml`'s unit job has no network and no database by design, and the
+  rows are database content. So `npm test` checks the DOI FORMAT offline
+  (`src/evidence/doi.test.ts`), `npm run test:db` checks that every row has one
+  and that no source is cited twice (`tests/db/evidence.test.ts`), and
+  `npm run verify:doi` resolves each against the DOI Handle API in its own,
+  non-blocking CI job. All 13 resolve — [ADR 0023](adr/0023-evidence-rows.md),
+  which also records what none of them prove: that the paper says what the row
+  claims.
 - Calendar achievements fire on the correct local date for a user in a
   non-server timezone
 
