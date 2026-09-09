@@ -11,12 +11,33 @@
  *            like every other read in the app; the view is what makes it return
  *            rows the caller does not own.
  */
+import { levelForXp } from '../gamification/level';
 import { stripInvisible } from '../llm/safety';
 import type { Db } from './client';
 
 export interface LeaderboardRow {
   rank: number;
   displayName: string;
+  /**
+   * The figure the board shows — `levelForXp(lifetimeXp)`.
+   *
+   * INVARIANT: derived here, in TypeScript, from the XP the view returns —
+   *            never computed in SQL. `src/gamification/level.ts` is the single
+   *            definition of the curve, including the per-step rounding whose
+   *            AI-NOTE explains why a closed-form sum drifts at the edges. A
+   *            second copy in a view would be the failure this repo has now
+   *            recorded three times: a badge and a chart disagreeing about one
+   *            set, the seeder recounting sessions, and `sessions_last_28_days`.
+   */
+  level: number;
+  /**
+   * Still carried, and still what `rank` is ordered by.
+   *
+   * WHY it is kept when the board no longer prints it: it is the tiebreak. Level
+   * buckets XP, so a level-only ordering would put a third of the table on one
+   * rank; ADR 0016's amendment records the decision to keep a total order and
+   * show the level. Rendering this is the caller's choice — the Hub does not.
+   */
   lifetimeXp: number;
   /** True for the signed-in user's own row — `auth.uid()`, computed in the view. */
   isYou: boolean;
@@ -124,6 +145,12 @@ export function clampDisplayName(value: string): string {
  * Rank comes from the view rather than the array index: a user outside the
  * limit still has a real position, and computing it here would make the number
  * depend on how many rows this particular call happened to fetch.
+ *
+ * **The view is untouched by the move to levels**, and that is the point. Rank
+ * is still `rank() over (order by xp desc, display_name asc)`, so the ordering
+ * is unchanged — `levelForXp` is monotonic non-decreasing, so an XP ordering
+ * never puts a lower level above a higher one. What changed is the figure a
+ * reader sees, which is a mapping and not a query.
  */
 export async function loadLeaderboard(
   db: Db,
@@ -155,11 +182,15 @@ export async function loadLeaderboard(
      */
     if (displayName === '') return [];
 
+    const lifetimeXp = row.lifetime_xp ?? 0;
+
     return [
       {
         rank: row.rank ?? 0,
         displayName,
-        lifetimeXp: row.lifetime_xp ?? 0,
+        // INVARIANT: the level is code's, not SQL's — see LeaderboardRow.
+        level: levelForXp(lifetimeXp),
+        lifetimeXp,
         isYou: row.is_you ?? false,
       },
     ];

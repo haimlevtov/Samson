@@ -244,10 +244,22 @@ export function SettingsForm({
          * can be worked out from them — ADR 0016, "What this does not
          * guarantee". FOUND IN REVIEW, 2026-09-07.
          */}
+        {/*
+         * Updated when the board moved from XP to level.
+         *
+         * The inference caveat is WEAKER now and the copy says so rather than
+         * keeping a warning that overstates. ADR 0016 §2's point stands — this
+         * is the one place the app makes a factual privacy claim at the moment
+         * somebody decides — and the honest version of that claim changed: a
+         * level moves a handful of times a year, so watching it says far less
+         * about when you trained than watching a total that rose after every
+         * session.
+         */}
         <p className="muted small">
-          Other people see your display name and your total XP — not your email and not your
-          sessions, though a total that only ever rises means roughly when you last trained can be
-          inferred from it. Without a display name you are not listed at all.
+          Other people see your display name and your level — not your email, not your XP and not
+          your sessions. A level only ever rises, so someone watching closely could tell roughly
+          when you passed one, but it moves far less often than a running total would. Without a
+          display name you are not listed at all.
         </p>
       </fieldset>
 

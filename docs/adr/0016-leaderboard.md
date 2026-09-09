@@ -105,6 +105,35 @@ this paragraph.
 An unauthenticated leaderboard is a public directory of names and scores, and
 `is_you` would be meaningless with no `auth.uid()`.
 
+## Amended 2026-09-09 — the board shows a level, and the view did not move
+
+The Hub printed `lifetime_xp`. It now prints the **level** that total earns.
+
+**The four columns are unchanged, and no migration was needed.** `levelForXp` is
+monotonic non-decreasing, so `rank() over (order by lifetime_xp desc, …)` already
+produces a level ordering: it can never put a lower level above a higher one. The
+change is a mapping in `src/db/leaderboard.ts`, not a query.
+
+**The level is derived in TypeScript, deliberately.**
+`src/gamification/level.ts` is the single definition of the curve, including the
+per-step rounding whose AI-NOTE explains why a closed-form sum drifts at the
+edges. Reimplementing it in SQL would be a second definition of one number — the
+failure this project has recorded three times over, and the reason
+`sessions_last_28_days` is read rather than recounted.
+
+**The total order was kept rather than sharing ranks within a level**, which was
+the stakeholder's call on 2026-09-09. Level buckets XP, so ranking by level alone
+would put a third of the table on one position, and a ladder where that happens
+stops being a ladder. XP remains the tiebreak and is never printed.
+
+**§2's privacy argument is strengthened by this, not weakened.** That section
+weighs what four columns disclose, and "What this does not guarantee" below notes
+that an XP total which only ever rises lets somebody infer roughly when you last
+trained. **A level moves a handful of times a year rather than after every
+session**, so the same inference is far coarser. `lifetime_xp` still crosses the
+view — it is what orders the board — but it now stops at the server component
+that renders the level, and no longer reaches another user's browser.
+
 ## What this does not guarantee
 
 **The row count is a population count.** Anyone authenticated can page the view

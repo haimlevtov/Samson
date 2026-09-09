@@ -223,9 +223,9 @@ export default async function HubPage() {
       <h2 className="section with-hint">
         Leaderboard
         <FieldHint title="What other people can see">
-          Your display name and your total XP, and nothing else — not your email, not your sessions.
-          You are listed only if you have set a display name, and you can leave at any time from
-          Settings.
+          Your display name and your level, and nothing else — not your email, not your XP, not your
+          sessions. Your level comes from your total XP, which is what decides the order. You are
+          listed only if you have set a display name, and you can leave at any time from Settings.
         </FieldHint>
       </h2>
 
@@ -252,7 +252,14 @@ export default async function HubPage() {
               <tr>
                 <th>#</th>
                 <th>Lifter</th>
-                <th>XP</th>
+                {/*
+                 * Level, not XP. The ORDER is unchanged — rank still comes from
+                 * the view's `order by xp desc` — because `levelForXp` is
+                 * monotonic non-decreasing, so an XP ordering never puts a lower
+                 * level above a higher one. ADR 0016's amendment records why the
+                 * total order was kept rather than sharing ranks within a level.
+                 */}
+                <th>Level</th>
               </tr>
             </thead>
             <tbody>
@@ -268,7 +275,12 @@ export default async function HubPage() {
                     {row.displayName}
                     {row.isYou ? <span className="chip chip-on you-chip">you</span> : null}
                   </td>
-                  <td className="lb-xp">{row.lifetimeXp.toLocaleString()}</td>
+                  {/*
+                   * `.lb-xp` keeps its name: it is the numeric column's right
+                   * alignment and tabular figures, and renaming a class to match
+                   * one caller's content is churn a reviewer has to read.
+                   */}
+                  <td className="lb-xp">{row.level.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

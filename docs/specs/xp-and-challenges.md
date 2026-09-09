@@ -203,6 +203,21 @@ XP is a sum over a ledger whose amounts are non-negative by constraint, so a
 negative total is unreachable — and a progress bar is not the place to discover
 that it happened.
 
+### Who reads the curve
+
+Two surfaces, and neither reimplements it.
+
+- **Profile** draws the level and its progress bar from `levelProgress`.
+- **The leaderboard** (2026-09-09) shows `levelForXp(lifetime_xp)`, mapped in
+  `src/db/leaderboard.ts` from the XP `public.leaderboard` returns.
+
+**The leaderboard's ordering depends on `Monotonic` above**, which is why that
+row is a stated property rather than an incidental one. The view ranks by XP; the
+board displays a level; and the two agree only because `x <= y` implies
+`levelForXp(x) <= levelForXp(y)`. If that property were ever weakened, the board
+would have to sort in SQL and the curve would need a second definition there —
+[ADR 0016](../adr/0016-leaderboard.md)'s amendment records the whole argument.
+
 ---
 
 ## Plausibility
