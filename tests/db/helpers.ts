@@ -177,6 +177,39 @@ export async function createTestUser(label: string): Promise<TestUser> {
   return { id: data.user.id, email, client };
 }
 
+/**
+ * Signs in as one of the seeded archetypes and returns an RLS-scoped client.
+ *
+ * WHY the password is a literal in the repository: it is a fixture, printed on
+ * the sign-in page by design — docs/FRAMING.md, "a grader must be able to open
+ * the app and look at it". It authenticates nothing outside a seeded database.
+ *
+ * AI-NOTE: this was copied into each test file that needed it. Keep it here —
+ *          the failure message is the valuable half, because "could not sign
+ *          in" almost always means the seed was not run rather than that
+ *          anything under test is broken.
+ */
+export async function signInAsArchetype(email: string): Promise<TestUser> {
+  const anon = createClient<Database>(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await anon.auth.signInWithPassword({
+    email,
+    password: 'samson-demo-fixture',
+  });
+  if (error || !data.session) {
+    throw new Error(
+      `could not sign in ${email} (${error?.message}). Run: npm run migrate && npm run seed`
+    );
+  }
+
+  const client = createClient<Database>(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${data.session.access_token}` } },
+  });
+  return { id: data.session.user.id, email, client };
+}
+
 export async function deleteTestUser(user: TestUser): Promise<void> {
   await adminClient().auth.admin.deleteUser(user.id);
 }

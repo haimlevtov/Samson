@@ -21,7 +21,10 @@ import {
   generateHistory,
   validateProgramme,
   type Archetype,
+  type GeneratedWorkout,
 } from '../src/seed/archetypes';
+import { assignFromPool, type PoolTemplate } from '../src/gamification/assignment';
+import type { ChallengeContext } from '../src/gamification/challenge';
 import { mulberry32 } from '../src/seed/rng';
 import { createAnonClient, createUserClient, supabaseUrl, type Db } from '../src/db/client';
 import { buildPlannerContext } from '../src/planner/context';
@@ -229,8 +232,17 @@ async function seedArchetype(
   archetype: Archetype,
   exerciseBySlug: Map<string, string>,
   endDate: string,
-  tagBySlug: Map<string, string>
-): Promise<{ workouts: number; sets: number; awarded: number; badges: number }> {
+  tagBySlug: Map<string, string>,
+  pool: readonly PoolTemplate[]
+): Promise<{
+  workouts: number;
+  sets: number;
+  awarded: number;
+  badges: number;
+  offered: number;
+  rejected: number;
+  accepted: number;
+}> {
   const created = await admin.auth.admin.createUser({
     email: archetype.email,
     password: DEMO_PASSWORD,
@@ -433,7 +445,174 @@ async function seedArchetype(
   });
   if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
 
-  return { workouts: history.length, sets: setCount, awarded, badges: badges.size };
+  const challenges = await seedChallenges({
+    admin,
+    user,
+    archetype,
+    userId,
+    endDate,
+    history,
+    exerciseBySlug,
+    pool,
+  });
+
+  return {
+    workouts: history.length,
+    sets: setCount,
+    awarded,
+    badges: badges.size,
+    ...challenges,
+  };
+}
+
+/**
+ * The Hub's three buckets, for one archetype.
+ *
+ * WHY this exists at all: the batch that assigns challenges is a GitHub Actions
+ * cron, and `npm run seed` has never called it — so every demo user opened a Hub
+ * with three empty lists. Nothing was broken; nothing had ever created a row.
+ *
+ * INVARIANT: the decision is `assignFromPool`, the same function
+ *            scripts/generate-challenges.ts uses. A second copy here would let
+ *            the demo database and the cron disagree about what gets offered,
+ *            and the disagreement would be invisible.
+ */
+interface ChallengeSeed {
+  admin: Admin;
+  user: Db;
+  archetype: Archetype;
+  userId: string;
+  endDate: string;
+  history: readonly GeneratedWorkout[];
+  exerciseBySlug: Map<string, string>;
+  pool: readonly PoolTemplate[];
+}
+
+async function seedChallenges({
+  admin,
+  user,
+  archetype,
+  userId,
+  endDate,
+  history,
+  exerciseBySlug,
+  pool,
+}: ChallengeSeed): Promise<{ offered: number; rejected: number; accepted: number }> {
+  /*
+   * The same context the cron builds, from memory rather than from a re-read.
+   *
+   * `asOf` is `endDate` and not the archetype's local today, deliberately: the
+   * history was GENERATED to end on `endDate`, so validating against a date a
+   * day either side of it would ask whether the user already meets a challenge
+   * over a window their seeded history does not cover.
+   */
+  const sets = history.flatMap((workout) =>
+    workout.sets.map((set) => ({
+      /*
+       * Real catalogue ids, not slugs: `availableExerciseIds` is what bounds a
+       * distinct_exercises target, and it has to be the same list the cron
+       * would derive from this user's rows.
+       *
+       * The assertion is safe because the sets loop above THROWS on a slug the
+       * catalogue does not have, so this runs only for a history every slug of
+       * which resolved.
+       */
+      exerciseId: exerciseBySlug.get(set.exerciseSlug)!,
+      weightKg: set.weightKg,
+      reps: set.reps,
+      rpe: set.rpe,
+      isWarmup: set.isWarmup,
+      localDate: workout.localDate,
+    }))
+  );
+  const context: ChallengeContext = {
+    workouts: history.map((workout, i) => ({
+      id: `seed-${i}`,
+      localDate: workout.localDate,
+      status: workout.status,
+    })),
+    sets,
+    // Plausibility judges a set against the user's own record, and at
+    // assignment time there is no "new" set to hold apart — same as the cron.
+    history: sets,
+    asOf: endDate,
+    availableExerciseIds: [...new Set(sets.map((set) => set.exerciseId))],
+  };
+
+  const { assignments } = assignFromPool(pool, context, []);
+
+  const rows = assignments.map((row) => ({
+    user_id: userId,
+    slug: row.slug,
+    kind: row.kind,
+    spec: row.spec,
+    status: row.status,
+    window_start: row.windowStart,
+    window_end: row.windowEnd,
+    // The generated Json type takes an index-signature shape rather than an
+    // interface with named fields. The cast is at the jsonb boundary, where the
+    // column genuinely is untyped.
+    validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })),
+  }));
+  /*
+   * A direct insert rather than `insertBatched`, because the ids come back and
+   * the acceptance below needs one. The pool is a dozen rows, so there is
+   * nothing to batch.
+   */
+  const { data: written, error: writeErr } = await admin
+    .from('challenges')
+    .insert(rows as never)
+    .select('id, slug');
+  if (writeErr) throw new Error(`challenges for ${archetype.key}: ${writeErr.message}`);
+
+  const offered = assignments.filter((row) => row.status === 'offered');
+  const rejected = assignments.length - offered.length;
+
+  /*
+   * One challenge is put in play, and it is ACCEPTED rather than inserted as
+   * 'active' — the same discipline `awardSession` follows for XP. An 'active'
+   * row written by hand is a state the app itself cannot produce, and the
+   * accept path is what phase 5 shipped.
+   *
+   * WHY a weekly one: `accept_challenge` refuses a challenge whose window_end
+   * is before the USER'S local today (CLAUDE.md #9), and `endDate` is a UTC
+   * date. Two archetypes live in Asia/Jerusalem, so a seed run after 21:00 UTC
+   * is already tomorrow for them and every daily row — window_end === endDate —
+   * would be refused. A weekly window has six days of slack. It also makes a
+   * better demo: the Hub shows partial progress from history the user already
+   * has, where a daily quest on a rest day shows zero.
+   */
+  let accepted = 0;
+  const toAccept = offered.find((row) => row.kind === 'weekly') ?? offered[0];
+  if (toAccept) {
+    const id = (written ?? []).find((row) => row.slug === toAccept.slug)?.id;
+    if (id === undefined) {
+      throw new Error(
+        `${archetype.key}: ${toAccept.slug} was inserted but came back without an id`
+      );
+    }
+
+    const { data: inPlay, error: acceptErr } = await user.rpc('accept_challenge', {
+      p_challenge_id: id,
+    });
+    if (acceptErr) {
+      throw new Error(`accepting ${toAccept.slug} for ${archetype.key}: ${acceptErr.message}`);
+    }
+    /*
+     * The RPC returns false rather than erroring when it matched no row —
+     * wrong owner, wrong status, or a closed window. Silence here would seed a
+     * user whose Hub has nothing in play and no sign of why.
+     */
+    if (inPlay !== true) {
+      throw new Error(
+        `accepting ${toAccept.slug} for ${archetype.key}: the RPC matched no row ` +
+          `(window ${toAccept.windowStart}..${toAccept.windowEnd}, timezone ${archetype.timezone})`
+      );
+    }
+    accepted = 1;
+  }
+
+  return { offered: offered.length - accepted, rejected, accepted };
 }
 
 /**
@@ -566,11 +745,35 @@ async function main(): Promise<void> {
    * budget, which CI enforces against a local stack. Five sequential passes
    * would be five times the latency for no extra correctness.
    */
+  /*
+   * The unassigned pool — `challenges` rows with a null user_id, shipped by
+   * migration because content lives in the database (CLAUDE.md #7).
+   *
+   * Read ONCE and ordered by slug: the archetypes seed in parallel, and the
+   * order decides which challenge each one accepts. Without the order the demo
+   * database would differ run to run, against this file's own promise that a
+   * fixed seed makes it byte-identical.
+   */
+  const { data: poolRows, error: poolError } = await admin
+    .from('challenges')
+    .select('slug, kind, spec')
+    .is('user_id', null)
+    .order('slug');
+  if (poolError) throw new Error(`reading the challenge pool: ${poolError.message}`);
+  const pool: PoolTemplate[] = (poolRows ?? []).map((row) => ({
+    slug: row.slug,
+    kind: row.kind as PoolTemplate['kind'],
+    spec: row.spec,
+  }));
+  if (pool.length === 0) {
+    throw new Error('the challenge pool is empty — has 20260902090200 been applied?');
+  }
+
   console.log('Seeding synthetic users, one session at a time');
   const results = await Promise.allSettled(
     ARCHETYPES.map(async (archetype) => ({
       archetype,
-      ...(await seedArchetype(admin, archetype, exerciseBySlug, endDate, tagBySlug)),
+      ...(await seedArchetype(admin, archetype, exerciseBySlug, endDate, tagBySlug, pool)),
     }))
   );
 
@@ -583,10 +786,12 @@ async function main(): Promise<void> {
   const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
-    const { archetype, workouts, sets, awarded, badges } = result.value;
+    const { archetype, workouts, sets, awarded, badges, offered, rejected, accepted } =
+      result.value;
     console.log(
       `  ${archetype.key.padEnd(13)} ${workouts} workouts, ${String(sets).padStart(3)} sets, ` +
-        `${String(awarded).padStart(5)} XP, ${badges} badge(s)`
+        `${String(awarded).padStart(5)} XP, ${badges} badge(s), ` +
+        `${offered} offered / ${accepted} active / ${rejected} rejected`
     );
   }
   if (failures.length > 0) {

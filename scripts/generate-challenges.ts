@@ -44,12 +44,12 @@ import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import {
   challengeSpecSchema,
-  validateCandidate,
   type ChallengeContext,
   type ValidationReason,
 } from '../src/gamification/challenge';
+import { assignFromPool } from '../src/gamification/assignment';
 import { settleChallenges, type AssignedChallenge } from '../src/gamification/settlement';
-import { addDays, startOfWeek } from '../src/metrics/dates';
+import { startOfWeek } from '../src/metrics/dates';
 import type { Database } from '../src/db/types';
 import type { LocalDate, SetRecord, WorkoutRecord } from '../src/metrics/types';
 
@@ -200,57 +200,54 @@ async function main(): Promise<void> {
       }
     }
 
-    for (const template of pool ?? []) {
-      if (already.has(template.slug)) continue;
+    /*
+     * The decision is `assignFromPool`; everything below it is I/O and logging.
+     * scripts/seed.ts calls the same function, so the demo database and the
+     * cron cannot disagree about what gets offered — see the module header.
+     */
+    const plan = assignFromPool(
+      (pool ?? []).map((t) => ({ slug: t.slug, kind: t.kind as 'daily' | 'weekly', spec: t.spec })),
+      context,
+      already
+    );
 
-      const parsed = challengeSpecSchema.safeParse(template.spec);
-      if (!parsed.success) {
-        console.log(`  ${label} · ${template.slug}: unparseable spec, skipped`);
-        continue;
+    for (const skip of plan.skipped) {
+      // 'already_assigned' is the ordinary case and was never logged; an
+      // unparseable pool row is a content bug and has to be visible.
+      if (skip.reason === 'unparseable_spec') {
+        console.log(`  ${label} · ${skip.slug}: unparseable spec, skipped`);
       }
+    }
 
-      const kind = template.kind as 'daily' | 'weekly';
-      const verdict = validateCandidate(parsed.data, kind, context);
-
-      const windowStart = asOf;
-      const windowEnd = addDays(asOf, parsed.data.window_days - 1);
-
-      if (verdict.ok) {
+    for (const row of plan.assignments) {
+      if (row.status === 'offered') {
         assigned += 1;
-        console.log(`  ${label} · ${template.slug}: offered`);
-        if (APPLY) {
-          await db.from('challenges').insert({
-            user_id: user.user_id,
-            slug: template.slug,
-            kind,
-            spec: parsed.data,
-            status: 'offered',
-            window_start: windowStart,
-            window_end: windowEnd,
-            validation_reasons: [],
-          });
-        }
+        console.log(`  ${label} · ${row.slug}: offered`);
       } else {
         rejected += 1;
-        const codes = verdict.reasons.map((r: ValidationReason) => r.code).join(', ');
-        console.log(`  ${label} · ${template.slug}: rejected (${codes})`);
-        if (APPLY) {
-          // Written, not dropped. This is the inspectability criterion.
-          await db.from('challenges').insert({
-            user_id: user.user_id,
-            slug: template.slug,
-            kind,
-            spec: parsed.data,
-            status: 'rejected',
-            window_start: windowStart,
-            window_end: windowEnd,
-            // The generated Json type does not accept an interface with named
-            // fields, only an index-signature shape. The cast is at the jsonb
-            // boundary, where the column genuinely is untyped.
-            validation_reasons: verdict.reasons.map((r) => ({ code: r.code, detail: r.detail })),
-          });
-        }
+        const codes = row.reasons.map((r: ValidationReason) => r.code).join(', ');
+        console.log(`  ${label} · ${row.slug}: rejected (${codes})`);
       }
+      if (!APPLY) continue;
+
+      // A rejected row is WRITTEN, not dropped. That is the inspectability
+      // criterion — a row nobody can see is not inspectable.
+      const { error: writeErr } = await db.from('challenges').insert({
+        user_id: user.user_id,
+        slug: row.slug,
+        kind: row.kind,
+        spec: row.spec,
+        status: row.status,
+        window_start: row.windowStart,
+        window_end: row.windowEnd,
+        // The generated Json type does not accept an interface with named
+        // fields, only an index-signature shape. The cast is at the jsonb
+        // boundary, where the column genuinely is untyped.
+        validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })),
+      });
+      // FOUND WHILE EXTRACTING THIS: both inserts discarded their result, so a
+      // failed write was reported to the Actions log as an assignment.
+      if (writeErr) throw new Error(`writing ${row.slug} for ${label}: ${writeErr.message}`);
     }
   }
 

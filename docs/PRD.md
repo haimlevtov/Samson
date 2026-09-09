@@ -194,6 +194,17 @@ tree. The criteria are structured data a validator reads, never code the server
 runs — [ADR 0020](adr/0020-progression-unlock-criteria.md) explains why that
 distinction is a security one rather than a stylistic one.
 
+**Amended 2026-09-09 — the pool is a ladder.** The validator refuses to offer a
+challenge you already meet, which is right: a target you hit without changing
+anything is a free reward, not a challenge. The consequence, found by measuring
+rather than reasoning, is that a pool whose targets all sit at or below a
+consistent lifter's week has **nothing at all** to offer that lifter — three of
+the five demo users were in exactly that state, every candidate rejected under
+the same code. So the pool ships a second rung per kind, above what the most
+consistent user already does. `streak_days` cannot have one and the reason is a
+spec limit rather than a content gap:
+[`specs/xp-and-challenges.md`](specs/xp-and-challenges.md) records it.
+
 _Not yet expressible: a timed hold._ There is no duration column on a set, so
 the plank at the root of the core tree has no criteria and the rung above it
 inherits none. Recorded in the ADR rather than faked with reps.
