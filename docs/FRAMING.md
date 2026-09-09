@@ -174,6 +174,13 @@ the product if wrong.
 | 3 attempts, 60s timeout, 500ms backoff                                 | `config.ts`           |                                                                  |
 | Rest defaults to 120s, presets 60/90/120/180                           | `RestTimer.tsx`       |                                                                  |
 | Model per stage: flash-lite normalizer, sonnet-5 planner, flash critic | `models.ts`           | **Load-bearing** — this is the cost structure                    |
+| Calorie floor is `max(BMR, 1200)`                                      | `diet/energy.ts`      | **Load-bearing** — the whole safety property of the diet advisor |
+| Calorie ceiling is 6,000, and reaching it is a refusal                 | `diet/energy.ts`      | **Load-bearing** — it is what stops a mistyped height rendering  |
+| Deficit capped at 20% of TDEE, surplus at 15%                          | `diet/energy.ts`      | **Load-bearing** — the bound the model cannot argue with         |
+| `unspecified` sex takes the male Mifflin constant, the higher one      | `diet/energy.ts`      | Erring toward more food — ADR 0024 §3                            |
+| Activity bands at 0.5 / 3 / 5 / 7 sessions per week                    | `diet/energy.ts`      | Standard Mifflin multipliers, read off logged sessions           |
+| Protein target is 1.8 g per kg of bodyweight                           | `diet/energy.ts`      |                                                                  |
+| Bodyweight under 1000 kg, height under 300 cm, born after 1900         | `diet/biometrics.ts`  | Human bounds rather than the column's, and what excludes NaN     |
 
 ### Product behaviour never discussed
 

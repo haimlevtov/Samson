@@ -24,7 +24,18 @@ export interface TonnageOptions {
  * imputation is wrong in a moving one.
  *
  * AI-NOTE: if bodyweight-inclusive tonnage is ever wanted, it needs a
- *          bodyweight time series first. Do not reach for users.bodyweight_kg.
+ *          bodyweight time series first. Do not reach for users.bodyweight_kg
+ *          HERE, or anywhere else that computes a figure about the past.
+ *
+ *          Amended 2026-09-09 by ADR 0024, because this read as a flat
+ *          prohibition and is not one. The diet advisor reads
+ *          users.bodyweight_kg and is right to: a calorie target is a
+ *          present-tense number recomputed on every request, so a weight change
+ *          moves today's figure and nothing else. What is forbidden is
+ *          IMPUTATION INTO HISTORY — the same column used to fill in months of
+ *          past tonnage, where updating your weight silently rewrites every
+ *          past number and no chart the coach has already commented on still
+ *          agrees with itself.
  */
 export function setTonnage(set: SetRecord, options: TonnageOptions = {}): number {
   if (!options.includeWarmups && set.isWarmup) return 0;

@@ -14,6 +14,7 @@ import { cookies } from 'next/headers';
 import type { Db } from './client';
 import { supabaseAnonKey, supabaseUrl } from './client';
 import type { Database } from './types';
+import { isSex, type Sex } from '../diet/biometrics';
 
 /** Bound to the caller's session cookies. Never cache this across requests. */
 export async function createServerDb(): Promise<Db> {
@@ -50,6 +51,28 @@ export interface SessionUser {
   leaderboardOptOut: boolean;
   /** Appearance — see src/ui/theme.ts. The layout stamps it onto <html>. */
   theme: string;
+  /**
+   * The four the diet advisor needs — ADR 0024, docs/specs/diet.md §1.
+   *
+   * INVARIANT: kilograms and centimetres, canonically — CLAUDE.md #8.
+   *
+   * Null is a real state and not a missing default: every one of them may be
+   * cleared, and `src/diet/` names the absent field rather than guessing one.
+   * They are read here and consumed by the energy engine; none of them is ever
+   * put in a payload sent to a model — ADR 0024 §5.
+   */
+  bodyweightKg: number | null;
+  heightCm: number | null;
+  /** ISO `YYYY-MM-DD`. Age is derived against the user's local date — #9. */
+  birthDate: string | null;
+  /**
+   * Narrowed from the column's `text` by `isSex`, not cast. A value outside the
+   * three means the CHECK is gone, and reading it as valid would feed an unknown
+   * string into the Mifflin constant lookup. Null is the safe read: it produces
+   * the missing-biometric refusal, which is visible, rather than a silent
+   * default.
+   */
+  sex: Sex | null;
 }
 
 /**
@@ -68,9 +91,13 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
 
   const { data: profile } = await db
     .from('users')
-    .select('display_name, timezone, unit_preference, humor_max_level, theme, leaderboard_opt_out')
+    .select(
+      'display_name, timezone, unit_preference, humor_max_level, theme, leaderboard_opt_out, bodyweight_kg, height_cm, birth_date, sex'
+    )
     .eq('user_id', user.id)
     .maybeSingle();
+
+  const storedSex = profile?.sex ?? null;
 
   return {
     id: user.id,
@@ -85,6 +112,14 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
     // must not silently opt somebody out of a feature they never saw.
     leaderboardOptOut: profile?.leaderboard_opt_out ?? false,
     theme: profile?.theme ?? 'system',
+    // `?? null` rather than a default: absent is the answer here, and the diet
+    // block says which field it is waiting for.
+    bodyweightKg: profile?.bodyweight_kg ?? null,
+    heightCm: profile?.height_cm ?? null,
+    birthDate: profile?.birth_date ?? null,
+    // Narrowed from the column's `text`. The CHECK admits exactly these three;
+    // anything else means the constraint was dropped, and null is the safe read.
+    sex: isSex(storedSex) ? storedSex : null,
   };
 }
 

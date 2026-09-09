@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
 import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
+import { SEXES, type Sex } from '@/src/diet/biometrics';
 import { updateSettings } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -21,6 +22,13 @@ const HUMOR_BLURB: Record<string, string> = {
   crude: 'Everything the personas have.',
 };
 
+/** The three the column constrains, in the user's words rather than the schema's. */
+const SEX_LABEL: Record<Sex, string> = {
+  male: 'Male',
+  female: 'Female',
+  unspecified: 'Prefer not to say',
+};
+
 export function SettingsForm({
   displayName,
   timezone,
@@ -28,6 +36,11 @@ export function SettingsForm({
   theme,
   timezones,
   leaderboardOptOut,
+  bodyweightKg,
+  heightCm,
+  birthDate,
+  sex,
+  maxBirthDate,
 }: {
   displayName: string;
   timezone: string;
@@ -35,6 +48,18 @@ export function SettingsForm({
   theme: string;
   timezones: string[];
   leaderboardOptOut: boolean;
+  bodyweightKg: number | null;
+  heightCm: number | null;
+  birthDate: string | null;
+  sex: Sex | null;
+  /**
+   * Today in the user's own timezone — CLAUDE.md #9, computed on the server.
+   *
+   * WHY passed in rather than `new Date()` here: this is a client component, so
+   * a date built here would be the DEVICE's, and the picker would disagree with
+   * the action's own check for a user whose phone is in another zone.
+   */
+  maxBirthDate: string;
 }) {
   const [state, action, saving] = useActionState<SettingsFormState, FormData>(
     updateSettings,
@@ -70,6 +95,78 @@ export function SettingsForm({
           ))}
         </select>
       </label>
+
+      {/*
+       * ADR 0024 — the diet advisor needs all four, and until phase 6 nothing in
+       * the app read or wrote any of them.
+       *
+       * WHY they are optional and say so: the app worked without them for five
+       * phases and still does. Everything except the diet block is unaffected by
+       * leaving them blank, and a required field would be a health question
+       * somebody has to answer to change their theme.
+       */}
+      <fieldset>
+        <legend className="label">You</legend>
+        <p className="muted small">
+          Only the diet advisor uses these, and only while you have it open. They are never sent to
+          the coach model — it is told whether your target is a deficit, not what you weigh.
+        </p>
+
+        <label>
+          <span className="label">Bodyweight (kg)</span>
+          {/* inputMode decimal per docs/specs/mobile-interface.md: the phone
+              keyboard opens on digits rather than letters. */}
+          <input
+            name="bodyweightKg"
+            type="text"
+            inputMode="decimal"
+            defaultValue={bodyweightKg ?? ''}
+            placeholder="Leave blank to skip"
+            autoComplete="off"
+          />
+        </label>
+
+        <label>
+          <span className="label">Height (cm)</span>
+          <input
+            name="heightCm"
+            type="text"
+            inputMode="decimal"
+            defaultValue={heightCm ?? ''}
+            placeholder="Leave blank to skip"
+            autoComplete="off"
+          />
+        </label>
+
+        <label>
+          <span className="label">Date of birth</span>
+          <input name="birthDate" type="date" defaultValue={birthDate ?? ''} max={maxBirthDate} />
+        </label>
+
+        <label>
+          <span className="label">Sex</span>
+          {/*
+           * A term in the Mifflin–St Jeor equation, which is why it is asked at
+           * all and why the list is these three. "Prefer not to say" is a real
+           * answer with a real behaviour rather than a null: it takes the higher
+           * of the two constants, so the error lands on the side of more food —
+           * ADR 0024 §3.
+           */}
+          <select name="sex" defaultValue={sex ?? ''}>
+            <option value="">Not set</option>
+            {SEXES.map((option) => (
+              <option key={option} value={option}>
+                {SEX_LABEL[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="muted small">
+          Kilograms and centimetres. Clearing a field removes it, and the diet advisor will say
+          which one it is waiting for.
+        </p>
+      </fieldset>
 
       <fieldset className="humor">
         <legend className="label">Appearance</legend>

@@ -248,6 +248,12 @@ async function seedArchetype(
     // archetype lives somewhere different so calendar logic gets exercised.
     timezone: archetype.timezone,
     unit_preference: 'metric',
+    // The diet advisor's four inputs — ADR 0024. Optional in the product; set
+    // here because a demo whose diet block asks for a height is not a demo.
+    bodyweight_kg: archetype.bodyweightKg,
+    height_cm: archetype.heightCm,
+    birth_date: archetype.birthDate,
+    sex: archetype.sex,
   });
   if (profileError) throw new Error(`profile for ${archetype.key}: ${profileError.message}`);
 

@@ -9,12 +9,12 @@ the numbers in it.
 Four fields on `users`, all of which existed as columns from the phase-0 schema
 and none of which anything read or wrote before phase 6.
 
-| Column          | Type            | Constraint after this PR               | Asked for as |
-| --------------- | --------------- | -------------------------------------- | ------------ |
-| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                       | kilograms    |
-| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                        | centimetres  |
-| `birth_date`    | `date`          | `>= '1900-01-01' and <= current_date`  | a date       |
-| `sex`           | `text`          | `in ('male', 'female', 'unspecified')` | three radios |
+| Column          | Type            | Constraint after this PR                | Asked for as |
+| --------------- | --------------- | --------------------------------------- | ------------ |
+| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms    |
+| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres  |
+| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date       |
+| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | three radios |
 
 **The bounds are not cosmetic.** `'NaN'::numeric > 0` is TRUE in PostgreSQL —
 measured against this hosted project and recorded in
@@ -30,9 +30,16 @@ the tonnage hardening, which took `< 1e10` because _"numeric(12,2) tops out just
 under 1e10 anyway"_ — there the column held masses of buildings and any bound was
 arbitrary; here the column holds a person.
 
-`birth_date` had **no constraint at all**. It now cannot be in the future, which
-closes the case where a date typed as `3000-01-01` produces a negative age that
-trips the under-18 refusal by accident rather than by design.
+`birth_date` had **no constraint at all**. It is now bounded to a range a human
+birth date can fall in, which closes the case where `3000-01-01` produces a
+negative age that trips the under-18 refusal by accident rather than by design.
+
+**"Not in the future" is checked in the action, not the column.** A CHECK holding
+`current_date` is accepted by PostgreSQL and is a footgun: it evaluates in the
+server's timezone, which `CLAUDE.md` #9 forbids for anything calendar-shaped, and
+existing rows are never rechecked. The column holds a bound that cannot rot; the
+action compares against the user's own local date. Same split `users.timezone`
+already documents.
 
 ### Units
 
@@ -47,10 +54,23 @@ asks for canonical storage, which this is.
 Every one of the four may be cleared. A blank field parses to `null`, is written
 as `null`, and the diet block then names it as missing rather than defaulting.
 
-**Missing and zero are distinct states**, and the coercion makes that easy to get
-wrong: `z.coerce.number()` maps `""` and `" "` to `0` and `"0x10"` to `16`. The
-schema therefore trims and tests for empty **before** coercing, and `0` is a
-validation failure rather than a silent absence.
+**Missing and zero are distinct states**, and the obvious tool destroys the
+distinction: `z.coerce.number()` maps `""` and `" "` to `0`, and `"0x10"` to
+`16`. A cleared field would become a person who weighs nothing, and the
+missing-biometric refusal — the only thing that tells a user which field the
+advisor is waiting for — would be unreachable.
+
+So `measurementField` trims, treats empty as `null` **before** any conversion,
+and then requires a plain decimal (`/^\d{1,4}(?:\.\d{1,2})?$/`) rather than
+whatever `Number()` will accept. `0` is a validation failure naming the field,
+not a silent absence and not a database error naming a constraint.
+
+`birth_date` is checked the same way, and the round trip is the check:
+`Date.parse('2026-02-31T00:00:00Z')` does **not** return `NaN` — V8 rolls it over
+to 3 March, and `2026-13-01` becomes 1 January 2027. A birth date silently moved
+is exactly the kind of wrong nothing downstream detects, and it feeds the age
+comparison that decides whether a target is shown at all. `isRealDate` builds the
+date from its parts and requires the parts to survive.
 
 ## 2. The equation
 
