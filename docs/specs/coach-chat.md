@@ -5,7 +5,7 @@ Read that first; this is the part with the numbers in it.
 
 ## 1. The surface
 
-Three controls on `/coach`, and none of them fires on page load.
+Four controls on `/coach`, and none of them fires on page load.
 
 **The plan is revealed, not served.** The accepted block no longer renders when
 the page opens. The page shows a one-line summary — that a plan exists and when
@@ -38,6 +38,19 @@ empties the visible conversation; there is nothing to delete, because nothing is
 stored. It exists because the transcript is re-sent with every message — so
 without it, a user who has wandered somewhere unhelpful pays for that history on
 every subsequent turn and cannot get out of it except by leaving the page.
+
+**Supplements** is the fourth, in the page header, and it leaves. It is the only
+route to `/evidence` — [ADR 0023](../adr/0023-evidence-rows.md) — and it is on
+Coach because a supplement question is a coaching question that this coach
+cannot answer well.
+
+Stated carefully, because the obvious phrasing overclaims: the chat is confined
+to training by a classifier, and [ADR 0015](../adr/0015-coach-chat.md) is
+explicit that topical confinement is "a judgement, not arithmetic" and defence in
+depth rather than a control. So this link is not a guarantee that the model will
+refuse to discuss a supplement. It is somewhere better to send the user — a
+table of claims with the papers attached — than whatever a model says off the
+cuff about creatine.
 
 ## 2. The stage
 

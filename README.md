@@ -106,6 +106,7 @@ supabase stop && wsl --shutdown
 | `npm run migrate`                       | `supabase db reset` — local stack only, rebuilds from zero.    |
 | `npm run db:push`                       | Applies new migrations to the hosted project.                  |
 | `npm run seed`                          | Five synthetic users: 8+ weeks of history, XP, levels, badges. |
+| `npm run verify:doi`                    | Resolves every evidence-table DOI against the DOI registry.    |
 | `npm run inspect:seed`                  | Prints each archetype progression for eyeballing.              |
 | `npm run catalogue:fetch`               | Refreshes the committed exercise snapshot.                     |
 | `npm run smoke:llm`                     | One real model call. Spends money. Never runs in CI.           |

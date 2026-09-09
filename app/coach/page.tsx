@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/personas';
@@ -33,6 +34,23 @@ export default async function CoachPage() {
             {plan ? `Plan accepted ${displayDate(plan.createdAt.slice(0, 10))}` : 'No plan yet'}
           </span>
         </div>
+        {/*
+         * The only way into /evidence — ADR 0023, and `OWNED_BY` in
+         * src/ui/tabs.ts carries the route so the orphan-link guard in
+         * tests/unit/invariants.test.ts can see it.
+         *
+         * WHY here rather than on Profile: a supplement question is a coaching
+         * question that this coach cannot answer well.
+         *
+         * FOUND IN REVIEW: this said the chat "will decline to recommend a
+         * supplement". ADR 0015 refuses to promise that — it calls topical
+         * confinement "a judgement, not arithmetic", defence in depth rather
+         * than a control. The link is somewhere better to send the user, not a
+         * guarantee about what the model will say.
+         */}
+        <Link href="/evidence" className="chip">
+          Supplements
+        </Link>
       </header>
 
       {plan === null ? (

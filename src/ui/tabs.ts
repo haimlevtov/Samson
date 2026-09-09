@@ -45,6 +45,9 @@ export const OWNED_BY: Record<string, TabHref> = {
   // documents "the link on Profile is the only way in" was the one page nothing
   // checked had a link.
   '/progression-trees': '/profile',
+  // ADR 0023. Reached from Coach, which is where a supplement question gets
+  // asked, and for the same reason as the entry above: five tabs is the budget.
+  '/evidence': '/coach',
 };
 
 /** True when `pathname` is `route` or sits underneath it. */

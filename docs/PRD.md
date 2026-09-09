@@ -235,13 +235,20 @@ The mechanism, and why it is a view rather than a privileged client, is
 [ADR 0016](adr/0016-leaderboard.md) — this is the first feature in the project
 that reads another user's rows, which invariant #10 forbids by default.
 
-### 5.7 Diet — **Deferred** (phase 6)
+### 5.7 Diet — **Partly built**, the rest deferred (phase 6)
 
-Maintenance calories by equation, bounded adjustment, and a floor hard-clamped
-in code. The model explains the number; it never chooses it. Supplement answers
-are retrieval-only from a curated table with evidence grades and resolvable
-DOIs. Acceptance is adversarial: no prompt, persona or framing moves the floor,
-and every attempt is logged.
+**Built (phase 5).** The supplement evidence table and a page that reads it, at
+`/evidence`, reached from Coach. One row carries one claim, one evidence grade
+A–D and one resolvable DOI — [ADR 0023](adr/0023-evidence-rows.md) — and rows
+graded **D**, where the evidence does not support the popular claim, ship on
+purpose. The page states in as many words that no full text has been read.
+
+**Still deferred (phase 6).** Maintenance calories by equation, bounded
+adjustment, and a floor hard-clamped in code; the model explains the number, it
+never chooses it. Supplement answers as retrieval-only COACH responses, which is
+a different thing from a page a user browses — the table now exists for that to
+retrieve from. Acceptance is adversarial: no prompt, persona or framing moves
+the floor, and every attempt is logged.
 
 ### 5.8 Import — **Deferred** (phase 6)
 

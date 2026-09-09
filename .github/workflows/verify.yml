@@ -125,3 +125,60 @@ jobs:
         run: |
           supabase gen types typescript --local > src/db/types.ts
           git diff --exit-code src/db/types.ts
+
+  # ---------------------------------------------------------------------------
+  # The third of the three checks ADR 0023 splits the DOI criterion into.
+  #
+  # Its own job, deliberately, and NOT a required check. It is the only thing in
+  # this workflow that reaches the public internet, and doi.org being slow is
+  # not a reason to block a pull request that never touched the evidence table.
+  # A gate that fails for reasons the author cannot fix is a gate that gets
+  # switched off. `continue-on-error` is what makes that true, and it is the
+  # whole safety mechanism — GitHub has no per-job `paths` filter, so this runs
+  # on every push and simply reports rather than blocking.
+  # ---------------------------------------------------------------------------
+  doi:
+    name: evidence DOIs resolve
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      # The rows are database content, so the check needs a database. A fresh
+      # local stack rather than hosted: this must test the rows in THIS commit,
+      # not whatever is currently deployed.
+      - name: Start local Supabase
+        run: supabase start
+
+      # `set -euo pipefail` and the guard are not decoration: `eval` of empty
+      # output exits 0, so a failed `supabase status` would write blank values
+      # and the real failure would surface later — inside a continue-on-error
+      # job, where it is invisible. The db job fails loudly; this one would not.
+      - name: Write local connection details
+        run: |
+          set -euo pipefail
+          eval "$(supabase status -o env)"
+          [ -n "${API_URL:-}" ] || { echo "::error::supabase status gave no API_URL"; exit 1; }
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> .env.local
+
+      - run: npm run migrate
+
+      # The output is the point as much as the exit code: every line carries the
+      # source title next to its DOI, so the human half of the check — does this
+      # paper say what the row claims — has something to read. ADR 0023.
+      - run: npm run verify:doi

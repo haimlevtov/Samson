@@ -2441,3 +2441,121 @@ details.quick-log[open] > summary {
 .row-link:hover {
   border-color: var(--accent-text);
 }
+
+/* ---- supplement evidence ------------------------------------------------ */
+
+.evidence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.evidence-row {
+  display: grid;
+  gap: 6px;
+}
+
+/*
+ * The supplement and its grade on one line, wrapping rather than shrinking:
+ * "Testosterone boosters" and "D Not supported" do not both fit on 375px, and
+ * squeezing the chip is how a grade becomes unreadable.
+ */
+.evidence-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.evidence-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+/*
+ * INVARIANT: state is never carried by colour alone —
+ *            docs/specs/mobile-interface.md §3. The chip prints its letter AND
+ *            its meaning; the colour is the fast path, never the only one.
+ */
+.evidence-grade {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.evidence-grade strong {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.evidence-grade.is-a {
+  border-color: var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.evidence-grade.is-a strong {
+  color: var(--good);
+}
+
+/*
+ * D is the row the table exists for — ADR 0023 — so it is marked, not hidden.
+ * `--warn-*` is the token pair the rest of the app already uses for "read this
+ * before you act", rather than a second red invented here.
+ */
+.evidence-grade.is-d {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.evidence-grade.is-d strong {
+  color: var(--warn);
+}
+
+.evidence-claim {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.evidence-caution {
+  /* A caution is the one line a reader must not skim past. */
+  color: var(--warn);
+}
+
+/*
+ * `.label` is display:block, so reusing it inline needs the override — the same
+ * shape as `details.quick-log > summary .label`. FOUND IN REVIEW: without it,
+ * "Dose" sat on its own line and the margin below did nothing.
+ */
+.label.inline {
+  display: inline;
+  margin-right: 4px;
+}
+
+/*
+ * The citation is the one interaction this page exists for — ADR 0023, "a DOI
+ * they cannot click is a decoration" — and a 13px line of text is about 18px
+ * tall. Padding rather than a fixed height, because a source title wraps to
+ * three lines and must keep wrapping.
+ *
+ * INVARIANT: 44px minimum target — docs/specs/mobile-interface.md §3.
+ */
+.evidence-cite {
+  margin: 0;
+}
+.evidence-cite a {
+  display: block;
+  min-height: var(--tap);
+  padding: 11px 0;
+  margin: -5px 0;
+}

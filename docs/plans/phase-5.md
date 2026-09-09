@@ -37,10 +37,10 @@ curated supplement evidence table.
 | Supplement evidence table with DOIs        | Does not exist                                               |
 
 > **This table is a snapshot of 2026-09-07 and is deliberately not maintained.**
-> Four of its five rows are false as of 2026-09-08 — the achievements, the
-> tonnage comparisons, the personas and the progression trees all shipped in the
-> content fill. What is
-> outstanding is tracked in
+> **All five of its rows are false as of 2026-09-09** — the achievements, the
+> tonnage comparisons, the personas, the progression trees and the supplement
+> evidence table have all shipped in the content fill, and nothing on it is
+> outstanding. What shipped is recorded in
 > [`phase-5-content-fill.md`](phase-5-content-fill.md)'s Outcome, which is the
 > live document; editing a dated record to keep it current would destroy the
 > thing it exists to record.
@@ -183,6 +183,10 @@ recorded in `CLAUDE.md`.
   `CLAUDE.md` names FRAMING.md as the document to read when a decision is
   disputed and it was not read here. All five items ship, planned in
   [`phase-5-content-fill.md`](phase-5-content-fill.md).
+
+  **Closed 2026-09-09.** All five shipped — the fifth, the supplement evidence
+  table, in that plan's PR 6. Nothing in the table at the top of this file is
+  still outstanding.
 
 - **Phase 3's persona drift eval remains unmet** — "does turn 80 still sound
   like turn 3". The project's one outstanding acceptance criterion, waiting on

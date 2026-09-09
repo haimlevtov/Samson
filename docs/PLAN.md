@@ -13,7 +13,7 @@ meets its acceptance criteria.
 plan and recorded outcome of each. Phase 5 shipped, but **not the phase written
 below**: it became interface and feature work, and
 [`plans/phase-5.md`](plans/phase-5.md) records the divergence and what the
-content-fill brief still owes. That debt is now being paid rather than written
+content-fill brief still owes. That debt is **now paid in full** rather than written
 off — see [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
 One phase-6 item, the leaderboard, was pulled
 forward into it and shipped; see the entry under phase 6 for why and for the two
@@ -216,16 +216,17 @@ One of each, end to end. This is about plumbing, not content.
 > content survived a phase that spent itself elsewhere. It does: two of the
 > three acceptance criteria below cannot be met without it, and §5.5 of
 > [`PRD.md`](PRD.md) specified hidden achievements, calendar achievements and
-> progression trees that the build did not have. All five items ship, planned
-> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md) — four of
-> them as of 2026-09-08, including all three §5.5 named.
+> progression trees that the build did not have. All five items shipped, planned
+> in [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md) — four on
+> 2026-09-08, including all three §5.5 named, and the supplement evidence table
+> on 2026-09-09.
 
 Compressible and parallelisable. Safe to cut down if time runs short.
 
 **Build** — kept as briefed rather than ticked off. What has actually shipped
 against it is recorded in
-[`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md)'s Outcome; four
-of the five are done as of 2026-09-08.
+[`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md)'s Outcome. **All
+five are done as of 2026-09-09.**
 
 - Remaining achievements across all tiers, including hidden ones and calendar
   events evaluated in local date
@@ -247,7 +248,16 @@ of the five are done as of 2026-09-08.
   now returned to its holder by a parameterless definer function. Nothing else
   changed: `achievements_read_visible` still withholds every definition the
   caller has no unlock event for, which is what this criterion was for.
-- A test asserts every evidence-table claim has a resolvable DOI
+- A test asserts every evidence-table claim has a resolvable DOI — **met, by
+  three checks rather than one.** One test could not do it:
+  `verify.yml`'s unit job has no network and no database by design, and the
+  rows are database content. So `npm test` checks the DOI FORMAT offline
+  (`src/evidence/doi.test.ts`), `npm run test:db` checks that every row has one
+  and that no source is cited twice (`tests/db/evidence.test.ts`), and
+  `npm run verify:doi` resolves each against the DOI Handle API in its own,
+  non-blocking CI job. All 13 resolve — [ADR 0023](adr/0023-evidence-rows.md),
+  which also records what none of them prove: that the paper says what the row
+  claims.
 - Calendar achievements fire on the correct local date for a user in a
   non-server timezone
 

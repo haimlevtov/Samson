@@ -24,7 +24,8 @@
     "eval:planner": "tsx scripts/eval-planner.ts",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run eval:planner && npm run eval:planner -- --naive",
     "demo:llm": "tsx scripts/eval-planner.ts --live --limit 1 --max-spend 0.15",
-    "challenges:generate": "tsx scripts/generate-challenges.ts"
+    "challenges:generate": "tsx scripts/generate-challenges.ts",
+    "verify:doi": "tsx scripts/verify-doi.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
