@@ -1397,11 +1397,33 @@ code {
   z-index: 30;
   bottom: calc(100% + 8px);
   /*
-   * Pinned left rather than centred: on a phone the hint sits near the screen
-   * edge, where a centred bubble hangs off it. Growing rightwards always has
-   * room.
+   * Pinned left rather than centred: a centred bubble hangs off the screen at
+   * both ends, and pinning halves the problem.
+   *
+   * It does not solve it, which the previous version of this comment claimed —
+   * "growing rightwards always has room". At 375px the max-width below resolves
+   * to 260px, so any hint whose button sits past x=115 overflows, and the
+   * right-hand tile of a four-up grid always does. `--hint-shift` is the pull
+   * back inside, measured by src/ui/FieldHint.tsx because CSS cannot know how
+   * far this element is from the viewport edge — ADR 0022.
    */
   left: 0;
+  /*
+   * `margin-left`, and NOT `translate`, which is what this was written as first.
+   *
+   * MEASURED, toggling the two against each other on one open bubble at 375px:
+   * with `translate: -11px`, the bubble painted at right=368 and
+   * `documentElement.scrollWidth` stayed at **379**. With `margin-left: -11px`
+   * and no translate, same visible position, scrollWidth **375**. The page went
+   * on scrolling sideways with nothing visibly hanging off the edge to explain
+   * it — which is a worse bug than the one being fixed, because it is invisible.
+   *
+   * A margin changes the used position, so the scrollable overflow is
+   * recomputed from it. Whatever the general rule for transformed boxes is, the
+   * measurement above is the reason this property is a margin; do not "tidy" it
+   * into a transform.
+   */
+  margin-left: var(--hint-shift, 0px);
   width: max-content;
   max-width: min(260px, 76vw);
   display: none;
@@ -1599,6 +1621,17 @@ code {
     gap: 12px;
   }
 
+  /*
+   * Centred once there is room for it. The centring stays a transform because
+   * it is half the bubble's OWN width, and a percentage margin would resolve
+   * against `.hint` — about 20px, which is not the number wanted. The clamp is
+   * still the margin, so the two compose rather than overwrite each other.
+   *
+   * Checked rather than assumed, since the note above is about exactly this
+   * hazard: measured at 600px, every hint on /profile keeps scrollWidth at 600
+   * with the clamp applied. The transform-centred case does not reproduce the
+   * overflow that `translate` did.
+   */
   .hint-bubble {
     left: 50%;
     transform: translateX(-50%);
