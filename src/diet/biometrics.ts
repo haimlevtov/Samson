@@ -104,7 +104,16 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * The round trip is the check: build the date from the parts and require the
  * parts to survive it.
  */
-function isRealDate(iso: string): boolean {
+export function isRealDate(iso: string): boolean {
+  /*
+   * The SHAPE is checked here rather than only by the caller, because this is
+   * exported and `src/diet/energy.ts` calls it on its own. Without it `1995-7-2`
+   * round-trips happily — the parts survive, they are simply not zero-padded —
+   * and `ageOn` slices fixed offsets out of the string, so an unpadded date
+   * silently reads the wrong year.
+   */
+  if (!ISO_DATE.test(iso)) return false;
+
   const [year, month, day] = iso.split('-').map(Number);
   if (year === undefined || month === undefined || day === undefined) return false;
 
