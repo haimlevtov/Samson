@@ -1,0 +1,130 @@
+# ADR 0023 — One row, one claim, one DOI
+
+**Status:** accepted, phase 5
+**Date:** 2026-09-09
+
+> Written before the migration and the page it governs, in its own commit.
+>
+> `docs/plans/phase-5-content-fill.md` reserved the number **0021** for this
+> document. Two ADRs were written between the plan and the work — 0021 on
+> training order, 0022 on popover clamping — so it is 0023. The plan's PR 6
+> section is otherwise the brief this follows.
+
+## Context
+
+This is the project's first table of **external claims**. Everything else in the
+database is either the user's own data or content this project authored:
+achievements it wrote, personas it wrote, progression rungs it chose. A
+supplement table is different in kind, because every row asserts something about
+the world that somebody else established, and a reader has no way to tell a
+careful row from an invented one by looking at it.
+
+`docs/PLAN.md` phase 5 sets the acceptance criterion: **every claim has a
+resolvable DOI.**
+
+That criterion is necessary and it is not sufficient, which this document exists
+to say out loud. While assembling the rows, three DOIs were guessed from plausible
+shapes and checked against Crossref:
+
+| DOI                            | Resolves | Is about                                        |
+| ------------------------------ | -------- | ----------------------------------------------- |
+| `10.1519/JSC.0000000000002917` | yes      | an obituary for a powerlifting historian        |
+| `10.1007/s40279-020-01372-y`   | yes      | sprint training in football codes               |
+| `10.3390/nu13082751`           | yes      | punicic acid and ferroptosis in carcinoma cells |
+
+Every one of those would pass a resolver, and a row citing any of them would look
+checked. **A resolver proves a DOI is registered. It cannot prove the paper says
+what the row claims.**
+
+## Decision
+
+**A row carries one supplement, one claim, one evidence grade, a dose in
+canonical units, and the DOI of the source that backs _that_ claim.**
+
+No row summarises a literature. If a supplement has three claims worth making, it
+gets three rows and three sources. A row nobody can check is worse than an absent
+row, because an absent row is honest about the gap.
+
+### The grades
+
+Assigned from what the cited source concludes, not from popularity.
+
+|       | Meaning                                                                                                      |
+| ----- | ------------------------------------------------------------------------------------------------------------ |
+| **A** | A position stand or equivalent concludes the effect is established for training people.                      |
+| **B** | Established, but for narrower conditions than the marketing implies — a task type, a duration, a population. |
+| **C** | Mixed, limited, or real for something other than what it is sold for.                                        |
+| **D** | **The evidence does not support the popular claim.**                                                         |
+
+**D rows ship on purpose, and they are the point.** "This does not do what the
+label says" is the answer a user most needs and the one a supplement table never
+gives, because the tables are usually written by people selling supplements.
+Three of the shipped rows are D.
+
+### Sources
+
+ISSN position stands and peer-reviewed systematic reviews. The plan also named
+NIH ODS fact sheets; those carry no DOI, so where a fact sheet is the best plain-
+language source the row cites the peer-reviewed work instead, and where there is
+no such work the row is not written.
+
+## The check, in three parts
+
+The acceptance criterion needs a network call, and `verify.yml`'s unit job has no
+network by design — its own comment says a change that needs one means "something
+has grown a hidden dependency on the network — fix that rather than adding the
+secret". `vitest.config.ts` scopes that run to `src/**` and `tests/unit/**` with
+no database, and evidence rows are database content. So one criterion becomes
+three checks:
+
+|                      | Runs                   | Asserts                                                                   |
+| -------------------- | ---------------------- | ------------------------------------------------------------------------- |
+| `npm test`           | anywhere, offline      | `isDoi()` — format only, no rows, no network                              |
+| `npm run test:db`    | against a database     | every row's DOI is well-formed, every claim has one, every grade is legal |
+| `npm run verify:doi` | its own CI job, online | each DOI resolves against the DOI Handle API                              |
+
+The third is deliberately **not** a merge gate for changes that do not touch the
+table. A registry being down is not a reason to block an unrelated PR, and a
+check that blocks for reasons the author cannot fix gets disabled.
+
+## What is NOT verified, stated plainly
+
+**No test reads a paper.** The claims here were written against each source's
+**abstract**, fetched from PubMed, plus its title, journal and year from Crossref
+— not against full texts. That is more than a title match and less than a
+literature review.
+
+So the residual gap is specific: a row can cite a real paper, on the right
+subject, and still characterise its conclusion more strongly than the full text
+supports. Nothing in CI will catch that. It needs a person who knows the field to
+read the rows against the papers, and until that has happened this table is
+**demo content with citations**, not a clinical reference. The page says so where
+a user can see it, not only here.
+
+## Alternatives rejected
+
+**Store a URL instead of a DOI.** Simpler, and it rots. A DOI is a permanent
+identifier with a registry behind it; a publisher URL is a redirect somebody
+else controls. The whole value of the column is that it still resolves in a year.
+
+**Let one row cover a supplement.** "Creatine: good, 3–5 g" is what every other
+supplement table does, and it is unfalsifiable — there is no single claim to
+check a source against, so the citation becomes decoration.
+
+**Grade on a numeric score.** Rejected as false precision: turning "one position
+stand and two trials that disagree" into 6.5/10 invents resolution the evidence
+does not have, and invites averaging scores across rows, which means nothing.
+
+**Ship only A and B rows.** It would make the table look authoritative and would
+remove its main use. Someone reaching for a supplement page is usually deciding
+whether to buy something, and "no" is the most valuable answer available.
+
+## Consequences
+
+- `verify:doi` reaches the network, so it can fail for reasons unrelated to the
+  change under test. It runs in its own job and its output is recorded.
+- Adding a row means finding a source for that specific claim, which is
+  deliberately more work than adding a row to a list.
+- The page ships while the diet advisor stays deferred to phase 6.
+  `docs/PRD.md` §5.7 is updated to say which half is which, rather than leaving
+  the section describing supplements as retrieval-only coach answers.
