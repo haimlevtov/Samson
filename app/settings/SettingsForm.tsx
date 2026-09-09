@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
 import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
+import { EARLIEST_BIRTH_DATE, SEXES, type Sex } from '@/src/diet/biometrics';
 import { updateSettings } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -21,6 +22,13 @@ const HUMOR_BLURB: Record<string, string> = {
   crude: 'Everything the personas have.',
 };
 
+/** The three the column constrains, in the user's words rather than the schema's. */
+const SEX_LABEL: Record<Sex, string> = {
+  male: 'Male',
+  female: 'Female',
+  unspecified: 'Prefer not to say',
+};
+
 export function SettingsForm({
   displayName,
   timezone,
@@ -28,6 +36,11 @@ export function SettingsForm({
   theme,
   timezones,
   leaderboardOptOut,
+  bodyweightKg,
+  heightCm,
+  birthDate,
+  sex,
+  maxBirthDate,
 }: {
   displayName: string;
   timezone: string;
@@ -35,6 +48,18 @@ export function SettingsForm({
   theme: string;
   timezones: string[];
   leaderboardOptOut: boolean;
+  bodyweightKg: number | null;
+  heightCm: number | null;
+  birthDate: string | null;
+  sex: Sex | null;
+  /**
+   * Today in the user's own timezone — CLAUDE.md #9, computed on the server.
+   *
+   * WHY passed in rather than `new Date()` here: this is a client component, so
+   * a date built here would be the DEVICE's, and the picker would disagree with
+   * the action's own check for a user whose phone is in another zone.
+   */
+  maxBirthDate: string;
 }) {
   const [state, action, saving] = useActionState<SettingsFormState, FormData>(
     updateSettings,
@@ -70,6 +95,98 @@ export function SettingsForm({
           ))}
         </select>
       </label>
+
+      {/*
+       * ADR 0024 — the diet advisor needs all four, and until phase 6 nothing in
+       * the app read or wrote any of them.
+       *
+       * WHY they are optional and say so: the app worked without them for five
+       * phases and still does. Everything except the diet block is unaffected by
+       * leaving them blank, and a required field would be a health question
+       * somebody has to answer to change their theme.
+       */}
+      <fieldset className="humor">
+        <legend className="label">You</legend>
+        <p className="muted small">
+          For the diet advisor, which is being built. Nothing else reads them, and they will not be
+          sent to the coach model — it is told whether your target is a deficit, never what you
+          weigh.
+        </p>
+
+        <label>
+          <span className="label">Bodyweight (kg)</span>
+          {/* inputMode decimal per docs/specs/mobile-interface.md: the phone
+              keyboard opens on digits rather than letters. */}
+          <input
+            name="bodyweightKg"
+            type="text"
+            inputMode="decimal"
+            defaultValue={bodyweightKg ?? ''}
+            placeholder="Leave blank to skip"
+            autoComplete="off"
+          />
+        </label>
+
+        <label>
+          <span className="label">Height (cm)</span>
+          <input
+            name="heightCm"
+            type="text"
+            inputMode="decimal"
+            defaultValue={heightCm ?? ''}
+            placeholder="Leave blank to skip"
+            autoComplete="off"
+          />
+        </label>
+
+        <label>
+          <span className="label">Date of birth</span>
+          {/* Both bounds, so the picker agrees with the validator rather than
+              offering dates the save will refuse. */}
+          <input
+            name="birthDate"
+            type="date"
+            defaultValue={birthDate ?? ''}
+            min={EARLIEST_BIRTH_DATE}
+            max={maxBirthDate}
+          />
+        </label>
+
+        <label>
+          <span className="label">Sex</span>
+          {/*
+           * A term in the Mifflin–St Jeor equation, which is why it is asked at
+           * all and why the list is these three. "Prefer not to say" is a real
+           * answer with a real behaviour rather than a null: it takes the higher
+           * of the two constants, so the error lands on the side of more food —
+           * ADR 0024 §3.
+           *
+           * `sex ?? ''` shows "Not set" for a stored value outside the three —
+           * which `currentUser` reads as null on purpose, so an unknown constant
+           * never reaches the equation. The consequence is worth knowing: the
+           * next save of ANY setting then writes that null down. That is the
+           * intended direction here (an out-of-range value means the CHECK is
+           * gone, and it is not a value to preserve), and it is deliberately
+           * NOT what page.tsx does for `timezone`, where an unlisted stored zone
+           * is prepended to the options so a save cannot destroy it. The
+           * difference: a zone this runtime does not list is probably valid, and
+           * a sex the column does not admit is not.
+           */}
+          <select name="sex" defaultValue={sex ?? ''}>
+            <option value="">Not set</option>
+            {SEXES.map((option) => (
+              <option key={option} value={option}>
+                {SEX_LABEL[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="muted small">
+          Kilograms and centimetres. Clearing a field removes it, and the diet advisor will say
+          which one it is waiting for.
+        </p>
+      </fieldset>
 
       <fieldset className="humor">
         <legend className="label">Appearance</legend>

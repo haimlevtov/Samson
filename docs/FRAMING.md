@@ -162,18 +162,31 @@ the product if wrong.
 
 ### Numbers invented outright
 
-| Assumption                                                             | Where                 |                                                                  |
-| ---------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
-| Secondary muscles receive 0.5 of a set's tonnage                       | `tonnage.ts`          | **Load-bearing** — phase 2 volume caps are expressed against it  |
-| Epley is withheld above 12 reps                                        | `e1rm.ts`             | **Load-bearing** — decides when the app admits it does not know  |
-| ACWR is uncoupled, 7 days over 28, bands at 0.8 / 1.3 / 1.5            | `acwr.ts`             | **Load-bearing** — the critic will gate plans on this            |
-| Bodyweight movements contribute zero tonnage                           | `tonnage.ts`          | **Load-bearing** — a bodyweight-only user shows a flat zero line |
-| Warm-ups are excluded from tonnage and can never set a PR              | `tonnage.ts`, `pr.ts` |                                                                  |
-| Adherence is shown over a 4-week window                                | `workouts/page.tsx`   |                                                                  |
-| Default LLM budget is $0.50 per user per week                          | `config.ts`           | **Load-bearing** — a low cap silently truncates phase 2 evals    |
-| 3 attempts, 60s timeout, 500ms backoff                                 | `config.ts`           |                                                                  |
-| Rest defaults to 120s, presets 60/90/120/180                           | `RestTimer.tsx`       |                                                                  |
-| Model per stage: flash-lite normalizer, sonnet-5 planner, flash critic | `models.ts`           | **Load-bearing** — this is the cost structure                    |
+> Started as the phases 0–1 list this section describes; extended since, because
+> the category is the point rather than the phase. Rows in _italics_ name a file
+> that is planned rather than written — the number was chosen in an ADR before
+> the code, and this table is where a number nobody was asked about gets
+> recorded.
+
+| Assumption                                                             | Where                            |                                                                  |
+| ---------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
+| Secondary muscles receive 0.5 of a set's tonnage                       | `tonnage.ts`                     | **Load-bearing** — phase 2 volume caps are expressed against it  |
+| Epley is withheld above 12 reps                                        | `e1rm.ts`                        | **Load-bearing** — decides when the app admits it does not know  |
+| ACWR is uncoupled, 7 days over 28, bands at 0.8 / 1.3 / 1.5            | `acwr.ts`                        | **Load-bearing** — the critic will gate plans on this            |
+| Bodyweight movements contribute zero tonnage                           | `tonnage.ts`                     | **Load-bearing** — a bodyweight-only user shows a flat zero line |
+| Warm-ups are excluded from tonnage and can never set a PR              | `tonnage.ts`, `pr.ts`            |                                                                  |
+| Adherence is shown over a 4-week window                                | `workouts/page.tsx`              |                                                                  |
+| Default LLM budget is $0.50 per user per week                          | `config.ts`                      | **Load-bearing** — a low cap silently truncates phase 2 evals    |
+| 3 attempts, 60s timeout, 500ms backoff                                 | `config.ts`                      |                                                                  |
+| Rest defaults to 120s, presets 60/90/120/180                           | `RestTimer.tsx`                  |                                                                  |
+| Model per stage: flash-lite normalizer, sonnet-5 planner, flash critic | `models.ts`                      | **Load-bearing** — this is the cost structure                    |
+| Bodyweight under 1000 kg, height under 300 cm, born after 1900         | `diet/biometrics.ts`             | Human bounds rather than the columns', and what excludes NaN     |
+| Calorie floor is `max(BMR, 1200)`                                      | _`diet/energy.ts`, phase 6 PR 3_ | **Load-bearing** — the whole safety property of the diet advisor |
+| Calorie ceiling is 6,000, and reaching it is a refusal                 | _`diet/energy.ts`, phase 6 PR 3_ | **Load-bearing** — it is what stops a mistyped height rendering  |
+| Deficit capped at 20% of TDEE, surplus at 15%                          | _`diet/energy.ts`, phase 6 PR 3_ | **Load-bearing** — the bound the model cannot argue with         |
+| `unspecified` sex takes the male Mifflin constant, the higher one      | _`diet/energy.ts`, phase 6 PR 3_ | Erring toward more food — ADR 0024 §3                            |
+| Activity bands at 0.5 / 3 / 5 / 7 sessions per week                    | _`diet/energy.ts`, phase 6 PR 3_ | Standard Mifflin multipliers, read off logged sessions           |
+| Protein target is 1.8 g per kg of bodyweight                           | _`diet/energy.ts`, phase 6 PR 3_ |                                                                  |
 
 ### Product behaviour never discussed
 

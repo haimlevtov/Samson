@@ -11,6 +11,7 @@
  */
 import { addDays, startOfWeek } from '../metrics/dates';
 import type { LocalDate, WorkoutStatus } from '../metrics/types';
+import type { Sex } from '../diet/biometrics';
 import { chance, jitter, mulberry32, randomInt, roundToPlate, type Rng } from './rng';
 
 export interface ProgrammeEntry {
@@ -73,6 +74,22 @@ export interface Archetype {
   displayName: string;
   /** INVARIANT: history is generated in the user's local dates — CLAUDE.md #9. */
   timezone: string;
+  /*
+   * The four the diet advisor needs — ADR 0024, docs/specs/diet.md §1.
+   *
+   * WHY the seeder sets them at all: they are optional in the product and the
+   * app worked for five phases without them, but a demo where the diet block
+   * says "we need your height" is not a demo. Fixed values rather than drawn
+   * from the RNG — a birth date is not a distribution, and inserting a draw
+   * here would re-roll the entire downstream stream.
+   *
+   * INVARIANT: kilograms and centimetres — CLAUDE.md #8.
+   */
+  bodyweightKg: number;
+  heightCm: number;
+  /** A real date, so the age moves with the calendar like anybody else's. */
+  birthDate: string;
+  sex: Sex;
   summary: string;
   weeks: number;
   daysPerWeek: number;
@@ -300,6 +317,10 @@ export const ARCHETYPES: Archetype[] = [
     email: 'beginner@samson.test',
     displayName: 'Noa (beginner)',
     timezone: 'Asia/Jerusalem',
+    bodyweightKg: 62,
+    heightCm: 166,
+    birthDate: '2002-03-14',
+    sex: 'female',
     summary: 'Twelve weeks of clean linear progression. Everything works.',
     weeks: 12,
     daysPerWeek: 3,
@@ -318,6 +339,10 @@ export const ARCHETYPES: Archetype[] = [
     email: 'plateaued@samson.test',
     displayName: 'Dan (plateaued)',
     timezone: 'Europe/Berlin',
+    bodyweightKg: 84,
+    heightCm: 180,
+    birthDate: '1995-07-02',
+    sex: 'male',
     summary: 'Trains hard and has not added weight in six weeks. The case the planner must notice.',
     weeks: 14,
     daysPerWeek: 4,
@@ -336,6 +361,10 @@ export const ARCHETYPES: Archetype[] = [
     email: 'returning@samson.test',
     displayName: 'Maya (returning)',
     timezone: 'America/New_York',
+    bodyweightKg: 68,
+    heightCm: 170,
+    birthDate: '1988-11-23',
+    sex: 'female',
     summary:
       'Trained, vanished for five weeks, came back lighter. Load must not resume where it stopped.',
     weeks: 16,
@@ -350,6 +379,10 @@ export const ARCHETYPES: Archetype[] = [
     email: 'homegym@samson.test',
     displayName: 'Yossi (home gym)',
     timezone: 'Asia/Jerusalem',
+    bodyweightKg: 92,
+    heightCm: 176,
+    birthDate: '1981-05-09',
+    sex: 'male',
     summary: 'Dumbbells that stop at 30 kg, bands, and a pull-up bar. No barbell exists.',
     weeks: 12,
     daysPerWeek: 3,
@@ -369,6 +402,10 @@ export const ARCHETYPES: Archetype[] = [
     email: 'inconsistent@samson.test',
     displayName: 'Tom (inconsistent)',
     timezone: 'Europe/London',
+    bodyweightKg: 78,
+    heightCm: 183,
+    birthDate: '1999-09-30',
+    sex: 'male',
     summary:
       'Plans four days a week and manages about half. Adherence, not volume, is his problem.',
     weeks: 12,

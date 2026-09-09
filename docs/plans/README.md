@@ -164,7 +164,7 @@ items are inherited from earlier phases.
 
 - [`docs/PLAN.md`](../PLAN.md) — the phase brief and its acceptance criteria.
   The plans here say how a phase was executed; PLAN.md says what it owed.
-- [`docs/adr/`](../adr/) — the decisions. Twenty-three of them, and several
+- [`docs/adr/`](../adr/) — the decisions. Twenty-four of them, and several
   carry the honest note that they were written after their code at a reviewer's
   prompting rather than before it.
 - [`docs/specs/`](../specs/) — the written contracts tests are built from.

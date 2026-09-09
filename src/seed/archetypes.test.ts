@@ -14,6 +14,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  EARLIEST_BIRTH_DATE,
+  MAX_BODYWEIGHT_KG,
+  MAX_HEIGHT_CM,
+  SEXES,
+  isFutureBirthDate,
+} from '../diet/biometrics';
+import {
   ARCHETYPES,
   generateHistory,
   type Archetype,
@@ -108,6 +115,39 @@ describe('every archetype', () => {
       'plateaued',
       'returning',
     ]);
+  });
+
+  /*
+   * The biometrics the seeder writes, checked against the same bounds the
+   * database enforces — 20260909120000_user_biometrics_bounds.sql, imported
+   * rather than retyped.
+   *
+   * WHY this is worth a test: an out-of-bounds value here breaks `npm run seed`
+   * at the point a demo is being rebuilt, and an archetype who is UNDER 18 would
+   * make the diet block render ADR 0024 §6's refusal for a demo user — the exact
+   * "not a demo" failure the seeded biometrics exist to prevent, and one nothing
+   * else would catch until somebody opened the page.
+   */
+  it('gives every archetype biometrics the database and the advisor will accept', () => {
+    for (const archetype of ARCHETYPES) {
+      const where = archetype.key;
+
+      expect(archetype.bodyweightKg, where).toBeGreaterThan(0);
+      expect(archetype.bodyweightKg, where).toBeLessThan(MAX_BODYWEIGHT_KG);
+      expect(archetype.heightCm, where).toBeGreaterThan(0);
+      expect(archetype.heightCm, where).toBeLessThan(MAX_HEIGHT_CM);
+
+      expect(SEXES, where).toContain(archetype.sex);
+
+      expect(archetype.birthDate, where).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(archetype.birthDate >= EARLIEST_BIRTH_DATE, where).toBe(true);
+      expect(isFutureBirthDate(archetype.birthDate, END), where).toBe(false);
+
+      // Eighteen years before the history window ends. String comparison is
+      // safe on zero-padded ISO dates, the same property isFutureBirthDate uses.
+      const eighteenthBirthday = `${Number(archetype.birthDate.slice(0, 4)) + 18}${archetype.birthDate.slice(4)}`;
+      expect(eighteenthBirthday <= END, `${where} must be an adult`).toBe(true);
+    }
   });
 
   it('produces at least eight weeks of history', () => {

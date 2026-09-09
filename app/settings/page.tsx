@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createServerDb, currentUser } from '@/src/db/server';
+import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { SettingsForm } from './SettingsForm';
 import { SignOutButton } from './SignOutButton';
 
@@ -75,12 +75,19 @@ export default async function SettingsPage() {
           leaderboardOptOut={user.leaderboardOptOut}
           theme={user.theme}
           timezones={timezones}
+          bodyweightKg={user.bodyweightKg}
+          heightCm={user.heightCm}
+          birthDate={user.birthDate}
+          sex={user.sex}
+          // INVARIANT: the user's local date, never the server's — CLAUDE.md #9.
+          maxBirthDate={localDateFor(user.timezone)}
         />
 
         <p className="muted small">
           Everything is shown in kilograms, and stored that way. An imperial toggle lands when
           display conversion does; until then it would be a switch that changes no number on any
-          screen.
+          screen — which is why the bodyweight and height above are asked for in metric rather than
+          following a preference nothing reads.
         </p>
       </div>
 
