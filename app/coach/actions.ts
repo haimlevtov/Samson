@@ -16,7 +16,10 @@ import { z } from 'zod';
 import { explainTarget } from '@/src/diet/advice';
 import { DIET_GOALS, computeEnergy } from '@/src/diet/energy';
 import { dietQuestionSchema } from '@/src/diet/schema';
+import { lookUpSupplement } from '@/src/diet/supplements';
+import { loadEvidence } from '@/src/db/evidence';
 import { EMPTY_DIET, type DietState } from './diet-state';
+import { EMPTY_SUPPLEMENT, type SupplementState } from './supplement-state';
 import { BudgetExceededError } from '@/src/llm/types';
 import { coachFacts } from '@/src/chat/facts';
 import { askCoach } from '@/src/chat/reply';
@@ -257,6 +260,78 @@ export async function askDietAdvisor(_previous: DietState, formData: FormData): 
       caveat: null,
       goal,
       error: 'The coach could not put that into words. The figures above are still yours.',
+    };
+  }
+}
+
+/**
+ * One supplement question, answered out of the evidence table — ADR 0023,
+ * `docs/PRD.md` §5.7.
+ *
+ * INVARIANT: the answer is a ROW, never prose about a row. The model returns a
+ *            slug from an allowlist built out of the rows it was shown; this
+ *            action hands back the row object itself, and the panel renders its
+ *            own columns. There is no model-authored string anywhere in the
+ *            result.
+ *
+ * INVARIANT: the rows come from `loadEvidence`, which is RLS-scoped and
+ *            filtered to shared rows — CLAUDE.md #10. Nothing is fetched by a
+ *            string the model produced.
+ */
+export async function askAboutSupplement(
+  _previous: SupplementState,
+  formData: FormData
+): Promise<SupplementState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const parsed = dietQuestionSchema.safeParse(formData.get('question') ?? '');
+  if (!parsed.success) {
+    return {
+      ...EMPTY_SUPPLEMENT,
+      error: `That is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`,
+    };
+  }
+
+  const question = parsed.data;
+  /*
+   * Nothing asked, nothing spent. The diet advisor has no equivalent because a
+   * bare submit there is still a meaningful request; here it is an empty string
+   * and a metered call would be paying for nothing.
+   */
+  if (question === null) return EMPTY_SUPPLEMENT;
+
+  const { rows } = await loadEvidence(db);
+
+  try {
+    const answer = await lookUpSupplement(user.id, rows, question, {
+      call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
+    });
+
+    return {
+      row: answer.row,
+      message: answer.message,
+      question,
+      error: null,
+      asked: true,
+    };
+  } catch (cause) {
+    // The name and a bounded message, never the object — see `askDietAdvisor`
+    // for what an unbounded one puts in the log.
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
+      return { ...EMPTY_SUPPLEMENT, question, asked: true, error: cause.message };
+    }
+
+    console.error(
+      'supplement lookup failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
+    return {
+      ...EMPTY_SUPPLEMENT,
+      question,
+      asked: true,
+      error: 'That lookup did not work. The Supplements page lists every row in the table.',
     };
   }
 }

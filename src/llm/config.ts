@@ -60,6 +60,16 @@ export const CHAT_MAX_TOKENS = 400;
 export const DIET_MAX_TOKENS = 300;
 
 /**
+ * One supplement lookup — `src/diet/supplements.ts`.
+ *
+ * The smallest ceiling in the file, and it can be: the whole answer is one slug
+ * from an allowlist. There is no text field in that schema, so there is nothing
+ * for the model to be verbose in. Sixty leaves room for the JSON wrapper and a
+ * long slug, and nothing else.
+ */
+export const SUPPLEMENT_MAX_TOKENS = 60;
+
+/**
  * One optional question about a target, before fencing.
  *
  * Deliberately shorter than `MAX_CHAT_MESSAGE_CHARS`: this box asks about one

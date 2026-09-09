@@ -7,6 +7,7 @@ import { FieldHint } from '@/src/ui/FieldHint';
 import { CoachConsole, type CoachPersona } from './CoachConsole';
 import { ChatPanel } from './ChatPanel';
 import { DietPanel } from './DietPanel';
+import { SupplementPanel } from './SupplementPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -165,6 +166,13 @@ export default async function CoachPage() {
        */}
       <h2 className="section">Eating</h2>
       <DietPanel />
+      {/*
+       * ADR 0023's table, asked rather than browsed — docs/PRD.md §5.7. Beside
+       * the calorie target because they are the same question from two sides,
+       * and the Supplements link in the header still goes to the whole table for
+       * anyone who would rather read it than ask.
+       */}
+      <SupplementPanel />
 
       <ChatPanel />
     </>

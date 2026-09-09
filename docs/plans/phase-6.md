@@ -21,7 +21,7 @@ planned until a scope question is answered.
 | 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09)                   |
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
 | 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
-| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                                            |
+| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | shipped 09-09, [↓](#pr-5--retrieval-only-supplements-2026-09-09)   |
 | 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
 
 PR 6 is marked blocked rather than planned, and [the reason](#pr-6--file-import)
@@ -689,6 +689,45 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### PR 5 — retrieval-only supplements, 2026-09-09
+
+**Stronger than planned, in the one way that matters.** The plan said the model
+returns a slug and prose, and that the prose is discarded without being read.
+What shipped has **no text field at all**: `supplementReplySchema` is
+`z.enum([NO_MATCH, ...slugs])` and nothing else. There is no sentence to
+discard, to guard, or to render by mistake — which also means this is the only
+stage in the project with no `\p{N}` problem to have, because it has no prose
+for a digit to hide in.
+
+That is the deviation, and it is worth naming as one: the plan's shape would have
+worked and this one cannot fail in the same way.
+
+**The allowlist is built from the rows actually presented**, so it narrows when
+the list does — a test asserts that a row not shown cannot be named. A slug the
+model invents fails the gateway's own validation and is retried, rather than
+reaching `.eq('slug', modelString)` and returning a silent null. The row handed
+back is an object **from the array that built the allowlist**, never refetched.
+
+**The payload carries slug, name and claim** — not the dose, the caution or the
+citation. The model chooses a row; it does not describe one, so the columns the
+answer renders from never need to cross the wire.
+
+**It logs under `stage: 'diet'`,** as the plan required, so there is no
+`llm_calls.stage` migration. The cost is recorded rather than glossed: the
+per-stage token breakdown now mixes two call shapes under one label. They stay
+separable by `prompt_prefix_hash`, because the system prompts differ — which is
+the mitigation, not a reason the cost is zero.
+
+**Two holes recorded as passing tests.** Nothing checks that the row the model
+picked answers the question asked, and `NO_MATCH` is the model's own judgement
+about coverage. What retrieval buys is narrower than "the answer is right": every
+word read was written against a source, and a wrong answer is a wrong **row**
+rather than an invented claim. ADR 0023 is why that is worth having — a D-graded
+row, where the evidence does not support the popular claim, is exactly the one a
+paraphrase would soften.
+
+**Not verified, unchanged:** the browser pass at 375×812.
 
 ### PR 4 — the diet stage, 2026-09-09
 
