@@ -496,6 +496,95 @@ function buildSets(
 }
 
 /**
+ * Refuses a programme that would silently omit prescribed work.
+ *
+ * WHY it is a whole-programme pass and not a check inside the day loop, where
+ * the `appended` guard sits: the filter there is `e.day === day % PROGRAMME_DAYS`,
+ * so an entry with `day: 3` is selected by no iteration at all. A check that runs
+ * per SELECTED day is exactly the check that cannot see it. That is the shape of
+ * every fault below — the work vanishes, and nothing is raised, logged or
+ * rendered differently.
+ *
+ * WHY it is worth throwing over: `day: 3` is the natural thing to write for a
+ * four-day archetype, and `daysPerWeek` genuinely is 4 for `plateaued` and
+ * `inconsistent`. A vanished accessory is a progression-tree rung nobody can
+ * ever open with nothing to say why — the failure the bodyweight accessories
+ * were added to fix in the first place, reintroduced by a typo.
+ *
+ * FOUND IN REVIEW: the first version checked `day` alone, which is one member of
+ * the class. The others are here because the class is the point.
+ *
+ * INVARIANT: the seeder refuses to produce history that silently omits
+ *            prescribed work.
+ *
+ * AI-NOTE: raising PROGRAMME_DAYS means filling the new session in every
+ *          programme — the check below enforces that rather than trusting it.
+ */
+export function validateProgramme(archetype: Archetype): void {
+  const problems: string[] = [];
+
+  /*
+   * "Matches no session" rather than "outside the rotation": three different
+   * conditions land here and only one is literally outside anything. `day: 1.5`
+   * is inside the range and still selected by nothing, so the sentence has to be
+   * true of all three.
+   */
+  for (const e of archetype.programme) {
+    if (!Number.isInteger(e.day) || e.day < 0 || e.day >= PROGRAMME_DAYS) {
+      problems.push(
+        `${e.exerciseSlug} has day ${e.day}, which matches no session in the ` +
+          `${PROGRAMME_DAYS}-day rotation — a programme day is a whole number from ` +
+          `0 to ${PROGRAMME_DAYS - 1}, an index into the rotation rather than a day ` +
+          'of the week or an index into daysPerWeek'
+      );
+    }
+
+    /*
+     * `sets: 0` is worse than it looks. For a bodyweight entry the loop below
+     * runs zero times and the lift is simply absent; for a loaded one the warmup
+     * block still fires, so the exercise appears in history having never been
+     * worked — which reads as real training and is not.
+     */
+    if (!Number.isInteger(e.sets) || e.sets < 1) {
+      problems.push(`${e.exerciseSlug} has sets ${e.sets}, so it would log no working set`);
+    }
+
+    // `reps: 0` is silently rewritten to 1 for working sets by the Math.max in
+    // buildSets, while warmups keep the 0. Two different answers to one typo.
+    if (!Number.isInteger(e.reps) || e.reps < 1) {
+      problems.push(`${e.exerciseSlug} has reps ${e.reps}, which buildSets would quietly rewrite`);
+    }
+
+    /*
+     * A negative load is caught eventually — by `weight_kg check (>= 0)` — but
+     * only on a run that reaches the database with a service-role key. Every
+     * offline consumer in `npm run verify` passes with it, so without this the
+     * failure is invisible until seed time.
+     */
+    if (e.startingKg < 0) {
+      problems.push(`${e.exerciseSlug} has a negative startingKg (${e.startingKg})`);
+    }
+  }
+
+  /*
+   * The inverse of the day check, and the more expensive omission of the two:
+   * a rotation day with NO entries produces no workout row at all — not
+   * completed, not skipped, and not a rest day either, because the rest loop
+   * excludes training weekdays. The date disappears and the adherence
+   * denominator shrinks with it.
+   */
+  for (let day = 0; day < PROGRAMME_DAYS; day++) {
+    if (!archetype.programme.some((e) => e.day === day)) {
+      problems.push(`session ${day} of the rotation has no entries, so that date would vanish`);
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`${archetype.key}: ${problems.join('; ')}.`);
+  }
+}
+
+/**
  * Generates one archetype's history, ending on `endDate`.
  *
  * Sessions land on fixed weekdays so adherence has something to be measured
@@ -508,38 +597,7 @@ export function generateHistory(
   rng: Rng
 ): GeneratedWorkout[] {
   const workouts: GeneratedWorkout[] = [];
-
-  /*
-   * An entry on a day the rotation can never reach.
-   *
-   * WHY this is checked over the WHOLE programme, and not inside the day loop
-   * below where the `appended` guard sits: the filter there is
-   * `e.day === day % PROGRAMME_DAYS`, so an entry with `day: 3` is selected by
-   * no iteration at all. A check that runs per selected day is exactly the check
-   * that cannot see this one. It is the shape of the bug — the entry produces no
-   * sets, no warning and no error.
-   *
-   * WHY it is worth throwing over rather than tidying: `day: 3` is the natural
-   * thing to write for a four-day archetype, and `daysPerWeek` genuinely is 4
-   * for `plateaued` and `inconsistent`. The prescription would simply vanish,
-   * and a vanished accessory is a progression-tree rung nobody can ever open
-   * with nothing to say why — the failure the bodyweight accessories were added
-   * to fix, reintroduced by a typo.
-   *
-   * INVARIANT: the seeder refuses to produce history that silently omits
-   *            prescribed work.
-   */
-  const unreachable = archetype.programme.filter(
-    (e) => !Number.isInteger(e.day) || e.day < 0 || e.day >= PROGRAMME_DAYS
-  );
-  if (unreachable.length > 0) {
-    throw new Error(
-      `${archetype.key}: ${unreachable.map((e) => `${e.exerciseSlug} (day ${e.day})`).join(', ')} ` +
-        `sit outside the ${PROGRAMME_DAYS}-day rotation, so no session would ever ` +
-        'include them. A programme day is 0, 1 or 2 — it is an index into the ' +
-        'rotation, not a day of the week and not an index into daysPerWeek.'
-    );
-  }
+  validateProgramme(archetype);
 
   /*
    * The side stream, for entries marked `appended`.

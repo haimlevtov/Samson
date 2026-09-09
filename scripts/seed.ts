@@ -16,7 +16,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { ARCHETYPES, generateHistory, type Archetype } from '../src/seed/archetypes';
+import {
+  ARCHETYPES,
+  generateHistory,
+  validateProgramme,
+  type Archetype,
+} from '../src/seed/archetypes';
 import { mulberry32 } from '../src/seed/rng';
 import { createAnonClient, createUserClient, supabaseUrl, type Db } from '../src/db/client';
 import { buildPlannerContext } from '../src/planner/context';
@@ -320,7 +325,27 @@ async function seedArchetype(
 
     const rows = workout.sets.flatMap((set) => {
       const exerciseId = exerciseBySlug.get(set.exerciseSlug);
-      if (!exerciseId) return [];
+      /*
+       * FOUND IN REVIEW: this used to `return []`, which is the same silent drop
+       * the programme guard in src/seed/archetypes.ts exists to stop — one layer
+       * down, and with a worse consequence. A slug missing from the catalogue
+       * made its sets vanish; if every set in a session dropped, the workout was
+       * still inserted as `completed` and still awarded XP — a finished session
+       * with nothing in it. And tests/planner/golden.ts builds its exercise ids
+       * from the slug with no lookup, so the golden fixture and the database
+       * would describe different histories for the same person, which both files
+       * say must never happen.
+       *
+       * Latent rather than live — every shipped slug is in the snapshot, and a
+       * test now asserts that offline — but the snapshot is regenerable and
+       * nothing else was checking.
+       */
+      if (!exerciseId) {
+        throw new Error(
+          `${archetype.key}: ${set.exerciseSlug} on ${workout.localDate} is not in the ` +
+            'exercise catalogue, so its sets would silently vanish'
+        );
+      }
       return [
         {
           user_id: userId,
@@ -501,6 +526,18 @@ async function main(): Promise<void> {
   // history is generated relative to today, so a seed run months from now still
   // produces a user who trained last week.
   const endDate = new Date().toISOString().slice(0, 10);
+
+  /*
+   * Every programme is validated BEFORE anything is deleted or written.
+   *
+   * FOUND IN REVIEW: `generateHistory` validates too, but it is called after the
+   * auth user, the profile and the equipment rows for that archetype already
+   * exist — so a typo left three writes behind for the failing user while the
+   * other four seeded on. `clean()` recovers on the next run, so nothing was
+   * broken; but the check needs no database at all, and up here it reports EVERY
+   * bad archetype at once rather than whichever one happened to get there first.
+   */
+  for (const archetype of ARCHETYPES) validateProgramme(archetype);
 
   console.log('Clearing previous seed data');
   await clean(admin);
