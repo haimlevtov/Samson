@@ -9,6 +9,7 @@
  *
  * Runs with no database, no network and no API key.
  */
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { MAX_BODYWEIGHT_KG, MAX_HEIGHT_CM, SEXES } from './biometrics';
@@ -23,6 +24,7 @@ import {
   ageOn,
   boundedAdjustment,
   computeEnergy,
+  dietFacts,
   mifflinStJeor,
   normaliseGoal,
   proteinTarget,
@@ -57,22 +59,31 @@ const ok = (result: EnergyResult): EnergyTarget => {
 };
 
 /*
- * The sweep. Every value is one the database now admits, plus the edges of what
- * it admits, because the edges are where a clamp is decided.
+ * The sweep. Every value is one the database admits, plus the edges of what it
+ * admits, because the edges are where a clamp is decided. 9 × 7 × 8 × 3 × 7 × 5
+ * = 52,920 combinations, each one arithmetic.
  *
- * 8 × 7 × 6 × 3 × 7 × 5 = 35,280 combinations, and each one is arithmetic.
+ * `0.2` and the ages past 120 were added after review, and they are the honest
+ * part of this file: the sweep missed two holes because of its own lists, not
+ * because of its properties. A bodyweight under 0.28 kg rounds the protein
+ * target to zero, and there was no upper age bound — the properties would have
+ * caught both, given the input. A cartesian product only reaches what it
+ * contains, and saying so is worth more than calling it thorough.
  */
-const WEIGHTS = [1, 40, 62, 84, 120, 200, 635, 999.99];
-const HEIGHTS = [1, 140, 166, 183, 220, 272, 299.9];
-const AGES = [18, 25, 40, 65, 90, 120];
+const WEIGHTS = [0.2, 1, 40, 62, 84, 120, 200, 635, 999.99, 9999.99];
+const HEIGHTS = [1, 140, 166, 183, 220, 272, 299.9, 9999.9];
+const AGES = [18, 25, 40, 65, 90, 120, 130, 200];
 const SESSIONS = [0, 1, 4, 12, 20, 28, 60];
 const GOALS = [...DIET_GOALS, '', 'bulk'];
+
+const SWEEP_SIZE =
+  WEIGHTS.length * HEIGHTS.length * AGES.length * SEXES.length * SESSIONS.length * GOALS.length;
 
 /**
  * Collects the inputs that break a property, rather than asserting inside the
  * loop.
  *
- * WHY: an `expect` per iteration is 35,280 assertions, and a message argument is
+ * WHY: an `expect` per iteration is 50,000-odd assertions, and a message is
  * evaluated eagerly — so `JSON.stringify(where)` ran on every one of them and
  * pushed the suite past its timeout under coverage instrumentation. Checking
  * first and reporting the failures that exist is both faster and a better
@@ -117,7 +128,28 @@ function sweep(visit: (result: EnergyResult, where: EnergyInput) => void): numbe
 
 describe('the sweep', () => {
   it('covers what it claims to', () => {
-    expect(sweep(() => {})).toBe(35_280);
+    expect(sweep(() => {})).toBe(SWEEP_SIZE);
+    expect(SWEEP_SIZE).toBeGreaterThan(50_000);
+  });
+
+  /*
+   * Every property below short-circuits on a refusal, so a sweep that refused
+   * everything would satisfy all of them while asserting nothing. That is not a
+   * hypothetical: 29% of these inputs already refuse, and lowering the ceiling
+   * or widening any guard would quietly raise it while the suite stayed green.
+   *
+   * So the share that actually reaches a target is pinned. `expect(previous)
+   * .toBeGreaterThan(0)` in the monotonicity tests is the same guard, applied
+   * where it was missing.
+   */
+  it('reaches a target often enough for the properties to mean anything', () => {
+    let targets = 0;
+    sweep((result) => {
+      if (result.kind === 'ok') targets += 1;
+    });
+
+    expect(targets / SWEEP_SIZE).toBeGreaterThan(0.4);
+    expect(targets).toBeGreaterThan(20_000);
   });
 
   it('never returns anything but a target or a named refusal', () => {
@@ -314,6 +346,54 @@ describe('refusals', () => {
     expect(result.kind === 'implausible-input' && result.reason).toBe('no-resting-rate');
   });
 
+  /*
+   * ALL FOUND IN REVIEW. Each of these returned `kind: 'ok'` with a
+   * sensible-looking calorie target beside a figure that was not a figure.
+   * None was reachable by the sweep: the first because it iterates SEXES, the
+   * others because their values were not in the lists.
+   */
+  it('refuses a sex outside the three, rather than returning NaN', () => {
+    for (const sex of ['other', 'Male', '', 'toString', 'constructor']) {
+      const result = computeEnergy(input({ sex: sex as never }));
+      expect(result.kind, sex).toBe('implausible-input');
+      /*
+       * The REASON is asserted, not just the refusal. Two gates catch this now
+       * — `isSex` before the equation, and the non-finite BMR check after it —
+       * and without the first the second still refuses, so a test that checked
+       * only `kind` would pass with the input validation deleted. Verified: it
+       * did. `non-finite` means the input was rejected as an input.
+       */
+      expect(result.kind === 'implausible-input' && result.reason, sex).toBe('out-of-range');
+    }
+  });
+
+  it('refuses a weight whose protein target rounds to zero', () => {
+    // 0.2 kg passes the form grammar, the column CHECK and the BMR sign check,
+    // and 0.2 × 1.8 rounds to 0 g.
+    const result = computeEnergy(input({ bodyweightKg: 0.2 }));
+    expect(result.kind).toBe('implausible-input');
+  });
+
+  it('refuses a date that is shaped like one but is not one', () => {
+    for (const birthDate of ['2008-02-31', '2008-00-00', '2008-13-01']) {
+      expect(computeEnergy(input({ birthDate })).kind, birthDate).toBe('implausible-input');
+    }
+  });
+
+  it('refuses an age no person reaches, and a birth date in the future', () => {
+    expect(computeEnergy(input({ birthDate: '0001-01-01' })).kind).toBe('implausible-input');
+    // The combination that cancelled the BMR sign check: a huge body carries a
+    // 2,025-year-old to a perfectly ordinary 2,711 kcal.
+    expect(
+      computeEnergy(input({ birthDate: '0001-01-01', bodyweightKg: 999.98, heightCm: 299 })).kind
+    ).toBe('implausible-input');
+
+    const future = computeEnergy(input({ birthDate: '2099-01-01' }));
+    expect(future.kind).toBe('implausible-input');
+    // Not `under-18` with a negative age, which the surface would have to render.
+    expect(future.kind === 'under-18').toBe(false);
+  });
+
   it('refuses when the figures reach the ceiling', () => {
     // Inside every column bound, and still not a person: 900 kg at 250 cm.
     const result = computeEnergy(input({ bodyweightKg: 900, heightCm: 250 }));
@@ -437,5 +517,118 @@ describe('what a target reports about itself', () => {
 
   it('carries the local date it was computed against', () => {
     expect(ok(computeEnergy(input({ today: '2026-01-02' }))).asOf).toBe('2026-01-02');
+  });
+});
+
+/*
+ * The grid above is exhaustive over the boundaries and blind to everything
+ * between them — which is how it missed a 0.2 kg bodyweight until review put
+ * the value in the list. `fast-check` is the house tool for the other half
+ * (`src/gamification/xp.test.ts` argues the case, and four other suites use
+ * it), and it searches off the grid and shrinks a failure to a minimal
+ * counterexample instead of handing back a seed.
+ *
+ * Both, then: enumerated edges for the cases we know decide a clamp, and
+ * generated inputs for the ones nobody thought to list.
+ *
+ * AI-NOTE: `numRuns` is deliberate. The floor is what this phase is graded on.
+ */
+describe('generated inputs, off the grid', () => {
+  const anyBody = fc.record({
+    bodyweightKg: fc.double({ min: 0.01, max: 1500, noNaN: true }),
+    heightCm: fc.double({ min: 0.1, max: 400, noNaN: true }),
+    age: fc.integer({ min: 0, max: 200 }),
+    sex: fc.constantFrom(...SEXES),
+    sessionsLast28Days: fc.integer({ min: 0, max: 200 }),
+    goal: fc.oneof(fc.constantFrom(...DIET_GOALS), fc.string()),
+  });
+
+  it('never produces a target below the floor, for anything', () => {
+    fc.assert(
+      fc.property(anyBody, (body) => {
+        const result = computeEnergy(
+          input({ ...body, birthDate: bornAged(body.age), sex: body.sex })
+        );
+        if (result.kind !== 'ok') return true;
+        return (
+          result.targetKcal >= result.floorKcal &&
+          result.floorKcal === Math.max(result.bmrKcal, ABSOLUTE_FLOOR_KCAL) &&
+          result.targetKcal >= ABSOLUTE_FLOOR_KCAL
+        );
+      }),
+      { numRuns: 20_000 }
+    );
+  });
+
+  it('never returns a figure that is not a positive whole number', () => {
+    fc.assert(
+      fc.property(anyBody, (body) => {
+        const result = computeEnergy(
+          input({ ...body, birthDate: bornAged(body.age), sex: body.sex })
+        );
+        if (result.kind !== 'ok') return true;
+        return [
+          result.bmrKcal,
+          result.tdeeKcal,
+          result.targetKcal,
+          result.floorKcal,
+          result.proteinG,
+        ].every((value) => Number.isInteger(value) && value > 0);
+      }),
+      { numRuns: 10_000 }
+    );
+  });
+
+  it('never turns an unrecognised goal into a deficit', () => {
+    fc.assert(
+      fc.property(fc.string(), (goal) => {
+        if ((DIET_GOALS as readonly string[]).includes(goal)) return true;
+        const result = computeEnergy(input({ goal }));
+        return result.kind !== 'ok' || result.targetKcal >= result.tdeeKcal;
+      }),
+      { numRuns: 5_000 }
+    );
+  });
+});
+
+/*
+ * ADR 0024 §1: the model receives categories, never figures. `dietFacts` is the
+ * allowlist that makes that structural rather than a rule somebody follows, and
+ * this test is what fails when a figure is added to it.
+ */
+describe('what a model may be told', () => {
+  it('carries no numbers at all', () => {
+    const facts = dietFacts(ok(computeEnergy(input())));
+
+    for (const [field, value] of Object.entries(facts)) {
+      expect(typeof value, field).not.toBe('number');
+      // `as_of` is the one field allowed to contain digits — see below.
+      if (typeof value === 'string' && field !== 'as_of') {
+        expect(value, field).not.toMatch(/\d/);
+      }
+    }
+  });
+
+  it('carries the date, and nothing else that identifies a body', () => {
+    const facts = dietFacts(ok(computeEnergy(input())));
+    expect(Object.keys(facts).sort()).toEqual([
+      'activity_band',
+      'as_of',
+      'floor_reached',
+      'goal',
+      'is_deficit',
+    ]);
+  });
+
+  /*
+   * `as_of` is the one exception and it is deliberate: a date is CLAUDE.md #9's
+   * requirement, it is the user's own local date rather than a body metric, and
+   * the chat's payload already carries the same field for the same reason. It is
+   * asserted separately so the "no numbers" property above stays absolute about
+   * everything else.
+   */
+  it('makes the date the only exception, on purpose', () => {
+    const facts = dietFacts(ok(computeEnergy(input({ today: '2026-01-02' }))));
+    expect(facts.as_of).toBe('2026-01-02');
   });
 });

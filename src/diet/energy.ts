@@ -19,16 +19,40 @@
  * Pure over plain shapes, like `src/metrics/`: no database, no clock, no DOM.
  */
 import type { LocalDate } from '../metrics/types';
-import { MAX_BODYWEIGHT_KG, MAX_HEIGHT_CM, type Sex } from './biometrics';
+import { MAX_BODYWEIGHT_KG, MAX_HEIGHT_CM, isRealDate, isSex, type Sex } from './biometrics';
 
 export const DIET_GOALS = ['cut', 'maintain', 'gain'] as const;
 export type DietGoal = (typeof DIET_GOALS)[number];
 
+/** Exported as a value, not only a type: PR 4's payload schema needs the list. */
 export const ACTIVITY_BANDS = ['sedentary', 'light', 'moderate', 'high', 'very high'] as const;
 export type ActivityBand = (typeof ACTIVITY_BANDS)[number];
 
-/** Nobody is prescribed a target. See `computeEnergy` for what happens instead. */
+/**
+ * Below this, no target is produced at all — `computeEnergy` refuses.
+ *
+ * AI-NOTE: this is a PRODUCT decision, not an arithmetic one, and it is
+ *          recorded in three places that must move together: ADR 0024 §6,
+ *          docs/specs/diet.md §3, and docs/FRAMING.md's "Product behaviour never
+ *          discussed" list. What it buys and what it does not is ADR 0024's
+ *          does-not-guarantee table — `birth_date` is self-reported and
+ *          unverified, so this is a documented refusal rather than a control.
+ */
 export const MIN_AGE_YEARS = 18;
+
+/**
+ * Above this the birth date is a typo, not a very old person.
+ *
+ * FOUND IN REVIEW. There was no upper bound, and the non-positive BMR refusal
+ * only caught a large age incidentally, because `−5 × age` dominates — a large
+ * enough body cancels it. Born in year 1, at 999.98 kg and 299 cm, the engine
+ * returned a perfectly ordinary 2,711 kcal for a 2,025-year-old.
+ *
+ * 130 rather than 122: the oldest verified human reached 122, and this is a
+ * data-entry bound rather than a claim about longevity. `EARLIEST_BIRTH_DATE` in
+ * `biometrics.ts` is the column's version of the same bound.
+ */
+export const MAX_AGE_YEARS = 130;
 
 /**
  * The floor, and it is the whole safety property of this feature.
@@ -39,6 +63,11 @@ export const MIN_AGE_YEARS = 18;
  * AI-NOTE: 1,200 is a heuristic for adults and NOT a clinical standard — ADR
  *          0024's does-not-guarantee table says so, and that honesty is part of
  *          the artifact. Do not describe it as a medically safe minimum.
+ *
+ *          It is also written down in three other places, and changing it here
+ *          means changing all of them in the same commit: docs/specs/diet.md §2,
+ *          ADR 0024 §3, and docs/FRAMING.md's "Numbers invented outright" table,
+ *          where it is marked load-bearing.
  */
 export const ABSOLUTE_FLOOR_KCAL = 1200;
 
@@ -46,8 +75,9 @@ export const ABSOLUTE_FLOOR_KCAL = 1200;
  * Above this, the inputs are wrong rather than the person unusual.
  *
  * WHY it exists: the columns admit 9,999.99 kg and 9,999.9 cm — together a BMR
- * near 162,000 kcal — and even after this PR's bounds a mistyped 300 cm against
- * 900 kg produces five figures. A target that needs the ceiling is a data-entry
+ * near 162,000 kcal — and even inside the bounds added by
+ * `20260909120000_user_biometrics_bounds.sql`, a mistyped 300 cm against 900 kg
+ * produces five figures. A target that needs the ceiling is a data-entry
  * error, so it is refused rather than clamped and shown. The clamp still applies
  * it, because an invariant asserted in one place and enforced in another is an
  * invariant with a gap in it.
@@ -84,13 +114,24 @@ const SEX_CONSTANT: Record<Sex, number> = {
  *
  * Ordered high to low so the first match wins and the boundaries read as the
  * spec writes them.
+ *
+ * AI-NOTE: the thresholds are duplicated in docs/specs/diet.md §2's band table
+ *          and in docs/FRAMING.md's invented-numbers row, and the BAND NAMES
+ *          become the `activity_band` enum in the payload `dietFacts` builds —
+ *          so renaming one is a change to what a model is told. All four move
+ *          together or not at all.
  */
 const ACTIVITY_TIERS: ReadonlyArray<{ from: number; factor: number; band: ActivityBand }> = [
   { from: 7, factor: 1.9, band: 'very high' },
   { from: 5, factor: 1.725, band: 'high' },
   { from: 3, factor: 1.55, band: 'moderate' },
   { from: 0.5, factor: 1.375, band: 'light' },
-  { from: 0, factor: 1.2, band: 'sedentary' },
+  // FOUND IN REVIEW: this was `from: 0`, and `activityTier` then found nothing
+  // for a negative or NaN count and threw on the non-null assertion. Unreachable
+  // from `computeEnergy`, which floors at zero — but the function is exported,
+  // and a caller with an unvalidated count got a TypeError rather than the
+  // sedentary band. `-Infinity` makes the last tier a genuine default.
+  { from: Number.NEGATIVE_INFINITY, factor: 1.2, band: 'sedentary' },
 ];
 
 export type BiometricField = 'bodyweightKg' | 'heightCm' | 'birthDate' | 'sex';
@@ -108,15 +149,34 @@ export interface EnergyInput {
   goal: string;
 }
 
+/**
+ * INVARIANT: the five `*Kcal`/`*G` fields below NEVER cross to a model —
+ *            ADR 0024 §1 and §5. Code renders them; the diet stage is given
+ *            `dietFacts()` and nothing else.
+ *
+ * AI-NOTE: this object mixes figures that must not leave the server with
+ *          categories that may. Do NOT spread or `JSON.stringify` it into a
+ *          prompt payload — build the payload with `dietFacts()`, which is an
+ *          allowlist. `findUnknownNumbers` cannot catch that mistake, because
+ *          its allowed set is derived from whatever the payload contains, so a
+ *          widened payload silently ends the guarantee rather than failing.
+ */
 export interface EnergyTarget {
   kind: 'ok';
   asOf: LocalDate;
-  /** Whole kcal. Every figure below is an integer, and that is load-bearing. */
+  /** Whole kcal, and a positive integer — asserted before this is returned. */
   bmrKcal: number;
   tdeeKcal: number;
   targetKcal: number;
   floorKcal: number;
+  /** Whole grams, likewise positive. */
   proteinG: number;
+  /**
+   * Sessions ÷ 4, so a quarter-step and NOT an integer — one session in 28 days
+   * is 0.25. Named here because the field sits among the whole-kcal figures and
+   * an earlier version of this comment claimed everything below it was an
+   * integer, which the property test exempted this field from.
+   */
   sessionsPerWeek: number;
   activityBand: ActivityBand;
   goal: DietGoal;
@@ -125,13 +185,53 @@ export interface EnergyTarget {
   floorReached: boolean;
 }
 
+/**
+ * Everything a model may be told about a target, and nothing else.
+ *
+ * INVARIANT: no numbers — ADR 0024 §1. The stage receives categories and writes
+ *            prose; every figure is rendered by code beside it.
+ *
+ * WHY this lives here rather than in the stage that builds the prompt: the
+ * privacy property is only as good as the projection, and a projection written
+ * at the call site is one `{ ...target }` away from ending it. Putting the
+ * allowlist next to the values it excludes means widening it is a change to
+ * this file, where the invariant above is written down.
+ *
+ * `sessionsPerWeek` is deliberately absent: it is a number, and `activityBand`
+ * says the same thing in a word.
+ */
+export interface DietFacts {
+  as_of: LocalDate;
+  goal: DietGoal;
+  activity_band: ActivityBand;
+  is_deficit: boolean;
+  floor_reached: boolean;
+}
+
+export function dietFacts(target: EnergyTarget): DietFacts {
+  return {
+    as_of: target.asOf,
+    goal: target.goal,
+    activity_band: target.activityBand,
+    is_deficit: target.isDeficit,
+    floor_reached: target.floorReached,
+  };
+}
+
 export type EnergyResult =
   | EnergyTarget
   | { kind: 'missing-biometric'; missing: BiometricField }
   | { kind: 'under-18'; ageYears: number }
   | {
       kind: 'implausible-input';
-      reason: 'non-finite' | 'unreal-date' | 'no-resting-rate' | 'ceiling';
+      /*
+       * `non-finite` and `out-of-range` are separate because they are separate
+       * things: one is a value that is not a number, the other is a number
+       * outside its bound. They were one reason called `non-finite`, and the
+       * spec was reworded to cover both — which is the wrong direction, since
+       * the spec is what the tests are written from.
+       */
+      reason: 'non-finite' | 'out-of-range' | 'unreal-date' | 'no-resting-rate' | 'ceiling';
     };
 
 /**
@@ -164,8 +264,11 @@ export function mifflinStJeor(
 }
 
 export function activityTier(sessionsPerWeek: number): { factor: number; band: ActivityBand } {
-  // Non-null: the last tier starts at 0 and sessionsPerWeek is never negative.
-  const tier = ACTIVITY_TIERS.find((candidate) => sessionsPerWeek >= candidate.from)!;
+  // Non-null: the last tier starts at -Infinity, so something always matches —
+  // including NaN, which matches nothing above it and falls to sedentary.
+  const tier =
+    ACTIVITY_TIERS.find((candidate) => sessionsPerWeek >= candidate.from) ??
+    ACTIVITY_TIERS[ACTIVITY_TIERS.length - 1]!;
   return { factor: tier.factor, band: tier.band };
 }
 
@@ -191,7 +294,13 @@ export function proteinTarget(weightKg: number): number {
   return Math.round(weightKg * PROTEIN_G_PER_KG);
 }
 
-/** Every numeric input, named, so a refusal can say which one was unusable. */
+/**
+ * The first of the four biometrics the user has not supplied, or null.
+ *
+ * Absence only — a value that is present and unusable is the next branch's job,
+ * and the two produce different refusals because they need different sentences:
+ * one asks the user for something, the other tells them a value is wrong.
+ */
 function firstMissing(input: EnergyInput): BiometricField | null {
   if (input.bodyweightKg === null) return 'bodyweightKg';
   if (input.heightCm === null) return 'heightCm';
@@ -236,13 +345,39 @@ export function computeEnergy(input: EnergyInput): EnergyResult {
     Number.isFinite(input.sessionsLast28Days);
   const inRange =
     weightKg > 0 && weightKg < MAX_BODYWEIGHT_KG && heightCm > 0 && heightCm < MAX_HEIGHT_CM;
-  if (!finite || !inRange) return { kind: 'implausible-input', reason: 'non-finite' };
+  /*
+   * FOUND IN REVIEW, and it is the same NaN mechanism this comment block was
+   * written about, reached through the one field it did not cover. `sex` was
+   * checked for null and nothing else, and `SEX_CONSTANT[sex]` is an unguarded
+   * index: a value of `'other'` returned `kind: 'ok'` with NaN in the BMR, the
+   * TDEE, the target and the floor. `'toString'` was worse — the equation
+   * string-concatenated a function body before `Math.round` made it NaN.
+   *
+   * The column CHECK and `isSex` in src/db/server.ts both stand in front of
+   * this today, which is exactly the reasoning this file says it does not rely
+   * on: `computeEnergy` is exported, and PR 4 may reach it from a read that is
+   * not `currentUser()`.
+   */
+  if (!finite) return { kind: 'implausible-input', reason: 'non-finite' };
+  if (!inRange || !isSex(sex)) return { kind: 'implausible-input', reason: 'out-of-range' };
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !/^\d{4}-\d{2}-\d{2}$/.test(input.today)) {
+  // A shape check is not a date check: `2008-02-31` matched the old regex and
+  // rolled over to 3 March, which is the finding `isRealDate` exists for. It
+  // lives in biometrics.ts and is imported rather than reimplemented.
+  if (!isRealDate(birthDate) || !isRealDate(input.today)) {
     return { kind: 'implausible-input', reason: 'unreal-date' };
   }
 
   const ageYears = ageOn(birthDate, input.today);
+  /*
+   * A negative age is not a young person, it is a birth date in the future.
+   * Refusing it here rather than letting it fall through to `under-18` keeps
+   * that branch's `ageYears` a number the surface can put in a sentence — it
+   * used to be able to return −73.
+   */
+  if (ageYears < 0 || ageYears > MAX_AGE_YEARS) {
+    return { kind: 'implausible-input', reason: 'unreal-date' };
+  }
   if (ageYears < MIN_AGE_YEARS) return { kind: 'under-18', ageYears };
 
   const sessionsPerWeek = Math.max(0, input.sessionsLast28Days) / 4;
@@ -274,7 +409,9 @@ export function computeEnergy(input: EnergyInput): EnergyResult {
    * positive is not a person the equation describes, so it is refused rather
    * than clamped into looking sane.
    */
-  if (bmrKcal <= 0) return { kind: 'implausible-input', reason: 'no-resting-rate' };
+  if (!Number.isFinite(bmrKcal) || bmrKcal <= 0) {
+    return { kind: 'implausible-input', reason: 'no-resting-rate' };
+  }
 
   const tdeeKcal = Math.round(bmrKcal * factor);
 
@@ -290,6 +427,28 @@ export function computeEnergy(input: EnergyInput): EnergyResult {
 
   // INVARIANT: the clamp, and the only place `targetKcal` is assigned.
   const targetKcal = Math.min(Math.max(rawTarget, floorKcal), TARGET_CEILING_KCAL);
+  const proteinG = proteinTarget(weightKg);
+
+  /*
+   * The last gate: every figure this returns is a positive whole number, or the
+   * inputs were not a person.
+   *
+   * FOUND IN REVIEW. `proteinTarget` is `round(weight × 1.8)`, so any weight
+   * under 0.28 kg gives **zero** — and 0.2 kg passes the form grammar, passes
+   * the column's `> 0`, and carries a normal height to a positive BMR. The user
+   * saw a clamped, sensible-looking 1,514 kcal beside a protein target of 0 g:
+   * structurally the same defect as the negative BMR, one field over.
+   *
+   * WHY a sweep over the outputs rather than another bound on weight: picking a
+   * minimum plausible bodyweight means deciding how light a real adult can be,
+   * which is a judgement this file has no business making. "Every figure I
+   * produce is positive" is a property of the output, needs no such judgement,
+   * and closes whatever the next piece of arithmetic gets wrong as well.
+   */
+  const figures = [bmrKcal, tdeeKcal, targetKcal, floorKcal, proteinG];
+  if (!figures.every((value) => Number.isInteger(value) && value > 0)) {
+    return { kind: 'implausible-input', reason: 'no-resting-rate' };
+  }
 
   return {
     kind: 'ok',
@@ -298,7 +457,7 @@ export function computeEnergy(input: EnergyInput): EnergyResult {
     tdeeKcal,
     targetKcal,
     floorKcal,
-    proteinG: proteinTarget(weightKg),
+    proteinG,
     sessionsPerWeek,
     activityBand: band,
     goal,

@@ -189,6 +189,15 @@ the product if wrong.
 
 ### Product behaviour never discussed
 
+**Added 2026-09-09 — the diet advisor withholds a calorie target from anyone
+under 18.** Nobody was asked whether the product should have an age gate, and it
+now has one: `MIN_AGE_YEARS` in `diet/energy.ts` refuses a target and points at a
+professional instead. It is a real product decision — a whole feature withheld
+from a class of user — made on the basis of a self-reported birth date that
+nothing verifies. [ADR 0024](adr/0024-diet-advisor.md)'s does-not-guarantee table
+says what it buys (the honest case, and an audit trail) and what it does not
+(anything, against a minor who wants a number).
+
 - **Detraining costs 65% of accumulated progress** after a layoff (`archetypes.ts`). Invented, then tuned when a test proved the first value invisible.
 - **Every archetype's parameters** — weeks of history, days per week, adherence rate, starting loads, progression increments, and their timezones (Jerusalem, Berlin, New York, London).
 - **Six bodyweight accessories in the shared programmes** (2026-09-08), added so the progression trees have someone standing on them. Two are prerequisites for the rung above them, and their rep counts are chosen to clear that rung: 16 where the criterion asks 15. Ordinary training to read, authored to demonstrate a feature in fact, and the distinction is the reason this line exists.

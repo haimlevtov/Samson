@@ -22,6 +22,13 @@ export default defineConfig({
     // AI-NOTE: scoped to these two deliberately. Widening to all of src/ would
     //          drag in the Next.js app and the Supabase clients, whose coverage
     //          is not meaningful and would force the number back down.
+    //
+    //          Note the inward consequence as well: EVERYTHING added under
+    //          src/diet/ now inherits 95/95/90/95. Phase 6 PR 4 puts schema.ts,
+    //          prompts.ts and advice.ts there — a module of prompt constants and
+    //          a retry loop with a correction path are exactly the shapes that
+    //          drag branch coverage under a threshold, so budget for it rather
+    //          than discovering it in CI.
     coverage: {
       provider: 'v8',
       include: ['src/metrics/**/*.ts', 'src/diet/**/*.ts'],

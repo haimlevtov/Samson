@@ -147,6 +147,12 @@ adjustment = boundedAdjustment(tdee, goal)
 target     = clamp(tdee + adjustment, max(bmr, 1200), 6000)
 ```
 
+**The upper bound is a refusal before it is a clamp.** A target that would reach
+6,000 returns `implausible-input` (§3) rather than a target of 6,000, so the
+`min` in that expression is unreachable by construction — it stays because an
+invariant asserted in one place and enforced in another is an invariant with a
+gap in it. **No surface ever has to render a 6,000 kcal target.**
+
 | Goal       | Adjustment   |
 | ---------- | ------------ |
 | `cut`      | −20% of TDEE |
@@ -166,11 +172,19 @@ division away.
 The engine returns a discriminated result, never a partial number. Each of these
 is a distinct case the surface renders in its own words:
 
-| Case                | When                                                                                                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `missing-biometric` | any of the four is null — the result **names which**                                                                                                               |
-| `under-18`          | `ageYears < 18` against the user's local date; the result carries the age                                                                                          |
-| `implausible-input` | reason `non-finite` (a non-finite or out-of-range measurement), `unreal-date`, `no-resting-rate` (see below), or `ceiling` (the target or the floor reaches 6,000) |
+| Case                | When                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `missing-biometric` | any of the four is null — the result **names which**                                                                          |
+| `under-18`          | `0 <= ageYears < 18` against the user's local date; the result carries the age, and it is always a number a sentence can hold |
+| `implausible-input` | one of four reasons, below                                                                                                    |
+
+| `implausible-input` reason | When                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| `non-finite`               | a measurement is `NaN` or infinite                                                        |
+| `out-of-range`             | a measurement is finite and outside its bound, **or `sex` is outside the three**          |
+| `unreal-date`              | a date is the wrong shape or an impossible day, or the age is negative or past 130        |
+| `no-resting-rate`          | the equation produced nothing positive, or a figure that would render as zero — see below |
+| `ceiling`                  | the target or the floor reaches 6,000 kcal                                                |
 
 A non-finite input is refused **before the first multiplication**: `Math.min` and
 `Math.max` propagate NaN, and a NaN target is not null, so it would pass the
