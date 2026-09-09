@@ -9,7 +9,7 @@ Each phase is written as a brief. Hand one to an agent in plan mode, review the
 plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
-**Current phase: 5** — phases 0 to 4 are complete; each has a plan and a
+**Current phase: 6** — phases 0 to 5 are complete; each has a plan and a
 recorded outcome in `docs/plans/`, and
 [`plans/README.md`](plans/README.md) says what each one is, when it was written
 relative to its code, and carries phase 5's PR history in one table. Phase 5 shipped, but **not the phase written
@@ -19,9 +19,18 @@ content-fill brief still owes. That debt is **now paid in full** rather than wri
 off — see [`plans/phase-5-content-fill.md`](plans/phase-5-content-fill.md).
 One phase-6 item, the leaderboard, was pulled
 forward into it and shipped; see the entry under phase 6 for why and for the two
-ways it differs from what was written there. Phase 3 carries one unmet
-criterion (persona drift), waiting on live runs rather than on work. Phase 4
-met all four of its criteria, and every gap its outcome named is now closed.
+ways it differs from what was written there.
+
+Phase 6 is planned in [`plans/phase-6.md`](plans/phase-6.md), committed before
+its code. It **reorders the brief below** — the diet advisor first because it
+carries the phase's only adversarial acceptance criterion, file import last and
+blocked on a scope question the plan states rather than answers.
+
+**Three acceptance criteria from earlier phases are still unmet, and all three
+are blocked on an OpenRouter key rather than on work:** phase 2's cache hit rate
+and cost per plan generation, and phase 3's persona drift eval.
+`npm run eval:planner -- --live` and the drift eval are written and unrun. Phase
+4 met all four of its criteria, and every gap its outcome named is now closed.
 
 ---
 
@@ -269,12 +278,24 @@ five are done as of 2026-09-09.**
 
 Each is self-contained. Cut any of them without breaking anything above.
 
+> **Planned 2026-09-09 in [`plans/phase-6.md`](plans/phase-6.md), which reorders
+> this list.** The diet advisor runs first, because it carries the phase's only
+> adversarial acceptance criterion and the adversarial taxonomy is a graded
+> deliverable in its own right (`PRD.md` §7). File import runs last and is
+> **blocked on a scope question**: three of its four formats are endurance
+> formats and this is a strength app, so there is nowhere for a GPS track to
+> land. The plan states the three readings rather than choosing one.
+
 **Build**
 
 - File import: `.fit`, `.tcx`, `.gpx`, Apple Health XML
-- Health Connect and HealthKit, only if time allows and a test device exists
+- ~~Health Connect and HealthKit~~ — **out.** This entry conditioned them on a
+  test device existing and none does. Named as out rather than left ambiguous.
 - Diet advisor: maintenance computed by equation, bounded adjustment,
-  hard-clamped floor in code, retrieval-only supplement answers
+  hard-clamped floor in code, retrieval-only supplement answers. **It lives on
+  the Coach tab**, not a sixth one — it is a coaching question asked where
+  coaching questions are asked, and `STAGE_MODELS` is per stage so serving it
+  from a different model than the chat is a config line, not a refactor.
 - ~~**Leaderboard**~~ — **built early, in phase 5.** Pulled forward because
   ADR 0013 gave Hub the job of being the tab about other people, and a tab that
   owns nothing is the fault ADR 0012 was written to fix. The conditions this

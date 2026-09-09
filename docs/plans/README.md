@@ -1,6 +1,6 @@
 # Plans — what each one is, and which to open
 
-Eight documents, written over sixteen days, in four different genres. This file
+Nine documents, written over sixteen days, in four different genres. This file
 is the way in.
 
 It exists because phase 5 alone is three files whose names do not say how they
@@ -17,12 +17,12 @@ committed alongside its implementation cannot show it came first. So these
 documents are not interchangeable, and merging them into one file would destroy
 the distinction each of them spends its opening paragraph establishing:
 
-| Genre                             | Written                                        | Documents                                 |
-| --------------------------------- | ---------------------------------------------- | ----------------------------------------- |
-| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4; `phase-5-content-fill.md` |
-| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                               |
-| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`             |
-| **Record**                        | after the fact, and says so                    | `phase-5.md`                              |
+| Genre                             | Written                                        | Documents                                    |
+| --------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md` |
+| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                  |
+| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                |
+| **Record**                        | after the fact, and says so                    | `phase-5.md`                                 |
 
 **The second row is a finding rather than a category anyone chose**, and it came
 out of checking this table instead of writing it from the filenames. `phase-0.md`
@@ -51,6 +51,7 @@ whether the feature exists.
 | [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
+| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | **in progress**              |
 
 ## Phase 5 is three documents, and here is why
 
@@ -129,7 +130,8 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — five of the nine, and worth
+**Blocked on an OpenRouter key, not on work** — five of the nine open items
+below, and worth
 grouping because one `.env.local` line closes them:
 
 | From                     | Item                                                                                             |
