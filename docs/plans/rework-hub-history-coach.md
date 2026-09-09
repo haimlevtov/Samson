@@ -56,9 +56,12 @@ The Hub shows lifetime XP. It should show level.
 
 ### It needs no migration, and that is the finding
 
-**`levelForXp` is monotonic in XP**, so ordering by level and ordering by XP
-produce the **same sequence**. The request is a display change, not a sort
-change, and the view's `rank()` can stay exactly as it is.
+**`levelForXp` is monotonic non-decreasing in XP** — `docs/specs/xp-and-challenges.md`
+states it as `x <= y implies levelForXp(x) <= levelForXp(y)`. So an XP ordering is
+always **consistent with** a level ordering: it never puts a lower level above a
+higher one. It is not the _same_ sequence, because level ties are broken by XP,
+which is exactly the tie question below. The request is a display change, not a
+sort change, and the view's `rank()` can stay as it is.
 
 **The level is computed in TypeScript, from the `lifetime_xp` the view already
 returns.** `src/gamification/level.ts` is the single definition of the curve —
@@ -89,9 +92,9 @@ need the migration this PR otherwise avoids.
 
 ### Documents this changes
 
-- **ADR 0016** exposes "four values, not two" and names them. It gains an
-  amendment: the view still exposes those four, and `lifetime_xp` is now an
-  input to a derived figure rather than the figure itself.
+- **ADR 0016** says the view exposes "four values **and nothing else**" and names
+  them. It gains an amendment: the four are unchanged, and `lifetime_xp` becomes
+  an input to a derived figure rather than the figure a user reads.
 - `docs/specs/xp-and-challenges.md` carries the level curve and should say the
   leaderboard reads it.
 
@@ -121,13 +124,17 @@ machinery that already exists.
   least one already active. The validator's rejection reasons are phase 4's
   inspectability criterion, so seeding a rejected one too is worth doing —
   it is the only way that half of the Hub is ever seen.
-- **The pool needs content.** `20260902090200_challenge_pool.sql` ships one
-  insert; the Hub is more interesting with a spread across the challenge kinds
-  the validator supports. Content is rows — CLAUDE.md #7 — so this is a
-  migration of INSERTs, which changes no column and needs no regeneration.
-- **Quests** are the daily-window variant of the same validator (phase 4's
-  build list). Check whether anything distinguishes them in the schema before
-  assuming a second mechanism is needed.
+- **The pool does NOT need content.** `20260902090200_challenge_pool.sql` ships
+  **seven rows in one insert**, covering every kind the validator supports —
+  three `sessions`, two `distinct_exercises`, two `sets_at_rpe`, one
+  `streak_days` — in both `daily` and `weekly` windows. _An earlier version of
+  this bullet read "ships one insert" and asked for more content, which would
+  have sent the next session to write a redundant migration. Corrected in
+  review: the gap is assignment, and only assignment._
+- **Quests need no second mechanism, and the answer is already written down.**
+  `docs/specs/xp-and-challenges.md`: _"A daily quest is a challenge with
+  `window_days: 1`."_ The pool already carries daily rows. Nothing to
+  investigate.
 
 ### Acceptance
 
@@ -183,8 +190,9 @@ breakpoint where they fit, and no labels below it — but start with three.
   two templates built from its own programme — the barbell user gets its
   barbell days, the home-gym user gets something it can actually do under a
   30 kg cap.
-- **Profile data.** The four biometrics landed on 2026-09-09 in phase 6 PR 2 and
-  the seeder fills them, so a profile viewed before re-running `npm run seed`
+- **Profile data.** The four biometric COLUMNS have existed since the phase-0
+  schema; what landed on 2026-09-09 in phase 6 PR 2 was the seeder filling them
+  and the bounded CHECKs. So a profile viewed before re-running `npm run seed`
   looks emptier than it is. **The first step is to look rather than to guess:**
   open each seeded user's Profile and list what renders blank or as an em dash,
   then fill what should not be. This plan does not pre-judge the list.
@@ -238,27 +246,45 @@ needs.
 
 **Branch `plan-to-template`.**
 
-A button on the coach's plan block that writes one of its sessions into
-`workout_templates`, so the Workout tab can start it.
+> **The first version of this section planned a feature that already ships, and
+> that is worth leaving in the record rather than quietly replacing.** It
+> proposed building the mapping from a plan session to a template, with "two
+> things to decide rather than assume". Both were decided and shipped months
+> ago:
+>
+> | What it proposed to build            | What already exists                                                                       |
+> | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+> | The mapping                          | `src/templates/plan.ts` — `templateFromPlannedSession`, with `plan.test.ts`               |
+> | The action                           | `createTemplateFromPlan` in `app/workout/actions.ts`                                      |
+> | The surface                          | `PlanImportForm` in `app/workout/ImportForms.tsx`, on `/workout/new`                      |
+> | "which session" — undecided          | Already a per-session picker, keyed by `weekNumber` + `dayIndex`                          |
+> | "must fail loudly on a missing slug" | Already does — returns `{ ok: false, missingSlugs }`                                      |
+> | —                                    | `docs/specs/workout-templates.md` §6 is the written contract, and the plan never cited it |
+>
+> Written from the request rather than from a grep. The same class of error as
+> writing a summary from the previous summary, which this repo has recorded
+> twice in two days.
 
-The plan block is `TrainingBlock` — weeks, sessions, exercises, set groups. A
-template is a name plus ordered items with reps, RPE and rest. The mapping is
-mechanical, with two things to decide rather than assume:
+**So the work is one entry point, not a feature.** The import lives on
+`/workout/new`; the request is a button **on the coach's plan**. Render the same
+control there, against the block already on screen, and reuse
+`createTemplateFromPlan` unchanged.
 
-- **Which session.** A twelve-week block has thirty-six. Proposed: a button per
-  session on the week the user is looking at, not one button for the block.
-- **Exercise identity.** The block carries `exercise_slug`; template items
-  reference `exercise_id`. The lookup must fail loudly for a slug with no
-  catalogue row — the seeder learned this in phase 6 (`scripts/seed.ts` throws on
-  a missing slug rather than returning `[]`).
+### What is genuinely open, and both are small
+
+- **`tests/db` has no `workout_template*` coverage at all.** A grep over
+  `tests/db/*.ts` returns nothing. The insert's RLS has never been asserted, and
+  this PR is the natural place because it is the one adding a second caller.
+- **There is no unique constraint on template name**, so importing the same
+  session twice produces two identical rows. Decide: an error, a rename, or
+  allowed. Currently it is allowed by accident rather than by decision.
 
 ### Acceptance
 
-- A template created this way starts a session with the right exercises, sets
-  and reps.
+- The button on `/coach` produces a template that starts a session correctly,
+  through the same action `/workout/new` uses.
 - `tests/db` covers the insert under RLS: a user can only write their own.
-- Creating the same session twice does not silently produce two identical
-  templates — decide and state whether that is an error or a rename.
+- The duplicate case is decided and stated, not left to accident.
 
 ---
 
@@ -321,14 +347,59 @@ written down so nobody rediscovers them:
   block at fewer weeks for a first plan, and surface a partial failure as a
   state rather than a hang.
 
-**A questionnaire, then.** Goal, days per week, equipment, injured joints — the
-four things `buildPlannerContext` needs that the app cannot infer. Everything
-else comes from the training log it already has.
+**A questionnaire, then.** `ContextInput` in `src/planner/context.ts` takes
+`goal`, `daysPerWeek`, `blockWeeks`, `injuredJoints`, `asOf`, `workouts`, `sets`
+and `candidates`. The last four the app has. **The first four are the questions**
+— and `blockWeeks` is one of them, which matters because this PR's own mitigation
+is to cap it.
+
+**Equipment is not one of them**, and an earlier version of this list said it
+was. It never reaches `buildPlannerContext`: equipment filtering happens in SQL
+before the model sees anything (invariant #5), and arrives as pre-filtered
+`candidates`. Asking about it is still worth doing — nothing but the seeder ever
+writes `user_equipment`, so a real user's is empty — but that is a **separate
+question feeding a different place**, not a planner input.
+
+A `TrainingBlock` is capped at **8 weeks** (`src/planner/schema.ts`, with an
+AI-NOTE explaining the bound is a deliberate cost control), and every seeded
+block is 4. An earlier draft of PR 7 said "a twelve-week block has thirty-six
+sessions"; both numbers were wrong, and the 12 was `block_weeks` on the planner
+_input_ rather than the block.
 
 **One archetype ships with no plan**, so the empty state and the questionnaire
 are testable today. `scripts/seed.ts` writes one accepted `plan_runs` row per
 user; the inconsistent archetype is the natural candidate — a user who misses
 half their sessions is the one most likely not to have got round to it.
+
+### Documents this changes, and the largest PR had no such section
+
+**`docs/specs/coach-chat.md` §1 is the written contract for this exact surface,
+and PR 8 contradicts it point by point.** It says "Four controls on `/coach`",
+"the chat is a panel below it", "**Clear** … is the third control", "**Supplements**
+is the fourth … it is the only route to `/evidence`", and carries a block-quoted
+callout headed "**`Create a plan` is not this button, and the difference is
+deliberate.**" The code comment this PR quotes cites that spec as its authority.
+
+So:
+
+- **`docs/specs/coach-chat.md`** — §1 rewritten for one box and a plan control;
+  §5 and §6 extended if routing is a second call.
+- **`docs/PRD.md`** — §5.3 (coaching, currently "Specified") and the diet and
+  supplement entries at §5.7.
+- **A home for the routing decision.** The plan calls it "the new thing, and it
+  is the risk" and then proposes nowhere to record it. ADR 0015's
+  does-not-guarantee table is the natural place — routing joins `on_topic` as a
+  model's judgement about itself, a mitigation rather than a control.
+- **`docs/specs/diet.md`** §4b, if the supplement question moves surface.
+
+### One migration this PR may owe
+
+**If routing is a separate call it is a new pipeline stage**, and
+`llm_calls.stage` is a CHECK constraint rather than an enum —
+`20260907160000_llm_calls_chat_stage.sql` records that exact trap, where the
+unit suite passed and the first live message failed. It does not break "Docker
+exactly once": a CHECK change moves no column and needs no types regeneration.
+One call returning both a route and an answer owes nothing.
 
 ### Acceptance
 
@@ -336,7 +407,10 @@ half their sessions is the one most likely not to have got round to it.
   and a plan.
 - The seeded planless user shows the questionnaire, and the other four show
   their plan.
-- `npm run verify`, `npm run build`, browser at 375×812 in both themes.
+- Every guarantee from ADR 0015, 0023 and 0024 still has a test that fails when
+  it is removed.
+- `npm run verify`, `npm run build`, `npm run test:db` if a stage was added,
+  browser at 375×812 in both themes.
 - **Stated rather than claimed:** generation is unverified end to end until a key
   exists.
 
@@ -371,6 +445,7 @@ need a session and this agent does not type passwords. Review found **a width bu
 in one and a colour-only state in the other**, which is exactly what that pass
 catches.
 
-**Six of the eight PRs below have a surface.** If the pass stays unrun the same
-class of defect will keep shipping, so it is worth clearing before PR 2 rather
-than after PR 8.
+**Seven of the eight PRs above have something to look at in a browser** — every
+one except this plan, and PR 5 explicitly requires opening each seeded Profile.
+Five of them change markup. If the pass stays unrun the same class of defect will
+keep shipping, so it is worth clearing before PR 2 rather than after PR 8.
