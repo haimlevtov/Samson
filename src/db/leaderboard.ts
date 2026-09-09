@@ -30,15 +30,25 @@ export interface LeaderboardRow {
    *            set, the seeder recounting sessions, and `sessions_last_28_days`.
    */
   level: number;
-  /**
-   * Still carried, and still what `rank` is ordered by.
+  /*
+   * There is NO `lifetimeXp` here, and its absence is deliberate.
    *
-   * WHY it is kept when the board no longer prints it: it is the tiebreak. Level
-   * buckets XP, so a level-only ordering would put a third of the table on one
-   * rank; ADR 0016's amendment records the decision to keep a total order and
-   * show the level. Rendering this is the caller's choice — the Hub does not.
+   * FOUND IN REVIEW: the first version of this change carried it with a comment
+   * saying it was "the tiebreak". That was wrong — the tiebreak is
+   * `rank() over (order by lifetime_xp desc, display_name asc)`, computed in
+   * Postgres before the row leaves the database. No TypeScript reads this field
+   * to order anything, and nothing in the app rendered it.
+   *
+   * A load-bearing WHY naming a reason that does not exist is how a field
+   * survives the next cleanup — and this one is the field that would serialise
+   * every listed user's exact XP into the page HTML the day somebody makes the
+   * table sortable and passes a row into a client component.
+   *
+   * AI-NOTE: the view still EXPOSES `lifetime_xp` and `authenticated` may still
+   *          read it directly — dropping it here changes what this app renders,
+   *          not what the boundary permits. Do not describe that as a privacy
+   *          fix; ADR 0016's amendment says why.
    */
-  lifetimeXp: number;
   /** True for the signed-in user's own row — `auth.uid()`, computed in the view. */
   isYou: boolean;
 }
@@ -182,15 +192,13 @@ export async function loadLeaderboard(
      */
     if (displayName === '') return [];
 
-    const lifetimeXp = row.lifetime_xp ?? 0;
-
     return [
       {
         rank: row.rank ?? 0,
         displayName,
-        // INVARIANT: the level is code's, not SQL's — see LeaderboardRow.
-        level: levelForXp(lifetimeXp),
-        lifetimeXp,
+        // INVARIANT: the level is code's, not SQL's — see LeaderboardRow. The
+        // XP is read, used, and not carried any further than this line.
+        level: levelForXp(row.lifetime_xp ?? 0),
         isYou: row.is_you ?? false,
       },
     ];

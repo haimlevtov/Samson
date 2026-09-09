@@ -205,9 +205,13 @@ that it happened.
 
 ### Who reads the curve
 
-Two surfaces, and neither reimplements it.
+Three surfaces, and none of them reimplements it. _An earlier version of this
+section said two and missed the third — found in review, and a grep would have
+caught it._
 
 - **Profile** draws the level and its progress bar from `levelProgress`.
+- **The coach's fact payload** carries `level` and `xp_to_next_level` from the
+  same function — `src/chat/facts.ts`, documented in `docs/specs/coach-chat.md`.
 - **The leaderboard** (2026-09-09) shows `levelForXp(lifetime_xp)`, mapped in
   `src/db/leaderboard.ts` from the XP `public.leaderboard` returns.
 

@@ -1,14 +1,17 @@
 /**
- * The display-name clamp.
+ * What `src/db/leaderboard.ts` does to a row on its way to the Hub.
  *
- * WHY this is worth a unit test when the view already decides who appears: this
- * is the one string in the app that ONE user writes and ANOTHER user reads, and
- * every case below is a way to vandalise somebody else's screen rather than
- * your own. The db suite proves who is on the leaderboard; this proves what
- * their name can do once it is there.
+ * Two halves. **The display-name clamp** is the one string in the app that ONE
+ * user writes and ANOTHER user reads, and every case for it below is a way to
+ * vandalise somebody else's screen rather than your own. **The level mapping**
+ * is what the board actually prints, and it is derived here rather than in the
+ * view — ADR 0016's amendment.
  *
- * No database — `clampDisplayName` is pure, and the type-only import of `Db`
- * is erased at runtime.
+ * The db suite proves who is on the leaderboard and what the boundary exposes;
+ * this proves what the loader does with what comes back.
+ *
+ * No database: `clampDisplayName` is pure and `loadLeaderboard` takes its client
+ * as a parameter, so a stub covers it.
  */
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -182,39 +185,83 @@ describe('the leaderboard shows a level, derived from the XP the view returns', 
    * Only the four columns the loader selects, shaped the way PostgREST returns
    * them, so this exercises the real mapping rather than a paraphrase of it.
    */
-  const dbReturning = (rows: unknown[]): Parameters<typeof loadLeaderboard>[0] =>
-    ({
-      from: () => ({
-        select: () => ({
-          order: () => ({
-            limit: async () => ({ data: rows, error: null }),
-          }),
-        }),
-      }),
-    }) as never;
+  function dbReturning(rows: unknown[]) {
+    const asked = { from: '', select: '' };
 
-  it('maps each row through levelForXp, and keeps the XP it derived from', async () => {
-    const rows = await loadLeaderboard(
-      dbReturning([
-        { display_name: 'Noa', lifetime_xp: 0, rank: 3, is_you: false },
-        { display_name: 'Dan', lifetime_xp: 300, rank: 2, is_you: true },
-        { display_name: 'Maya', lifetime_xp: 12_000, rank: 1, is_you: false },
-      ])
-    );
+    /*
+     * `as unknown as Db` rather than `as never` — FOUND IN REVIEW. `never` is
+     * assignable to everything, so that cast made TypeScript verify nothing at
+     * all about the stub, including whether it still resembles the client.
+     */
+    const db = {
+      from: (table: string) => {
+        asked.from = table;
+        return {
+          select: (columns: string) => {
+            asked.select = columns;
+            return {
+              order: () => ({ limit: async () => ({ data: rows, error: null }) }),
+            };
+          },
+        };
+      },
+    } as unknown as Parameters<typeof loadLeaderboard>[0];
 
-    expect(rows.map((r) => r.level)).toEqual([levelForXp(0), levelForXp(300), levelForXp(12_000)]);
-    // The XP is still carried — it is the tiebreak the view ordered by, even
-    // though the Hub no longer prints it.
-    expect(rows.map((r) => r.lifetimeXp)).toEqual([0, 300, 12_000]);
+    return { db, asked };
+  }
+
+  it('maps each row through levelForXp, and does not carry the XP onward', async () => {
+    // Rank ascending, which is the order `loadLeaderboard` asks PostgREST for.
+    // The stub cannot sort, so feeding them out of order would read as though
+    // the board renders worst-first.
+    const { db } = dbReturning([
+      { display_name: 'Maya', lifetime_xp: 12_000, rank: 1, is_you: false },
+      { display_name: 'Dan', lifetime_xp: 300, rank: 2, is_you: true },
+      { display_name: 'Noa', lifetime_xp: 0, rank: 3, is_you: false },
+    ]);
+    const rows = await loadLeaderboard(db);
+
+    expect(rows.map((r) => r.level)).toEqual([levelForXp(12_000), levelForXp(300), levelForXp(0)]);
+
+    /*
+     * And the XP it derived from is NOT carried. FOUND IN REVIEW: the first
+     * version returned it with a comment calling it "the tiebreak", which it is
+     * not — the tiebreak is computed in Postgres. Nothing rendered it, and it is
+     * the field that would serialise every listed user's exact total into the
+     * page HTML the day this table becomes sortable.
+     */
+    for (const row of rows) expect(row).not.toHaveProperty('lifetimeXp');
   });
 
   it('never returns a level below 1, including for a row with no XP at all', async () => {
-    const rows = await loadLeaderboard(
-      dbReturning([{ display_name: 'Tom', lifetime_xp: null, rank: 9, is_you: false }])
-    );
+    const { db } = dbReturning([
+      { display_name: 'Tom', lifetime_xp: null, rank: 9, is_you: false },
+    ]);
+    const rows = await loadLeaderboard(db);
 
     expect(rows[0]?.level).toBe(1);
-    expect(rows[0]?.lifetimeXp).toBe(0);
+  });
+
+  /*
+   * The select list, pinned here as well as in tests/db/leaderboard.test.ts.
+   *
+   * That file holds the real allowlist and is the one that proves the VIEW
+   * exposes nothing more — but it needs Postgres. This asserts the narrower
+   * thing a unit test can: that the loader does not start asking for a column
+   * the boundary was never reviewed for. The stub used to discard its arguments,
+   * so it could not have noticed.
+   */
+  it('asks the view for four columns and no more', async () => {
+    const { db, asked } = dbReturning([]);
+    await loadLeaderboard(db);
+
+    expect(asked.from).toBe('leaderboard');
+    expect(
+      asked.select
+        .split(',')
+        .map((c) => c.trim())
+        .sort()
+    ).toEqual(['display_name', 'is_you', 'lifetime_xp', 'rank']);
   });
 
   /*

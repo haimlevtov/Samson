@@ -216,8 +216,15 @@ project refuses those; see
 ### 5.6 The leaderboard — **Built** (phase 5)
 
 The one surface in the app where you see another person. On the Hub tab: a
-ranking by lifetime XP, showing a **display name and a total, and nothing
-else** — no email, no session history, and no user id.
+**display name and a level**, ordered by lifetime XP — no email, no session
+history, and no user id.
+
+**Amended 2026-09-09.** The board printed the XP total; it now prints the level
+that total earns. The ordering did not change, because `levelForXp` is monotonic
+non-decreasing and the view already ranked by XP. **This is a display change and
+not a privacy one**, which is worth saying because the first version of it
+claimed otherwise: the view still returns `lifetime_xp` to any signed-in user,
+and changing which column the Hub renders revokes nothing.
 
 Two rules make it something a user chooses rather than something that happens
 to them. **You are not listed until you set a display name**, so appearing

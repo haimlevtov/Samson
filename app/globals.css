@@ -2275,7 +2275,7 @@ details.quick-log[open] > summary {
 
 .leaderboard th {
   text-align: left;
-  /* Overridden for XP below — a heading that does not sit over its own column
+  /* Overridden for the numeric column below — a heading that does not sit over its own column
      defeats the alignment this table stayed a table for. */
   font-size: 11px;
   text-transform: uppercase;

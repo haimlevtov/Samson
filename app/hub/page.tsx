@@ -223,9 +223,9 @@ export default async function HubPage() {
       <h2 className="section with-hint">
         Leaderboard
         <FieldHint title="What other people can see">
-          Your display name and your level, and nothing else — not your email, not your XP, not your
-          sessions. Your level comes from your total XP, which is what decides the order. You are
-          listed only if you have set a display name, and you can leave at any time from Settings.
+          Your display name and your level. Your XP total is what decides the order, and anyone
+          signed in can read it — not your email and not your sessions. You are listed only if you
+          have set a display name, and you can leave at any time from Settings.
         </FieldHint>
       </h2>
 
@@ -243,7 +243,7 @@ export default async function HubPage() {
           {/*
            * NOT a .table-cards table, for the reason globals.css already gives
            * for the set grid: three narrow columns fit 375px, and a ranking is
-           * read DOWN the rank and XP columns. Breaking each lifter onto their
+           * read DOWN the rank and level columns. Breaking each lifter onto their
            * own card turns five rows into fifteen and destroys the alignment a
            * leaderboard exists for.
            */}
@@ -252,13 +252,8 @@ export default async function HubPage() {
               <tr>
                 <th>#</th>
                 <th>Lifter</th>
-                {/*
-                 * Level, not XP. The ORDER is unchanged — rank still comes from
-                 * the view's `order by xp desc` — because `levelForXp` is
-                 * monotonic non-decreasing, so an XP ordering never puts a lower
-                 * level above a higher one. ADR 0016's amendment records why the
-                 * total order was kept rather than sharing ranks within a level.
-                 */}
+                {/* Level, not XP — ADR 0016's amendment, and the reasoning is
+                    in src/db/leaderboard.ts where the mapping lives. */}
                 <th>Level</th>
               </tr>
             </thead>
@@ -275,12 +270,10 @@ export default async function HubPage() {
                     {row.displayName}
                     {row.isYou ? <span className="chip chip-on you-chip">you</span> : null}
                   </td>
-                  {/*
-                   * `.lb-xp` keeps its name: it is the numeric column's right
-                   * alignment and tabular figures, and renaming a class to match
-                   * one caller's content is churn a reviewer has to read.
-                   */}
-                  <td className="lb-xp">{row.level.toLocaleString()}</td>
+                  {/* `.lb-xp` is the numeric column's alignment; globals.css
+                      describes it as such since this change. No toLocaleString:
+                      a level is one or two digits and grouping never applies. */}
+                  <td className="lb-xp">{row.level}</td>
                 </tr>
               ))}
             </tbody>

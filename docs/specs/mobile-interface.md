@@ -245,7 +245,9 @@ than across a row, so card-stacking would destroy the one property it has.
 - **The set grid** — five columns, sized to fit as a grid. Turning a set into a
   card destroys the alignment that makes a session readable at a glance.
 - **The leaderboard** — three columns, and a ranking is read down its rank and
-  XP columns. Card-stacking turned five lifters into fifteen rows.
+  level columns. Card-stacking turned five lifters into fifteen rows. (It was
+  the XP column until 2026-09-09; the argument is about reading a number down a
+  column, not about which number.)
 
 Anything else becomes cards. A new exemption is argued here, in this list, not
 in a comment beside the table — a rule whose exceptions live in code comments

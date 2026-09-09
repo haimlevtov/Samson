@@ -126,13 +126,41 @@ the stakeholder's call on 2026-09-09. Level buckets XP, so ranking by level alon
 would put a third of the table on one position, and a ladder where that happens
 stops being a ladder. XP remains the tiebreak and is never printed.
 
-**§2's privacy argument is strengthened by this, not weakened.** That section
-weighs what four columns disclose, and "What this does not guarantee" below notes
-that an XP total which only ever rises lets somebody infer roughly when you last
-trained. **A level moves a handful of times a year rather than after every
-session**, so the same inference is far coarser. `lifetime_xp` still crosses the
-view — it is what orders the board — but it now stops at the server component
-that renders the level, and no longer reaches another user's browser.
+### This changed nothing about privacy, and the first version of this section said it did
+
+That paragraph is kept as a heading rather than deleted, because the error is
+the useful part.
+
+**It claimed §2's privacy argument was strengthened, and that "`lifetime_xp` …
+no longer reaches another user's browser."** Both were wrong, and §1 of this
+same ADR says why in as many words: **the view is the security boundary, not the
+render.** `grant select on public.leaderboard to authenticated` still covers
+`lifetime_xp`; `tests/db/leaderboard.test.ts` asserts one user reading another's
+exact total straight from PostgREST, on purpose, as the boundary's intended
+behaviour. Changing which column the Hub prints revokes nothing.
+
+**The weakened inference caveat was wrong too**, and it contradicted the
+"A polled XP total is an activity signal" paragraph below — which was itself
+written in response to an earlier review finding. `rank` is a **strict total
+order over exact XP** and it _is_ printed, so any gain that crosses a
+neighbour's total moves a visible number. In a cohort with clustered totals that
+happens more often than a level-up, not less.
+
+**So the copy was corrected rather than the claim defended.** The Hub's hint and
+the settings opt-out now say the board shows a level, that XP decides the order,
+and that anyone signed in can read it.
+
+**What would actually close the exposure, and why none of it is in this change.**
+Two options exist — project the level in SQL and drop `lifetime_xp` from the
+view, or revoke direct select and serve through a definer function. **Both
+require the curve in SQL**, which is the second definition this amendment's first
+paragraph rejects. That tradeoff is recorded here rather than resolved by
+wording: the exposure predates this change, it is unchanged by it, and closing it
+means paying a price the project has so far declined to pay.
+
+`LeaderboardRow` no longer carries `lifetimeXp` — nothing consumed it, and it is
+the field that would serialise every listed user's total into the page HTML the
+day the table becomes sortable. That is a smaller blast radius, not a fix.
 
 ## What this does not guarantee
 
@@ -159,7 +187,8 @@ like. Invariant #4 ties XP to adherence, so a total that moves means _that named
 person trained_. Nobody's sessions are exposed, but somebody watching closely
 enough can infer roughly when they happen.
 
-This is why the settings copy says "when you last trained can be inferred"
+This is why the settings copy says a total that only ever rises means "roughly
+when you last trained can be worked out from it"
 rather than the flat "not your sessions" it said first — the app makes a factual
 privacy claim at the moment of consent, and that claim has to be true. Rate
 limiting is out of scope (`CLAUDE.md`), so the honest move is to say it.

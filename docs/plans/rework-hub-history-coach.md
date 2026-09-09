@@ -8,18 +8,18 @@ seven changes in the order given.
 that came from using the app rather than from `docs/PLAN.md`, planned together
 because several of them touch the same surface.
 
-## Status — planned
+## Status
 
-| PR  | What                                                                                      | Branch                 | State   |
-| --- | ----------------------------------------------------------------------------------------- | ---------------------- | ------- |
-| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | planned |
-| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | planned |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | planned |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | planned |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned |
+| PR  | What                                                                                      | Branch                 | State                                                                |
+| --- | ----------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
+| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                        |
+| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | planned                                                              |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | planned                                                              |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned                                                              |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
+| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
 
 PR 8 carries two of the requested changes because they are the same surface and
 would conflict as separate branches.
@@ -449,3 +449,69 @@ catches.
 one except this plan, and PR 5 explicitly requires opening each seeded Profile.
 Five of them change markup. If the pass stays unrun the same class of defect will
 keep shipping, so it is worth clearing before PR 2 rather than after PR 8.
+
+---
+
+## Outcome
+
+### PR 2 — the leaderboard ranks by level, 2026-09-09
+
+The plan's finding held: **no migration, no SQL, no Docker.** `levelForXp` is
+monotonic non-decreasing, so the view's existing `order by lifetime_xp desc`
+already produces a level ordering, and `tests/db/leaderboard.test.ts` passes
+untouched — which is the proof the boundary did not move.
+
+**What review changed, and it is the whole reason this PR was worth reviewing.**
+
+**I dressed a display change up as a privacy improvement, and it is not one.**
+The first version's settings copy said other people see "not your XP", and the
+ADR amendment claimed §2's privacy argument was _strengthened_. Both false, for
+the reason ADR 0016 §1 states in as many words: **the view is the security
+boundary, not the render.** `grant select on public.leaderboard to authenticated`
+still covers `lifetime_xp`, and this repo's own db suite asserts one user
+reading another's exact total straight from PostgREST — deliberately, as the
+boundary's intended behaviour. Changing which column the Hub prints revokes
+nothing.
+
+Two reviewers found it independently, which is the signal that it was not a
+close call.
+
+**The weakened inference caveat was wrong too, and it contradicted a paragraph
+written from an earlier review finding.** `rank` is a strict total order over
+exact XP and it _is_ printed, so any gain crossing a neighbour's total moves a
+visible number — more often than a level-up, not less. And the arithmetic behind
+"a level moves a handful of times a year" was wrong on its own terms: at the
+spec's own perfect week it is about twelve, and the spec says "around level 10
+after a season" in as many words.
+
+The copy is now true, and ADR 0016 keeps the error as a heading rather than
+deleting it, along with what closing the exposure would actually cost — both
+options need the curve in SQL, which is the second definition this change exists
+to avoid.
+
+**Smaller things review caught:**
+
+- `LeaderboardRow.lifetimeXp` was carried with a comment calling it "the
+  tiebreak". It is not — the tiebreak is computed in Postgres before the row
+  leaves. Nothing consumed the field, and it is the one that would serialise
+  every listed user's exact total into the page HTML the day the table becomes
+  sortable. Dropped. That is a smaller blast radius, not a fix.
+- The test stub was cast `as never`, which is assignable to everything and so
+  verified nothing about the stub at all. Now `as unknown as` a real parameter
+  type, and it captures the select list — so a column added to the query fails a
+  unit test rather than only the Docker-dependent one.
+- **Three of five new tests could not fail for anything this PR changed**, and
+  duplicated `src/gamification/level.test.ts` — which already proves
+  monotonicity over 5,000 generated inputs, beside the curve it is about.
+  Deleted, with a comment saying where the property lives and why that is the
+  right place for it to fail.
+- Four documents still described the board as showing XP: `docs/PRD.md` §5.6,
+  `docs/specs/mobile-interface.md`'s card-stacking exemption, the comment in
+  `app/hub/page.tsx` arguing that exemption, and `app/globals.css`'s note on
+  `.lb-xp`. `xp-and-challenges.md` said "two surfaces read the curve" when
+  `src/chat/facts.ts` makes three.
+
+**Not verified:** the browser pass at 375×812 in both themes. `/hub` needs a
+session, and a password is not something this agent types. The plan says this
+should be cleared **before** PR 2 rather than after PR 8, and it has not been —
+so the debt this PR was supposed to start paying down is instead one PR larger.

@@ -245,20 +245,26 @@ export function SettingsForm({
          * guarantee". FOUND IN REVIEW, 2026-09-07.
          */}
         {/*
-         * Updated when the board moved from XP to level.
+         * Updated when the board moved from XP to level — and then CORRECTED IN
+         * REVIEW, because the first version claimed a privacy improvement that
+         * had not happened.
          *
-         * The inference caveat is WEAKER now and the copy says so rather than
-         * keeping a warning that overstates. ADR 0016 §2's point stands — this
-         * is the one place the app makes a factual privacy claim at the moment
-         * somebody decides — and the honest version of that claim changed: a
-         * level moves a handful of times a year, so watching it says far less
-         * about when you trained than watching a total that rose after every
-         * session.
+         * It said "not your XP". That is false. ADR 0016 §1 makes the VIEW the
+         * security boundary, not this render: `grant select on
+         * public.leaderboard to authenticated` still covers `lifetime_xp`, and
+         * tests/db/leaderboard.test.ts asserts one user reading another's exact
+         * total straight from PostgREST. Changing which column the Hub prints
+         * revokes nothing.
+         *
+         * The inference caveat is restored for the same reason. `rank` is a
+         * strict total order over exact XP and it IS printed, so any gain that
+         * crosses a neighbour's total moves a visible number — more often than a
+         * level-up, not less.
          */}
         <p className="muted small">
-          Other people see your display name and your level — not your email, not your XP and not
-          your sessions. A level only ever rises, so someone watching closely could tell roughly
-          when you passed one, but it moves far less often than a running total would. Without a
+          The board shows your display name and your level. Your XP total is what puts you in order,
+          and anyone signed in can read it — a total that only ever rises means roughly when you
+          last trained can be worked out from it. Not your email and not your sessions. Without a
           display name you are not listed at all.
         </p>
       </fieldset>
