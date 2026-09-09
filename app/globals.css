@@ -1397,11 +1397,39 @@ code {
   z-index: 30;
   bottom: calc(100% + 8px);
   /*
-   * Pinned left rather than centred: on a phone the hint sits near the screen
-   * edge, where a centred bubble hangs off it. Growing rightwards always has
-   * room.
+   * Pinned left rather than centred: a centred bubble hangs off the screen at
+   * both ends, and pinning halves the problem.
+   *
+   * It does not solve it, which the previous version of this comment claimed —
+   * "growing rightwards always has room". At 375px the max-width below resolves
+   * to 260px, so any hint whose button sits past x=115 overflows. What pushes a
+   * button that far right is the LABEL beside it: "Adherence · 4 wks" put its
+   * hint at x=158, in a tile that spans the full width. (An earlier draft blamed
+   * the right-hand column of a four-up grid. There is no such column at this
+   * width — `.grid.cols-4` is two columns here and the first two children span
+   * both — and the tiles that do sit right carry no hint.)
+   *
+   * `--hint-shift` is the pull back inside, measured by src/ui/FieldHint.tsx
+   * because CSS cannot know how far this element is from the viewport edge —
+   * ADR 0022.
    */
   left: 0;
+  /*
+   * `margin-left`, and NOT `translate`, which is what this was written as first.
+   *
+   * MEASURED, toggling the two against each other on one open bubble at 375px:
+   * with `translate: -11px`, the bubble painted at right=368 and
+   * `documentElement.scrollWidth` stayed at **379**. With `margin-left: -11px`
+   * and no translate, same visible position, scrollWidth **375**. The page went
+   * on scrolling sideways with nothing visibly hanging off the edge to explain
+   * it — which is a worse bug than the one being fixed, because it is invisible.
+   *
+   * A margin changes the used position, so the scrollable overflow is
+   * recomputed from it. Whatever the general rule for transformed boxes is, the
+   * measurement above is the reason this property is a margin; do not "tidy" it
+   * into a transform.
+   */
+  margin-left: var(--hint-shift, 0px);
   width: max-content;
   max-width: min(260px, 76vw);
   display: none;
@@ -1425,11 +1453,30 @@ code {
   color: var(--accent-text);
 }
 
-/* Hover for pointers, focus for keyboards, data-open for taps. */
-.hint:hover .hint-bubble,
+/* Focus for keyboards, data-open for taps. */
 .hint:focus-within .hint-bubble,
 .hint-bubble[data-open] {
   display: block;
+}
+
+/*
+ * Hover, for devices that actually have a pointer.
+ *
+ * FOUND IN REVIEW, and the guard is load-bearing rather than tidy: a touch
+ * "hover" is applied during tap handling, AFTER the pointerenter that would
+ * have measured the bubble — so on a phone the hover rule could reveal one that
+ * nothing had positioned, which is the original bug on the exact device ADR
+ * 0022 is about. Worse on iOS Safari, where the first tap on an element whose
+ * :hover reveals content is consumed applying hover rather than dispatching the
+ * click that would have clamped it.
+ *
+ * Behind `hover: hover` a touch device can only reveal through `[data-open]` or
+ * `:focus-within`, and both of those are measured.
+ */
+@media (hover: hover) {
+  .hint:hover .hint-bubble {
+    display: block;
+  }
 }
 
 /* =======================================================================
@@ -1599,6 +1646,26 @@ code {
     gap: 12px;
   }
 
+  /*
+   * Centred once there is room for it. The centring stays a transform because
+   * it is half the bubble's OWN width, and a percentage margin would resolve
+   * against `.hint` — about 20px, which is not the number wanted. The clamp is
+   * still the margin, so the two compose rather than overwrite each other.
+   *
+   * FOUND IN REVIEW: an earlier version of this comment offered a measurement
+   * taken at 600px as evidence that the composition is safe. This block opens at
+   * min-width: 760px, so that reading was taken at a width where this rule was
+   * not applied, and proved nothing about it.
+   *
+   * Re-measured at 765px and 885px, which do exercise it — and the centred case
+   * turned out to fail in the OTHER direction. Centring pulls the bubble left by
+   * half its own width, so at 765px the "Streak" hint's bubble had a natural
+   * left edge of -40px: forty pixels of the sentence off the side of the screen,
+   * with no horizontal scroll to reveal it because content off the left is
+   * simply clipped. The clamp pushes it back to +8. That is why
+   * `computeHintShift` returns a positive shift as well as a negative one, and
+   * why the left edge wins when both constraints cannot hold.
+   */
   .hint-bubble {
     left: 50%;
     transform: translateX(-50%);
