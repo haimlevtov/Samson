@@ -1,6 +1,6 @@
 # Plans — what each one is, and which to open
 
-Eight documents, written over sixteen days, in three different genres. This file
+Eight documents, written over sixteen days, in four different genres. This file
 is the way in.
 
 It exists because phase 5 alone is three files whose names do not say how they
@@ -10,35 +10,47 @@ which document answered your question in order to find it.
 **Nothing here supersedes anything.** The originals are the record; this is a
 map. Where this file and a plan disagree, the plan is right and this is stale.
 
-## The three genres, because they are graded differently
+## The four genres, because they are graded differently
 
 `CLAUDE.md`: _the artifact trail is graded, and so is its order._ A plan
 committed alongside its implementation cannot show it came first. So these
 documents are not interchangeable, and merging them into one file would destroy
 the distinction each of them spends its opening paragraph establishing:
 
-| Genre                    | Written                                        | Example                       |
-| ------------------------ | ---------------------------------------------- | ----------------------------- |
-| **Plan**                 | before the code it governs, in its own commit  | `phase-5-content-fill.md`     |
-| **Plan, committed late** | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md` |
-| **Record**               | after the fact, and says so in its first line  | `phase-5.md`                  |
+| Genre                             | Written                                        | Documents                                 |
+| --------------------------------- | ---------------------------------------------- | ----------------------------------------- |
+| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4; `phase-5-content-fill.md` |
+| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                               |
+| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`             |
+| **Record**                        | after the fact, and says so                    | `phase-5.md`                              |
 
-A record is not a failed plan. `phase-5.md` opens by stating that it did not
-guide the work and does not claim to — the alternative was no phase-level
-artifact at all, and backdating one would have been the actual offence.
+**The second row is a finding rather than a category anyone chose**, and it came
+out of checking this table instead of writing it from the filenames. `phase-0.md`
+was added in `3b8b0e2` — a 48-file commit carrying every migration, the gateway
+and CI — and `phase-1.md` in `4885106` alongside the whole metrics engine.
+Neither can show it came first, and neither says so. The habit starts at
+`82bcf46`, "Phase 2 artifacts, committed before the code they plan", which is the
+first documents-only plan commit in the repo.
+
+A record is not a failed plan. `phase-5.md` states that it did not guide the work
+and does not claim to — the alternative was no phase-level artifact at all, and
+backdating one would have been the actual offence.
 
 ## Every plan
 
-| Document                                                   | Genre                | Covers                                                   | Status                      |
-| ---------------------------------------------------------- | -------------------- | -------------------------------------------------------- | --------------------------- |
-| [phase-0.md](phase-0.md)                                   | plan                 | Foundations: schema, gateway, ledger, CI                 | shipped                     |
-| [phase-1.md](phase-1.md)                                   | plan                 | Deterministic substrate — metrics, seeder                | shipped                     |
-| [phase-2.md](phase-2.md)                                   | plan                 | Planner and critic                                       | shipped                     |
-| [phase-3.md](phase-3.md)                                   | plan                 | Normalizer and persona                                   | shipped, one criterion open |
-| [phase-4.md](phase-4.md)                                   | plan                 | Gamification vertical slice                              | shipped                     |
-| [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                     |
-| [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                     |
-| [phase-5-content-fill.md](phase-5-content-fill.md)         | plan                 | What phase 5 was briefed to build, done afterwards       | shipped                     |
+Status is against each document's **own** acceptance criteria, not against
+whether the feature exists.
+
+| Document                                                   | Genre                | Covers                                                   | Status                       |
+| ---------------------------------------------------------- | -------------------- | -------------------------------------------------------- | ---------------------------- |
+| [phase-0.md](phase-0.md)                                   | plan, with its code  | Foundations: schema, gateway, ledger, CI                 | shipped                      |
+| [phase-1.md](phase-1.md)                                   | plan, with its code  | Deterministic substrate — metrics, seeder                | shipped                      |
+| [phase-2.md](phase-2.md)                                   | plan, first          | Planner and critic                                       | shipped, two criteria unmet  |
+| [phase-3.md](phase-3.md)                                   | plan, first          | Normalizer and persona                                   | shipped, one criterion unmet |
+| [phase-4.md](phase-4.md)                                   | plan, first          | Gamification vertical slice                              | shipped                      |
+| [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
+| [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
+| [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
 
 ## Phase 5 is three documents, and here is why
 
@@ -58,8 +70,9 @@ the same phase number. That is one story in three artifacts:
    noticed and executed over the two days after.
 
 **Read them in that order if you want the story. Open the third if you want to
-know what shipped** — it carries the longest Outcome section in the repo, one
-entry per PR, and it is the live document. The snapshot table at the top of
+know what shipped** — it carries the longest Outcome section in the repo
+(545 lines against 184 for the runner-up), one entry per shipped PR, and it is
+the live document. The snapshot table at the top of
 `phase-5.md` is deliberately frozen and every row of it is now false; it says so.
 
 ### The whole phase in one table
@@ -98,27 +111,51 @@ Two things the table makes visible that the individual files do not:
 - **The PR numbers and the plan numbers do not line up, in both directions.**
   Content-fill PR 6 shipped as #28 and PR 7 as #26, because PR 7 was inserted
   from a direct product request after PR 6 had been planned. The rework plan's
-  five PRs are #11–#14 and #17, with #15, #16, #18 and #19 interleaved between
-  them — none of those four is in any plan.
-- **Four of the last five PRs were not planned anywhere**, and that is the
-  pattern the rework Outcome names: _a tab rework is not finished when the tabs
-  are right._ Each was invisible until there were enough surfaces for the
-  navigation to be wrong about.
+  five PRs are #11–#14 and #17, with **#15 and #16 interleaved between them** and
+  **#18 and #19 after the last of them** — none of those four is in any plan.
+- **#15, #16, #18 and #19 were not planned anywhere**, and that is the pattern
+  the rework Outcome names: _a tab rework is not finished when the tabs are
+  right._ Each was invisible until there were enough surfaces for the navigation
+  to be wrong about. (Named rather than counted, because "four of the last five"
+  is also true of #26–#30 further down the table, which those words do not
+  describe at all.)
 
-## What is still open, across all of them
+## What is still open, taken from the documents rather than from memory
 
-Three things, none of them in phase 5's own scope:
+> **The first version of this section listed three items and called them
+> complete.** It was written from recall and missed six, including two unmet
+> acceptance criteria that `phase-2.md` names in a table. That is the same
+> failure `rework-profile-hub-coach.md`'s own Outcome carries a callout about,
+> repeated one day later — which is the argument for reading the Still-open
+> sections rather than remembering them.
 
-- **Phase 3's persona drift eval** — "does turn 80 still sound like turn 3". The
-  project's one unmet acceptance criterion. It needs live model runs, not code.
-  [phase-5.md](phase-5.md), known gaps.
-- **The start-action race.** `startWorkout` and `startFromTemplate` read then
-  insert; Next's action queue serialises a double-tap, so what remains is two
-  tabs or two devices. The guarantee is a partial unique index, deliberately
-  deferred. [phase-5.md](phase-5.md), known gaps.
-- **The chat's topical confinement is a mitigation, not a guarantee**, and
-  [ADR 0015](../adr/0015-coach-chat.md) says so in a table. Not a gap to close —
-  a property to keep stating accurately.
+**Blocked on an OpenRouter key, not on work** — five of the nine, and worth
+grouping because one `.env.local` line closes them:
+
+| From                     | Item                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| [phase-2.md](phase-2.md) | Cache hit rate measured and recorded — **unmet acceptance criterion**                            |
+| [phase-2.md](phase-2.md) | Cost per plan generation recorded per model — **unmet acceptance criterion**                     |
+| [phase-2.md](phase-2.md) | Live acceptance rate across the thirty golden cases                                              |
+| [phase-3.md](phase-3.md) | The persona drift eval — "does turn 80 still sound like turn 3" — **unmet acceptance criterion** |
+| [phase-3.md](phase-3.md) | No persona has ever spoken; every delivery in the suite is scripted                              |
+
+`npm run eval:planner -- --live` and the drift eval are written and unrun.
+
+**Known gaps that need work:**
+
+| From                     | Item                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                    |
+| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                      |
+| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                            |
+| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred |
+
+**Not a gap, a property to keep stating accurately:** the chat's topical
+confinement is a mitigation rather than a guarantee, and
+[ADR 0015](../adr/0015-coach-chat.md) says so in a table. It came out of phase 5
+(PR #14), as did the start-action race (PR #16); only phase 3's and phase 2's
+items are inherited from earlier phases.
 
 ## Where else to look
 
