@@ -1402,10 +1402,16 @@ code {
    *
    * It does not solve it, which the previous version of this comment claimed —
    * "growing rightwards always has room". At 375px the max-width below resolves
-   * to 260px, so any hint whose button sits past x=115 overflows, and the
-   * right-hand tile of a four-up grid always does. `--hint-shift` is the pull
-   * back inside, measured by src/ui/FieldHint.tsx because CSS cannot know how
-   * far this element is from the viewport edge — ADR 0022.
+   * to 260px, so any hint whose button sits past x=115 overflows. What pushes a
+   * button that far right is the LABEL beside it: "Adherence · 4 wks" put its
+   * hint at x=158, in a tile that spans the full width. (An earlier draft blamed
+   * the right-hand column of a four-up grid. There is no such column at this
+   * width — `.grid.cols-4` is two columns here and the first two children span
+   * both — and the tiles that do sit right carry no hint.)
+   *
+   * `--hint-shift` is the pull back inside, measured by src/ui/FieldHint.tsx
+   * because CSS cannot know how far this element is from the viewport edge —
+   * ADR 0022.
    */
   left: 0;
   /*
@@ -1447,11 +1453,30 @@ code {
   color: var(--accent-text);
 }
 
-/* Hover for pointers, focus for keyboards, data-open for taps. */
-.hint:hover .hint-bubble,
+/* Focus for keyboards, data-open for taps. */
 .hint:focus-within .hint-bubble,
 .hint-bubble[data-open] {
   display: block;
+}
+
+/*
+ * Hover, for devices that actually have a pointer.
+ *
+ * FOUND IN REVIEW, and the guard is load-bearing rather than tidy: a touch
+ * "hover" is applied during tap handling, AFTER the pointerenter that would
+ * have measured the bubble — so on a phone the hover rule could reveal one that
+ * nothing had positioned, which is the original bug on the exact device ADR
+ * 0022 is about. Worse on iOS Safari, where the first tap on an element whose
+ * :hover reveals content is consumed applying hover rather than dispatching the
+ * click that would have clamped it.
+ *
+ * Behind `hover: hover` a touch device can only reveal through `[data-open]` or
+ * `:focus-within`, and both of those are measured.
+ */
+@media (hover: hover) {
+  .hint:hover .hint-bubble {
+    display: block;
+  }
 }
 
 /* =======================================================================
@@ -1627,10 +1652,19 @@ code {
    * against `.hint` — about 20px, which is not the number wanted. The clamp is
    * still the margin, so the two compose rather than overwrite each other.
    *
-   * Checked rather than assumed, since the note above is about exactly this
-   * hazard: measured at 600px, every hint on /profile keeps scrollWidth at 600
-   * with the clamp applied. The transform-centred case does not reproduce the
-   * overflow that `translate` did.
+   * FOUND IN REVIEW: an earlier version of this comment offered a measurement
+   * taken at 600px as evidence that the composition is safe. This block opens at
+   * min-width: 760px, so that reading was taken at a width where this rule was
+   * not applied, and proved nothing about it.
+   *
+   * Re-measured at 765px and 885px, which do exercise it — and the centred case
+   * turned out to fail in the OTHER direction. Centring pulls the bubble left by
+   * half its own width, so at 765px the "Streak" hint's bubble had a natural
+   * left edge of -40px: forty pixels of the sentence off the side of the screen,
+   * with no horizontal scroll to reveal it because content off the left is
+   * simply clipped. The clamp pushes it back to +8. That is why
+   * `computeHintShift` returns a positive shift as well as a negative one, and
+   * why the left edge wins when both constraints cannot hold.
    */
   .hint-bubble {
     left: 50%;

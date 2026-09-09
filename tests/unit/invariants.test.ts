@@ -168,3 +168,50 @@ describe('a route a tab owns is reachable from somewhere', () => {
     ).toEqual([]);
   });
 });
+
+describe('the popover clamp is wired end to end', () => {
+  /*
+   * WHY a source scan rather than a behaviour test: ADR 0022 rejects the
+   * modifier-class alternative because "nothing fails when someone forgets it",
+   * and review pointed out the shipped fix had the same property — delete the
+   * `margin-left` from globals.css, or the reveal handlers from FieldHint, and
+   * every check still passed while the page silently scrolled sideways again.
+   *
+   * `src/ui/hint-position.test.ts` proves the arithmetic. This proves the two
+   * ends are still connected, which is the half that was easy to break.
+   *
+   * AI-NOTE: if the shift ever stops being a CSS custom property, this is what
+   *          tells you to update it — do not delete it, re-point it.
+   */
+  const css = () => readFileSync(join(ROOT, 'app', 'globals.css'), 'utf8');
+
+  it('has globals.css consume the property FieldHint writes', () => {
+    expect(css(), '--hint-shift is written but never read').toContain(
+      'margin-left: var(--hint-shift'
+    );
+  });
+
+  it('keeps the hover reveal behind a pointer query', () => {
+    /*
+     * A touch "hover" is applied after the pointerenter that would measure the
+     * bubble, so an unguarded `:hover` reveal can show an unpositioned one on
+     * the phone the ADR is about.
+     */
+    const text = css();
+    const hoverReveal = text.indexOf('.hint:hover .hint-bubble');
+    expect(hoverReveal, '.hint:hover reveal not found — was it renamed?').toBeGreaterThan(0);
+
+    const guard = text.lastIndexOf('@media (hover: hover)', hoverReveal);
+    expect(guard, 'the :hover reveal is not inside a `hover: hover` query').toBeGreaterThan(0);
+    expect(text.slice(guard, hoverReveal)).not.toContain('}\n}');
+  });
+
+  it('measures on every route that reveals the bubble', () => {
+    const component = readFileSync(join(ROOT, 'src', 'ui', 'FieldHint.tsx'), 'utf8');
+    for (const handler of ['onPointerEnter', 'onPointerLeave', 'onFocus', 'onBlur']) {
+      expect(component, `${handler} is gone — a reveal path lost its measurement`).toContain(
+        handler
+      );
+    }
+  });
+});

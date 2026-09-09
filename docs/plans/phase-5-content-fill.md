@@ -855,6 +855,16 @@ scrolls sideways on a phone is against everything that document is for. It is
 pre-existing, it reproduces on hint copy this PR never touched, and it belongs
 in its own change.
 
+> **Closed 2026-09-09**, in the change it was parked for —
+> [ADR 0022](../adr/0022-popover-clamping.md), branch `hint-bubble-viewport`.
+> Two things in the paragraph above turned out to be wrong, and both are worth
+> keeping visible. It is not "the right-hand column": at 375 px `.grid.cols-4`
+> is two columns with the first two children spanning both, and the tiles that
+> do sit right carry no hint — it is the LABEL length pushing the button right,
+> "Adherence · 4 wks" landing its hint at x=158. And the spec no longer
+> "requires it of wide content specifically": §3 now states the general rule,
+> which is the right resolution of the hedge this paragraph was making.
+
 ### PR 2 — achievements, 2026-09-08
 
 **Ten** rows, one in every tier the schema has allowed since phase 0, taking the

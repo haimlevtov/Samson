@@ -11,7 +11,7 @@
 ## Context
 
 `src/ui/FieldHint.tsx` renders a `?` button with a `.hint-bubble` beside it, used
-in 41 places. The bubble is `position: absolute` inside a `position: relative`
+at 16 call sites — 8 of them on `/profile`, which is the busiest page. The bubble is `position: absolute` inside a `position: relative`
 `.hint` span, anchored `left: 0` with `max-width: min(260px, 76vw)`.
 
 The comment on that rule says, of pinning left rather than centring:
@@ -29,8 +29,20 @@ It does not. MEASURED on `/profile` at 375×812 against the hosted project,
 That bubble's rect is `left: 158, right: 418` against a `clientWidth` of 375 — it
 hangs 43 px past the edge and the page scrolls sideways. It is arithmetic rather
 than bad luck: at 375 px the max-width resolves to 260 px, and any hint whose
-button sits past x=115 overflows. The right-hand tile of a four-up grid always
-does. Hints in the left column never do, which is why it survived.
+button sits past x=115 overflows.
+
+What pushes a button that far right is the **label beside it**. "Adherence · 4
+wks" puts its hint at x=158, in a tile that spans the full width of the phone.
+Short labels — "Streak" at x=83 — never reach the threshold, which is why this
+survived.
+
+> **Corrected in review.** The first draft of this paragraph blamed "the
+> right-hand tile of a four-up grid". There is no right-hand tile at this width:
+> `.grid.cols-4` is two columns on a phone and its first two children span both,
+> and the tiles that do sit right — Sessions, Badges — carry no hint at all. The
+> measured failure is real; the cause given for it was invented, which is the
+> same fault as the "growing rightwards always has room" comment this change
+> exists to delete.
 
 `docs/specs/mobile-interface.md` calls horizontal page scroll "the single most
 common phone-layout failure" and forbids it outright. This is pre-existing — it
@@ -62,18 +74,30 @@ worst case — a hint whose button sits at the far right of the viewport — so 
 bubble would have to be about 25 px wide at 375 px. Sizing every bubble for the
 worst position on the page is not a fix, it is a different bug.
 
-**A modifier class on the call sites that need it.** `.hint-bubble--right` on the
-hints in right-hand columns, flipping to `right: 0`. Rejected on maintenance
-grounds: it asks each of 41 call sites to know where it will land, it is wrong
-the moment a grid reflows at a different breakpoint, and nothing fails when
+**A modifier class on the call sites that need it.** `.hint-bubble--right`,
+flipping to `right: 0`. Rejected on maintenance grounds: it asks each of 16 call
+sites to know how long its own label renders and where that leaves the button,
+it is wrong the moment a label or a breakpoint changes, and nothing fails when
 someone forgets it. That last property is the disqualifying one — this bug
 survived because nothing failed.
 
+> **Held to the same standard in review**, which the first version of this
+> change was not: deleting `margin-left: var(--hint-shift)` from the stylesheet,
+> or the reveal handlers from the component, also failed nothing. Both ends are
+> now asserted in `tests/unit/invariants.test.ts`, and the arithmetic in
+> `src/ui/hint-position.test.ts`. Proved load-bearing by removing the
+> declaration and watching the suite go red.
+
 **CSS anchor positioning** (`position-try-fallbacks`) expresses exactly this,
-declaratively, with no JavaScript. Rejected for now rather than on merit: it is
-not yet something this project can rely on across the phone browsers it ships
-to, and the whole point of the change is that the phone case is the broken one.
-Worth revisiting; it would delete the code this ADR adds.
+declaratively, with no JavaScript, and would delete every line this ADR adds.
+
+Rejected as **an untested assumption rather than a checked fact**, said plainly
+because review was right to push on it: this repo declares no browser target —
+no `browserslist`, no `.browserslistrc`, no device matrix — so "we cannot rely
+on it yet" names no floor and nothing here can falsify it. Chromium and WebKit
+have both shipped it, so the claim may already be out of date. Revisit with an
+actual support check and a written target; if it holds, this is the first thing
+to delete.
 
 **Make the bubble full-width and fixed on phones.** It would work, and it
 discards the association between a bubble and its button — the reader would have
@@ -88,7 +112,15 @@ transforms.
   current behaviour, not a worse one.
 - The measurement runs on show, not on every render, and reads
   `getBoundingClientRect` once. There is no observer and no layout loop.
-- **This is the pattern for the next popover.** Anything anchored to a control
-  and floating above the page — a menu, a date picker, a set-editor popover —
-  has this bug waiting for it. Reuse `FieldHint`'s clamp rather than writing a
-  second one, exactly as `FieldHint`'s own docstring asked phase 4 to reuse it.
+- **This is the pattern for the next popover, on the horizontal axis only.**
+  Anything anchored to a control and floating above the page — a menu, a date
+  picker, a set-editor popover — has this bug waiting for it, and
+  `computeHintShift` is pure so it can be reused directly rather than
+  reimplemented.
+
+  **It says nothing about stacking, and that half is not solved.**
+  `.hint-bubble` is `z-index: 30`, the fixed rest bar is 40 and the tab bar 50,
+  so a bubble opened low on a page paints underneath both. Pre-existing, not
+  introduced here, and recorded rather than quietly inherited: an ADR that calls
+  itself the popover pattern and is silent on stacking would send the next
+  author confidently into the other half of the same problem.

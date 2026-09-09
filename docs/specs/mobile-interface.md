@@ -173,8 +173,12 @@ Colour is the fast path for people who can use it, never the only path.
 
 **Sizes.** Every interactive target is at least **44×44 px**. A visually smaller
 control gets its target from padding or a pseudo-element, not from shrinking the
-hit area. This currently fails in three places: buttons are ~37 px tall, chips
-~31 px, and the "?" hint is **16×16 px**.
+hit area. This currently fails in two places: buttons are ~37 px tall and chips
+~31 px.
+
+_The "?" hint used to be listed here as 16×16 px. It is 20×20 with a 44 px
+`::after` — the remedy this paragraph prescribes — and the sentence outlived the
+fix. Corrected 2026-09-09._
 
 **Text inputs are 16 px minimum.** Below that, iOS Safari zooms the viewport on
 focus and does not zoom back. This is not a preference; it is the difference
@@ -246,6 +250,20 @@ than across a row, so card-stacking would destroy the one property it has.
 Anything else becomes cards. A new exemption is argued here, in this list, not
 in a comment beside the table — a rule whose exceptions live in code comments
 has stopped being a rule.
+
+**The page body never scrolls horizontally, and not only because of tables.**
+The rule above was written about wide content, and read narrowly it let a
+different failure through: a popover anchored to a control near the right of the
+screen. Opening the "Adherence" hint on `/profile` at 375 px took
+`scrollWidth` to 418 — 43 px of sideways scroll, from an element with no width
+problem at all.
+
+So the rule generalises: **anything floating above the page — a popover, a
+menu, a picker — is clamped into the viewport rather than trusted to fit.**
+CSS cannot express it, because an absolutely positioned box cannot know its own
+distance from the screen edge; the measurement is
+[ADR 0022](../adr/0022-popover-clamping.md), and
+`src/ui/hint-position.ts` is the one implementation to reuse.
 
 ## 4. Feedback, and its bad states
 

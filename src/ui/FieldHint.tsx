@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-
-/** Breathing room kept between the bubble and either edge of the viewport. */
-const EDGE_GUTTER = 8;
+import { computeHintShift } from './hint-position';
 
 /**
  * WHY a layout effect and not a plain one: `useEffect` runs AFTER paint, so the
@@ -28,23 +26,36 @@ const useMeasureEffect = typeof window === 'undefined' ? useEffect : useLayoutEf
  */
 export function FieldHint({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  /*
+   * Revealed by hover or by focus, which CSS does without telling React.
+   *
+   * FOUND IN REVIEW: gating the re-measure on `open` alone left reachable states
+   * where the bubble is on screen and nothing owns it. Tab to the `?` and press
+   * Escape: `open` goes false, but Escape does not blur, so `:focus-within`
+   * keeps it displayed — visible, with a shift that a resize would never
+   * update. A shift measured at 900px still applied at 375px puts the left edge
+   * off screen, which is worse than the overflow this fixes.
+   */
+  const [revealed, setRevealed] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
 
   /*
-   * Pull the bubble back inside the viewport — ADR 0022.
+   * Pull the bubble back inside the viewport — ADR 0022. The arithmetic is in
+   * `computeHintShift`, which is pure and unit-tested; this half is only the
+   * measuring, because that is the half that needs a DOM.
    *
-   * WHY this is not a CSS problem: the bubble is absolutely positioned against
-   * its own `.hint`, so `max-width` constrains how WIDE it is and says nothing
-   * about where its right edge lands. At 375px the max-width resolves to 260px,
-   * so any hint whose button sits past x=115 hangs off the edge and the page
-   * scrolls sideways — which docs/specs/mobile-interface.md forbids outright.
-   * MEASURED before the fix, /profile at 375px: scrollWidth 375 with the hints
-   * closed, 418 with the right-hand tile's hint open.
+   * WHY it is not a CSS problem: the bubble is absolutely positioned against its
+   * own `.hint`, so `max-width` constrains how WIDE it is and says nothing about
+   * where its right edge lands. At 375px the max-width resolves to 260px, so a
+   * hint whose button has been pushed right — by a long label, most of all —
+   * hangs off the edge and the page scrolls sideways. MEASURED before the fix,
+   * /profile at 375px: scrollWidth 375 with the hints closed, 418 with the
+   * "Adherence · 4 wks" hint open.
    *
    * The shift is written as a custom property rather than as `left`, so the
-   * ≥560px rule can keep centring with `transform: translateX(-50%)` and this
-   * composes with it instead of fighting it.
+   * min-width: 760px rule can keep centring with `transform: translateX(-50%)`
+   * and this composes with it instead of fighting it.
    *
    * AI-NOTE: this runs on every path that can REVEAL the bubble, because CSS
    *          owns visibility and JS owns position. A new way to show one — a
@@ -56,22 +67,17 @@ export function FieldHint({ title, children }: { title: string; children: ReactN
     if (!bubble) return;
 
     // Measured with no shift applied, so the reading is the natural position
-    // rather than the last one this function chose.
+    // rather than the last one this function chose. Setting the property
+    // dirties style and `getBoundingClientRect` flushes layout, so the read
+    // below is of the natural position and not of a stale frame.
     bubble.style.setProperty('--hint-shift', '0px');
     const rect = bubble.getBoundingClientRect();
-    // Zero width means it is still display:none — nothing to place yet.
+    // Zero width means it is still display:none — nothing to place yet, and
+    // nothing has been lost, because a reveal always ends in a clamp.
     if (rect.width === 0) return;
 
-    const viewport = document.documentElement.clientWidth;
-    // Negative when the right edge overhangs; never positive, so a bubble that
-    // already fits is left exactly where the stylesheet put it.
-    let shift = Math.min(0, viewport - EDGE_GUTTER - rect.right);
-    // And never so far that the left edge leaves the screen. The bubble is
-    // narrower than the viewport at every width this ships to, so both
-    // constraints are satisfiable and the left one wins.
-    if (rect.left + shift < EDGE_GUTTER) shift = EDGE_GUTTER - rect.left;
-
-    bubble.style.setProperty('--hint-shift', `${Math.round(shift)}px`);
+    const shift = computeHintShift(rect, document.documentElement.clientWidth);
+    bubble.style.setProperty('--hint-shift', `${shift}px`);
   }, []);
 
   // A tap outside closes it. Without this the bubble sticks open on a phone,
@@ -93,27 +99,37 @@ export function FieldHint({ title, children }: { title: string; children: ReactN
   }, [open]);
 
   /*
-   * The tapped-open path, plus rotating the phone with one open.
+   * Re-measure whenever this bubble is on screen, by any of the three routes,
+   * and keep it correct while it stays there.
    *
-   * The resize listener is attached only while this hint is open, so the forty
-   * others on the page cost nothing — /profile alone renders eleven.
+   * The listener is attached per VISIBLE hint rather than per rendered one, so
+   * the fifteen other call sites in the app cost nothing — and no page renders
+   * more than the eight on /profile. A module-level listener that clamped every
+   * instance would be worse: N alternating writes and reads, each forcing a
+   * reflow, on every resize tick.
    */
+  const visible = open || revealed;
   useMeasureEffect(() => {
-    if (!open) return;
+    if (!visible) return;
     clamp();
     window.addEventListener('resize', clamp);
     return () => window.removeEventListener('resize', clamp);
-  }, [open, clamp]);
+  }, [visible, clamp]);
 
   return (
     <span
       className="hint"
       ref={wrapRef}
-      // The two paths CSS opens without telling React: `:hover` for a pointer
-      // and `:focus-within` for a keyboard. Both have already applied by the
-      // time these fire, so the bubble is laid out and measurable.
-      onPointerEnter={clamp}
-      onFocus={clamp}
+      /*
+       * The two routes CSS opens without telling React. `onFocus` and `onBlur`
+       * are React's `focusin`/`focusout`, which bubble, so focus landing on the
+       * button reaches this wrapper — `:focus-within` has already applied by
+       * then, so the bubble is laid out and measurable.
+       */
+      onPointerEnter={() => setRevealed(true)}
+      onPointerLeave={() => setRevealed(false)}
+      onFocus={() => setRevealed(true)}
+      onBlur={() => setRevealed(false)}
     >
       <button
         // INVARIANT of forms, not of this project: without type="button" this
