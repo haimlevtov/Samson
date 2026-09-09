@@ -17,9 +17,10 @@ All five content items shipped, plus one PR that was not in the original six.
 | 6   | [The supplement evidence table](#pr-6--the-supplement-evidence-table)           | `supplement-evidence`       | 2026-09-09 | [↓](#pr-6--the-supplement-evidence-table-2026-09-09)        |
 | 7   | [Progress in the demo database](#pr-7--the-demo-database-has-no-progress-in-it) | `seed-progress`             | 2026-09-08 | [↓](#pr-7--the-demo-database-has-progress-in-it-2026-09-08) |
 
-**How to read this file.** Everything above the [Outcome](#outcome) is the plan
-as written on 2026-09-08, amended in place only where an amendment is marked as
-one. Everything below it is the record of what actually happened, and where the
+**How to read this file.** Everything from the next heading down to the
+[Outcome](#outcome) is the plan as written on 2026-09-08, amended in place only
+where an amendment is marked as one. The status table above it was added
+2026-09-09 and is a record, not part of the plan. Everything below it is the record of what actually happened, and where the
 two disagree the Outcome is right — that is the point of keeping both.
 
 PR 7 was added on 2026-09-08 from a direct product request, after PR 6 was

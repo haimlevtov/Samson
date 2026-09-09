@@ -89,6 +89,11 @@ phase had changed. That did not happen until this document.
 | #18 | The three skills `CLAUDE.md` advertised and did not have              | —                                          |
 | #19 | Two cards that met with no space between them                         | —                                          |
 
+PRs #11 to #17 were planned together in
+[`rework-profile-hub-coach.md`](rework-profile-hub-coach.md), whose Outcome
+records what they turned into and which of them this table lists as follow-ups
+that no plan anticipated.
+
 Templates (ADR 0010, `docs/specs/workout-templates.md`) landed inside this
 window too.
 

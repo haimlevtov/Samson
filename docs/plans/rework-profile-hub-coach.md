@@ -33,10 +33,10 @@ All five shipped on 2026-09-07, in the order planned.
 | 4   | [The coach you can talk to](#pr-4--the-coach-ask-for-a-plan-and-talk-to-it)         | `coach-chat`             | [#14](https://github.com/haimlevtov/Samson/pull/14) | [ADR 0015](../adr/0015-coach-chat.md), [spec](../specs/coach-chat.md) |
 | 5   | [The leaderboard](#pr-5--the-leaderboard)                                           | `hub-leaderboard`        | [#17](https://github.com/haimlevtov/Samson/pull/17) | [ADR 0016](../adr/0016-leaderboard.md)                                |
 
-**This document is the plan, not the record.** It is kept as approved — see the
-comment above the title for the three things that had already moved by the time
-it was committed. What the five changes turned into is in
-[Outcome](#outcome), at the end.
+**Everything between this table and the [Outcome](#outcome) is the plan, not the
+record.** It is kept as approved — see the comment above the title for the three
+things that had already moved by the time it was committed, the third of which
+is now closed. This table and the Outcome were both written 2026-09-09.
 
 ## Context
 
@@ -275,8 +275,9 @@ reason: they are reconstructed from the merged work rather than written while it
 was fresh, so they say what shipped and where it diverged, and do not pretend to
 recall the review rounds in detail.
 
-All five merged on 2026-09-07. Three of the four "decisions taken before
-planning" survived contact; the fourth is the first entry below.
+All five merged on 2026-09-07, and all three
+[decisions taken before planning](#decisions-taken-before-planning) survived
+contact. What diverged was in PR 4's body rather than in that list — see below.
 
 ### What diverged from the plan
 
@@ -297,32 +298,48 @@ where a reader starts.
 **Level arrived as planned** (PR 1) — `levelForXp` in `src/gamification/level.ts`,
 pure and unit-tested, with the curve written into
 [`docs/specs/xp-and-challenges.md`](../specs/xp-and-challenges.md) before the
-code. It sat at level 1 for every seeded user until the demo database was given
-XP, a year of history later in wall-clock terms and one day later in this repo's
-— see `phase-5-content-fill.md` PR 7.
+code. It then sat at level 1 for every seeded user for a day, until
+[`phase-5-content-fill.md`](phase-5-content-fill.md) PR 7 gave the demo database
+XP — a working feature reading a database that had never had anything to read.
 
 ### What the plan did not anticipate
 
-Three follow-up PRs came straight out of using what these five built, and none of
+Four follow-up PRs came straight out of using what these five built, and none of
 them is in the sequence above:
 
-|                                                     |                          |                                                                                                                                                                                                                                      |
-| --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [#15](https://github.com/haimlevtov/Samson/pull/15) | `profile-settings-route` | Settings moved from a disclosure on Profile to its own route. The `<details>` this plan argued for worked and was in the wrong place; `/settings` is an address people can say out loud, and ADR 0013 gained an amendment saying so. |
-| [#16](https://github.com/haimlevtov/Samson/pull/16) | `active-session-routing` | Which tab lights up for a route that no tab owns — the problem `OWNED_BY` in `src/ui/tabs.ts` exists to solve, found by adding routes this plan did not have.                                                                        |
-| [#19](https://github.com/haimlevtov/Samson/pull/19) | `profile-card-spacing`   | Layout, once Profile actually held everything ADR 0013 moved onto it.                                                                                                                                                                |
+|                                                     |                          |                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [#15](https://github.com/haimlevtov/Samson/pull/15) | `profile-settings-route` | Settings moved from a disclosure on Profile to its own route. The `<details>` this plan argued for worked and was in the wrong place; `/settings` is an address people can say out loud, and ADR 0013 gained an amendment. It also brought `OWNED_BY` in `src/ui/tabs.ts`: a route no tab owns lit no tab at all. |
+| [#16](https://github.com/haimlevtov/Samson/pull/16) | `active-session-routing` | A workout in progress was landing in History with no route back into it, and both start actions could insert a duplicate row. See [`phase-5.md`](phase-5.md), which tables the same PR.                                                                                                                           |
+| [#18](https://github.com/haimlevtov/Samson/pull/18) | `project-skills`         | `CLAUDE.md` advertised four skills and `.claude/skills/` held one — item 3 of the comment above this document's title, now closed.                                                                                                                                                                                |
+| [#19](https://github.com/haimlevtov/Samson/pull/19) | `profile-card-spacing`   | Layout, once Profile actually held everything ADR 0013 moved onto it.                                                                                                                                                                                                                                             |
 
 The pattern is worth naming: **a tab rework is not finished when the tabs are
 right.** Each of these was invisible until there were enough surfaces for the
 navigation to be wrong about.
 
+### Delivered, including the part that is easiest to quietly skip
+
+**The adversarial suite records what got through.** [ADR 0005](../adr/0005-llm-safety.md)
+§5 asks for the escapes and not only the blocks, and the Verification table above
+repeats it. Both exist as named `describe` blocks:
+`src/chat/reply.test.ts` — "what this stage does NOT stop, recorded rather than
+implied", five escapes each with its reason — and `src/llm/safety.test.ts` —
+"scanOutput — what it does NOT catch, recorded honestly".
+
+> **A first draft of this Outcome listed this as still open, and cited ADR 0015
+> §5.** Both halves were wrong: 0015 §5 is the bounded context window, the
+> escapes requirement is ADR **0005** §5, and the record had shipped — three
+> documents already said so, including this file's own Verification table.
+> Caught in review. Worth leaving visible, because a retrospective written from
+> memory rather than from the code is exactly how a delivered requirement gets
+> re-opened on paper.
+
 ### Still open from this plan
 
-- **The adversarial suite's escapes.** ADR 0015 §5 requires the suite to record
-  what got through, not only what was blocked, and the Verification table above
-  asks for it in as many words. The suite exists; the written record of escapes
-  does not.
-- **Topical confinement remains a judgement.** ADR 0015 says so and it has not
-  changed: there is no deterministic check for "is this about training", so the
-  guarantee is about the refusal's wording, the absence of tools and the numbers
-  the coach may state — never about the classifier being right.
+- **Topical confinement remains a judgement, not a control.**
+  [ADR 0015](../adr/0015-coach-chat.md)'s "what this does not guarantee" section
+  says so and nothing has changed it: there is no deterministic check for "is
+  this about training". What is guaranteed is the refusal's wording, the absence
+  of tools, and the numbers the coach may state — never that the classifier is
+  right.
