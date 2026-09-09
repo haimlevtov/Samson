@@ -112,10 +112,10 @@ target     = clamp(tdee + adjustment, max(bmr, 1200), 6000)
 
 - **The floor is `max(BMR, 1200 kcal)`.** Never prescribe below resting metabolic
   rate.
-- **The ceiling is 6,000 kcal, and it is not decoration.** `bodyweight_kg
-numeric(6, 2) check (> 0)` admits 9,999.99 and `height_cm numeric(5, 1)` admits
-  9,999.9 — a BMR near 162,000. A computation that reaches the ceiling is a
-  data-entry error, not a diet, and is returned as a refusal.
+- **The ceiling is 6,000 kcal, and it is not decoration.** A `numeric(6, 2)`
+  column checked only for positivity admits 9,999.99 kg, and `numeric(5, 1)`
+  admits 9,999.9 cm — a BMR near 162,000. A computation that reaches the ceiling
+  is a data-entry error, not a diet, and is returned as a refusal.
 - **An unrecognised goal falls to maintain, never to a deficit.** The goal is the
   only user-controlled value entering the computation, and a `<select>` is not a
   gate.
@@ -125,13 +125,14 @@ numeric(6, 2) check (> 0)` admits 9,999.99 and `height_cm numeric(5, 1)` admits
   direction, the same reasoning `src/metrics/tonnage.ts` gives for counting
   bodyweight lifts as zero.
 
-**Non-finite input is refused before the first multiplication.** `'NaN'::numeric
-
-> 0`is TRUE and PostgREST casts the JSON string`"NaN"`into a numeric column,
-as`20260908100100_tonnage_comparisons_hardening.sql`recorded when it measured
-this against the hosted project. A NaN weight gives a NaN BMR,`Math.min`and`Math.max`propagate it, and a NaN target is **not null** — so the
-missing-biometric refusal would not fire and a NaN would render. The columns gain
-bounded checks in the same PR as this ADR;`energy.ts` does not trust them.
+**Non-finite input is refused before the first multiplication.** In PostgreSQL
+`'NaN'::numeric` compares as greater than zero, and PostgREST casts the JSON
+string `"NaN"` into a numeric column on the way in — measured against this hosted
+project and recorded in `20260908100100_tonnage_comparisons_hardening.sql`. A NaN
+weight gives a NaN BMR, `Math.min` and `Math.max` propagate it, and a NaN target
+is **not null** — so the missing-biometric refusal would not fire and a NaN would
+render. The columns gain bounded checks in the same PR as this ADR, and
+`energy.ts` does not trust them.
 
 ### 4. The activity factor is measured, not asked
 
