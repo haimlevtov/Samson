@@ -8,10 +8,10 @@ the numbers in it.
 > over four PRs ([`plans/phase-6.md`](../plans/phase-6.md)) and this spec was
 > written whole, before them, so the tests can be written from it.
 >
-> As of **2026-09-09**: §1 (the inputs), §2 (the equation and the clamp) and §3
-> (the refusals) are built, in `src/diet/biometrics.ts` and `src/diet/energy.ts`.
-> §4 — `dietReplySchema`, the payload and the surface — is PR 4 and does not
-> exist yet.
+> As of **2026-09-09** all of §1–§4 are built: `src/diet/biometrics.ts`,
+> `energy.ts`, `schema.ts`, `prompts.ts`, `advice.ts` and the disclosure on
+> `/coach`. What remains of the phase is PR 5, retrieval-only supplement
+> answers, which this document does not cover.
 
 ## 1. What is collected, and where — **built**
 
@@ -199,26 +199,61 @@ have shown "your resting burn is −745 kcal" beside a sensible-looking number. 
 body the equation returns nothing positive for is refused rather than clamped
 into looking sane.
 
-## 4. What the model is given, and what comes back — **PR 4, not built**
+## 4. What the model is given, and what comes back — **built**
 
-The payload has **no numbers in it**:
+The payload has **no numbers in it**. `dietFacts()` in `src/diet/energy.ts` is
+the allowlist that builds it, and it lives there rather than in the prompt layer
+so that widening it is a change to the file where the invariant is written down:
 
 | Field           | Type                                                          |
 | --------------- | ------------------------------------------------------------- |
-| `as_of`         | the user's local date — `CLAUDE.md` #9                        |
 | `goal`          | `cut` \| `maintain` \| `gain`                                 |
 | `activity_band` | `sedentary` \| `light` \| `moderate` \| `high` \| `very high` |
 | `is_deficit`    | boolean                                                       |
 | `floor_reached` | boolean — the clamp bound the target rather than the goal     |
-| `question`      | present only when the user typed one; fenced                  |
 
-`dietReplySchema` has **no numeric field**. `findUnknownNumbers` runs against an
-**empty** allowed set over every string field concatenated, so any numeral in the
-reply is rejected, corrected once in the unfenced channel (ADR 0008), and then
-answered by a constant. There is no fallback to unchecked prose.
+The optional question is a separate fenced block, not a field. It is **the
+stage's only untrusted input**, and it is the reason there is fencing here at
+all — everything else in the payload is the app's own.
 
-Code renders every figure the user sees: the target, the floor, the protein
-figure, the band. The model's prose sits beside them.
+**Four fields, and none of them can hold a digit.** `as_of` used to be a fifth
+and was removed in review: nothing read it, and a date correlated with a
+provider's request timestamp discloses roughly what part of the world somebody
+is in. `CLAUDE.md` #9 is satisfied by the engine evaluating against the user's
+local date, not by the model being told what it was.
+
+`dietReplySchema` has **no numeric field**, and returns two short prose fields:
+`summary` and `caveat`. The check is **`/\p{N}/u` over every string field**,
+derived from the parsed object rather than a hand-written list — any digit in
+any script is rejected, corrected once in the unfenced channel (ADR 0008), and
+then answered by a constant. There is no fallback to unchecked prose.
+
+**Not `findUnknownNumbers`, and that is the point.** Its pattern is `\d`, which
+is ASCII-only even under the `u` flag, so `١٨٠٠` and `１８００` passed it — the
+hole review found, recorded in ADR 0024 §2 with why the obvious fix does not
+work.
+
+**There is no transcript.** The chat fences replayed turns because its history is
+client-held and therefore untrusted (ADR 0015 §2); this stage answers one
+question about one figure and keeps nothing, so that channel does not exist to
+be attacked.
+
+Code renders every figure the user sees: the target, the floor, the resting
+burn, the maintenance figure and the protein target. The model's prose sits
+beside them, and the figures render even when the call fails — which is the
+practical point of computing them first.
+
+### The surface
+
+A `<details>` disclosure on `/coach`, between the plan and the chat.
+`docs/specs/mobile-interface.md` draws the line it has to satisfy: _"a disclosure
+reveals more of what the page is already about; a different subject gets a route
+instead."_ A calorie target for the training being coached on the same page is
+the same subject, and it is one block rather than a page.
+
+**Nothing fires on page load.** Every state renders something: nothing asked yet,
+each of the three refusals in the app's own words, a target, and a target with
+the model's sentence missing because the call failed.
 
 ## 5. What the tests must cover
 

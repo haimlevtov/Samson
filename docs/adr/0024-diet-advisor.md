@@ -74,7 +74,15 @@ author will reach for both:
 The payload sent to the `diet` stage carries **no numbers at all**. Not the
 biometrics, and not the computed calorie figures either. It carries labels and
 booleans: the goal, an activity band, whether the target is a deficit, whether
-the floor was reached, whether a biometric is missing, and `as_of`.
+the floor was reached. Four fields, and no fifth.
+
+_Amended after review._ This originally also listed "whether a biometric is
+missing" and `as_of`. Neither survived the build: a missing biometric returns
+before any model is called, so there is nothing to tell one about, and the date
+was the single field that could hold digits — nothing used it, and correlated
+with a provider's own request timestamp it discloses roughly what part of the
+world somebody is in. Dropping it made "the payload carries no numbers" literally
+true, with no exception to remember.
 
 `dietReplySchema` has **no numeric field**, which makes "cannot alter a number"
 structural before it is tested. This is the persona's shape, not the chat's —
@@ -85,17 +93,39 @@ all, so 'cannot alter a number' is structural before it is tested."_
 `CLAUDE.md` #6 read literally: the model explains the number, and the number
 arrives from `src/diet/energy.ts`.
 
-### 2. The allowed set is empty — code
+### 2. No digit at all, in any script — code
 
-`findUnknownNumbers` runs against `new Set()`. Any numeral in the reply is
-rejected, corrected once in the unfenced channel (ADR 0008), and then answered by
-a constant — the same shape `src/chat/reply.ts` uses, with no fallback to
-unchecked prose. There is no figure the model is permitted to state.
+`/\p{N}/u` over the reply. Any digit is rejected, corrected once in the unfenced
+channel (ADR 0008), and then answered by a constant — the same shape
+`src/chat/reply.ts` uses, with no fallback to unchecked prose. There is no figure
+the model is permitted to state.
 
-The guard runs over **every string field concatenated**, the way
-`deliveredText()` does for the persona's three, rather than over one field. The
-chat checks one `reply` and that is all the chat has; a second prose field here
-would otherwise be unguarded.
+> **Amended after review, and the first version of this section was wrong.**
+>
+> It said `findUnknownNumbers` against an empty set, and that is not sufficient:
+> the pattern behind that function is `\d`, which is **ASCII-only even under the
+> `u` flag**. So `١٨٠٠`, `१८००`, `１８００` and `¹⁸⁰⁰` all passed the guard and
+> the model's figure rendered directly beneath the app's. Asking the question in
+> Arabic, Persian, Hindi or Bengali is enough to get a reply in native digits —
+> no jailbreak required — and the adversarial suite could not see it, because
+> its assertion was `not.toMatch(/\d/)`: the test and the bug shared a blind
+> spot.
+>
+> Widening `findUnknownNumbers` would not have fixed it either. `\p{Nd}` there
+> would match, and then `Number('١٨٠٠')` is `NaN`, which `guard.ts` **skips** —
+> the widened match would be discarded silently. NFKC normalisation folds
+> fullwidth and superscripts and leaves the rest. So the check is stage-local,
+> which this stage can afford precisely because nothing is allowed: with an empty
+> set there is no membership question, only a predicate.
+>
+> `guard.ts` is untouched. Its ASCII assumption is load-bearing for the chat and
+> the persona, where numerals are compared against a set of numbers.
+
+The check runs over **every string field**, derived from the parsed object rather
+than from a hand-written list — the way `deliveredText()` does for the persona's
+three. The chat checks one `reply` and that is all the chat has; a second prose
+field here would otherwise be unguarded, and a comment promising otherwise is
+what review found the first time.
 
 This is strictly stronger than the chat and it is the point of the ADR. It also
 makes the privacy property true rather than aspirational: with no numbers in the

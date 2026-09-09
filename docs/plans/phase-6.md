@@ -20,7 +20,7 @@ planned until a scope question is answered.
 | 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | shipped 09-09                                                      |
 | 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09)                   |
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
-| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned                                                            |
+| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
 | 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                                            |
 | 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
 
@@ -689,6 +689,130 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### PR 4 — the diet stage, 2026-09-09
+
+**The phase's one adversarial acceptance criterion is met**, and the two halves
+are checked in different places because they have to be.
+
+**Blocked** — `src/diet/advice.test.ts`, 33 cases against a scripted model.
+Thirteen attacks, each asserting the same three things: the target the user sees
+is the engine's, the model's figures never render, and the attack arrived fenced.
+The attacks differ and the reason they fail does not, which is the argument for
+the design rather than for a longer prompt. Five ordinary questions assert the
+other half — a guard that refuses "how much protein should I eat" is one somebody
+switches off.
+
+**Logged** — `tests/db/diet-ledger.test.ts`, and it could not have been done in
+the unit suite: **that suite mocks the gateway, so it never inserts a row and
+structurally cannot see one.** Six cases: a `stage = 'diet'` row inserts under
+the user's own token, a stage nobody declared is rejected, a `safety_blocked`
+attempt is representable, a retry is a second row rather than an update, and
+nobody can log against or read another user's spend.
+
+**What none of that proves, stated rather than implied:** that a live model call
+lands a row. No key has ever been configured on this project. That gap is the one
+phase 2's and phase 3's unmet criteria already sit in, and this PR does not close
+it.
+
+**Four things the design does not stop, recorded as passing tests** — ADR 0005 §5
+asks for the taxonomy of what got through, not only what was blocked:
+
+- A figure spelled out in words. `findUnknownNumbers` reads numerals. Narrower
+  here than elsewhere, because the model was never told the target, so a written
+  figure is a guess rather than a leak — but "eighteen hundred" reaches the user.
+- Whether the prose agrees with the target. Nothing can tell "eat a little under
+  what you burn" from "eat considerably less", and the second is a nudge a
+  maintenance target does not support.
+- The `on_topic` classification. The model classifies itself; what is guaranteed
+  is that the refusal's wording is code.
+- Anything about a live model, per above.
+
+**Deviations from the plan, stated:**
+
+1. **The adversarial cases are in `src/diet/advice.test.ts`, not
+   `src/llm/safety.test.ts`** as the plan said. That file tests
+   `sanitizeUntrusted`, `fenceUntrusted` and `scanOutput` — module-level
+   functions with no stage. These cases exercise a stage against an injected
+   caller, and moving the harness there would have been the tail wagging the dog.
+2. **The reply schema has two prose fields, `summary` and `caveat`**, where the
+   plan implied one. Two short fields give the guard two short strings rather
+   than one long one, and let the surface render the second more quietly. The
+   guard concatenates them — the plan's own instruction, and the thing the chat
+   does not need to do because it has one field.
+3. **A refusal calls no model at all.** The plan's surface section listed the
+   refusals as states to render; it did not say the action returns before the
+   call, which it does. Asking a model to comment on a missing biometric would be
+   paying for a sentence the app can write.
+4. **One planned adversarial case was dropped**, and review was right that it
+   went unrecorded: _"smuggled through the transcript rather than the message"_.
+   There is no transcript. This stage answers one question and keeps nothing, so
+   the channel ADR 0015 §2 had to fence for the chat does not exist here —
+   `src/diet/prompts.ts` argues it, and now so does this list.
+
+**Still not verified, and it is the same item as PR 2:** the browser pass at
+375×812 in both themes. `/coach` needs a session and a password is not something
+this agent types. Review found a **width bug above 760px** in this PR's own
+markup, which is the sharpest possible argument that the missing check is not a
+formality — `docs/PRD.md` §5.7 says Built on that understanding.
+
+**What review changed, and the first finding falsified the ADR's headline row.**
+
+- **`\d` is ASCII-only, even under the `u` flag.** The guard was
+  `findUnknownNumbers` against an empty set, and `١٨٠٠`, `१८००`, `１８００` and
+  `¹⁸⁰⁰` all sailed past it — so a model-chosen calorie figure rendered directly
+  beneath the app's. **Asking the question in Arabic, Persian, Hindi or Bengali
+  is enough**; a model replying in-script uses native digits, and no jailbreak is
+  needed. The adversarial suite could not see it: its assertion was
+  `not.toMatch(/\d/)`, so the test and the bug shared a blind spot. The check is
+  `/\p{N}/u` now, stage-local — widening `findUnknownNumbers` would not have
+  worked, because `Number('١٨٠٠')` is `NaN` and `guard.ts` skips non-finite
+  values, so the widened match would be discarded silently.
+- **The guard read a hand-written field list** while its own comment promised
+  "every string field", so a third prose field would have been unguarded with no
+  test failing. Derived from the parsed object now.
+- **`as_of` left the payload.** It was the one field that could hold digits, and
+  nothing used it; correlated with a provider's request timestamp it discloses
+  roughly what part of the world somebody is in. "The payload carries no
+  numbers" is literally true now rather than true-with-a-footnote.
+- **A `.table-cards` with no `<thead>`.** Below 760px it stacks and prints
+  `data-label`; at 760px the CSS restores the header row and drops those labels —
+  so above the breakpoint the four figures rendered with no captions at all.
+  **This is exactly the class of bug the browser pass exists to catch, and the
+  browser pass is the item this PR could not run.** It is a definition list now.
+- **The spec named a `z.enum` goal gate the action did not have.** The safety
+  outcome survived, because the engine falls to maintain for anything
+  unrecognised — but the named mechanism did not exist, and the raw string was
+  echoed into the `<select>`, whose fail case was therefore the FIRST option:
+  `cut`. The UI's default disagreed with the code's. Both are maintain now.
+- **`console.error('diet advisor failed', cause)` logged the whole error
+  object**, and `LlmCallFailedError` carries `attempts: LlmCallInsert[]` — so
+  every failure wrote the user's auth UUID into the server log once per attempt.
+  The same lens as PR 2's settings fix, one hop out.
+- **Four assertions could not fail**, and two of them were cited above as
+  evidence the graded criterion is met:
+  - `expect(ATTACKS).toHaveLength(13)` asserted a literal's own length.
+  - The thirteen adversarial cases scripted an identical reply, so they ran one
+    code path thirteen times and proved nothing the guard tests already did.
+    Each case now scripts **the figure the attack itself asks for**, which makes
+    it a distinct assertion, and three non-ASCII cases were added. The
+    fence-escape case contained no fence token, so its "arrived fenced" check
+    would have passed even if the attack had closed the fence; it uses a real
+    one now, and the assertion is that the marker appears _after_ the attack
+    text.
+  - "Ordinary questions are answered" cannot be tested against a scripted model
+    at all — no code path in `explainTarget` reads the question. **The claim in
+    this Outcome was wrong** and now says what is actually proved: nothing in the
+    stage refuses on its own. Whether a live model would misclassify one is a
+    false-positive property that needs a key.
+  - The ledger's retry count was already satisfied by earlier cases in the same
+    file. It counts before and after now.
+
+**Found by the project's own guard, not by me.** `tests/unit/invariants.test.ts`
+failed on the new database test for naming OpenRouter outside `src/llm/` — in a
+comment. The check is a blunt substring match and it says why in a comment of its
+own: it duplicates an ESLint rule on purpose, because lint can be silenced inline
+and this cannot. The right fix was mine, not the guard's.
 
 ### PR 3 — the arithmetic and the clamp, 2026-09-09
 

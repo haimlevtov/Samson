@@ -293,11 +293,14 @@ Each is self-contained. Cut any of them without breaking anything above.
 - File import: `.fit`, `.tcx`, `.gpx`, Apple Health XML
 - ~~Health Connect and HealthKit~~ — **out.** This entry conditioned them on a
   test device existing and none does. Named as out rather than left ambiguous.
-- Diet advisor: maintenance computed by equation, bounded adjustment,
-  hard-clamped floor in code, retrieval-only supplement answers. **It lives on
-  the Coach tab**, not a sixth one — it is a coaching question asked where
-  coaching questions are asked, and `STAGE_MODELS` is per stage so serving it
-  from a different model than the chat is a config line, not a refactor.
+- ~~Diet advisor: maintenance computed by equation, bounded adjustment,
+  hard-clamped floor in code~~ — **built 2026-09-09**, on the Coach tab as a
+  disclosure rather than a sixth tab. The model is sent categories rather than
+  figures, its schema has no numeric field, it may write no digit in any script,
+  and code renders every number. [ADR 0024](adr/0024-diet-advisor.md),
+  [`specs/diet.md`](specs/diet.md), and the Outcome in
+  [`plans/phase-6.md`](plans/phase-6.md). **Retrieval-only supplement answers
+  are the remaining half**, planned as that file's PR 5.
 - ~~**Leaderboard**~~ — **built early, in phase 5.** Pulled forward because
   ADR 0013 gave Hub the job of being the tab about other people, and a tab that
   owns nothing is the fault ADR 0012 was written to fix. The conditions this

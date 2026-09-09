@@ -50,6 +50,26 @@ export const NORMALIZER_MAX_TOKENS = 800;
 export const CHAT_MAX_TOKENS = 400;
 
 /**
+ * One diet explanation — docs/specs/diet.md §4, ADR 0024 §1.
+ *
+ * WHY it is smaller than the chat's 400: the schema caps this reply at 500
+ * characters across two fields, and unlike the chat it may contain no numeral
+ * at all — code renders every figure beside it. The model is writing two or
+ * three sentences of plain prose about a number it was never shown.
+ */
+export const DIET_MAX_TOKENS = 300;
+
+/**
+ * One optional question about a target, before fencing.
+ *
+ * Deliberately shorter than `MAX_CHAT_MESSAGE_CHARS`: this box asks about one
+ * figure on one screen, not about a training history. Length is an attack, so
+ * the bound is the smallest one the feature can work in — the same reasoning
+ * ADR 0015 §5 gives for the chat's own cap.
+ */
+export const MAX_DIET_QUESTION_CHARS = 400;
+
+/**
  * One chat message in, before fencing — ADR 0015 §5.
  *
  * Deliberately far below `MAX_UNTRUSTED_CHARS`: that cap is sized for a whole

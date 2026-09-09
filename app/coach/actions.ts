@@ -7,7 +7,16 @@ import { loadXpSummary } from '@/src/db/gamification';
 import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import { listWorkouts, loadHistory } from '@/src/db/training';
 import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
-import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  MAX_DIET_QUESTION_CHARS,
+  MissingApiKeyError,
+} from '@/src/llm/config';
+import { z } from 'zod';
+import { explainTarget } from '@/src/diet/advice';
+import { DIET_GOALS, computeEnergy } from '@/src/diet/energy';
+import { dietQuestionSchema } from '@/src/diet/schema';
+import { EMPTY_DIET, type DietState } from './diet-state';
 import { BudgetExceededError } from '@/src/llm/types';
 import { coachFacts } from '@/src/chat/facts';
 import { askCoach } from '@/src/chat/reply';
@@ -126,6 +135,128 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
     return {
       turns: trim(withUser),
       error: 'The coach could not answer that one. Try again in a moment.',
+    };
+  }
+}
+
+/**
+ * The diet advisor — ADR 0024, docs/specs/diet.md.
+ *
+ * INVARIANT: the target is computed, clamped and RENDERED by code —
+ *            CLAUDE.md #6. The model is called after the number exists, is
+ *            given `dietFacts()` (categories, no figures), and its words are
+ *            printed beside a figure it never saw. There is no path from the
+ *            model's output to `targetKcal`, on the variable or on the screen.
+ *
+ * INVARIANT: the biometrics are read from the authenticated user's own row
+ *            under RLS, never from a form field — CLAUDE.md #10. The form
+ *            carries a goal and an optional question, and nothing else.
+ */
+export async function askDietAdvisor(_previous: DietState, formData: FormData): Promise<DietState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  /*
+   * FOUND IN REVIEW: this was a bare `String(...)`, while docs/specs/diet.md
+   * and ADR 0024 both said the action validates the goal with `z.enum`. The
+   * safety outcome survived — `normaliseGoal` in the engine falls to maintain
+   * for anything unrecognised, deliberately — but the named mechanism did not
+   * exist, and the raw string was echoed back into the `<select>`, so a
+   * hand-posted `goal=banana` rendered a control with nothing selected.
+   *
+   * `.catch` rather than a rejection: an unrecognised goal is not worth an
+   * error message, and maintain is the safe direction.
+   */
+  const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
+  const parsedQuestion = dietQuestionSchema.safeParse(formData.get('question') ?? '');
+  if (!parsedQuestion.success) {
+    return {
+      ...EMPTY_DIET,
+      goal,
+      error: `That question is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`,
+    };
+  }
+
+  const today = localDateFor(user.timezone);
+  const [history, xp] = await Promise.all([loadHistory(db), loadXpSummary(db, today)]);
+
+  /*
+   * The session count comes from `coachFacts`, which the chat on this same page
+   * already computes — ADR 0024 §4. A second count here would be a second
+   * definition of one number, and `src/chat/facts.ts` says why its window is 28
+   * days: it matches what the Profile tab reports, so the two cannot disagree.
+   */
+  const facts = coachFacts({
+    today,
+    workouts: history.workouts,
+    sets: history.sets,
+    exerciseNames: new Map([...history.exercises].map(([id, e]) => [id, e.name])),
+    lifetimeXp: xp.lifetime,
+  });
+
+  // INVARIANT: every figure is produced here, before a model is involved.
+  const result = computeEnergy({
+    today,
+    bodyweightKg: user.bodyweightKg,
+    heightCm: user.heightCm,
+    birthDate: user.birthDate,
+    sex: user.sex,
+    sessionsLast28Days: facts.sessions_last_28_days,
+    goal,
+  });
+
+  // A refusal is rendered by the panel in its own words. Nothing is sent to a
+  // model: there is no target to explain, and asking one to comment on a
+  // missing biometric would be paying for a sentence the app can write.
+  if (result.kind !== 'ok') return { ...EMPTY_DIET, goal, result };
+
+  try {
+    const explanation = await explainTarget(user.id, result, parsedQuestion.data, {
+      call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
+    });
+
+    return {
+      result,
+      summary: explanation.summary,
+      caveat: explanation.caveat,
+      goal,
+      error: null,
+    };
+  } catch (cause) {
+    /*
+     * The figures survive the failure, and that is the point of computing them
+     * first: the target renders whether or not a model could be reached.
+     *
+     * The same two errors are worth showing verbatim as in `sendChatMessage`,
+     * and everything else is generic for the reason recorded there.
+     */
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
+      return { result, summary: null, caveat: null, goal, error: cause.message };
+    }
+
+    /*
+     * The NAME and a bounded message, never the object.
+     *
+     * FOUND IN REVIEW, and it is the same lens as the settings fix in PR 2 one
+     * hop out: `LlmCallFailedError` carries `attempts: LlmCallInsert[]`, and
+     * Node prints an Error's own enumerable properties after the stack — so
+     * logging `cause` wrote the user's auth UUID into the server log once per
+     * attempt. The message itself embeds the upstream body on an HTTP error,
+     * and providers commonly echo the request back, which here means the user's
+     * question — free text this feature's own adversarial list shows can be a
+     * health disclosure.
+     */
+    console.error(
+      'diet advisor failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
+    return {
+      result,
+      summary: null,
+      caveat: null,
+      goal,
+      error: 'The coach could not put that into words. The figures above are still yours.',
     };
   }
 }

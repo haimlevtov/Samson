@@ -6,6 +6,7 @@ import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { CoachConsole, type CoachPersona } from './CoachConsole';
 import { ChatPanel } from './ChatPanel';
+import { DietPanel } from './DietPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,6 +156,15 @@ export default async function CoachPage() {
           </details>
         </>
       )}
+
+      {/*
+       * ADR 0024. Below the plan and above the chat: it is a figure like the
+       * plan is a figure, and the chat is the open-ended thing that belongs
+       * last. It renders whether or not a plan exists — the target is computed
+       * from Settings and the training log, not from a block.
+       */}
+      <h2 className="section">Eating</h2>
+      <DietPanel />
 
       <ChatPanel />
     </>
