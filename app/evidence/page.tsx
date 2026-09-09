@@ -2,85 +2,25 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { loadEvidence, type EvidenceGrade, type EvidenceRow } from '@/src/db/evidence';
-import { doiUrl } from '@/src/evidence/doi';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { EvidenceBody } from '@/src/ui/EvidenceCard';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Supplements — Samson' };
 
 /**
- * What a grade means, in the reader's language.
+ * One row, rendered by the shared component in src/ui/EvidenceCard.tsx.
  *
- * WHY the wording matters more than the letter: "C" tells a reader nothing on
- * its own, and a table of letters invites them to read A as "buy this" and
- * ignore the rest. ADR 0023's grade definitions, said in one line each.
+ * WHY it moved: the coach's supplement panel needs the same row, and its first
+ * copy of this markup already dropped the grade LABEL — leaving a bare letter,
+ * which the .evidence-grade rule in globals.css calls out as the thing not to
+ * do. Two copies of a health-claim card is one copy too many.
  */
-const GRADE_LABEL: Record<EvidenceGrade, string> = {
-  A: 'Well established',
-  B: 'Established, narrowly',
-  C: 'Mixed or limited',
-  D: 'Not supported',
-};
-
-function GradeChip({ grade }: { grade: EvidenceGrade }) {
-  return (
-    <span className={`evidence-grade is-${grade.toLowerCase()}`}>
-      {/*
-       * INVARIANT: state is never carried by colour alone —
-       *            docs/specs/mobile-interface.md §3. The letter and the words
-       *            both say it, so the chip still works in greyscale.
-       */}
-      <strong>{grade}</strong> {GRADE_LABEL[grade]}
-    </span>
-  );
-}
-
 function EvidenceCard({ row }: { row: EvidenceRow }) {
-  const href = doiUrl(row.doi);
-
   return (
     <li className="card evidence-row">
-      <div className="evidence-head">
-        <h3>{row.supplement}</h3>
-        <GradeChip grade={row.grade} />
-      </div>
-
-      <p className="evidence-claim">{row.claim}</p>
-
-      {row.dose !== null && (
-        <p className="muted small">
-          <span className="label inline">Dose</span> {row.dose}
-        </p>
-      )}
-
-      {row.caution !== null && (
-        <p className="muted small evidence-caution">
-          <span className="label inline">Worth knowing</span> {row.caution}
-        </p>
-      )}
-
-      {/*
-       * The citation is a link because the whole argument of ADR 0023 is that a
-       * reader can check the row. A DOI they cannot click is a decoration — and
-       * `.evidence-cite` is what gives it the 44px target that a 13px line of
-       * text does not have on its own (mobile-interface.md §3).
-       *
-       * `href` is null only if a row reached here with a DOI that is not one,
-       * which `loadEvidence` already refuses to return. Rendered as plain text
-       * rather than as a dead link if it ever happens.
-       */}
-      {href === null ? (
-        <p className="muted small">
-          {row.sourceTitle} ({row.sourceYear})
-        </p>
-      ) : (
-        <p className="muted small evidence-cite">
-          <a href={href} target="_blank" rel="noreferrer noopener">
-            {row.sourceTitle} ({row.sourceYear})
-          </a>
-        </p>
-      )}
+      <EvidenceBody row={row} />
     </li>
   );
 }
@@ -90,13 +30,18 @@ function EvidenceCard({ row }: { row: EvidenceRow }) {
  *
  * INVARIANT: content lives in the database — CLAUDE.md #7. Every claim, grade,
  *            dose and citation on this page is a row. Nothing here is written in
- *            code except the labels for the grades.
+ *            code except the labels for the grades, which now live in
+ *            `src/ui/EvidenceCard.tsx` because the coach renders the same rows.
+ *
+ * Phase 6 gave the rows a second entry point: the supplement panel on `/coach`
+ * asks a question and shows ONE row, verbatim, through the same component. This
+ * page is still the way to read all of them, and both links come from Coach.
  *
  * AI-NOTE: a sub-route reached from Coach, deliberately not a sixth tab — five
  *          is the budget ADR 0012 set, and `/settings` and `/progression-trees`
- *          are the precedents. The link on Coach is the only way in, so
- *          `OWNED_BY` in src/ui/tabs.ts must carry it or the orphan-link guard
- *          in tests/unit/invariants.test.ts cannot see this page.
+ *          are the precedents. Both links into it are on Coach, so `OWNED_BY` in
+ *          src/ui/tabs.ts must carry it or the orphan-link guard in
+ *          tests/unit/invariants.test.ts cannot see this page.
  */
 export default async function EvidencePage() {
   const db = await createServerDb();

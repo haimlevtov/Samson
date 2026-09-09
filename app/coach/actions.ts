@@ -133,8 +133,20 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
       return { turns: trim(withUser), error: cause.message };
     }
 
-    // The detail is kept, just not sent to the browser.
-    console.error('coach chat failed', cause);
+    /*
+     * The NAME and a bounded message, never the object — the same treatment
+     * `askDietAdvisor` gained in PR 4, applied here because the asymmetry was
+     * the finding. `LlmCallFailedError` declares `attempts: LlmCallInsert[]`,
+     * an enumerable own property Node prints after the stack, and every one of
+     * those rows carries `user_id`. Logging `cause` wrote the user's auth UUID
+     * into the server log up to three times per failure, plus up to 500
+     * characters of upstream body — which providers commonly fill with the
+     * request they rejected.
+     */
+    console.error(
+      'coach chat failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
     return {
       turns: trim(withUser),
       error: 'The coach could not answer that one. Try again in a moment.',
@@ -286,11 +298,17 @@ export async function askAboutSupplement(
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const parsed = dietQuestionSchema.safeParse(formData.get('question') ?? '');
+  const raw = formData.get('question') ?? '';
+  const parsed = dietQuestionSchema.safeParse(raw);
   if (!parsed.success) {
+    // Two failures, two sentences. A File or a repeated field fails on TYPE, and
+    // telling that user their question was too long is simply false.
     return {
       ...EMPTY_SUPPLEMENT,
-      error: `That is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`,
+      error:
+        typeof raw === 'string'
+          ? `That is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`
+          : 'That did not arrive as text. Type a question into the box.',
     };
   }
 
@@ -302,9 +320,15 @@ export async function askAboutSupplement(
    */
   if (question === null) return EMPTY_SUPPLEMENT;
 
-  const { rows } = await loadEvidence(db);
-
   try {
+    /*
+     * Inside the try, deliberately. `loadEvidence` throws with the raw Postgres
+     * message, and an escaped rejection bypasses the generic error state the
+     * rest of this action is careful to build — the class `sendChatMessage`'s
+     * own comment is about.
+     */
+    const { rows } = await loadEvidence(db);
+
     const answer = await lookUpSupplement(user.id, rows, question, {
       call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
     });
@@ -312,7 +336,6 @@ export async function askAboutSupplement(
     return {
       row: answer.row,
       message: answer.message,
-      question,
       error: null,
       asked: true,
     };
@@ -320,7 +343,7 @@ export async function askAboutSupplement(
     // The name and a bounded message, never the object — see `askDietAdvisor`
     // for what an unbounded one puts in the log.
     if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
-      return { ...EMPTY_SUPPLEMENT, question, asked: true, error: cause.message };
+      return { ...EMPTY_SUPPLEMENT, asked: true, error: cause.message };
     }
 
     console.error(
@@ -329,7 +352,6 @@ export async function askAboutSupplement(
     );
     return {
       ...EMPTY_SUPPLEMENT,
-      question,
       asked: true,
       error: 'That lookup did not work. The Supplements page lists every row in the table.',
     };
@@ -396,7 +418,12 @@ export async function deliverForPersona(
       return { ...EMPTY_DELIVERY, personaSlug: slug, error: cause.message };
     }
 
-    console.error('persona delivery failed', cause);
+    // Name and bounded message only — see `sendChatMessage` for what the object
+    // carries. This was the third site with the same leak.
+    console.error(
+      'persona delivery failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
     return {
       ...EMPTY_DELIVERY,
       personaSlug: slug,

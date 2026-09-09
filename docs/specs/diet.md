@@ -261,7 +261,9 @@ responses**, which is a different thing from the page at `/evidence`. ADR 0023 i
 the contract for what a row means; this is what happens when one is asked for.
 
 **The model's entire output is a slug.** `supplementReplySchema` is
-`z.enum([NO_MATCH, ...slugs])` built from the rows actually presented, so:
+`z.strictObject({ slug: z.enum([NO_MATCH, ...slugs]) })`, built from the rows
+actually presented — `strictObject` so nothing rides along beside the slug, and
+the enum so the slug itself is an allowlist. So:
 
 - there is **no text field**, and therefore no generated sentence to guard, to
   discard, or to render by accident;
@@ -276,9 +278,22 @@ citation, because the model chooses a row rather than describing one. Claims are
 fenced and per-field sanitised: they are the project's own rows, but every one
 paraphrases a source nobody here read in full.
 
-`NO_MATCH` renders a constant pointing at `/evidence`. An empty table calls no
-model at all, because `z.enum` cannot be built from an empty list and paying for
-a lookup against nothing would be worse than the error.
+**The claim cap is 280 characters, not `MAX_FIELD_CHARS`.** That constant is 120
+and is sized for an exercise name; ten of the thirteen shipped claims are longer
+than it, so every one reached the model truncated mid-sentence. The
+`eaa-supplementation` row was cut at _"Whether that beats simply eating …"_,
+severing the negation — so the selector read an endorsement. The user still saw
+the whole row; the **selection** was made on inverted text.
+
+`NO_MATCH` renders a constant, with the link to `/evidence` beside it as a real
+anchor rather than a word in the string. An empty table calls no model at all,
+because `z.enum` cannot be built from an empty list and paying for a lookup
+against nothing would be worse than the error.
+
+**One row is rendered by the same component `/evidence` uses**
+(`src/ui/EvidenceCard.tsx`), including the grade's LABEL. A copy of that markup
+dropped it on its first outing, and `app/globals.css` states the invariant on the
+`.evidence-grade` rule itself: state is never carried by colour alone.
 
 **It logs under `stage: 'diet'`** and deliberately gains no stage of its own,
 which would need an `llm_calls.stage` migration. The cost is real: the per-stage

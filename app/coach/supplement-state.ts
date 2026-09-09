@@ -16,8 +16,6 @@ export interface SupplementState {
   row: EvidenceRow | null;
   /** The constant shown when no row matched, or an error. Never a generation. */
   message: string | null;
-  /** Echoed back so the box keeps what was typed across a round trip. */
-  question: string;
   error: string | null;
   /** False until the user asks, so "no match" and "not asked yet" differ. */
   asked: boolean;
@@ -26,7 +24,6 @@ export interface SupplementState {
 export const EMPTY_SUPPLEMENT: SupplementState = {
   row: null,
   message: null,
-  question: '',
   error: null,
   asked: false,
 };

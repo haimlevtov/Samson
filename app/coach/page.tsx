@@ -37,7 +37,7 @@ export default async function CoachPage() {
           </span>
         </div>
         {/*
-         * The only way into /evidence — ADR 0023, and `OWNED_BY` in
+         * One of two ways into /evidence — ADR 0023, and `OWNED_BY` in
          * src/ui/tabs.ts carries the route so the orphan-link guard in
          * tests/unit/invariants.test.ts can see it.
          *

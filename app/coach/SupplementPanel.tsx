@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { MAX_DIET_QUESTION_CHARS } from '@/src/llm/config';
-import { doiUrl } from '@/src/evidence/doi';
+import { EvidenceBody } from '@/src/ui/EvidenceCard';
 import { askAboutSupplement } from './actions';
 import { EMPTY_SUPPLEMENT, type SupplementState } from './supplement-state';
 
@@ -31,7 +31,6 @@ export function SupplementPanel() {
   );
 
   const row = state.row;
-  const href = row === null ? null : doiUrl(row.doi);
 
   return (
     <details className="plan-disclosure card">
@@ -48,8 +47,7 @@ export function SupplementPanel() {
               name="question"
               type="text"
               maxLength={MAX_DIET_QUESTION_CHARS}
-              defaultValue={state.question}
-              placeholder="Does creatine actually do anything?"
+              placeholder="Does it actually do anything?"
               autoComplete="off"
             />
           </label>
@@ -69,51 +67,27 @@ export function SupplementPanel() {
           </p>
         ) : null}
 
+        {/*
+         * The SAME component `/evidence` renders — src/ui/EvidenceCard.tsx.
+         *
+         * FOUND IN REVIEW: this was a copy, and it had already dropped the grade
+         * LABEL on its first outing, leaving a bare letter. `app/globals.css`
+         * states the invariant on the `.evidence-grade` rule itself — state is
+         * never carried by colour alone — and only A and D are tinted, so a B or
+         * C row rendered as a lone grey character. Two copies of a health-claim
+         * card is one copy too many.
+         */}
         {row !== null ? (
           <div className="card evidence-row">
-            <div className="evidence-head">
-              <h3>{row.supplement}</h3>
-              <span className={`evidence-grade is-${row.grade.toLowerCase()}`}>
-                <strong>{row.grade}</strong>
-              </span>
-            </div>
-
-            <p className="evidence-claim">{row.claim}</p>
-
-            {row.dose !== null ? (
-              <p className="muted small">
-                <span className="label inline">Dose</span> {row.dose}
-              </p>
-            ) : null}
-
-            {row.caution !== null ? (
-              <p className="muted small evidence-caution">
-                <span className="label inline">Worth knowing</span> {row.caution}
-              </p>
-            ) : null}
-
-            {/*
-             * The citation is a link for the reason ADR 0023 gives: a reader who
-             * cannot check the row is being asked to take it on trust, which is
-             * the thing the table exists not to ask. `href` is null only for a
-             * DOI that is not one, which `loadEvidence` already refuses to
-             * return.
-             */}
-            {href === null ? (
-              <p className="muted small">
-                {row.sourceTitle} ({row.sourceYear})
-              </p>
-            ) : (
-              <p className="muted small evidence-cite">
-                <a href={href} target="_blank" rel="noreferrer noopener">
-                  {row.sourceTitle} ({row.sourceYear})
-                </a>
-              </p>
-            )}
+            <EvidenceBody row={row} />
           </div>
         ) : null}
 
-        {state.message !== null ? <p className="muted">{state.message}</p> : null}
+        {state.message !== null ? (
+          <p className="muted">
+            {state.message} <a href="/evidence">the whole table is here</a>.
+          </p>
+        ) : null}
         {state.error !== null ? <p className="error small">{state.error}</p> : null}
       </div>
     </details>

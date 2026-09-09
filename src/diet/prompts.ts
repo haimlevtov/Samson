@@ -11,9 +11,15 @@
  *            returns rather than reaching into the target itself.
  */
 import { MAX_DIET_QUESTION_CHARS } from '../llm/config';
-import { MAX_PAYLOAD_CHARS, fenceUntrusted } from '../llm/safety';
+import {
+  MAX_FIELD_CHARS,
+  MAX_PAYLOAD_CHARS,
+  fenceUntrusted,
+  sanitizeUntrusted,
+} from '../llm/safety';
 import type { ChatMessage } from '../llm/types';
 import type { DietFacts } from './energy';
+import { NO_MATCH } from './schema';
 
 /**
  * WHY the rules are stated here as well as enforced in code: the same reasoning
@@ -104,4 +110,78 @@ export function dietMessages(facts: DietFacts, question: string | null): ChatMes
  */
 export function numeralCorrection(): string {
   return 'That reply contained a digit. This stage may not state any figure at all, in any script — the application prints them. Say it in words: "a modest deficit", "a little above what you burn". Reply with JSON matching the schema exactly, and nothing else.';
+}
+
+/* ---- the supplement lookup — ADR 0023, docs/specs/diet.md §4b ------------ */
+
+/**
+ * WHY the rules are stated here as well as enforced in code: the same reasoning
+ * as `DIET_SYSTEM` above.
+ *
+ * AI-NOTE: nothing in this string is a control. The control is that
+ *          `supplementReplySchema` in `./schema.ts` admits only slugs from the
+ *          list actually sent, so a slug the model invents fails validation in
+ *          the gateway rather than reaching a query.
+ */
+export const SUPPLEMENT_SYSTEM = `You are a lookup. A list of supplement rows follows, each with a slug, a name and the claim the row makes. A question follows it.
+
+Return the slug of the ONE row that answers the question, or "${NO_MATCH}" if none of them does.
+
+Return "${NO_MATCH}" when the question is about a supplement that is not in the list, about something that is not a supplement at all, or about anything other than what these rows cover. A near miss is a miss: do not return the closest row because it is closest.
+
+You write no answer. The application prints the row you name, in the row's own words, and prints a fixed sentence when you name none. Nothing you could write would be shown, so there is nothing to be gained by trying.
+
+Reply with JSON only.`;
+
+const CANDIDATES_LABEL = 'the rows available, as data';
+const SUPPLEMENT_QUESTION_LABEL = 'the question to look up';
+
+/**
+ * How much of a claim the model is shown.
+ *
+ * FOUND IN REVIEW, by both reviewers independently, and `MAX_FIELD_CHARS` (120)
+ * was the wrong cap: **ten of the thirteen shipped claims are longer than that**,
+ * up to 202 characters, so every one arrived truncated mid-sentence. The
+ * `eaa-supplementation` row was cut at "Whether that beats simply eating …",
+ * severing the negation — so the model chose that row from text reading as an
+ * endorsement. That is the softened claim ADR 0023 exists to prevent, arriving
+ * by truncation instead of by paraphrase. The user still saw the whole row; the
+ * SELECTION was made on inverted text.
+ *
+ * `MAX_FIELD_CHARS` is sized for an exercise name. 280 is headroom over the
+ * longest shipped claim rather than a target.
+ *
+ * AI-NOTE: if a claim ever approaches this, shorten the claim rather than
+ *          raising the number — one too long to read is too long to choose
+ *          between.
+ */
+export const MAX_CLAIM_CHARS = 280;
+
+/**
+ * The candidates, as the model sees them.
+ *
+ * Fenced, and this content genuinely is third-party: every claim paraphrases a
+ * source nobody on this project read in full — ADR 0023's whole subject.
+ * Sanitised per field, because one enormous claim would push the rules out of
+ * attention on its own.
+ *
+ * Slug, name and claim only. The dose, the caution, the grade and the citation
+ * are what the ANSWER renders, and the model chooses a row rather than
+ * describing one, so they never need to cross the wire.
+ */
+export function candidatesBlock(
+  rows: readonly { slug: string; supplement: string; claim: string }[]
+): string {
+  const candidates = rows.map((row) => ({
+    slug: row.slug,
+    supplement: sanitizeUntrusted(row.supplement, MAX_FIELD_CHARS),
+    claim: sanitizeUntrusted(row.claim, MAX_CLAIM_CHARS),
+  }));
+
+  return fenceUntrusted(CANDIDATES_LABEL, JSON.stringify(candidates), MAX_PAYLOAD_CHARS);
+}
+
+/** The question, fenced with its cap stated — the house pattern above. */
+export function supplementQuestionBlock(question: string): string {
+  return fenceUntrusted(SUPPLEMENT_QUESTION_LABEL, question, MAX_DIET_QUESTION_CHARS);
 }
