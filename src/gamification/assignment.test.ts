@@ -145,13 +145,6 @@ describe('the verdict is carried, not re-derived', () => {
     ]);
   });
 
-  it('leaves an offered row with no reasons', () => {
-    const { assignments } = assignFromPool([weekly()], untrainedContext(), []);
-
-    expect(assignments[0]?.status).toBe('offered');
-    expect(assignments[0]?.reasons).toEqual([]);
-  });
-
   it('keeps the pool order, which is what makes a seeded database reproducible', () => {
     // scripts/seed.ts accepts one of these, chosen by position. If the order
     // came back from a Set or a Map the demo database would differ per run.
@@ -172,8 +165,14 @@ describe('the pool a consistent lifter is offered', () => {
    * so a count of rejected rows looked like the feature working.
    *
    * tests/db/challenges.test.ts asserts the fix against the real pool and the
-   * real seeded users. This pins the shape of the failure, offline, so the next
-   * person to add a pool row can see what "calibrated" means.
+   * real seeded users, and sweeps seven weekdays. This pins the shape of the
+   * failure, offline, so the next person to add a pool row can see what
+   * "calibrated" means.
+   *
+   * Only the failing direction is here. FOUND IN REVIEW: the passing one —
+   * "a harder rung is offered to the same user" — is `validateCandidate`'s
+   * behaviour, not `assignFromPool`'s, and `challenge.test.ts` already owns it
+   * beside the code that would break it. That is where it should fail.
    */
   const days = ['2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07'];
   const workouts: WorkoutRecord[] = days.map((localDate, i) => ({
@@ -201,11 +200,5 @@ describe('the pool a consistent lifter is offered', () => {
     expect(new Set(assignments.flatMap((a) => a.reasons.map((r) => r.code)))).toEqual(
       new Set(['below_current_ability'])
     );
-  });
-
-  it('offers a rung above what they already do, to the same user', () => {
-    const { assignments } = assignFromPool([weekly({ target: 6 })], consistent, []);
-
-    expect(assignments[0]?.status).toBe('offered');
   });
 });

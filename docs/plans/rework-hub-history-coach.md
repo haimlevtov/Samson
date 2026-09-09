@@ -14,7 +14,7 @@ because several of them touch the same surface.
 | --- | ----------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
 | 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                        |
 | 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | planned                                                              |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | planned                                                              |
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned                                                              |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
@@ -131,13 +131,20 @@ below was written on that assumption and measurement contradicted it.
   the more rigorous claim and is false. **Measured before writing any code**, by
   running each archetype's real generated history through the real validator:
 
-  | Archetype      | Offered | Rejected | Why                           |
-  | -------------- | ------- | -------- | ----------------------------- |
-  | `beginner`     | **0**   | 7        | all `below_current_ability`   |
-  | `plateaued`    | **0**   | 7        | all `below_current_ability`   |
-  | `home-gym`     | **0**   | 7        | all `below_current_ability`   |
-  | `returning`    | 4       | 3        | mid-layoff, so little to beat |
-  | `inconsistent` | 4       | 3        | same                          |
+  | Archetype      | Offered | Rejected | Why                                           |
+  | -------------- | ------- | -------- | --------------------------------------------- |
+  | `beginner`     | **0**   | 7        | all `below_current_ability`                   |
+  | `plateaued`    | **0**   | 7        | all `below_current_ability`                   |
+  | `home-gym`     | **0**   | 7        | all `below_current_ability`                   |
+  | `returning`    | 5       | 2        | 2 sessions in the rolling week, streak broken |
+  | `inconsistent` | 5       | 2        | same                                          |
+
+  _The last two rows first read 4/3, "mid-layoff, so little to beat" — wrong on
+  both counts, found by a reviewer re-running the measurement. The counts came
+  from a miscount off the probe's own output; `inconsistent` has no layoff at
+  all (adherence 0.5), and `returning`'s ended seven weeks before the window
+  being measured. What actually clears the low bar for both is a rolling week
+  holding two sessions and a streak of zero. CI's seed log agrees with 5/2._
 
   `20260902090200_challenge_pool.sql` does ship seven rows covering every kind
   the validator supports — that part was right. What neither version checked is
@@ -558,3 +565,82 @@ to avoid.
 session, and a password is not something this agent types. The plan says this
 should be cleared **before** PR 2 rather than after PR 8, and it has not been —
 so the debt this PR was supposed to start paying down is instead one PR larger.
+
+### PR 3 — challenges and quests, 2026-09-09
+
+**`npm run seed` now fills all three of the Hub's buckets for all five demo
+users.** CI's own log, which is the verification rather than a claim about it:
+
+```
+beginner      3 offered / 1 active / 7 rejected
+plateaued     3 offered / 1 active / 7 rejected
+returning     8 offered / 1 active / 2 rejected
+home-gym      3 offered / 1 active / 7 rejected
+inconsistent  8 offered / 1 active / 2 rejected
+```
+
+Seed took 5s against the 60s budget; `npm run test:db` passes 209 tests, and
+`npm run verify` 1043 across 46 files.
+
+**The plan's own PR 3 bullet was wrong, and had already been corrected once into
+a different wrong answer.** "The gap is assignment, and only assignment" was
+false: three of five archetypes were offered NOTHING, because every pool target
+sat at or below a consistent lifter's rolling week and `validateCandidate`
+rejects what a user already does. Measuring before writing is what caught it —
+the bullet had been reasoned about twice and measured zero times.
+
+**What shipped:** four pool rows above the top archetype's week, one shared
+`assignFromPool` used by both the cron and the seeder, and a seeder that accepts
+one challenge through `accept_challenge` as the signed-in archetype rather than
+inserting `status: 'active'`.
+
+**What review changed.**
+
+- **Two rows of this document's own measurement table were wrong**, found by a
+  reviewer re-running it. `returning` and `inconsistent` are 5 offered / 2
+  rejected, not 4/3 — a miscount off my own probe output, which CI's seed log
+  then contradicted in plain sight. The "Why" column was wrong too:
+  `inconsistent` has no layoff at all. Corrected in place, with the error kept.
+- **The migration's calibration numbers came from one date.** The weekly hard-set
+  peak is 23, not the 20 I wrote; a single reading is not a margin when
+  `generateHistory` drops days by `chance(rng, adherence)`. Re-measured as
+  maxima over 28 consecutive seed dates.
+- **The spec claimed weekly rows are stable across weekdays.** They are not, for
+  the same reason. That paragraph would have told the next author to skip the
+  weekday re-check the migration says is mandatory.
+- **"Verified on all seven weekdays" was asserted in three places and tested in
+  none** — in a PR whose whole design rationale was a pure function that makes
+  exactly that assertable. `tests/db/challenges.test.ts` now sweeps it.
+- **The seeder wrote challenge windows from a UTC date** and
+  `accept_challenge` judges them against the user's local one (CLAUDE.md #9).
+  West of UTC that made a challenge acceptable a local day early; east of it,
+  after 21:00 UTC, a daily row was born closed. Fixed at source with a shared
+  `localDateIn` — which turned out to be a _third_ definition of "today there",
+  so `src/db/server.ts` and the cron now delegate to one.
+- **Two of my twelve unit tests could not fail for anything this code owns**,
+  which is the class PR 2's Outcome above records deleting. Deleted, with a note
+  saying where the property belongs.
+- **The cron logged `display_name`** — user-authored personal data — for every
+  user into a retained Actions log, and my new error message added a carrier.
+  Now the id prefix.
+- **My new `throw` aborted the batch mid-run**, after settlement had paid XP for
+  earlier users, so one bad row denied everyone after it that week's challenges.
+  Collected and reported at the end instead.
+- Also: the migration's serial collided with 0036; `.insert(rows as never)`
+  disabled type checking on `user_id` in a service-role write; two db tests used
+  the service role to assert a boundary the service role bypasses; a test name
+  claimed to prove something nothing records; and README, FRAMING's
+  invented-content list and the plans index were all stale.
+
+**The one judgment call, flagged rather than buried:** `weekly-eight-hard-sets`
+pays 110 and the new `weekly-twenty-five-hard-sets` pays 140, and a user may
+hold both — so more sets can mean more XP, which is the shape invariant #4
+exists to forbid. The ruling, written into the spec beside the existing volume-
+tier argument: what #4 forbids is XP that _scales_, and each challenge pays flat
+at a threshold, is opt-in, and is clamped by the weekly ceiling. The honest
+limit is recorded with it — a stepped ladder is still weakly monotonic in
+volume, and the rung above 25 would need a second look.
+
+**Not verified:** the browser pass at 375×812. `/hub` needs a session. This is
+the third consecutive PR to leave that debt, and PR 3 is the one that puts real
+content on the surface it would check.

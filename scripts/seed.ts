@@ -24,13 +24,14 @@ import {
   type GeneratedWorkout,
 } from '../src/seed/archetypes';
 import { assignFromPool, type PoolTemplate } from '../src/gamification/assignment';
+import { localDateIn } from '../src/metrics/dates';
 import type { ChallengeContext } from '../src/gamification/challenge';
 import { mulberry32 } from '../src/seed/rng';
 import { createAnonClient, createUserClient, supabaseUrl, type Db } from '../src/db/client';
 import { buildPlannerContext } from '../src/planner/context';
 import { candidatesFor } from '../tests/planner/golden';
 import { compliantBlock } from '../tests/planner/stub-planner';
-import type { Database } from '../src/db/types';
+import type { Database, Json } from '../src/db/types';
 
 config({ path: '.env.local', quiet: true });
 
@@ -450,7 +451,6 @@ async function seedArchetype(
     user,
     archetype,
     userId,
-    endDate,
     history,
     exerciseBySlug,
     pool,
@@ -465,6 +465,16 @@ async function seedArchetype(
   };
 }
 
+interface ChallengeSeed {
+  admin: Admin;
+  user: Db;
+  archetype: Archetype;
+  userId: string;
+  history: readonly GeneratedWorkout[];
+  exerciseBySlug: Map<string, string>;
+  pool: readonly PoolTemplate[];
+}
+
 /**
  * The Hub's three buckets, for one archetype.
  *
@@ -472,28 +482,18 @@ async function seedArchetype(
  * cron, and `npm run seed` has never called it — so every demo user opened a Hub
  * with three empty lists. Nothing was broken; nothing had ever created a row.
  *
- * INVARIANT: the decision is `assignFromPool`, the same function
- *            scripts/generate-challenges.ts uses. A second copy here would let
- *            the demo database and the cron disagree about what gets offered,
- *            and the disagreement would be invisible.
+ * INVARIANT: the DECISION is `assignFromPool`, the same function
+ *            scripts/generate-challenges.ts uses, so the demo database and the
+ *            cron cannot disagree about what a given history is offered. The
+ *            INPUTS still differ — this passes an empty `alreadyAssigned`
+ *            because a freshly seeded user owns nothing — so sharing the
+ *            function narrows the drift rather than eliminating it.
  */
-interface ChallengeSeed {
-  admin: Admin;
-  user: Db;
-  archetype: Archetype;
-  userId: string;
-  endDate: string;
-  history: readonly GeneratedWorkout[];
-  exerciseBySlug: Map<string, string>;
-  pool: readonly PoolTemplate[];
-}
-
 async function seedChallenges({
   admin,
   user,
   archetype,
   userId,
-  endDate,
   history,
   exerciseBySlug,
   pool,
@@ -501,11 +501,20 @@ async function seedChallenges({
   /*
    * The same context the cron builds, from memory rather than from a re-read.
    *
-   * `asOf` is `endDate` and not the archetype's local today, deliberately: the
-   * history was GENERATED to end on `endDate`, so validating against a date a
-   * day either side of it would ask whether the user already meets a challenge
-   * over a window their seeded history does not cover.
+   * INVARIANT: the window is written from the USER'S local date, never the
+   *            server's — CLAUDE.md #9, and `accept_challenge` compares
+   *            `window_end` against exactly this. FOUND IN REVIEW: this used
+   *            `endDate`, a UTC date. West of UTC that made a challenge
+   *            acceptable through the whole of the user's previous local day;
+   *            east of it, after 21:00 UTC, every daily row's window was
+   *            already closed when it was written.
+   *
+   * The history was generated to end on `endDate`, so for a zone ahead of UTC
+   * this window can include one day the seeded history does not cover. That
+   * lowers measured progress slightly, which can only make a challenge MORE
+   * likely to be offered — never less, and never wrongly rejected.
    */
+  const asOf = localDateIn(archetype.timezone);
   const sets = history.flatMap((workout) =>
     workout.sets.map((set) => ({
       /*
@@ -535,7 +544,7 @@ async function seedChallenges({
     // Plausibility judges a set against the user's own record, and at
     // assignment time there is no "new" set to hold apart — same as the cron.
     history: sets,
-    asOf: endDate,
+    asOf,
     availableExerciseIds: [...new Set(sets.map((set) => set.exerciseId))],
   };
 
@@ -545,14 +554,21 @@ async function seedChallenges({
     user_id: userId,
     slug: row.slug,
     kind: row.kind,
-    spec: row.spec,
     status: row.status,
     window_start: row.windowStart,
     window_end: row.windowEnd,
-    // The generated Json type takes an index-signature shape rather than an
-    // interface with named fields. The cast is at the jsonb boundary, where the
-    // column genuinely is untyped.
-    validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })),
+    /*
+     * The generated `Json` type takes an index-signature shape rather than an
+     * interface with named fields, so these two need a cast and the rest of the
+     * row does not.
+     *
+     * FOUND IN REVIEW: the insert used to cast the WHOLE payload with
+     * `as never`, which turned off type checking on the one service-role write
+     * that creates rows RLS forbids the app to create — including on
+     * `user_id`. Narrow casts keep that field checked.
+     */
+    spec: row.spec as unknown as Json,
+    validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })) as Json,
   }));
   /*
    * A direct insert rather than `insertBatched`, because the ids come back and
@@ -561,7 +577,7 @@ async function seedChallenges({
    */
   const { data: written, error: writeErr } = await admin
     .from('challenges')
-    .insert(rows as never)
+    .insert(rows)
     .select('id, slug');
   if (writeErr) throw new Error(`challenges for ${archetype.key}: ${writeErr.message}`);
 
@@ -574,13 +590,12 @@ async function seedChallenges({
    * row written by hand is a state the app itself cannot produce, and the
    * accept path is what phase 5 shipped.
    *
-   * WHY a weekly one: `accept_challenge` refuses a challenge whose window_end
-   * is before the USER'S local today (CLAUDE.md #9), and `endDate` is a UTC
-   * date. Two archetypes live in Asia/Jerusalem, so a seed run after 21:00 UTC
-   * is already tomorrow for them and every daily row — window_end === endDate —
-   * would be refused. A weekly window has six days of slack. It also makes a
-   * better demo: the Hub shows partial progress from history the user already
-   * has, where a daily quest on a rest day shows zero.
+   * WHY a weekly one, now that the window is written from the user's own date
+   * and a daily row would be accepted too: a daily window is the single day the
+   * seeder ran, so it survives a midnight crossing between this insert and the
+   * RPC call a moment later by nothing at all, where a weekly one has six days
+   * of slack. It is also the better demo — the Hub shows partial progress from
+   * history the user already has, where a daily quest on a rest day shows zero.
    */
   let accepted = 0;
   const toAccept = offered.find((row) => row.kind === 'weekly') ?? offered[0];
@@ -766,7 +781,7 @@ async function main(): Promise<void> {
     spec: row.spec,
   }));
   if (pool.length === 0) {
-    throw new Error('the challenge pool is empty — has 20260902090200 been applied?');
+    throw new Error('the challenge pool is empty — have the migrations been applied?');
   }
 
   console.log('Seeding synthetic users, one session at a time');

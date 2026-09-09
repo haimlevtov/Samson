@@ -1,4 +1,4 @@
--- Samson 0036 — a second rung on the challenge pool
+-- Samson 0053 — a second rung on the challenge pool
 --
 -- INVARIANT: content lives in the database, not in code — CLAUDE.md #7.
 --
@@ -12,16 +12,21 @@
 -- code.
 --
 -- So the pool had one rung per kind rather than a ladder. These four clear the
--- top archetype's rolling week:
+-- top archetype's week. The numbers are the MAXIMUM `evaluateChallenge`
+-- returns across 28 consecutive seed dates x 5 archetypes — not one date's
+-- reading, which is how an earlier version of this comment came to say 20 for
+-- the weekly hard sets when the real peak is 23:
 --
---   sessions          4 is the most any archetype trains in a rolling 7 days
---   sets_at_rpe >= 8  20 is the most, by `plateaued`
---   distinct/day      4 is the most in a single session
---   sets_at_rpe/day   5 is the most in a single session
+--   sessions/week     4    target 5
+--   sets_at_rpe/week  23   target 25
+--   distinct/day      4    target 6
+--   sets_at_rpe/day   5    target 6
 --
--- Verified offered to all five archetypes on ALL SEVEN weekdays, because
--- `evaluateChallenge` measures a rolling window and a `daily` row therefore
--- swings with whether today is a training day.
+-- Across those 28 dates none of the four is ever rejected for any archetype.
+-- The sweep matters because the seed can run on any day and `generateHistory`
+-- drops scheduled days by `chance(rng, adherence)`, so BOTH the daily and the
+-- weekly figures move with the date — see tests/db/challenges.test.ts, which
+-- runs the same sweep rather than leaving this comment as the only record.
 --
 -- AI-NOTE: there is no second rung for `streak_days`, and one cannot be added.
 --          `maxAchievable` bounds it by `window_days`, the schema caps that at
@@ -33,9 +38,10 @@
 
 insert into public.challenges (user_id, slug, kind, spec, status)
 values
-  -- Daily quests for a day someone is already training. Both sit one above the
-  -- busiest single session any archetype logs, so they stay offerable on a
-  -- training day and are trivially offerable on a rest day.
+  -- Daily quests for a day someone is already training. Both sit above the
+  -- busiest single session any archetype logs — six movements against four,
+  -- six hard sets against five — so they stay offerable on a training day and
+  -- are trivially offerable on a rest day.
   (null, 'daily-six-movements', 'daily',
    '{"kind":"distinct_exercises","target":6,"window_days":1,"reward_xp":45,"rpe_at_least":null}'::jsonb,
    'offered'),

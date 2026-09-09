@@ -11,6 +11,7 @@
  */
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { localDateIn } from '../metrics/dates';
 import type { Db } from './client';
 import { supabaseAnonKey, supabaseUrl } from './client';
 import type { Database } from './types';
@@ -124,18 +125,17 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
 }
 
 /**
- * Today in the user's own timezone.
+ * Today in the user's own timezone, for the request path.
  *
  * INVARIANT: timestamps are UTC plus the user's IANA timezone, and calendar
  *            logic evaluates against the user's local date — CLAUDE.md #9.
  * WHY here rather than at each call site: a session started at 23:30 in
  * Jerusalem belongs to that day, not to whatever date the server is on.
+ *
+ * FOUND IN REVIEW: this was a second definition. It is now the app's name for
+ * `localDateIn`, which the batch scripts share — they cannot import this
+ * module at all, because it reaches for `next/headers`.
  */
 export function localDateFor(timezone: string, now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
+  return localDateIn(timezone, now);
 }

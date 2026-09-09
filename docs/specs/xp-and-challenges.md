@@ -416,7 +416,7 @@ lifter at all.** Not "fewer challenges" — none. Measured on the five seeded
 archetypes against the original seven-row pool, three of them were offered
 nothing, every candidate rejected under that one code.
 
-So the pool ships **two tiers per kind where a harder rung is expressible**:
+So the pool ships **a second rung wherever one is both expressible and needed**:
 
 | Tier       | Calibrated for                                      |
 | ---------- | --------------------------------------------------- |
@@ -428,14 +428,54 @@ nothing needs to. It is a statement about who the validator will let it reach,
 and the validator decides that per user from their own history. Adding a rung
 means adding a row above what the top archetype already does.
 
-**The window is rolling, so the seeded Hub is stable across weekdays.**
-`evaluateChallenge` measures backward from `asOf`, not from the start of the
-calendar week, so a 7-day window holds the same number of a fixed rotation's
-sessions on any day. Only `daily` rows swing — they see one day, so a rest day
-scores zero and a training day scores a full session. A pool row intended to be
-offerable to everyone therefore has to clear the top archetype's **rolling**
-week, and the seed's own coverage is checked on all seven weekdays rather than
-on whichever one it happened to be written.
+**Everything a pool row is calibrated against moves with the date, so a rung is
+checked across a week rather than on one day.** `evaluateChallenge` measures
+backward from `asOf`, which makes a `daily` row swing hardest — it sees one day,
+so a rest day scores zero and a training day a full session. _An earlier version
+of this paragraph said the weekly rows were steady in exchange. They are not:_
+`generateHistory` drops each scheduled day by `chance(rng, adherence)`, and
+adherence runs from 0.96 down to 0.5, so a rolling 7-day session count varies
+too. `tests/db/challenges.test.ts` sweeps seven consecutive `asOf` values for
+every archetype for exactly this reason; the numbers in a rung's migration are
+maxima over such a sweep, never one date's reading.
+
+**The hard-set ladder against invariant #4, because it is the closest this pool
+comes to paying for volume.** `weekly-eight-hard-sets` pays 110 and
+`weekly-twenty-five-hard-sets` pays 140, and a user may hold both — so more sets
+can mean more XP, which is the shape "XP derives from adherence, never volume"
+exists to forbid.
+
+The ruling, consistent with the volume-tier section above: **what #4 forbids is
+XP that _scales_ with volume**, because scaling makes one more set always the
+rational move. Each challenge pays a **flat** reward at a **threshold** — the
+26th hard set pays nothing, and the 40th pays nothing — so there is no marginal
+reward to farm. Three further bounds: a challenge only exists for a user the
+validator says does not already do it, nothing is paid unless they **accept**
+it, and `WEEKLY_XP_CEILING` clamps the total regardless.
+
+What that argument does **not** cover, and is the honest limit: a stepped ladder
+is still weakly monotonic in volume, and `sets_at_rpe` is the only kind with no
+`maxAchievable` bound — which is exactly why it is the only kind that can carry
+a rung for the strongest user. If the ladder is ever extended again, the rung
+above 25 is the one that needs a second look, not this one.
+
+**Which rungs exist, and which are missing on purpose.** Two kinds have a rung
+at both tiers (`sessions` weekly, `sets_at_rpe` at both windows) and three do
+not, for three different reasons — recorded here because "add a harder row" is
+not always available:
+
+| Missing rung                 | Why                                                               |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `sessions`, daily            | inexpressible — `maxAchievable` is `window_days`, so 1 is the cap |
+| `distinct_exercises`, weekly | expressible and not shipped; see below                            |
+| `streak_days`, any           | inexpressible for the users who need it; see below                |
+
+**A harder weekly `distinct_exercises` rung is expressible and is not here.**
+The archetypes do 8 distinct movements in a rolling week against an 11–12
+exercise bound, so a target of 9 or 10 would validate for them. It is left out
+because the three rungs that did ship already reach every archetype on every
+weekday, and an unnecessary row is content to keep calibrated forever. Stated
+rather than left to look like an oversight.
 
 **`streak_days` has no second rung, and cannot have one.** `maxAchievable`
 bounds it by `window_days`, the schema caps that at 14, and `evaluateChallenge`

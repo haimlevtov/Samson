@@ -49,9 +49,9 @@ import {
 } from '../src/gamification/challenge';
 import { assignFromPool } from '../src/gamification/assignment';
 import { settleChallenges, type AssignedChallenge } from '../src/gamification/settlement';
-import { startOfWeek } from '../src/metrics/dates';
+import { localDateIn, startOfWeek } from '../src/metrics/dates';
 import type { Database } from '../src/db/types';
-import type { LocalDate, SetRecord, WorkoutRecord } from '../src/metrics/types';
+import type { SetRecord, WorkoutRecord } from '../src/metrics/types';
 
 config({ path: '.env.local', quiet: true });
 
@@ -65,22 +65,12 @@ function admin() {
   return createClient<Database>(url, key, { auth: { persistSession: false } });
 }
 
-/** Today in the user's timezone, without pulling in a date library. */
-function localToday(timezone: string): LocalDate {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
-  } catch {
-    // An unknown IANA zone must not fail the whole batch for every other user.
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date());
-  }
-}
-
 async function main(): Promise<void> {
   const db = admin();
 
   const [{ data: pool, error: poolErr }, { data: users, error: userErr }] = await Promise.all([
     db.from('challenges').select('slug, kind, spec').is('user_id', null),
-    db.from('users').select('user_id, timezone, display_name'),
+    db.from('users').select('user_id, timezone'),
   ]);
   if (poolErr) throw new Error(`reading pool: ${poolErr.message}`);
   if (userErr) throw new Error(`reading users: ${userErr.message}`);
@@ -95,9 +85,19 @@ async function main(): Promise<void> {
   let settled = 0;
   let assigned = 0;
   let rejected = 0;
+  /*
+   * Collected rather than thrown, and reported at the end.
+   *
+   * FOUND IN REVIEW: throwing here aborted the batch mid-pass, AFTER settlement
+   * had already paid XP for earlier users — so one bad row denied every later
+   * user that week's challenges. Re-running converges (the status filter is the
+   * idempotency guard) but only if somebody notices, and a batch that stops
+   * halfway is exactly the run nobody reads to the end.
+   */
+  const writeFailures: string[] = [];
 
   for (const user of users ?? []) {
-    const asOf = localToday(user.timezone ?? 'UTC');
+    const asOf = localDateIn(user.timezone ?? 'UTC');
 
     const [{ data: workouts }, { data: sets }, { data: owned }] = await Promise.all([
       db.from('workouts').select('id, local_date, status').eq('user_id', user.user_id),
@@ -132,7 +132,15 @@ async function main(): Promise<void> {
     context.history = context.sets;
 
     const already = new Set((owned ?? []).map((c) => c.slug));
-    const label = user.display_name ?? user.user_id.slice(0, 8);
+    /*
+     * The id prefix, never the display name.
+     *
+     * FOUND IN REVIEW: this logged `display_name` — user-authored personal
+     * data — for every user on every run, into a GitHub Actions log that is
+     * retained and read by a human. A short id is enough to follow one user
+     * down the report and to look them up, and it is not their name.
+     */
+    const label = user.user_id.slice(0, 8);
 
     /*
      * Settle before generating.
@@ -245,9 +253,9 @@ async function main(): Promise<void> {
         // boundary, where the column genuinely is untyped.
         validation_reasons: row.reasons.map((r) => ({ code: r.code, detail: r.detail })),
       });
-      // FOUND WHILE EXTRACTING THIS: both inserts discarded their result, so a
+      // WHY the result is read at all: both inserts used to discard it, so a
       // failed write was reported to the Actions log as an assignment.
-      if (writeErr) throw new Error(`writing ${row.slug} for ${label}: ${writeErr.message}`);
+      if (writeErr) writeFailures.push(`${label} · ${row.slug}: ${writeErr.message}`);
     }
   }
 
