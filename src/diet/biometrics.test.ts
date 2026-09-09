@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  BODYWEIGHT_SCALE,
   EARLIEST_BIRTH_DATE,
+  HEIGHT_SCALE,
   MAX_BODYWEIGHT_KG,
   MAX_HEIGHT_CM,
   SEXES,
@@ -17,7 +19,8 @@ import {
   measurementField,
 } from './biometrics';
 
-const weight = measurementField(MAX_BODYWEIGHT_KG, 'kg');
+const weight = measurementField(MAX_BODYWEIGHT_KG, 'kg', BODYWEIGHT_SCALE);
+const height = measurementField(MAX_HEIGHT_CM, 'cm', HEIGHT_SCALE);
 const birthDate = birthDateField();
 
 /** The parsed value, or the symbol REJECTED — keeps the assertions readable. */
@@ -72,9 +75,30 @@ describe('measurementField', () => {
     expect(parse(weight, String(MAX_BODYWEIGHT_KG))).toBe(REJECTED);
     expect(parse(weight, '9999.99')).toBe(REJECTED);
 
-    const height = measurementField(MAX_HEIGHT_CM, 'cm');
     expect(parse(height, '9999.9')).toBe(REJECTED);
     expect(parse(height, '183')).toBe(183);
+  });
+
+  /*
+   * FOUND IN REVIEW. Postgres rounds a numeric to its declared scale BEFORE the
+   * CHECK runs, so a grammar looser than the column produces two bugs at once:
+   * 299.99 cm passes the app bound of "< 300", becomes 300.0, and then violates
+   * the constraint — an error on a value the form offered, that no retry fixes.
+   * And 183.75 would be accepted and silently stored as 183.8.
+   *
+   * These assertions are the two gates agreeing, which is the only state in
+   * which having two of them means anything.
+   */
+  it('admits only the decimal places its column can hold', () => {
+    // height_cm is numeric(5, 1).
+    expect(parse(height, '183.7')).toBe(183.7);
+    expect(parse(height, '183.75')).toBe(REJECTED);
+    expect(parse(height, '299.99')).toBe(REJECTED);
+    expect(parse(height, '299.9')).toBe(299.9);
+
+    // bodyweight_kg is numeric(6, 2).
+    expect(parse(weight, '82.55')).toBe(82.55);
+    expect(parse(weight, '82.555')).toBe(REJECTED);
   });
 });
 
@@ -84,9 +108,16 @@ describe('birthDateField', () => {
     expect(parse(birthDate, '')).toBeNull();
   });
 
+  /*
+   * The quiet half is the day, not the month. `Date.parse('2026-13-01…')` really
+   * is NaN, so the old check caught that one; `2026-02-31` parses as 3 March,
+   * and a birth date moved three days is what nothing downstream can detect.
+   */
   it('rejects a date that does not exist', () => {
     expect(parse(birthDate, '2026-02-31')).toBe(REJECTED);
     expect(parse(birthDate, '2026-13-01')).toBe(REJECTED);
+    expect(parse(birthDate, '2025-02-29')).toBe(REJECTED);
+    expect(parse(birthDate, '2024-02-29')).toBe('2024-02-29');
   });
 
   it('rejects anything that is not an ISO date', () => {
@@ -127,6 +158,27 @@ describe('isFutureBirthDate', () => {
   it('is timezone-sensitive, which is the whole reason it is not a CHECK', () => {
     expect(isFutureBirthDate('2026-09-10', '2026-09-09')).toBe(true);
     expect(isFutureBirthDate('2026-09-10', '2026-09-10')).toBe(false);
+  });
+
+  /*
+   * The string comparison is only correct because both sides are zero-padded
+   * fixed-width. `ISO_DATE` pins the left. The right comes from `localDateFor`,
+   * which is `Intl.DateTimeFormat('en-CA', { 2-digit month and day })` — pinned
+   * here rather than left as an assumption, because that function lives in
+   * src/db/server.ts and cannot be imported into a unit test (it pulls in
+   * next/headers). If its formatter ever changes, this fails.
+   */
+  it('agrees with the format localDateFor produces', () => {
+    const asLocalDateFor = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jerusalem',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date('2026-01-05T12:00:00Z'));
+
+    expect(asLocalDateFor).toBe('2026-01-05');
+    expect(isFutureBirthDate('2026-01-06', asLocalDateFor)).toBe(true);
+    expect(isFutureBirthDate('2026-01-04', asLocalDateFor)).toBe(false);
   });
 });
 

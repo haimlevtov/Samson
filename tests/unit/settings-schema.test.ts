@@ -11,6 +11,8 @@
  *
  * This is the class of bug, not the instance.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { readSettingsForm, settingsSchema } from '../../src/settings/schema';
@@ -45,8 +47,29 @@ describe('the schema and the reader carry the same keys', () => {
     expect(readerKeys.filter((key) => !schemaKeys.includes(key))).toEqual([]);
   });
 
-  it('covers every field the form actually posts', () => {
-    expect(readerKeys).toEqual([...new Set([...completeForm().keys()])].sort());
+  /*
+   * The third copy, and the one that used to go unchecked: the `name=`
+   * attributes in the JSX.
+   *
+   * Comparing the reader against a fixture in this file proves only that the
+   * fixture agrees with itself. The gap that matters is between the reader and
+   * the form, and for the four biometrics a mismatch there is DESTRUCTIVE
+   * rather than annoying: `name="bodyweight_kg"` instead of `name="bodyweightKg"`
+   * makes `formData.get` return null, which the schema reads as "cleared", and
+   * every save then writes null over a stored value — with this whole suite
+   * green.
+   *
+   * Grepping the source is the pattern tests/unit/invariants.test.ts already
+   * uses for the things a type cannot reach.
+   */
+  it('matches every name= the form actually renders', () => {
+    const source = readFileSync(
+      join(__dirname, '..', '..', 'app', 'settings', 'SettingsForm.tsx'),
+      'utf8'
+    );
+    const rendered = [...source.matchAll(/name="([A-Za-z]+)"/g)].map((match) => match[1]);
+
+    expect(new Set(rendered)).toEqual(new Set(schemaKeys));
   });
 });
 
@@ -107,5 +130,44 @@ describe('parsing a submission', () => {
   it('rejects an empty submission instead of blanking the row', () => {
     const parsed = settingsSchema.safeParse(readSettingsForm(new FormData()));
     expect(parsed.success).toBe(false);
+  });
+
+  /*
+   * FOUND IN REVIEW, and the empty-form case above did not cover it: a POST that
+   * carries the four appearance fields and simply OMITS the biometrics used to
+   * succeed and erase all four, because a missing key was read as `''` and `''`
+   * means "clear this". The required fields fail loudly on absence; these were
+   * the only ones where absence was silently destructive.
+   */
+  it('rejects a submission that omits a biometric rather than clearing it', () => {
+    for (const omitted of ['bodyweightKg', 'heightCm', 'birthDate', 'sex']) {
+      const form = completeForm();
+      form.delete(omitted);
+
+      const parsed = settingsSchema.safeParse(readSettingsForm(form));
+      expect(parsed.success, `omitting ${omitted} must not succeed`).toBe(false);
+    }
+  });
+
+  it('still distinguishes an omitted field from a cleared one', () => {
+    const cleared = completeForm();
+    cleared.set('bodyweightKg', '');
+    expect(settingsSchema.safeParse(readSettingsForm(cleared)).success).toBe(true);
+
+    const omitted = completeForm();
+    omitted.delete('bodyweightKg');
+    expect(settingsSchema.safeParse(readSettingsForm(omitted)).success).toBe(false);
+  });
+
+  it('rejects a decimal the column would round, rather than storing a different number', () => {
+    // height_cm is numeric(5, 1): 183.75 would land as 183.8.
+    const form = completeForm();
+    form.set('heightCm', '183.75');
+    expect(settingsSchema.safeParse(readSettingsForm(form)).success).toBe(false);
+
+    // bodyweight_kg is numeric(6, 2), so two places are fine there.
+    const weight = completeForm();
+    weight.set('bodyweightKg', '82.55');
+    expect(settingsSchema.safeParse(readSettingsForm(weight)).success).toBe(true);
   });
 });

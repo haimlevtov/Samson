@@ -4,25 +4,42 @@ The behaviour `src/diet/` is tested against. Design and threat model:
 [ADR 0024](../adr/0024-diet-advisor.md). Read that first; this is the part with
 the numbers in it.
 
-## 1. What is collected, and where
+> **§1 describes code that exists. §2 to §5 do not yet.** The advisor ships over
+> four PRs ([`plans/phase-6.md`](../plans/phase-6.md)) and this spec was written
+> whole, before them, so the tests can be written from it. As of **2026-09-09**
+> only the inputs in §1 are built — `src/diet/biometrics.ts`, the settings
+> fields, and the column bounds. `energy.ts`, the clamp, `dietReplySchema` and
+> the surface are PRs 3 and 4. Nothing below §1 should be read as a description
+> of the running app.
+
+## 1. What is collected, and where — **built**
 
 Four fields on `users`, all of which existed as columns from the phase-0 schema
 and none of which anything read or wrote before phase 6.
 
-| Column          | Type            | Constraint after this PR                | Asked for as |
-| --------------- | --------------- | --------------------------------------- | ------------ |
-| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms    |
-| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres  |
-| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date       |
-| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | three radios |
+| Column          | Type            | Constraint after this PR                | Asked for as                    |
+| --------------- | --------------- | --------------------------------------- | ------------------------------- |
+| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms                       |
+| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres                     |
+| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date                          |
+| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select: blank, plus the three |
 
 **The bounds are not cosmetic.** `'NaN'::numeric > 0` is TRUE in PostgreSQL —
 measured against this hosted project and recorded in
 `20260908100100_tonnage_comparisons_hardening.sql` — and PostgREST casts the JSON
 string `"NaN"` into a numeric column on the way in. An upper bound excludes NaN,
 because `NaN < 1000` is false, and bounds the magnitude at the same time. Without
-one, `bodyweight_kg` admits 9,999.99 and `height_cm` admits 9,999.9, which is a
-BMR near 162,000 kcal.
+one, `bodyweight_kg` admits 9,999.99 and `height_cm` admits 9,999.9 — together a
+BMR near 162,000 kcal, and the weight alone at an ordinary height is still over
+100,000.
+
+**Scale is part of the bound.** PostgreSQL rounds a numeric to its declared scale
+_before_ the CHECK runs, so `299.99` submitted to `height_cm numeric(5, 1)`
+becomes `300.0` and then violates `< 300` — a rejection of a value the form
+accepted, which no retry can fix, for the whole window 299.95–299.99. The quieter
+half: `170.55` would be accepted and silently stored as `170.6`. So the app
+grammar admits **one** decimal place for height and **two** for weight, matching
+the columns. Two gates are defence in depth only while they agree.
 
 The bounds chosen are human rather than type-shaped: the heaviest person ever
 recorded was 635 kg and the tallest 272 cm. That is a deliberate difference from
@@ -61,18 +78,28 @@ missing-biometric refusal — the only thing that tells a user which field the
 advisor is waiting for — would be unreachable.
 
 So `measurementField` trims, treats empty as `null` **before** any conversion,
-and then requires a plain decimal (`/^\d{1,4}(?:\.\d{1,2})?$/`) rather than
-whatever `Number()` will accept. `0` is a validation failure naming the field,
-not a silent absence and not a database error naming a constraint.
+and then requires a plain decimal at the column's own scale rather than whatever
+`Number()` will accept. `0` is a validation failure naming the field, not a
+silent absence and not a database error naming a constraint. `\d` in a
+non-unicode regex is `[0-9]` only, so fullwidth and Eastern Arabic digits are
+rejected here even though `Number()` reads them.
 
-`birth_date` is checked the same way, and the round trip is the check:
+**An omitted field is not a cleared one.** Blank means "remove this"; a
+submission that does not carry the key at all is **rejected**. They were the same
+thing once, and the difference was destructive: a POST carrying only the
+appearance fields succeeded and erased all four health values, with "Saved" on
+screen. Every other field already failed loudly when absent.
+
+`birth_date` gets a real-date check, and the round trip is what does it.
 `Date.parse('2026-02-31T00:00:00Z')` does **not** return `NaN` — V8 rolls it over
-to 3 March, and `2026-13-01` becomes 1 January 2027. A birth date silently moved
-is exactly the kind of wrong nothing downstream detects, and it feeds the age
-comparison that decides whether a target is shown at all. `isRealDate` builds the
-date from its parts and requires the parts to survive.
+to **3 March**. (An out-of-range _month_ like `2026-13-01` does give `NaN`, so a
+`Date.parse` check catches half of this; the half it misses is the quiet one.) A
+birth date silently moved three days is the kind of wrong nothing downstream
+detects, and it feeds the age comparison that decides whether a target is shown
+at all. `isRealDate` builds the date from its parts and requires the parts to
+survive.
 
-## 2. The equation
+## 2. The equation — **PR 3, not built**
 
 Mifflin–St Jeor, in kilograms, centimetres and years:
 
@@ -133,7 +160,7 @@ validates it with `z.enum` and the default branch is the safe direction.
 computed and rendered; it is never sent to a model — it is bodyweight one
 division away.
 
-## 3. The refusals
+## 3. The refusals — **PR 3, not built**
 
 The engine returns a discriminated result, never a partial number. Each of these
 is a distinct case the surface renders in its own words:
@@ -149,7 +176,7 @@ non-finite input is refused **before the first multiplication**: `Math.min` and
 `Math.max` propagate NaN, and a NaN target is not null, so it would pass the
 missing-biometric branch and render.
 
-## 4. What the model is given, and what comes back
+## 4. What the model is given, and what comes back — **PR 4, not built**
 
 The payload has **no numbers in it**:
 
@@ -172,8 +199,8 @@ figure, the band. The model's prose sits beside them.
 
 ## 5. What the tests must cover
 
-**Property sweeps over generated inputs**, not a handful of examples, because the
-acceptance criterion is adversarial:
+**Property sweeps over generated inputs** — PR 3, not written — not a handful of
+examples, because the acceptance criterion is adversarial:
 
 - No combination of weight, height, age, sex, session count and goal produces a
   target below `max(bmr, 1200)`.
@@ -189,17 +216,31 @@ acceptance criterion is adversarial:
 - `under-18` is evaluated against a supplied `today`, so the boundary is testable
   on both sides of a birthday.
 
-**Database, in `tests/db`:**
+**Database, in `tests/db` — built, `tests/db/biometrics.test.ts`:**
 
-- Each of the four columns rejects `NaN`, a negative, zero, and a magnitude past
-  its bound.
-- `birth_date` rejects a future date.
+- The two **numeric** columns reject `NaN`, a negative, zero, and a magnitude
+  past their bound. (`birth_date` is a `date` and `sex` is `text`; neither can
+  hold any of those, and the tests do not pretend otherwise.)
+- Each numeric column **stores what it was given**, and rounds at its declared
+  scale — one decimal for `height_cm`, two for `bodyweight_kg`. Asserting the
+  rounding is what makes the app-side grammar's bound meaningful rather than
+  hopeful.
+- `birth_date` rejects a date outside 1900–2100, and **accepts** one in the
+  future: that is refused by the action against the user's local date, for the
+  reason in §1. The test says so, so that removing the action-side check does
+  not look safe.
+- `sex` admits exactly the three values `SEXES` holds, imported rather than
+  retyped.
 
-**Settings, in the unit suite:**
+**Settings, in the unit suite — built, `tests/unit/settings-schema.test.ts`:**
 
-- The settings schema and the parse object carry the same keys. The class of bug,
-  not the instance — a field in one and not the other made every save fail once
-  already, and typecheck cannot see it because the parse object is an untyped
-  literal.
-- A blank optional field round-trips to `null`, and `0` is rejected rather than
-  stored.
+- The settings schema and the parse object carry the same keys, **and so do the
+  `name=` attributes the form renders**. The class of bug, not the instance: a
+  field in one and not the other made every save fail once already, typecheck
+  cannot see it because the parse object is an untyped literal, and a mistyped
+  `name=` is worse than that — it makes every save write `null` over a stored
+  health value with the suite green.
+- A blank optional field round-trips to `null`; `0` is rejected rather than
+  stored; and an **omitted** field is rejected rather than treated as cleared.
+- A decimal the column would round is rejected rather than stored as a different
+  number.

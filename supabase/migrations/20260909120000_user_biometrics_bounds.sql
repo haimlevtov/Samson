@@ -26,7 +26,15 @@
 --
 -- `< 1000` is false for NaN, which is what closes it. The magnitude bound comes
 -- free and is worth having on its own: numeric(6, 2) admits 9,999.99 kg and
--- numeric(5, 1) admits 9,999.9 cm, and 9,999.9 cm is a BMR near 162,000 kcal.
+-- numeric(5, 1) admits 9,999.9 cm. Both maxed is a BMR near 162,000 kcal;
+-- the weight alone at an ordinary height is still around 101,000.
+--
+-- SCALE MATTERS HERE TOO, and it is easy to miss: Postgres rounds a numeric to
+-- its declared scale BEFORE these CHECKs run. height_cm is numeric(5, 1), so a
+-- submitted 299.99 becomes 300.0 and then violates `< 300` — an error on a
+-- value the form accepted, which no retry can fix. src/diet/biometrics.ts
+-- therefore admits one decimal place for height and two for weight, so the two
+-- gates agree rather than merely both existing.
 --
 -- DELIBERATELY HUMAN BOUNDS, unlike 20260908100100's `< 1e10`. That migration
 -- chose the type's own ceiling because the column held the mass of the Eiffel
@@ -77,6 +85,21 @@ alter table public.users
 -- same split `users.timezone` already documents: some things Postgres cannot
 -- check, and the action is the only place they can be.
 
+-- The drop makes this file rerunnable, matching the two constraints above.
+-- It is a new name, so nothing is being replaced today.
+alter table public.users
+  drop constraint if exists users_birth_date_range;
+
 alter table public.users
   add constraint users_birth_date_range
   check (birth_date >= date '1900-01-01' and birth_date <= date '2100-01-01');
+
+-- WHAT THIS DOES NOT DO, stated because a reader will assume it does: it does
+-- not stop a future birth date. It NARROWS the range from "any year" to "before
+-- 2100", which still admits ~74 years of them, every one yielding a negative
+-- age. app/settings/actions.ts rejects the future against the user's own local
+-- date; a direct PATCH to /rest/v1/users skips that, exactly as
+-- 20260908090300_validate_user_timezone.sql documents for `timezone`. The
+-- consequence today is benign — a negative age trips the under-18 refusal — but
+-- that is right by accident, and ADR 0024's table says so rather than claiming
+-- a control.

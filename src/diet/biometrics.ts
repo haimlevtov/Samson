@@ -8,14 +8,25 @@
  *            app/settings/page.tsx says so on the page itself.
  *
  * Pure, so both the server action that validates a form and the engine that
- * consumes the result can share one definition. There is no second copy of
- * these bounds: 20260909120000_user_biometrics_bounds.sql holds the same
- * numbers as CHECK constraints, deliberately — a constraint cannot see a value
- * arriving by a path that skips the column, and code cannot see a row written
- * before it existed.
+ * consumes the result can share one definition.
  *
- * AI-NOTE: changing a bound here means changing that migration in the same
- *          commit, and docs/specs/diet.md §1 with it.
+ * The same numbers are CHECK constraints in
+ * 20260909120000_user_biometrics_bounds.sql, and that duplication is the point:
+ * two independent gates. A constraint cannot see a value arriving by a path
+ * that skips the column, and code cannot see a row written before it existed.
+ * PostgREST is reachable with any user's own token, so the column is not
+ * theoretical cover.
+ *
+ * AI-NOTE: these numbers appear in FOUR places and changing one means changing
+ *          all four in the same commit —
+ *            1. here,
+ *            2. 20260909120000_user_biometrics_bounds.sql,
+ *            3. docs/specs/diet.md §1,
+ *            4. docs/FRAMING.md's "Numbers invented outright" table.
+ *          tests/db/biometrics.test.ts imports from here rather than repeating
+ *          them, so it moves on its own. The two GATES are defence in depth only
+ *          while they agree: where they disagree the wider one is decoration and
+ *          the narrower one produces an error the user cannot act on.
  */
 import { z } from 'zod';
 
@@ -29,19 +40,39 @@ export function isSex(value: string | null): value is Sex {
 /**
  * Past any real value, and still tight enough to reject a typo.
  *
- * WHY not the column's own ceiling: `numeric(6, 2)` tops out at 9,999.99, which
- * is a BMR near 162,000 kcal. The heaviest person ever recorded was 635 kg and
- * the tallest 272 cm, so these reject a slipped decimal point while admitting
- * anybody real.
+ * WHY not the columns' own ceilings: `numeric(6, 2)` tops out at 9,999.99 kg and
+ * `numeric(5, 1)` at 9,999.9 cm, and the two together are a BMR near 162,000
+ * kcal — the weight alone is around 101,000, which is no better. The heaviest
+ * person ever recorded was 635 kg and the tallest 272 cm, so these reject a
+ * slipped decimal point while admitting anybody real.
  */
 export const MAX_BODYWEIGHT_KG = 1000;
 export const MAX_HEIGHT_CM = 300;
+
+/**
+ * The DECLARED SCALE of each column, and it is not a formatting detail.
+ *
+ * FOUND IN REVIEW: PostgreSQL rounds a numeric to its declared scale BEFORE the
+ * CHECK runs. `height_cm` is `numeric(5, 1)`, so `299.99` — which passes both
+ * app gates — is stored as `300.0` and then violates `height_cm < 300`. The
+ * user gets "could not save that" on a value the form accepted, for the whole
+ * window 299.95 to 299.99, and no amount of retrying fixes it. The quiet cousin
+ * is worse to explain: `170.55` is accepted and silently becomes `170.6`.
+ *
+ * So the grammar below admits exactly what the column can hold without
+ * rounding. The two gates then agree instead of merely both existing.
+ *
+ * AI-NOTE: these track the column types in 20260824150139_users.sql. Changing a
+ *          column's scale means changing the number here in the same commit.
+ */
+export const BODYWEIGHT_SCALE = 2;
+export const HEIGHT_SCALE = 1;
 
 /** The oldest verified human lived to 122. */
 export const EARLIEST_BIRTH_DATE = '1900-01-01';
 
 /**
- * A decimal a person types into a number field: digits, optionally two places.
+ * A decimal a person types, at a scale the column stores without rounding.
  *
  * WHY a pattern rather than `z.coerce.number()` — and this is the trap, not a
  * preference. `z.coerce.number()` maps `""` and `" "` to **0** and `"0x10"` to
@@ -49,8 +80,13 @@ export const EARLIEST_BIRTH_DATE = '1900-01-01';
  * real state that produces a named refusal while zero is a validation failure;
  * a coercion that silently turns "I cleared this field" into "I weigh nothing"
  * would make the whole missing-biometric path unreachable.
+ *
+ * `\d` in a non-unicode regex is `[0-9]` only, so Eastern Arabic and fullwidth
+ * digits are rejected here even though `Number()` would happily read them.
  */
-const DECIMAL_INPUT = /^\d{1,4}(?:\.\d{1,2})?$/;
+function decimalInput(scale: number): RegExp {
+  return new RegExp(`^\\d{1,4}(?:\\.\\d{1,${scale}})?$`);
+}
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -58,11 +94,12 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * A date that exists, not merely one shaped like a date.
  *
  * FOUND IN TESTING: this was `Date.parse(\`${raw}T00:00:00Z\`)` with a comment
- * saying ISO parsing rejects impossible days. It does not — V8 rolls them over,
- * so `2026-02-31` parses happily as 3 March and `2026-13-01` as 1 January 2027.
- * A birth date silently moved by three days is the kind of wrong nothing
- * downstream can detect, and it would land on the age comparison that decides
- * whether somebody is shown a calorie target at all.
+ * saying ISO parsing rejects impossible days. It does not. `2026-02-31` parses
+ * happily as **3 March** — a birth date silently moved by three days, which is
+ * the kind of wrong nothing downstream can detect, landing on the age
+ * comparison that decides whether somebody is shown a calorie target at all.
+ * (An out-of-range MONTH like `2026-13-01` does give NaN, so the old check
+ * caught half of this and the half it missed was the quiet one.)
  *
  * The round trip is the check: build the date from the parts and require the
  * parts to survive it.
@@ -86,12 +123,20 @@ function isRealDate(iso: string): boolean {
  * failing here produces a sentence naming the field instead of a database error
  * naming a constraint.
  */
-export function measurementField(max: number, unit: string) {
+export function measurementField(max: number, unit: string, scale: number) {
+  const pattern = decimalInput(scale);
+  const places = scale === 1 ? 'one decimal place' : `${scale} decimal places`;
+
   return z
     .string()
     .trim()
     .transform((raw) => (raw === '' ? null : raw))
-    .refine((raw) => raw === null || DECIMAL_INPUT.test(raw), `Give a number in ${unit}.`)
+    .refine(
+      (raw) => raw === null || pattern.test(raw),
+      // The scale is in the message because the alternative is a rejection the
+      // user cannot act on: "182.55" looks like a number and is not one here.
+      { error: `Give a number in ${unit}, to at most ${places}.`, abort: true }
+    )
     .transform((raw) => (raw === null ? null : Number(raw)))
     .refine(
       (value) => value === null || (Number.isFinite(value) && value > 0 && value < max),

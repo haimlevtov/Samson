@@ -71,20 +71,37 @@ export async function updateSettings(
 
   if (error) {
     /*
-     * The detail is kept, and not sent to the browser.
+     * INVARIANT: no part of this error reaches the browser, and no part of the
+     *            ROW reaches the log.
      *
-     * WHY this changed when the biometrics landed — the same reasoning
-     * app/coach/actions.ts already carries: this interpolated `error.message`,
-     * and with CHECK-constrained columns that puts `new row for relation
-     * "users" violates check constraint "users_bodyweight_kg_check"` on screen.
-     * That hands a user table names, column semantics and constraint names for
-     * a table they cannot read — harmless once, free reconnaissance in quantity.
+     * Two leaks, in opposite directions, and fixing one opened the other.
      *
-     * Every value that can fail a constraint has already been rejected above
-     * with a sentence naming the field, so this branch is for the unexpected: a
-     * dropped column, a revoked grant, a network fault.
+     * The browser half is the reasoning app/coach/actions.ts already carries:
+     * this interpolated `error.message`, and with CHECK-constrained columns that
+     * puts `new row for relation "users" violates check constraint
+     * "users_bodyweight_kg_check"` on screen — table names, column semantics and
+     * constraint names for a table the reader cannot query. Harmless once, free
+     * reconnaissance in quantity.
+     *
+     * The log half is worse and was introduced by that fix — FOUND IN REVIEW.
+     * Logging the PostgrestError whole looks prudent and is not: on a CHECK
+     * violation PostgREST fills `details` from Postgres's errdetail, which is
+     * `Failing row contains (…)` — EVERY column of the tuple. That is
+     * `user_id`, `display_name`, `timezone`, `birth_date`, `sex`, `height_cm`
+     * and `bodyweight_kg`: a complete health profile joined to an account
+     * identifier, in plaintext, in the hosting runtime's logs. These are the
+     * four fields ADR 0024 calls a more sensitive category than anything this
+     * app stored before, and a log is a place nobody has thought about who can
+     * read it.
+     *
+     * So: `code` and `hint` only. Both are PostgREST's own vocabulary and
+     * neither can carry a submitted value.
+     *
+     * AI-NOTE: never log `error`, `error.message` or `error.details` for a write
+     *          to `users`. If more diagnostic detail is ever needed, add named
+     *          fields to this object rather than widening it to the whole error.
      */
-    console.error('settings save failed', error);
+    console.error('settings save failed', { code: error.code, hint: error.hint });
     return { error: 'Could not save that. Try again in a moment.', saved: false };
   }
 

@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
 import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
-import { SEXES, type Sex } from '@/src/diet/biometrics';
+import { EARLIEST_BIRTH_DATE, SEXES, type Sex } from '@/src/diet/biometrics';
 import { updateSettings } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -105,11 +105,12 @@ export function SettingsForm({
        * leaving them blank, and a required field would be a health question
        * somebody has to answer to change their theme.
        */}
-      <fieldset>
+      <fieldset className="humor">
         <legend className="label">You</legend>
         <p className="muted small">
-          Only the diet advisor uses these, and only while you have it open. They are never sent to
-          the coach model — it is told whether your target is a deficit, not what you weigh.
+          For the diet advisor, which is being built. Nothing else reads them, and they will not be
+          sent to the coach model — it is told whether your target is a deficit, never what you
+          weigh.
         </p>
 
         <label>
@@ -140,7 +141,15 @@ export function SettingsForm({
 
         <label>
           <span className="label">Date of birth</span>
-          <input name="birthDate" type="date" defaultValue={birthDate ?? ''} max={maxBirthDate} />
+          {/* Both bounds, so the picker agrees with the validator rather than
+              offering dates the save will refuse. */}
+          <input
+            name="birthDate"
+            type="date"
+            defaultValue={birthDate ?? ''}
+            min={EARLIEST_BIRTH_DATE}
+            max={maxBirthDate}
+          />
         </label>
 
         <label>
@@ -151,6 +160,17 @@ export function SettingsForm({
            * answer with a real behaviour rather than a null: it takes the higher
            * of the two constants, so the error lands on the side of more food —
            * ADR 0024 §3.
+           *
+           * `sex ?? ''` shows "Not set" for a stored value outside the three —
+           * which `currentUser` reads as null on purpose, so an unknown constant
+           * never reaches the equation. The consequence is worth knowing: the
+           * next save of ANY setting then writes that null down. That is the
+           * intended direction here (an out-of-range value means the CHECK is
+           * gone, and it is not a value to preserve), and it is deliberately
+           * NOT what page.tsx does for `timezone`, where an unlisted stored zone
+           * is prepended to the options so a save cannot destroy it. The
+           * difference: a zone this runtime does not list is probably valid, and
+           * a sex the column does not admit is not.
            */}
           <select name="sex" defaultValue={sex ?? ''}>
             <option value="">Not set</option>

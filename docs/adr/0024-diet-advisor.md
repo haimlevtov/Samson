@@ -55,11 +55,13 @@ author will reach for both:
 
 - **`scanOutput` does not block a completion for saying "male".**
   `PROTECTED_ATTRIBUTE` in `src/llm/safety.ts` covers gender identity and
-  orientation — `transgender`, `non-binary`, `homosexual` — and deliberately not
-  `male`, `female`, `sex` or `gender`, per its own AI-NOTE about false positives
-  on ordinary coaching language. The only thing addressing it is
-  `SAFETY_PREAMBLE`'s conduct rule, which ADR 0005 §3 classifies as defence in
-  depth and not a control.
+  orientation — `transgender`, `non-binary`, `homosexual` — and does not contain
+  `male`, `female`, `sex` or `gender`. Its AI-NOTE explains that some obvious
+  words are left out on purpose because they fire on ordinary gym language, and
+  names `race`, `straight` and `trans` rather than these four; whether their
+  absence was deliberate or an oversight, the effect is the same and it is not a
+  control. The only thing addressing it is `SAFETY_PREAMBLE`'s conduct rule,
+  which ADR 0005 §3 classifies as defence in depth and not a control.
 - **A number guard can never be a privacy control**, because the allowed set is
   _derived from the payload_. It protects only what the payload already omits, so
   the payload is doing all the work — and the day somebody widens the payload for
@@ -192,6 +194,7 @@ three are the control.
 | This target is safe for this user     | **Not guaranteed.** No medical history is collected. Eating-disorder risk, pregnancy, medication and metabolic conditions are undetectable here. 1,200 is a heuristic floor, not a clinical standard.                                                                                               |
 | The activity factor reflects the user | **Mitigated.** It reflects logged training, which is a subset of daily activity, and it errs low.                                                                                                                                                                                                   |
 | The user pays for their own abuse     | **Qualified.** ADR 0015 §5's note applies unchanged: one request drives up to attempts × gateway retries, both steerable, and the budget gate reads then calls with no reservation. Rate limiting is out of scope per `CLAUDE.md`.                                                                  |
+| The values are gone once you sign out | **No.** Signing out clears the cookie and the local drafts, but a rendered Settings page carrying a bodyweight and a date of birth can return from the browser's back-forward cache on a shared device. The same class `SignOutButton` already handles for session drafts, one step weaker.         |
 
 ## Consequences
 

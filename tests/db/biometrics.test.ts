@@ -20,6 +20,22 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestUser, deleteTestUser, type TestUser } from './helpers';
+import {
+  EARLIEST_BIRTH_DATE,
+  MAX_BODYWEIGHT_KG,
+  MAX_HEIGHT_CM,
+  SEXES,
+} from '../../src/diet/biometrics';
+
+/*
+ * The bounds are IMPORTED, not retyped.
+ *
+ * tests/db/schema-invariants.test.ts refuses a literal array for the same
+ * reason, in as many words: "a third copy of the same fact would drift from the
+ * other two exactly as the constraint did". The application module and the
+ * migration are already two copies that have to be changed together; a third
+ * one here would be the copy nobody remembers.
+ */
 
 let user: TestUser;
 
@@ -41,9 +57,41 @@ async function write(column: string, value: unknown): Promise<string | null> {
   return error?.message ?? null;
 }
 
+/**
+ * Writes, then reads the column back.
+ *
+ * WHY the read: `toBeNull()` on the error proves only that nothing complained,
+ * and a PostgREST update matching zero rows also complains about nothing. The
+ * rejection cases below already prove the row exists — they could not fail a
+ * constraint otherwise — but an accepted value is only interesting if it
+ * LANDED, and for `numeric` it is also the only way to see the scale rounding
+ * that the app grammar exists to prevent.
+ */
+async function roundTrip(column: string, value: unknown): Promise<unknown> {
+  const message = await write(column, value);
+  if (message !== null) return `REJECTED: ${message}`;
+
+  const { data } = await user.client
+    .from('users')
+    .select(column)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  return (data as Record<string, unknown> | null)?.[column] ?? null;
+}
+
 describe('bodyweight_kg', () => {
-  it('takes a real weight', async () => {
-    expect(await write('bodyweight_kg', 82.5)).toBeNull();
+  it('stores a real weight unchanged', async () => {
+    expect(await roundTrip('bodyweight_kg', 82.5)).toBe(82.5);
+  });
+
+  /*
+   * The scale the app grammar is built around — src/diet/biometrics.ts.
+   * numeric(6, 2) keeps two decimals and rounds a third away, so this asserts
+   * the column really does what the regex assumes it does.
+   */
+  it('keeps two decimals and rounds a third', async () => {
+    expect(await roundTrip('bodyweight_kg', 82.55)).toBe(82.55);
+    expect(await roundTrip('bodyweight_kg', 82.554)).toBe(82.55);
   });
 
   it('rejects NaN, which `> 0` alone admitted', async () => {
@@ -59,10 +107,11 @@ describe('bodyweight_kg', () => {
 
   it('rejects a magnitude no person has', async () => {
     // 9999.99 is what numeric(6, 2) admits and what the old constraint allowed:
-    // a BMR near 162,000 kcal. The heaviest person recorded was 635 kg.
+    // a BMR over 100,000 kcal on its own, and near 162,000 with height maxed
+    // too. The heaviest person recorded was 635 kg.
     expect(await write('bodyweight_kg', 9999.99)).not.toBeNull();
-    expect(await write('bodyweight_kg', 1000)).not.toBeNull();
-    expect(await write('bodyweight_kg', 635)).toBeNull();
+    expect(await write('bodyweight_kg', MAX_BODYWEIGHT_KG)).not.toBeNull();
+    expect(await roundTrip('bodyweight_kg', 635)).toBe(635);
   });
 
   it('takes null, because clearing a biometric is a real action', async () => {
@@ -71,17 +120,33 @@ describe('bodyweight_kg', () => {
 });
 
 describe('height_cm', () => {
-  it('takes a real height and rejects NaN', async () => {
-    expect(await write('height_cm', 183)).toBeNull();
+  it('stores a real height unchanged and rejects NaN', async () => {
+    expect(await roundTrip('height_cm', 183)).toBe(183);
     expect(await write('height_cm', 'NaN')).not.toBeNull();
+  });
+
+  /*
+   * FOUND IN REVIEW, and the reason `measurementField` takes a scale.
+   *
+   * numeric(5, 1) rounds to ONE decimal before any CHECK runs, so 299.99 — a
+   * value the form's own bound of "< 300" would have accepted — becomes 300.0
+   * and then violates the constraint. The user gets an error on a value the
+   * page offered them, for the whole window 299.95 to 299.99, and no retry
+   * fixes it. The quiet half is here too: 183.75 stores as 183.8.
+   */
+  it('rounds to one decimal, which is why the app grammar allows only one', async () => {
+    expect(await roundTrip('height_cm', 183.75)).toBe(183.8);
+    expect(await write('height_cm', 299.99)).not.toBeNull();
+    expect(await roundTrip('height_cm', 299.9)).toBe(299.9);
   });
 
   it('rejects zero, negatives and impossible magnitudes', async () => {
     expect(await write('height_cm', 0)).not.toBeNull();
     expect(await write('height_cm', -1)).not.toBeNull();
     expect(await write('height_cm', 9999.9)).not.toBeNull();
+    expect(await write('height_cm', MAX_HEIGHT_CM)).not.toBeNull();
     // The tallest person recorded was 272 cm.
-    expect(await write('height_cm', 272)).toBeNull();
+    expect(await roundTrip('height_cm', 272)).toBe(272);
   });
 
   it('takes null', async () => {
@@ -90,8 +155,9 @@ describe('height_cm', () => {
 });
 
 describe('birth_date', () => {
-  it('takes a real date', async () => {
-    expect(await write('birth_date', '1995-07-02')).toBeNull();
+  it('stores a real date unchanged', async () => {
+    expect(await roundTrip('birth_date', '1995-07-02')).toBe('1995-07-02');
+    expect(await roundTrip('birth_date', EARLIEST_BIRTH_DATE)).toBe(EARLIEST_BIRTH_DATE);
   });
 
   /*
@@ -125,9 +191,12 @@ describe('birth_date', () => {
 
 describe('sex', () => {
   it('admits exactly the three the application knows', async () => {
-    for (const value of ['male', 'female', 'unspecified']) {
-      expect(await write('sex', value), value).toBeNull();
+    // SEXES is imported, so a value added to the union without a migration
+    // fails here rather than at the first save.
+    for (const value of SEXES) {
+      expect(await roundTrip('sex', value), value).toBe(value);
     }
+    expect(SEXES).toHaveLength(3);
   });
 
   it('rejects anything else, so `isSex` never sees an unknown constant', async () => {

@@ -15,6 +15,8 @@ import { z } from 'zod';
 
 import { MAX_DISPLAY_NAME } from '../db/leaderboard';
 import {
+  BODYWEIGHT_SCALE,
+  HEIGHT_SCALE,
   MAX_BODYWEIGHT_KG,
   MAX_HEIGHT_CM,
   SEXES,
@@ -78,8 +80,8 @@ export const settingsSchema = z.object({
    * that keeps those apart is in `measurementField`, along with the reason
    * `z.coerce.number()` cannot be used here.
    */
-  bodyweightKg: measurementField(MAX_BODYWEIGHT_KG, 'kg'),
-  heightCm: measurementField(MAX_HEIGHT_CM, 'cm'),
+  bodyweightKg: measurementField(MAX_BODYWEIGHT_KG, 'kg', BODYWEIGHT_SCALE),
+  heightCm: measurementField(MAX_HEIGHT_CM, 'cm', HEIGHT_SCALE),
   /*
    * Bounded below and shape-checked only. "Not in the future" is the caller's
    * job: it depends on the user's local date (CLAUDE.md #9), and in this form
@@ -87,18 +89,22 @@ export const settingsSchema = z.object({
    * cannot know which today to ask about.
    */
   birthDate: birthDateField(),
-  // Blank is "not set"; the three values are the ones the column constrains.
-  // `unspecified` is a real choice with a real behaviour — ADR 0024 §3 — and is
-  // not the same as leaving this alone.
-  sex: z
-    .string()
-    .trim()
-    .transform((raw) => (raw === '' ? null : raw))
-    .refine(
-      (raw) => raw === null || (SEXES as readonly string[]).includes(raw),
-      'Pick one of the listed options.'
-    )
-    .transform((raw) => raw as (typeof SEXES)[number] | null),
+  /*
+   * Blank is "not set"; the three values are the ones the column constrains.
+   * `unspecified` is a real choice with a real behaviour — ADR 0024 §3 — and is
+   * not the same as leaving this alone.
+   *
+   * `z.enum(...).nullable()` behind a preprocess rather than a string with a
+   * refine and a cast: the enum is the source of truth and the type falls out of
+   * it, which is the convention `humorMaxLevel` and `theme` above already
+   * follow. The earlier version re-implemented `isSex` inline and then asserted
+   * the type back with `as`, which is the one thing that would still compile if
+   * the two lists drifted apart.
+   */
+  sex: z.preprocess(
+    (raw) => (typeof raw === 'string' && raw.trim() === '' ? null : raw),
+    z.enum(SEXES).nullable()
+  ),
 });
 
 export type SettingsInput = z.infer<typeof settingsSchema>;
@@ -117,15 +123,43 @@ export type SettingsInput = z.infer<typeof settingsSchema>;
  */
 export function readSettingsForm(formData: FormData): Record<keyof SettingsInput, unknown> {
   return {
-    displayName: formData.get('displayName') ?? '',
-    timezone: formData.get('timezone') ?? '',
-    humorMaxLevel: formData.get('humorMaxLevel') ?? '',
-    theme: formData.get('theme') ?? '',
-    // Present only when ticked — see the schema field.
+    displayName: field(formData, 'displayName'),
+    timezone: field(formData, 'timezone'),
+    humorMaxLevel: field(formData, 'humorMaxLevel'),
+    theme: field(formData, 'theme'),
+    /*
+     * The one field with presence semantics, and the only one exempt from the
+     * rule below: an unticked checkbox sends NOTHING AT ALL, so absent is the
+     * value rather than a missing value.
+     */
     leaderboardOptOut: formData.get('leaderboardOptOut') === 'on',
-    bodyweightKg: formData.get('bodyweightKg') ?? '',
-    heightCm: formData.get('heightCm') ?? '',
-    birthDate: formData.get('birthDate') ?? '',
-    sex: formData.get('sex') ?? '',
+    bodyweightKg: field(formData, 'bodyweightKg'),
+    heightCm: field(formData, 'heightCm'),
+    birthDate: field(formData, 'birthDate'),
+    sex: field(formData, 'sex'),
   };
+}
+
+/**
+ * A field the form sent, or `undefined` if it sent no such field at all.
+ *
+ * FOUND IN REVIEW, and this used to be `?? ''`. The four biometrics treat blank
+ * as "clear this", so a submission that simply OMITS them was indistinguishable
+ * from one that cleared them: a POST carrying only the four appearance fields
+ * succeeded and **erased the user's whole health profile**, silently and with a
+ * "Saved" on screen. Every other field fails loudly when absent — an empty
+ * string is not a valid timezone or theme — so the health fields were the only
+ * ones where absence was destructive rather than noisy.
+ *
+ * `undefined` fails `z.string()` with a message naming the field, so an
+ * incomplete submission is now rejected rather than applied. The real form
+ * always sends all nine: a blank text input posts `''`, and a `<select>` posts
+ * its current value.
+ *
+ * AI-NOTE: if a second surface ever writes one of these — a "log today's
+ *          weight" control on the diet block, say — it must NOT post a subset
+ *          to this action. Give it its own action that updates one column.
+ */
+function field(formData: FormData, name: keyof SettingsInput): unknown {
+  return formData.has(name) ? formData.get(name) : undefined;
 }

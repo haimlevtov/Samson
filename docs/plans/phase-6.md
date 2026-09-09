@@ -15,14 +15,14 @@ planned until a scope question is answered.
 
 ## Status — planned
 
-| PR  | What                                                                       | Branch              | State   |
-| --- | -------------------------------------------------------------------------- | ------------------- | ------- |
-| 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | planned |
-| 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | planned |
-| 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | planned |
-| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned |
-| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned |
-| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked |
+| PR  | What                                                                       | Branch              | State                                            |
+| --- | -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------ |
+| 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | shipped 09-09                                    |
+| 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09) |
+| 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | planned                                          |
+| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned                                          |
+| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                          |
+| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                          |
 
 PR 6 is marked blocked rather than planned, and [the reason](#pr-6--file-import)
 is a scope question that has to be answered before it can be estimated. Nothing
@@ -81,6 +81,10 @@ What is missing is a `DIET_MAX_TOKENS` in `src/llm/config.ts` and the whole of
 `src/diet/`.
 
 ### What is not here, and it is the first input
+
+> **True when this plan was written, and closed by PR 2 on 2026-09-09.** Left
+> as written because it is the finding the phase's order is built on. The
+> Outcome below records what changed.
 
 `users.bodyweight_kg`, `height_cm`, `birth_date` and `sex` exist as columns, and
 **nothing in the application reads or writes any of them.** Not the settings
@@ -683,6 +687,79 @@ established.
 | Stage       | `npm test` for blocked, `npm run test:db` for logged, and what got through written down       |
 | Supplements | The rendered answer is byte-identical to the row                                              |
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
+
+## Outcome
+
+### PR 2 — the inputs, 2026-09-09
+
+Everything the section above lists shipped. Four deviations and two findings are
+worth recording, because none of them is visible from the plan text.
+
+**Deviations from this plan, stated:**
+
+1. **The bounds are human, not `> 0 and < 1e10`.** The plan copied the shape from
+   `20260908100100_tonnage_comparisons_hardening.sql`, which took the type's own
+   ceiling because the column held the mass of the Eiffel Tower and any bound was
+   arbitrary. This column holds a person: 1000 kg and 300 cm reject a slipped
+   decimal point that `1e10` would wave through, and still exclude NaN, which is
+   what the bound was for.
+2. **The archetype biometrics are fixed literals, not RNG draws.** A birth date
+   is not a distribution, and — the sharper reason — inserting a draw into
+   `generateHistory`'s stream would re-roll every downstream value, which is the
+   failure PR #26 was written to fix.
+3. **`src/diet/biometrics.ts` and `src/settings/schema.ts` are new modules the
+   plan did not name.** The first puts `src/diet/` on disk a PR earlier than
+   planned, so it sits **outside the coverage gate** until PR 3 widens
+   `vitest.config.ts` — stated here rather than discovered then. The second
+   exists because a `'use server'` module may export only async functions, so a
+   schema declared in an action file cannot be tested at all.
+4. **The `birth_date` upper bound is a literal, not `current_date`.** A CHECK
+   holding `current_date` is accepted by PostgreSQL and evaluates in the
+   **server's** timezone, which `CLAUDE.md` #9 forbids for calendar logic, and it
+   never rechecks existing rows. So the column carries a bound that cannot rot
+   and the action asks the calendar question.
+
+**Two things the tests caught in the work itself:**
+
+- **`Date.parse` does not reject impossible ISO days.** A comment said it did.
+  `2026-02-31` parses as 3 March — a birth date silently moved three days,
+  feeding the comparison that decides whether a target is shown at all. An
+  out-of-range month does give `NaN`, so the old check caught the loud half.
+- **`z.coerce.number()` maps `""` to `0`.** A cleared field would have become a
+  person who weighs nothing, and the missing-biometric refusal would have been
+  unreachable.
+
+**What review changed, which was the important half:**
+
+- **The app grammar was looser than the column, in a way that produced an error
+  the user could not act on.** PostgreSQL rounds a numeric to its declared scale
+  **before** the CHECK runs, so `299.99` cm passed both app gates, became
+  `300.0`, and then violated `height_cm < 300`. The whole window 299.95–299.99
+  behaved that way, and the quiet cousin — `183.75` stored as `183.8` — was
+  worse to explain. `measurementField` now takes the column's scale.
+- **An omitted field was indistinguishable from a cleared one.** A POST carrying
+  only the four appearance fields succeeded and **erased all four health
+  values**, with "Saved" on screen. Absence is now rejected.
+- **Redacting the error message for the browser moved the leak into the log.**
+  Logging the `PostgrestError` whole looks prudent: on a CHECK violation
+  PostgREST fills `details` from Postgres's `errdetail`, which is
+  `Failing row contains (…)` — every column of the row. A complete health
+  profile joined to an account id, in plaintext, in the runtime log. `code` and
+  `hint` only, now.
+- Three factual errors in the documents: the 162,000 kcal BMR needs **both**
+  columns maxed, not either one; `2026-13-01` really is `NaN`; and §5 of the
+  spec still claimed the column rejects a future date, contradicting §1 of the
+  same file and the test that shipped asserting the opposite.
+
+**Verification.** `npm run verify` exits 0. `npm run test:db` passes against
+hosted, including the new bounds. `npm run build` clean. The under-18 assertion
+in `src/seed/archetypes.test.ts` was proved load-bearing by moving an
+archetype's birth date forward ten years and watching it fail.
+
+**Not verified, and the plan asked for it:** the browser round trip at 375×812
+in both themes. `/settings` needs a signed-in session, and a password is not
+something this agent types — including the fixture one printed on the sign-in
+page. Every other acceptance item is checked.
 
 ## Notes for whoever picks this up
 
