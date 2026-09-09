@@ -315,9 +315,18 @@ committed first.
 
 - **`docs/adr/0024-diet-advisor.md`** — the five decisions above, with what each
   rejected. It is the phase's one substantial decision record: what code owns,
-  what the model is permitted to do, why the payload is the outputs and not the
-  terms, and the table of what this does **not** guarantee (`docs/adr/0015`'s
-  table is the model to follow — a mitigation named as a mitigation).
+  what the model is permitted to do, why the payload is categories rather than
+  figures, and **the table of what this does not guarantee**, in ADR 0015's
+  style — a mitigation named as a mitigation. That table carries at least:
+
+  | Claim                              | Honest status                                                                                                                                             |
+  | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | No framing moves the calorie floor | **Guaranteed** for what renders, because code renders it and the model may write no numeral                                                               |
+  | The reply discloses no body metric | **Guaranteed** only while the payload carries no numbers; it is the payload doing the work, never the guard alone                                         |
+  | Under 18 gets no number            | **Mitigated** — `birth_date` is unverified, unconstrained, and typed by the user; if evaded, 1,200 is an adult floor                                      |
+  | This target is safe for this user  | **Not guaranteed** — no medical history is collected and eating-disorder risk is undetectable here                                                        |
+  | The user pays for their own abuse  | **Qualified** — ADR 0015 §5's note applies: one request drives up to attempts × gateway retries, and the budget gate reads then calls with no reservation |
+
 - **`docs/specs/diet.md`** — the contract the tests are written from. The
   equation with its constants, the multiplier bands and their session
   thresholds, the clamp order, the refusal cases, and the exact shape of the
