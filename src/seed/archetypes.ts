@@ -21,7 +21,15 @@ export interface ProgrammeEntry {
   startingKg: number;
   /** Added per progressed week. Zero for bodyweight movements. */
   incrementKg: number;
-  /** Which day of the training week this lift appears on, 0-indexed. */
+  /**
+   * Which session of the programme's rotation this lift appears in: 0, 1 or 2.
+   *
+   * NOT a day of the week, and not an index into `daysPerWeek` — the previous
+   * wording said "day of the training week", which invites `day: 3` for a
+   * four-day archetype. Two archetypes do train four days a week; they cycle
+   * back to session 0 on the fourth. `generateHistory` throws on anything
+   * outside the rotation rather than dropping it silently.
+   */
   day: number;
   /**
    * Draw this entry's randomness from the side stream instead of the shared one.
@@ -403,6 +411,20 @@ function progressedWeeks(archetype: Archetype, earned: number): number {
 const DETRAINING_RETENTION = 0.35;
 
 /**
+ * How many distinct sessions a programme rotates through.
+ *
+ * WHY this is not `archetype.daysPerWeek`: they are different numbers on
+ * purpose, and two of the five archetypes prove it. A four-day archetype trains
+ * on four calendar days — weekdays 0, 2, 4 and 6 — and cycles back to the first
+ * programme day on the fourth, so `daysPerWeek` is 4 while the rotation is 3.
+ *
+ * AI-NOTE: a `ProgrammeEntry.day` is an index into THIS rotation, not a day of
+ *          the week and not an index into `daysPerWeek`. Raising this means
+ *          writing the sessions to fill it; every archetype shares the rotation.
+ */
+const PROGRAMME_DAYS = 3;
+
+/**
  * Seeds the side stream `appended` entries draw from — see ProgrammeEntry.
  *
  * Any constant would do; it is fixed only so the database stays byte-identical.
@@ -488,6 +510,38 @@ export function generateHistory(
   const workouts: GeneratedWorkout[] = [];
 
   /*
+   * An entry on a day the rotation can never reach.
+   *
+   * WHY this is checked over the WHOLE programme, and not inside the day loop
+   * below where the `appended` guard sits: the filter there is
+   * `e.day === day % PROGRAMME_DAYS`, so an entry with `day: 3` is selected by
+   * no iteration at all. A check that runs per selected day is exactly the check
+   * that cannot see this one. It is the shape of the bug — the entry produces no
+   * sets, no warning and no error.
+   *
+   * WHY it is worth throwing over rather than tidying: `day: 3` is the natural
+   * thing to write for a four-day archetype, and `daysPerWeek` genuinely is 4
+   * for `plateaued` and `inconsistent`. The prescription would simply vanish,
+   * and a vanished accessory is a progression-tree rung nobody can ever open
+   * with nothing to say why — the failure the bodyweight accessories were added
+   * to fix, reintroduced by a typo.
+   *
+   * INVARIANT: the seeder refuses to produce history that silently omits
+   *            prescribed work.
+   */
+  const unreachable = archetype.programme.filter(
+    (e) => !Number.isInteger(e.day) || e.day < 0 || e.day >= PROGRAMME_DAYS
+  );
+  if (unreachable.length > 0) {
+    throw new Error(
+      `${archetype.key}: ${unreachable.map((e) => `${e.exerciseSlug} (day ${e.day})`).join(', ')} ` +
+        `sit outside the ${PROGRAMME_DAYS}-day rotation, so no session would ever ` +
+        'include them. A programme day is 0, 1 or 2 — it is an index into the ' +
+        'rotation, not a day of the week and not an index into daysPerWeek.'
+    );
+  }
+
+  /*
    * The side stream, for entries marked `appended`.
    *
    * Fixed seed, deliberately not derived from `rng`: deriving it would take a
@@ -540,7 +594,7 @@ export function generateHistory(
         continue;
       }
 
-      const entries = archetype.programme.filter((e) => e.day === day % 3);
+      const entries = archetype.programme.filter((e) => e.day === day % PROGRAMME_DAYS);
       if (entries.length === 0) continue;
 
       /*
@@ -557,7 +611,7 @@ export function generateHistory(
        */
       if (entries.every((e) => e.appended === true)) {
         throw new Error(
-          `${archetype.key}: day ${day % 3} holds only appended entries ` +
+          `${archetype.key}: day ${day % PROGRAMME_DAYS} holds only appended entries ` +
             `(${entries.map((e) => e.exerciseSlug).join(', ')}). ` +
             'An appended entry must share its day with a non-appended one, or it ' +
             'creates the session it is supposed to be invisible to.'

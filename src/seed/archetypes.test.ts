@@ -119,6 +119,64 @@ describe('every archetype', () => {
     expect(generate(byKey('beginner'), 7)).not.toEqual(generate(byKey('beginner'), 8));
   });
 
+  describe('an entry the rotation can never reach', () => {
+    /*
+     * `generateHistory` filters entries with `e.day === day % PROGRAMME_DAYS`,
+     * so an entry with `day: 3` matches no iteration and contributes nothing —
+     * silently, which is the whole problem. It is the natural thing to write for
+     * a four-day archetype, and two of the five really do train four days a
+     * week; they cycle back to session 0 on the fourth.
+     *
+     * A dropped accessory is a progression-tree rung nobody can open with
+     * nothing to say why — the failure the bodyweight accessories were added to
+     * fix in the first place.
+     *
+     * AI-NOTE: these assert the THROW, not the message. If the rotation ever
+     *          grows, change PROGRAMME_DAYS and the day numbers here; do not
+     *          delete the cases.
+     */
+    const withEntry = (day: number): Archetype => {
+      const base = byKey('plateaued'); // daysPerWeek: 4, which is the trap
+      return {
+        ...base,
+        programme: [
+          ...base.programme,
+          { exerciseSlug: 'pushups', sets: 3, reps: 10, startingKg: 0, incrementKg: 0, day },
+        ],
+      };
+    };
+
+    it('refuses a day past the end of the rotation', () => {
+      expect(() => generate(withEntry(3))).toThrow(/outside the 3-day rotation/);
+      expect(() => generate(withEntry(9))).toThrow(/outside the 3-day rotation/);
+    });
+
+    it('names the exercise and the day, so the typo is findable', () => {
+      // A guard that says only "invalid programme" makes the author re-read
+      // forty entries. The point is to land them on the one line.
+      expect(() => generate(withEntry(3))).toThrow(/pushups \(day 3\)/);
+    });
+
+    it('refuses a negative or fractional day', () => {
+      expect(() => generate(withEntry(-1))).toThrow(/outside the 3-day rotation/);
+      expect(() => generate(withEntry(1.5))).toThrow(/outside the 3-day rotation/);
+    });
+
+    it('accepts every day the rotation does reach', () => {
+      for (const day of [0, 1, 2]) {
+        expect(() => generate(withEntry(day)), `day ${day}`).not.toThrow();
+      }
+    });
+
+    it('leaves the shipped archetypes alone', () => {
+      // The guard runs on every call, so a false positive here would take out
+      // the seeder and the golden suite together.
+      for (const archetype of ARCHETYPES) {
+        expect(() => generate(archetype), archetype.key).not.toThrow();
+      }
+    });
+  });
+
   describe('an appended entry draws from the side stream', () => {
     /*
      * The property the `appended` flag exists for, which the determinism case
