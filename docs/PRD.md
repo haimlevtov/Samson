@@ -235,7 +235,7 @@ The mechanism, and why it is a view rather than a privileged client, is
 [ADR 0016](adr/0016-leaderboard.md) — this is the first feature in the project
 that reads another user's rows, which invariant #10 forbids by default.
 
-### 5.7 Diet — **Partly built**, the rest deferred (phase 6)
+### 5.7 Diet — **Built**, except retrieval-only supplement answers (phase 6 PR 5)
 
 **Built (phase 5).** The supplement evidence table and a page that reads it, at
 `/evidence`, reached from Coach. One row carries one claim, one evidence grade
@@ -243,19 +243,18 @@ A–D and one resolvable DOI — [ADR 0023](adr/0023-evidence-rows.md) — and r
 graded **D**, where the evidence does not support the popular claim, ship on
 purpose. The page states in as many words that no full text has been read.
 
-**Still deferred (phase 6).** Maintenance calories by equation, bounded
-adjustment, and a floor hard-clamped in code; the model explains the number, it
-never chooses it. Supplement answers as retrieval-only COACH responses, which is
-a different thing from a page a user browses — the table now exists for that to
-retrieve from. Acceptance is adversarial: no prompt, persona or framing moves
-the floor, and every attempt is logged.
+**Built (phase 6, 2026-09-09).** Maintenance calories by equation, a bounded
+adjustment and a floor hard-clamped in code, on the **Coach tab** as a disclosure
+beside the plan — a calorie target for the training you are being coached on is
+the same subject as the plan above it. How the floor is actually held: the model
+is sent categories rather than figures, its schema has no numeric field, it may
+write no numeral at all, and code renders every number the user sees. Design and
+what it does not guarantee: [ADR 0024](adr/0024-diet-advisor.md). Contract:
+[`specs/diet.md`](specs/diet.md).
 
-**Planned 2026-09-09 in [`plans/phase-6.md`](plans/phase-6.md).** Its surface is
-**the Coach tab**, as a disclosure beside the plan, not a sixth tab and not its
-own route — a calorie target for the training you are being coached on is the
-same subject as the plan above it. How the floor is actually held: the model is
-sent categories rather than figures, may write no numeral at all, and code
-renders every number the user sees.
+**Still deferred (phase 6, PR 5).** Supplement answers as retrieval-only COACH
+responses, which is a different thing from a page a user browses — the table
+exists for that to retrieve from.
 
 ### 5.8 Import — **Deferred** (phase 6)
 

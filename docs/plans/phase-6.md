@@ -20,7 +20,7 @@ planned until a scope question is answered.
 | 1   | [This plan](#pr-1--this-plan)                                              | `phase-6-plan`      | shipped 09-09                                                      |
 | 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09)                   |
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
-| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | planned                                                            |
+| 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
 | 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                                            |
 | 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
 
@@ -689,6 +689,67 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### PR 4 — the diet stage, 2026-09-09
+
+**The phase's one adversarial acceptance criterion is met**, and the two halves
+are checked in different places because they have to be.
+
+**Blocked** — `src/diet/advice.test.ts`, 33 cases against a scripted model.
+Thirteen attacks, each asserting the same three things: the target the user sees
+is the engine's, the model's figures never render, and the attack arrived fenced.
+The attacks differ and the reason they fail does not, which is the argument for
+the design rather than for a longer prompt. Five ordinary questions assert the
+other half — a guard that refuses "how much protein should I eat" is one somebody
+switches off.
+
+**Logged** — `tests/db/diet-ledger.test.ts`, and it could not have been done in
+the unit suite: **that suite mocks the gateway, so it never inserts a row and
+structurally cannot see one.** Six cases: a `stage = 'diet'` row inserts under
+the user's own token, a stage nobody declared is rejected, a `safety_blocked`
+attempt is representable, a retry is a second row rather than an update, and
+nobody can log against or read another user's spend.
+
+**What none of that proves, stated rather than implied:** that a live model call
+lands a row. No key has ever been configured on this project. That gap is the one
+phase 2's and phase 3's unmet criteria already sit in, and this PR does not close
+it.
+
+**Four things the design does not stop, recorded as passing tests** — ADR 0005 §5
+asks for the taxonomy of what got through, not only what was blocked:
+
+- A figure spelled out in words. `findUnknownNumbers` reads numerals. Narrower
+  here than elsewhere, because the model was never told the target, so a written
+  figure is a guess rather than a leak — but "eighteen hundred" reaches the user.
+- Whether the prose agrees with the target. Nothing can tell "eat a little under
+  what you burn" from "eat considerably less", and the second is a nudge a
+  maintenance target does not support.
+- The `on_topic` classification. The model classifies itself; what is guaranteed
+  is that the refusal's wording is code.
+- Anything about a live model, per above.
+
+**Deviations from the plan, stated:**
+
+1. **The adversarial cases are in `src/diet/advice.test.ts`, not
+   `src/llm/safety.test.ts`** as the plan said. That file tests
+   `sanitizeUntrusted`, `fenceUntrusted` and `scanOutput` — module-level
+   functions with no stage. These cases exercise a stage against an injected
+   caller, and moving the harness there would have been the tail wagging the dog.
+2. **The reply schema has two prose fields, `summary` and `caveat`**, where the
+   plan implied one. Two short fields give the guard two short strings rather
+   than one long one, and let the surface render the second more quietly. The
+   guard concatenates them — the plan's own instruction, and the thing the chat
+   does not need to do because it has one field.
+3. **A refusal calls no model at all.** The plan's surface section listed the
+   refusals as states to render; it did not say the action returns before the
+   call, which it does. Asking a model to comment on a missing biometric would be
+   paying for a sentence the app can write.
+
+**Found by the project's own guard, not by me.** `tests/unit/invariants.test.ts`
+failed on the new database test for naming OpenRouter outside `src/llm/` — in a
+comment. The check is a blunt substring match and it says why in a comment of its
+own: it duplicates an ESLint rule on purpose, because lint can be silenced inline
+and this cannot. The right fix was mine, not the guard's.
 
 ### PR 3 — the arithmetic and the clamp, 2026-09-09
 
