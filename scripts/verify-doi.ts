@@ -63,6 +63,21 @@ async function resolves(doi: string): Promise<{ ok: boolean; detail: string }> {
   return { ok: true, detail: 'registered' };
 }
 
+/**
+ * A thrown fetch failure, in words that name the actual problem.
+ *
+ * WHY it digs into `cause`: Node's fetch reports a DNS or connection failure as
+ * `TypeError: fetch failed`, with the real reason — `ENOTFOUND`, `ECONNRESET` —
+ * only in `.cause`. Without this, a registry outage prints thirteen identical
+ * "fetch failed" lines, and the one thing this job uniquely detects becomes
+ * indistinguishable from the weather.
+ */
+function describeFailure(cause: unknown): string {
+  if (!(cause instanceof Error)) return String(cause);
+  const inner = cause.cause;
+  return inner instanceof Error ? `${cause.message} (${inner.message})` : cause.message;
+}
+
 async function main(): Promise<void> {
   const { data, error } = await adminClient()
     .from('supplement_evidence')
@@ -77,36 +92,62 @@ async function main(): Promise<void> {
 
   console.log(`Resolving ${rows.length} DOI(s) against ${HANDLE_API}\n`);
 
-  const failures: string[] = [];
+  /*
+   * Two buckets, not one — FOUND IN REVIEW, and the distinction is the whole
+   * value of this job.
+   *
+   * This is a `continue-on-error` job, so its red X is easy to normalise into
+   * background noise. Every failure it can report EXCEPT one is already covered
+   * by a blocking check: `tests/db/evidence.test.ts` proves the rows exist and
+   * are well-formed. The one signal only this job carries is "this DOI is
+   * well-formed and is not registered" — a transposed digit that still matches
+   * the pattern. If a registry outage prints thirteen lines that look exactly
+   * like that, the signal is lost.
+   */
+  const unregistered: string[] = [];
+  const unreachable: string[] = [];
 
   for (const row of rows) {
     // Format first, so a malformed value is reported as malformed rather than
     // as a network failure. The same check `npm test` runs offline.
     if (!isDoi(row.doi)) {
-      failures.push(`${row.slug}: ${row.doi} is not shaped like a DOI`);
+      unregistered.push(`${row.slug}: ${row.doi} is not shaped like a DOI`);
       console.log(`  FAIL  ${row.slug.padEnd(30)} ${row.doi} — malformed`);
       continue;
     }
 
-    let outcome: { ok: boolean; detail: string };
+    let outcome: { ok: boolean; detail: string; reachable: boolean };
     try {
-      outcome = await resolves(row.doi);
+      outcome = { ...(await resolves(row.doi)), reachable: true };
     } catch (cause) {
-      outcome = { ok: false, detail: cause instanceof Error ? cause.message : String(cause) };
+      outcome = { ok: false, detail: describeFailure(cause), reachable: false };
     }
 
-    if (!outcome.ok) failures.push(`${row.slug}: ${row.doi} — ${outcome.detail}`);
+    if (!outcome.ok) {
+      const line = `${row.slug}: ${row.doi} — ${outcome.detail}`;
+      (outcome.reachable ? unregistered : unreachable).push(line);
+    }
 
     console.log(`  ${outcome.ok ? 'ok  ' : 'FAIL'}  ${row.slug.padEnd(30)} ${row.doi}`);
     // The line no test can check, printed so a person can — ADR 0023.
     console.log(`        ${row.source_title}`);
+    if (!outcome.ok) console.log(`        ${outcome.detail}`);
 
     await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
   }
 
-  if (failures.length > 0) {
-    console.error(`\n${failures.length} DOI(s) did not resolve:`);
-    for (const failure of failures) console.error(`  ${failure}`);
+  if (unregistered.length > 0 || unreachable.length > 0) {
+    console.error(
+      `\n${unregistered.length} unregistered, ${unreachable.length} unreachable, of ${rows.length}.`
+    );
+    if (unregistered.length > 0) {
+      console.error('\nNot registered — the ROWS are wrong, fix the migration:');
+      for (const line of unregistered) console.error(`  ${line}`);
+    }
+    if (unreachable.length > 0) {
+      console.error('\nCould not be reached — the NETWORK is wrong, nothing to fix here:');
+      for (const line of unreachable) console.error(`  ${line}`);
+    }
     process.exit(1);
   }
 

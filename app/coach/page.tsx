@@ -40,10 +40,15 @@ export default async function CoachPage() {
          * tests/unit/invariants.test.ts can see it.
          *
          * WHY here rather than on Profile: a supplement question is a coaching
-         * question. The chat is confined to training (ADR 0015) and will decline
-         * to recommend a supplement, so this is the answer it points at.
+         * question that this coach cannot answer well.
+         *
+         * FOUND IN REVIEW: this said the chat "will decline to recommend a
+         * supplement". ADR 0015 refuses to promise that — it calls topical
+         * confinement "a judgement, not arithmetic", defence in depth rather
+         * than a control. The link is somewhere better to send the user, not a
+         * guarantee about what the model will say.
          */}
-        <Link className="btn ghost" href="/evidence">
+        <Link href="/evidence" className="chip">
           Supplements
         </Link>
       </header>

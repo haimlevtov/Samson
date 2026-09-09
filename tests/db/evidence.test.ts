@@ -169,6 +169,52 @@ describe('a user cannot author a claim', () => {
     const { rows } = await table();
     await user.client.from('supplement_evidence').delete().eq('slug', rows[0]!.slug);
     expect((await table()).rows.length, 'a row was deleted').toBe(rows.length);
-    void adminClient;
+  });
+});
+
+describe('a row that does not validate', () => {
+  /*
+   * FOUND IN REVIEW: the suite asserted `dropped === 0` against the shipped
+   * rows, which is a claim about the CONTENT and never executes the drop
+   * branch. Nothing failed if `loadEvidence` started returning unvalidated rows,
+   * and the page's "could not be displayed" line had never rendered anywhere.
+   *
+   * The row below passes every SQL constraint — only `grade` and `source_year`
+   * are checked in the database, and `doi` is plain text — so it is reachable in
+   * production, which is the reason the reader-side message exists at all.
+   */
+  const slug = `bad-doi-${Date.now()}`;
+
+  afterAll(async () => {
+    const { error } = await adminClient().from('supplement_evidence').delete().eq('slug', slug);
+    // Thrown rather than swallowed: leaving it behind would make every other
+    // case in this file fail on the next run, for a reason nothing explains.
+    if (error) throw new Error(`cleaning up the fixture row: ${error.message}`);
+  });
+
+  it('is dropped rather than rendered, and counted', async () => {
+    const before = await table();
+
+    const { error } = await adminClient().from('supplement_evidence').insert({
+      user_id: null,
+      slug,
+      supplement: 'Something with a broken citation',
+      claim: 'A claim whose source cannot be checked.',
+      grade: 'A',
+      doi: 'not-a-doi',
+      source_title: 'A title that goes nowhere',
+      source_year: 2024,
+      display_order: 9999,
+    });
+    if (error) throw new Error(`inserting the fixture: ${error.message}`);
+
+    const after = await table();
+
+    expect(after.dropped, 'the malformed row was not dropped').toBe(before.dropped + 1);
+    expect(
+      after.rows.map((row) => row.slug),
+      'a row with an unusable DOI reached the page'
+    ).not.toContain(slug);
+    expect(after.rows.length, 'a good row was dropped too').toBe(before.rows.length);
   });
 });

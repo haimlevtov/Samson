@@ -38,8 +38,16 @@ what the row claims.**
 
 ## Decision
 
-**A row carries one supplement, one claim, one evidence grade, a dose in
-canonical units, and the DOI of the source that backs _that_ claim.**
+**A row carries one supplement, one claim, one evidence grade, a dose, and the
+DOI of the source that backs _that_ claim.**
+
+The dose is **prose, and CLAUDE.md #8 does not apply to it** — a correction to
+the plan, which asked for "a dose range in canonical units". What the sources
+actually give is "3–6 mg per kg bodyweight, 60 minutes before", "strain-specific;
+a dose from one product says nothing about another", and for the D rows "no dose
+is recommended". Canonicalising that means either discarding the caveats or
+writing a parser for a value nothing computes with. Nothing may do arithmetic on
+it; a feature that needs to should add typed columns beside it.
 
 No row summarises a literature. If a supplement has three claims worth making, it
 gets three rows and three sources. A row nobody can check is worse than an absent
@@ -60,6 +68,28 @@ Assigned from what the cited source concludes, not from popularity.
 label says" is the answer a user most needs and the one a supplement table never
 gives, because the tables are usually written by people selling supplements.
 Three of the shipped rows are D.
+
+### Nobody but the project may write a row
+
+**The table ships with a read policy and no write policy at all.** Not the
+catalogue pattern — `exercises`, `equipment_tags` and the rest carry a
+read/write pair that lets a user author their own rows alongside the shared
+ones.
+
+Migration `20260908120100` is why. `progression_nodes` inherited that pair for a
+feature that did not exist, and the hazard was not the wasted grant: the unique
+constraint is `unique nulls not distinct (user_id, slug)`, so a user row can
+reuse a **system** slug. Here that would put a row somebody wrote themselves
+next to a position stand, under the same heading, with a grade beside it. Of
+everything in this database, these are the rows where that matters most.
+
+RLS is what refuses the write; the `authenticated` role keeps its DML grant,
+because the two are independent gates — [ADR 0003](0003-grants-and-rls.md). The
+pair is simply never written, so there is nothing to drop later.
+
+_Added in review: this was argued in the migration header and the tests and was
+missing from the document somebody would actually consult before building an
+authoring feature._
 
 ### Sources
 

@@ -4,8 +4,18 @@
 -- Contract: docs/adr/0023-evidence-rows.md, committed first.
 --
 -- INVARIANT: content lives in the database, not in code — CLAUDE.md #7.
--- INVARIANT: units are stored canonically — CLAUDE.md #8. Doses are grams, or
---            grams per kilogram of bodyweight, and the display layer formats.
+--
+-- `dose` is PROSE and CLAUDE.md #8 does not apply to it. FOUND IN REVIEW: this
+-- header claimed the doses were canonical grams and the display layer formatted
+-- them. Neither is true — the column holds "3–6 mg per kg bodyweight, 60 minutes
+-- before" and "No dose is recommended — eat the protein instead", and the page
+-- prints it verbatim. The plan asked for "a dose range in canonical units"; a
+-- range with a schedule, a per-kilogram basis and a "do not take this" case is
+-- not a number with a unit, and pretending otherwise would have meant either
+-- losing the caveats or inventing a parser for something nothing computes with.
+--
+-- AI-NOTE: nothing may do arithmetic on `dose`. If a feature ever needs to, add
+--          typed columns beside it rather than parsing this one.
 --
 -- ONE ROW, ONE CLAIM, ONE DOI. A row that summarised a literature would have no
 -- single statement for its source to back, which makes the citation decoration.
@@ -41,8 +51,7 @@ create table public.supplement_evidence (
   -- One sentence, in the user's language, that the DOI below backs.
   claim text not null,
   grade text not null check (grade in ('A', 'B', 'C', 'D')),
-  -- Free text because a dose is a range with a unit and sometimes a schedule.
-  -- Stored canonically per CLAUDE.md #8: grams, or g/kg of bodyweight.
+  -- Prose, read by a person and never parsed. See the header.
   dose text,
   -- What a reader has to know before acting on the row: paraesthesia, GI
   -- distress, an interaction. Null when the source names none.

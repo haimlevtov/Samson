@@ -72,4 +72,24 @@ describe('doiUrl', () => {
   it('resolves through doi.org rather than a publisher', () => {
     expect(doiUrl('10.1186/s12970-017-0173-z')).toBe('https://doi.org/10.1186/s12970-017-0173-z');
   });
+
+  it('returns null rather than building a link from a non-DOI', () => {
+    /*
+     * FOUND IN REVIEW: this used to interpolate whatever it was given. Both
+     * callers validated first, so no bad href could reach a page — but that
+     * made the safety a property of the call sites, and the next caller would
+     * inherit none of it.
+     */
+    expect(doiUrl('https://evil.example/10.1186/x')).toBeNull();
+    expect(doiUrl('')).toBeNull();
+    expect(doiUrl('not a doi')).toBeNull();
+  });
+
+  it('keeps a hostile-looking suffix inside the doi.org path', () => {
+    // The prefix pins the origin:  plus a numeric registrant means every
+    // remaining byte is path, so it cannot change the host.
+    const url = doiUrl('10.1186/x@evil.example');
+    expect(url).not.toBeNull();
+    expect(new URL(url!).origin).toBe('https://doi.org');
+  });
 });

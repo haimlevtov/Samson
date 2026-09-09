@@ -2532,6 +2532,30 @@ details.quick-log[open] > summary {
   color: var(--warn);
 }
 
-.evidence-row .label {
+/*
+ * `.label` is display:block, so reusing it inline needs the override — the same
+ * shape as `details.quick-log > summary .label`. FOUND IN REVIEW: without it,
+ * "Dose" sat on its own line and the margin below did nothing.
+ */
+.label.inline {
+  display: inline;
   margin-right: 4px;
+}
+
+/*
+ * The citation is the one interaction this page exists for — ADR 0023, "a DOI
+ * they cannot click is a decoration" — and a 13px line of text is about 18px
+ * tall. Padding rather than a fixed height, because a source title wraps to
+ * three lines and must keep wrapping.
+ *
+ * INVARIANT: 44px minimum target — docs/specs/mobile-interface.md §3.
+ */
+.evidence-cite {
+  margin: 0;
+}
+.evidence-cite a {
+  display: block;
+  min-height: var(--tap);
+  padding: 11px 0;
+  margin: -5px 0;
 }

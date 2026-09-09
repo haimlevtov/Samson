@@ -35,12 +35,21 @@ export function isDoi(value: string): boolean {
 }
 
 /**
- * The URL that resolves a DOI, for a link and for `verify:doi`.
+ * The URL that resolves a DOI, or null when the value is not one.
  *
  * `doi.org` rather than a publisher's domain: the whole point of storing an
  * identifier instead of a URL is that this redirect is somebody's job to
  * maintain forever — ADR 0023.
+ *
+ * WHY it validates rather than trusting its caller: FOUND IN REVIEW. Both
+ * current callers happen to check first — `src/db/evidence.ts` drops a row whose
+ * DOI fails the schema — so the href could never be hostile. But that made the
+ * safety a property of two call sites rather than of this function, and the next
+ * caller (a search box, a share link) would inherit none of it. The prefix is
+ * what pins the origin: with `10.` and a numeric registrant guaranteed, every
+ * remaining byte lands in doi.org's PATH and cannot change the host.
  */
-export function doiUrl(doi: string): string {
+export function doiUrl(doi: string): string | null {
+  if (!isDoi(doi)) return null;
   return `https://doi.org/${doi}`;
 }

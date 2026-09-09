@@ -45,7 +45,8 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
 6. **Diet outputs are clamped in code.** No prompt, persona, or user request
    can move the floor. The model explains the number; it does not choose it.
 7. **Content lives in the database, not in code.** Achievements, personas,
-   challenges, exercises, and progression nodes are rows.
+   challenges, exercises, progression nodes, tonnage comparisons and supplement
+   evidence are rows.
 8. **Units are stored canonically** (kg, cm, seconds). Convert at display only.
 9. **Timestamps are UTC plus the user's IANA timezone.** Calendar-triggered
    achievements evaluate against the user's local date, never server date.
@@ -68,7 +69,8 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
   generator's formatting is not guessable — short function entries collapse onto
   one line, longer ones do not. Adding a column or an RPC means regenerating,
   not typing. This has cost two red builds already. Two further traps:
-  - **The CLI version is pinned in `.github/workflows/verify.yml`** because the
+  - **The CLI version is pinned in `.github/workflows/verify.yml`** — in TWO
+    jobs now, `db` and `doi`, so a bump has to change both — because the
     generator's output is part of the contract. v2.117.0 changed nothing but
     parentheses and turned every open PR red at once. Bumping the pin means
     regenerating in the same commit.

@@ -161,9 +161,15 @@ jobs:
       - name: Start local Supabase
         run: supabase start
 
+      # `set -euo pipefail` and the guard are not decoration: `eval` of empty
+      # output exits 0, so a failed `supabase status` would write blank values
+      # and the real failure would surface later — inside a continue-on-error
+      # job, where it is invisible. The db job fails loudly; this one would not.
       - name: Write local connection details
         run: |
+          set -euo pipefail
           eval "$(supabase status -o env)"
+          [ -n "${API_URL:-}" ] || { echo "::error::supabase status gave no API_URL"; exit 1; }
           {
             echo "SUPABASE_URL=$API_URL"
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
