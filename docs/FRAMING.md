@@ -94,6 +94,22 @@ guarantee are in [ADR 0016](adr/0016-leaderboard.md). It is also the first
 feature in the project that reads another user's rows, which is why it has an
 ADR at all.
 
+**Amended 2026-09-09 — file import is deferred, and the acceptance criterion goes
+unmet.** Phase 6 briefed `.fit`, `.tcx`, `.gpx` and Apple Health XML. Asked which
+was meant, the stakeholder answered **"skip Apple Health for now, save it for
+later"** — and Apple Health was the only one of the four with somewhere to land,
+because it carries a bodyweight time series this schema has no other source for.
+The other three are endurance formats and there is no table a GPS track belongs
+in, so the whole item waits rather than half of it being built.
+
+**It is recorded here as well as in the plan, deliberately.** `CLAUDE.md` names
+this file as the one to read when a decision is disputed, and phase 5 is the
+cautionary tale: a stakeholder answer lived in Q2 below, a plan was written
+without reading it, and the plan said "that decision has not been made" when it
+had. The reasoning and what the deferral costs are in
+[`plans/phase-6.md`](plans/phase-6.md); this paragraph exists so the next person
+does not have to already know that.
+
 ---
 
 ## The interview

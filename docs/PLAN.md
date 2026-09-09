@@ -28,18 +28,28 @@ forward into it and shipped; see the entry under phase 6 for why and for the two
 ways it differs from what was written there.
 
 Phase 6 is planned in [`plans/phase-6.md`](plans/phase-6.md), committed before
-its code. It **reorders the brief below** — the diet advisor first because it
+its code. It **reordered the brief below** — the diet advisor first because it
 carries the phase's only adversarial acceptance criterion, file import last and
-blocked on a scope question the plan states rather than answers.
+blocked on a scope question. **That question was answered on 2026-09-09 and the
+answer deferred the item**, which is why the criterion below is unmet.
 
-**Four acceptance criteria are unmet, and they are unmet for two different
-reasons.** Three wait on an OpenRouter key rather than on work: phase 2's cache
-hit rate and cost per plan generation, and phase 3's persona drift eval —
+**Five acceptance criteria are unmet, and they are unmet for two different
+reasons.** Four wait on an OpenRouter key rather than on work:
+
+- **phase 0** — a gateway call writes a complete `llm_calls` row. Implemented and
+  asserted field by field against canned payloads; no live call has ever run.
+  _Counted here for the first time on 2026-09-09: it is recorded plainly in
+  `plans/phase-0.md`'s own outcome table and every later summary in this repo
+  said "three", because each was written from the one before it rather than from
+  the phase documents._
+- **phase 2** — cache hit rate, and cost per plan generation per model.
+- **phase 3** — the persona drift eval.
+
 `npm run eval:planner -- --live` and the drift eval are both written and unrun.
-The fourth is phase 6's file import, which waits on nothing: it was **deferred by
-decision** on 2026-09-09, and a permitted cut is still a criterion that was not
-met. Phase 4 met all four of its criteria, and every gap its outcome named is
-closed.
+
+The fifth waits on nothing: **phase 6's file import was deferred by decision** on
+2026-09-09, and a permitted cut is still a criterion that was not met. Phase 4
+met all four of its criteria, and every gap its outcome named is closed.
 
 ---
 
@@ -292,17 +302,18 @@ Each is self-contained. Cut any of them without breaking anything above.
 > **Planned 2026-09-09 in [`plans/phase-6.md`](plans/phase-6.md), which reorders
 > this list.** The diet advisor runs first, because it carries the phase's only
 > adversarial acceptance criterion and the adversarial taxonomy is a graded
-> deliverable in its own right (`PRD.md` §7). File import runs last and is
-> **blocked on a scope question**: three of its four formats are endurance
-> formats and this is a strength app, so there is nowhere for a GPS track to
-> land. The plan states the three readings rather than choosing one.
+> deliverable in its own right (`PRD.md` §7). File import ran last and was
+> blocked on a scope question: three of its four formats are endurance formats
+> and this is a strength app, so there is nowhere for a GPS track to land.
+> **Answered 2026-09-09 — deferred**, see the item below.
 
 **Build**
 
 - ~~File import: `.fit`, `.tcx`, `.gpx`, Apple Health XML~~ — **deferred
   2026-09-09.** Apple Health was the only one of the four with somewhere to land:
-  it carries a bodyweight time series and strength workouts, while `.fit`, `.tcx`
-  and `.gpx` are endurance formats and this schema has no table a run belongs in.
+  it carries a bodyweight time series — the half of that argument that survived
+  being checked, since its workout records are summary-level with no per-set
+  weight or reps — while `.fit`, `.tcx` and `.gpx` are endurance formats and this schema has no table a run belongs in.
   The stakeholder asked to save Apple Health for later, which leaves nothing in
   the item worth building now — three parsers producing rows nothing displays.
   Recorded, with what it costs, in [`plans/phase-6.md`](plans/phase-6.md).
@@ -335,11 +346,12 @@ Each is self-contained. Cut any of them without breaking anything above.
 
 **Acceptance criteria**
 
-- ~~File import is the primary path and demos without any native module~~ —
-  **UNMET, and deliberately.** Import is deferred (2026-09-09, below). This is
-  the phase's one unmet criterion and the project's fourth overall; the other
-  three wait on an API key, and this one waits on a decision that was made the
-  other way.
+- File import is the primary path and demos without any native module —
+  **UNMET, and deliberately.** Import is deferred (2026-09-09, above). This is
+  the phase's one unmet criterion and the project's fifth overall; the other four
+  wait on an API key, and this one waits on a decision that was made the other
+  way. _Not struck through: everywhere else in this file a strikethrough means
+  removed or done, and the point of writing this line is that it is neither._
 - Adversarial suite: no prompt, persona, or user framing moves the calorie
   floor. Every attempt blocked and logged. — **met**, phase 6 PR 4:
   `src/diet/advice.test.ts` for blocked, `tests/db/diet-ledger.test.ts` for

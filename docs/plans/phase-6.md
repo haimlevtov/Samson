@@ -13,7 +13,7 @@ planned until a scope question is answered.
 > table. If the phase runs out of time, the thing that must not be the casualty
 > is the one being graded.
 
-## Status — planned
+## Status — complete
 
 | PR  | What                                                                       | Branch              | State                                                              |
 | --- | -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------ |
@@ -22,12 +22,20 @@ planned until a scope question is answered.
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
 | 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
 | 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | shipped 09-09, [↓](#pr-5--retrieval-only-supplements-2026-09-09)   |
-| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | **deferred 09-09**, [↓](#the-import-decision-2026-09-09)           |
+| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | **deferred 09-09**, [↓](#the-import-decision--2026-09-09)          |
 
 PR 6 was blocked rather than planned on a scope question. **That question was
 answered on 2026-09-09 and the answer defers the item** — see
-[the decision](#the-import-decision-2026-09-09). Nothing in PRs 2 to 5 depended
+[the decision](#the-import-decision--2026-09-09). Nothing in PRs 2 to 5 depended
 on it, and the phase's other two acceptance criteria are met.
+
+> **How to read this file.** Everything from [Context](#context) down to the
+> [Outcome](#outcome) is the plan as written on 2026-09-09, **before** any of the
+> code, and amended in place only where an amendment is marked as one. The status
+> table above, the import decision below it, and everything under Outcome were
+> added afterwards and are a record rather than part of the plan. Where the two
+> disagree the record is right — that is the point of keeping both, and
+> `phase-5-content-fill.md` established the convention.
 
 ## The import decision — 2026-09-09
 
@@ -37,13 +45,24 @@ That is a direct answer to only one of the three readings this plan set out, so
 what follows is an inference, marked as one rather than dressed up as the
 decision. **If it is wrong, this section is where to correct it.**
 
-Apple Health XML was the only one of the four formats with somewhere to land. It
+Apple Health XML was the only one of the four formats with somewhere to land, and
+**the reason is narrower than the first draft of this section claimed.** It
 carries a **bodyweight time series** — the thing `docs/PRD.md` §8's risk table
-and the AI-NOTE in `src/metrics/tonnage.ts` both say is missing — and strength
-workouts, which the `workouts`/`sets` schema already models. `.fit`, `.tcx` and
-`.gpx` are endurance formats in practice: there is no table a 5 km run belongs
-in, no metric in `src/metrics/` that would read one, and importing one would
-produce a row nothing displays.
+and the AI-NOTE in `src/metrics/tonnage.ts` both say is missing, and the only
+sourced half of this argument.
+
+> **Corrected in review: the first version also said Apple Health carries
+> strength workouts "which the `workouts`/`sets` schema already models". That is
+> unsourced and probably wrong.** Apple Health's workout records are
+> summary-level — a type, an interval, an energy figure — with no per-set weight
+> or reps. Importing one yields a workout with no sets, which is exactly the
+> outcome this section rejects for `.fit` and `.tcx` two paragraphs down. Half
+> the asymmetry the decision rests on did not survive being checked; the
+> bodyweight series is the half that did, and it is enough on its own.
+
+`.fit`, `.tcx` and `.gpx` are endurance formats in practice: there is no table a
+5 km run belongs in, no metric in `src/metrics/` that would read one, and
+importing one would produce a row nothing displays.
 
 So deferring Apple Health defers the half with the value in it, and building the
 other three now would be three parsers feeding a surface that does not exist.
@@ -647,8 +666,13 @@ popular claim — is exactly the one a fluent paraphrase would soften.
 **Branch `history-import`. Blocked on a scope answer, and the block is the
 finding.**
 
-The brief asks for `.fit`, `.tcx`, `.gpx` and Apple Health XML, with file import
-as the primary path and no native module.
+> **Settled 2026-09-09: deferred.** The answer came back "skip Apple Health for
+> now, save it for later", and Apple Health was the reading with the value in it.
+> [The decision](#the-import-decision--2026-09-09) is at the top of this file
+> with the reasoning and what it costs. Everything below is the section as
+> written before that, left in place because the question it poses is the reason
+> the answer went the way it did — and because a plan edited to look prescient is
+> worth less than one that shows its own working.
 
 **Three of those four are endurance formats, and Samson is a strength app.** A
 `.gpx` file is a GPS track. `.fit` and `.tcx` are, in practice, runs and rides.
@@ -700,13 +724,15 @@ the first draft of this plan miscounted them.
 
 | Criterion (`docs/PLAN.md` phase 6)                           | Owner           | State                                                                              |
 | ------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------------- |
-| File import is the primary path, demos with no native module | PR 6            | **unowned while PR 6 is blocked**                                                  |
+| File import is the primary path, demos with no native module | PR 6            | **UNMET** — deferred 09-09, see [the decision](#the-import-decision--2026-09-09)   |
 | No prompt, persona or framing moves the calorie floor        | PR 4            | **met** — `src/diet/advice.test.ts` blocked, `tests/db/diet-ledger.test.ts` logged |
 | Leaderboard view returns name and XP and nothing else        | phase 5, PR #17 | **met** — `tests/db/leaderboard.test.ts`                                           |
 
-**If PR 6 is answered as "cut it", the first criterion goes unmet and the phase
-says so** rather than quietly dropping it. That is the phase's own framing —
-"cut any of them" — but a cut criterion is still a criterion that was not met.
+**It was answered that way, and the criterion is unmet.** This paragraph was
+written before the answer and said the phase would say so rather than quietly
+dropping it; it does, here and in `docs/PLAN.md`. The phase's own framing permits
+the cut — "cut any of them" — and a cut criterion is still a criterion that was
+not met.
 
 ## Verification
 
@@ -715,7 +741,7 @@ themes for anything with a surface.
 
 **One migration, in PR 2**, and it adds CHECK constraints only — no column type
 changes, so `src/db/types.ts` is untouched, there is no regeneration and **no
-PR in this phase needs Docker** unless PR 6 is answered as reading 1 or 2.
+PR in this phase needed Docker**, and with import deferred none ever will.
 `npm run db:push` and `npm run test:db` both run against hosted, as PR #7
 established.
 
@@ -734,30 +760,38 @@ established.
 Five PRs shipped, one deferred. Three acceptance criteria: **two met, one unmet
 by decision.**
 
-| Criterion                                         | State                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------- |
-| File import is the primary path, no native module | **unmet** — deferred, see [the decision](#the-import-decision-2026-09-09) |
-| No framing moves the calorie floor, all logged    | **met** — `src/diet/advice.test.ts`, `tests/db/diet-ledger.test.ts`       |
-| Leaderboard returns name and XP and nothing else  | **met** in phase 5 — `tests/db/leaderboard.test.ts`                       |
+| Criterion                                         | State                                                                      |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| File import is the primary path, no native module | **unmet** — deferred, see [the decision](#the-import-decision--2026-09-09) |
+| No framing moves the calorie floor, all logged    | **met** — `src/diet/advice.test.ts`, `tests/db/diet-ledger.test.ts`        |
+| Leaderboard returns name and XP and nothing else  | **met** in phase 5 — `tests/db/leaderboard.test.ts`                        |
 
-**What review did to this phase, counted, because it is the phase's most useful
-measurement and it is not a flattering one.** Every PR had findings, and four of
-them were defects that would have reached a user:
+**What found what, counted, because it is the phase's most useful measurement
+and it is not a flattering one.** Each of the four code PRs carried a defect that
+would have reached a user. **The first draft of this table credited all of them to
+review and was wrong about one** — corrected below to what the per-PR Outcomes
+already said:
 
-| PR  | The one that mattered                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 2   | A column's scale rounded `299.99` to `300.0` and then rejected it — an error on a value the form offered                      |
-| 3   | Mifflin–St Jeor goes negative for inputs every column admits; the floor rescued the target and left a −745 kcal BMR beside it |
-| 4   | `\d` is ASCII-only, so the model could write the number in Arabic-Indic digits and it rendered                                |
-| 5   | The claim cap truncated ten of thirteen rows mid-sentence, severing a negation the selector then read as an endorsement       |
+| PR  | The one that mattered                                                                                                         | Found by                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 2   | A column's scale rounded `299.99` to `300.0` and then rejected it — an error on a value the form offered                      | review                          |
+| 3   | Mifflin–St Jeor goes negative for inputs every column admits; the floor rescued the target and left a −745 kcal BMR beside it | **the sweep**, on its first run |
+| 3   | A `sex` outside the three returned `kind: 'ok'` with NaN in every figure                                                      | review                          |
+| 4   | `d` is ASCII-only, so the model could write the number in Arabic-Indic digits and it rendered                                 | review                          |
+| 5   | The claim cap truncated ten of thirteen rows mid-sentence, severing a negation the selector then read as an endorsement       | review                          |
 
-Three of those four were **invisible to the tests written for them**, because the
-test shared the bug's assumption: the sweep iterated the one field with an
-unchecked lookup, the adversarial assertion was `not.toMatch(/\d/)` against an
-ASCII-only guard, and the row fixtures were all shorter than the cap that broke
-the real ones. That is the pattern worth carrying forward — a test written by the
-same hand as the code inherits its blind spot, and the reviewers are what found
-each one.
+**Three were invisible to the tests written for them**, because each test shared
+its code's assumption:
+
+- the sweep iterated `SEXES`, drawing the one field with an unchecked lookup from
+  the very set that made the lookup safe;
+- the adversarial assertion was `not.toMatch(/d/)` against an ASCII-only guard;
+- the row fixtures were all shorter than the cap that broke the real rows.
+
+That is the pattern worth carrying forward: a test written by the same hand as
+the code inherits its blind spot. PR 3's negative BMR is the exception that shows
+the way out — it was found by a **property** sweep, which is the one test shape
+that does not have to think of the case first.
 
 **Two things this phase did not do, and both are stated in their own places
 rather than here alone:** no live model has ever been called, so every adversarial
