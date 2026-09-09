@@ -300,7 +300,9 @@ Each is self-contained. Cut any of them without breaking anything above.
   and code renders every number. [ADR 0024](adr/0024-diet-advisor.md),
   [`specs/diet.md`](specs/diet.md), and the Outcome in
   [`plans/phase-6.md`](plans/phase-6.md). **Retrieval-only supplement answers
-  are the remaining half**, planned as that file's PR 5.
+  shipped with it**, as that file's PR 5: the model's whole output is a slug
+  from an allowlist built out of the rows it was shown, so the answer is the
+  row's own words and there is no paraphrase to soften a D-graded claim.
 - ~~**Leaderboard**~~ — **built early, in phase 5.** Pulled forward because
   ADR 0013 gave Hub the job of being the tab about other people, and a tab that
   owns nothing is the fault ADR 0012 was written to fix. The conditions this

@@ -158,3 +158,30 @@ whether to buy something, and "no" is the most valuable answer available.
 - The page ships while the diet advisor stays deferred to phase 6.
   `docs/PRD.md` §5.7 is updated to say which half is which, rather than leaving
   the section describing supplements as retrieval-only coach answers.
+
+## Amended 2026-09-09 — the rows are now reachable through a model
+
+Phase 6 PR 5 gave these rows a second entry point: a question box on `/coach`
+that returns one row. That is a model-mediated path to a health claim, which is
+the thing this ADR exists to be careful about, so what it does and does not
+change is worth saying here rather than only in `docs/specs/diet.md` §4b.
+
+**Every guarantee above survives, because the model does not write anything.**
+Its entire output is a slug chosen from an allowlist built out of the rows it was
+shown — there is no text field in the schema. The answer rendered is the row's
+own claim, grade, dose, caution and clickable citation, through the same
+component the page uses. So:
+
+- **"No row summarises a literature"** still holds: nothing new is written.
+- **"A reader can check the row"** still holds: the citation is a link on both
+  surfaces, and dropping it in the coach's answer would have been the paraphrase
+  by another route.
+- **A D-graded row survives intact.** This is the sharpest test of the shape: a
+  row that says the evidence does _not_ support the popular claim is exactly what
+  a fluent summary would soften, and there is no summary.
+
+**What it adds to the does-not-guarantee list:** nothing checks that the row the
+model picked answers the question asked. A wrong answer here is a wrong **row**,
+rendered correctly — which is a smaller failure than an invented claim, and is
+not nothing. It is recorded as a passing test in `src/diet/supplements.test.ts`
+under "what retrieval does NOT stop".

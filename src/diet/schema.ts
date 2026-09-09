@@ -72,3 +72,36 @@ export const dietQuestionSchema = z
   .trim()
   .max(MAX_DIET_QUESTION_CHARS)
   .transform((value) => (value === '' ? null : value));
+
+/**
+ * The value that means "no row covers this" — `src/diet/supplements.ts`.
+ *
+ * WHY a sentinel inside the enum rather than a nullable field: constrained
+ * decoding handles a closed set of strings far better than it handles null, and
+ * it keeps the whole answer inside one allowlist. `lookUpSupplement` maps it
+ * back before anything downstream sees it.
+ */
+export const NO_MATCH = '__none__';
+
+/**
+ * What the supplement lookup may return.
+ *
+ * INVARIANT: **no text field.** The model's entire output is a slug, so there is
+ *            no generated sentence to guard, to discard, or to render by
+ *            accident — the strongest form of ADR 0023's retrieval-only shape,
+ *            and the reason this is the one stage in the project with no
+ *            digit-in-prose problem to have.
+ *
+ * INVARIANT: the enum is built from the rows ACTUALLY PRESENTED, so a slug the
+ *            model invents fails the gateway's own validation and is retried,
+ *            rather than reaching `.eq('slug', modelString)` and returning a
+ *            silent null. `docs/plans/phase-3.md` states the rule for the
+ *            planner — _slug, not free text, and resolved against the candidate
+ *            list_ — and this is invariant #5's boundary in another place.
+ *
+ * `strictObject`, so nothing rides along beside the slug.
+ */
+export function supplementReplySchema(slugs: readonly string[]) {
+  const admitted = [NO_MATCH, ...slugs] as [string, ...string[]];
+  return z.strictObject({ slug: z.enum(admitted) });
+}

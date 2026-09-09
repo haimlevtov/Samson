@@ -8,10 +8,9 @@ the numbers in it.
 > over four PRs ([`plans/phase-6.md`](../plans/phase-6.md)) and this spec was
 > written whole, before them, so the tests can be written from it.
 >
-> As of **2026-09-09** all of §1–§4 are built: `src/diet/biometrics.ts`,
-> `energy.ts`, `schema.ts`, `prompts.ts`, `advice.ts` and the disclosure on
-> `/coach`. What remains of the phase is PR 5, retrieval-only supplement
-> answers, which this document does not cover.
+> As of **2026-09-09** everything here is built: `src/diet/biometrics.ts`,
+> `energy.ts`, `schema.ts`, `prompts.ts`, `advice.ts`, `supplements.ts`, and the
+> two disclosures on `/coach`.
 
 ## 1. What is collected, and where — **built**
 
@@ -254,6 +253,59 @@ the same subject, and it is one block rather than a page.
 **Nothing fires on page load.** Every state renders something: nothing asked yet,
 each of the three refusals in the app's own words, a target, and a target with
 the model's sentence missing because the call failed.
+
+## 4b. Supplements, answered rather than browsed — **built**
+
+`docs/PRD.md` §5.7 asks for supplement answers as **retrieval-only coach
+responses**, which is a different thing from the page at `/evidence`. ADR 0023 is
+the contract for what a row means; this is what happens when one is asked for.
+
+**The model's entire output is a slug.** `supplementReplySchema` is
+`z.strictObject({ slug: z.enum([NO_MATCH, ...slugs]) })`, built from the rows
+actually presented — `strictObject` so nothing rides along beside the slug, and
+the enum so the slug itself is an allowlist. So:
+
+- there is **no text field**, and therefore no generated sentence to guard, to
+  discard, or to render by accident;
+- a slug the model invents fails the gateway's own validation and is retried,
+  rather than reaching `.eq('slug', modelString)` and returning a silent null —
+  `docs/plans/phase-3.md`'s rule for the planner, applied here;
+- the row handed back is an object **from the array that built the allowlist**,
+  never one refetched by a model-supplied string.
+
+The payload carries slug, name and claim — not the dose, the caution or the
+citation, because the model chooses a row rather than describing one. Claims are
+fenced and per-field sanitised: they are the project's own rows, but every one
+paraphrases a source nobody here read in full.
+
+**The claim cap is 280 characters, not `MAX_FIELD_CHARS`.** That constant is 120
+and is sized for an exercise name; ten of the thirteen shipped claims are longer
+than it, so every one reached the model truncated mid-sentence. The
+`eaa-supplementation` row was cut at _"Whether that beats simply eating …"_,
+severing the negation — so the selector read an endorsement. The user still saw
+the whole row; the **selection** was made on inverted text.
+
+`NO_MATCH` renders a constant, with the link to `/evidence` beside it as a real
+anchor rather than a word in the string. An empty table calls no model at all,
+because `z.enum` cannot be built from an empty list and paying for a lookup
+against nothing would be worse than the error.
+
+**One row is rendered by the same component `/evidence` uses**
+(`src/ui/EvidenceCard.tsx`), including the grade's LABEL. A copy of that markup
+dropped it on its first outing, and `app/globals.css` states the invariant on the
+`.evidence-grade` rule itself: state is never carried by colour alone.
+
+**It logs under `stage: 'diet'`** and deliberately gains no stage of its own,
+which would need an `llm_calls.stage` migration. The cost is real: the per-stage
+token breakdown `docs/PLAN.md` grades now mixes two call shapes under one label.
+They stay separable by `prompt_prefix_hash`, which differs because the system
+prompts differ.
+
+**What this does not stop**, recorded as passing tests: nothing checks that the
+row the model picked answers the question asked, and `NO_MATCH` is its own
+judgement about coverage. What retrieval buys is narrower than "the answer is
+right" — it is that every word read was written against a source, and that a
+wrong answer is a wrong **row** rather than an invented claim.
 
 ## 5. What the tests must cover
 

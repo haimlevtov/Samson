@@ -21,7 +21,7 @@ planned until a scope question is answered.
 | 2   | [ADR 0024, the spec, and the numbers we do not have](#pr-2--the-inputs)    | `diet-inputs`       | shipped 09-09, [↓](#pr-2--the-inputs-2026-09-09)                   |
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
 | 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
-| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | planned                                                            |
+| 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | shipped 09-09, [↓](#pr-5--retrieval-only-supplements-2026-09-09)   |
 | 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
 
 PR 6 is marked blocked rather than planned, and [the reason](#pr-6--file-import)
@@ -659,11 +659,11 @@ here so the decision is visible rather than made implicitly by whoever starts.
 and one of those is already met — worth a table rather than a sentence, because
 the first draft of this plan miscounted them.
 
-| Criterion (`docs/PLAN.md` phase 6)                           | Owner           | State                                    |
-| ------------------------------------------------------------ | --------------- | ---------------------------------------- |
-| File import is the primary path, demos with no native module | PR 6            | **unowned while PR 6 is blocked**        |
-| No prompt, persona or framing moves the calorie floor        | PR 4            | planned                                  |
-| Leaderboard view returns name and XP and nothing else        | phase 5, PR #17 | **met** — `tests/db/leaderboard.test.ts` |
+| Criterion (`docs/PLAN.md` phase 6)                           | Owner           | State                                                                              |
+| ------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------------- |
+| File import is the primary path, demos with no native module | PR 6            | **unowned while PR 6 is blocked**                                                  |
+| No prompt, persona or framing moves the calorie floor        | PR 4            | **met** — `src/diet/advice.test.ts` blocked, `tests/db/diet-ledger.test.ts` logged |
+| Leaderboard view returns name and XP and nothing else        | phase 5, PR #17 | **met** — `tests/db/leaderboard.test.ts`                                           |
 
 **If PR 6 is answered as "cut it", the first criterion goes unmet and the phase
 says so** rather than quietly dropping it. That is the phase's own framing —
@@ -689,6 +689,97 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### PR 5 — retrieval-only supplements, 2026-09-09
+
+**Stronger than planned, in the one way that matters.** The plan said the model
+returns a slug and prose, and that the prose is discarded without being read.
+What shipped has **no text field at all**: `supplementReplySchema` is
+`z.enum([NO_MATCH, ...slugs])` and nothing else. There is no sentence to
+discard, to guard, or to render by mistake — which also means this is the only
+stage in the project with no `\p{N}` problem to have, because it has no prose
+for a digit to hide in.
+
+That is the deviation, and it is worth naming as one: the plan's shape would have
+worked and this one cannot fail in the same way.
+
+**The allowlist is built from the rows actually presented**, so it narrows when
+the list does — a test asserts that a row not shown cannot be named. A slug the
+model invents fails the gateway's own validation and is retried, rather than
+reaching `.eq('slug', modelString)` and returning a silent null. The row handed
+back is an object **from the array that built the allowlist**, never refetched.
+
+**The payload carries slug, name and claim** — not the dose, the caution or the
+citation. The model chooses a row; it does not describe one, so the columns the
+answer renders from never need to cross the wire.
+
+**It logs under `stage: 'diet'`,** as the plan required, so there is no
+`llm_calls.stage` migration. The cost is recorded rather than glossed: the
+per-stage token breakdown now mixes two call shapes under one label. They stay
+separable by `prompt_prefix_hash`, because the system prompts differ — which is
+the mitigation, not a reason the cost is zero.
+
+**Two holes recorded as passing tests.** Nothing checks that the row the model
+picked answers the question asked, and `NO_MATCH` is the model's own judgement
+about coverage. What retrieval buys is narrower than "the answer is right": every
+word read was written against a source, and a wrong answer is a wrong **row**
+rather than an invented claim. ADR 0023 is why that is worth having — a D-graded
+row, where the evidence does not support the popular claim, is exactly the one a
+paraphrase would soften.
+
+**What review changed.** Both reviewers found the same thing independently, which
+is the one worth leading with.
+
+- **The claim cap was `MAX_FIELD_CHARS` (120), and ten of the thirteen shipped
+  claims are longer than that** — up to 202 characters. Every one reached the
+  model truncated mid-sentence. The `eaa-supplementation` row was cut at
+  _"Whether that beats simply eating …"_, severing the negation, so the selector
+  read an endorsement. The user still saw the whole row; the **selection** was
+  made on inverted text — which is the softened claim ADR 0023 exists to prevent,
+  arriving by truncation instead of by paraphrase. The cap is 280 now.
+- **The grade chip dropped its LABEL.** The panel copied `/evidence`'s markup and
+  lost `GRADE_LABEL` on the way, so a B or C row rendered as a lone grey letter —
+  only A and D are tinted. `app/globals.css` states the invariant on the
+  `.evidence-grade` rule itself: state is never carried by colour alone. The copy
+  had drifted on its **first** outing, which is the argument for
+  `src/ui/EvidenceCard.tsx` rather than for a careful second copy. Both surfaces
+  render it now.
+- **"Three files would be ceremony" was a straw man.** `src/diet/schema.ts` and
+  `prompts.ts` already existed, so the skill's own layout was also the smaller
+  diff — and no file in `src/` puts a schema, a prompt and a caller in one place.
+  The schema and the prompt moved beside `dietReplySchema` and `DIET_SYSTEM`.
+- **The sentinel was resolved by a lookup MISSING**, with a comment claiming the
+  lookup could not miss. It misses on every no-match. A migration adding a row
+  slugged `__none__` would have shadowed the constant silently; it is an explicit
+  branch now.
+- **A test could not fail.** "Returns the row itself" asserted that a fixture
+  contained a slug it had been given, and never called the function. It now
+  asserts reference identity **and** the negative — a structurally equal clone
+  must not satisfy it, because that is what a refetch would produce.
+- `loadEvidence` was outside the try, so its raw Postgres message escaped the
+  action's generic error state. The over-length message was also wrong for a
+  malformed field, which fails on type rather than length.
+- **Two pre-existing log leaks, fixed because this diff made them visible.**
+  `sendChatMessage` and `deliverForPersona` still logged the whole error object,
+  and `LlmCallFailedError` carries `attempts: LlmCallInsert[]` — the user's auth
+  UUID, once per attempt. PR 4 fixed this for the diet stage; the new action
+  copied the fix, which is what made the two that never got it legible.
+
+**Two of this PR's own acceptance criteria, recorded honestly:**
+
+1. _"A test asserts the rendered answer is byte-identical to the row's own
+   columns."_ **Met at the data boundary, not at the render.** This repo has no
+   `.tsx` tests at all, so the criterion as written is not achievable; what is
+   asserted is that the answer is the row **object** from the array — reference
+   identity, plus the negative against a clone — and that both surfaces render it
+   through one component.
+2. _"a request to 'explain in your own words'"_ was **missing** until review said
+   so. It is the case that motivates the whole shape, and it cannot succeed
+   against any model because there is no field in which words could arrive. Added
+   with four siblings, each asserting the row is returned verbatim and that
+   `SupplementAnswer` has no key that could hold a sentence.
+
+**Not verified, unchanged:** the browser pass at 375×812.
 
 ### PR 4 — the diet stage, 2026-09-09
 

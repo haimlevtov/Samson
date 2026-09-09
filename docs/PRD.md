@@ -235,7 +235,7 @@ The mechanism, and why it is a view rather than a privileged client, is
 [ADR 0016](adr/0016-leaderboard.md) — this is the first feature in the project
 that reads another user's rows, which invariant #10 forbids by default.
 
-### 5.7 Diet — **Built**, except retrieval-only supplement answers (phase 6 PR 5)
+### 5.7 Diet — **Built** (phase 6)
 
 **Built (phase 5).** The supplement evidence table and a page that reads it, at
 `/evidence`, reached from Coach. One row carries one claim, one evidence grade
@@ -252,9 +252,12 @@ write no numeral at all, and code renders every number the user sees. Design and
 what it does not guarantee: [ADR 0024](adr/0024-diet-advisor.md). Contract:
 [`specs/diet.md`](specs/diet.md).
 
-**Still deferred (phase 6, PR 5).** Supplement answers as retrieval-only COACH
-responses, which is a different thing from a page a user browses — the table
-exists for that to retrieve from.
+**Also built (phase 6 PR 5).** Supplement answers as retrieval-only COACH
+responses, which is a different thing from a page a user browses. The model's
+entire output is a **slug from an allowlist built out of the rows it was shown**
+— it has no text field, so the answer is the row's own claim, grade, dose,
+caution and clickable citation, and there is no paraphrase to soften a D-graded
+row. `specs/diet.md` §4b.
 
 ### 5.8 Import — **Deferred** (phase 6)
 
