@@ -15,6 +15,14 @@ file import deferred by decision, which leaves its criterion unmet. The
 close-out, and what review found in every one of those PRs, is in
 [`plans/phase-6.md`](plans/phase-6.md).
 
+**Work continues after the phases, and it is not phase 7.**
+[`plans/rework-hub-history-coach.md`](plans/rework-hub-history-coach.md) plans
+eight PRs that came from using the app rather than from this brief — the
+leaderboard by level, challenges in the Hub, readable graphs, furnished demo
+users, and a Coach with one question box and a plan you can ask for.
+`rework-profile-hub-coach.md` is the precedent: a rework is not a phase, and
+filing it as one would make this document claim to have briefed it.
+
 Phases 0 to 5 are complete; each has a plan and a
 recorded outcome in `docs/plans/`, and
 [`plans/README.md`](plans/README.md) says what each one is, when it was written
