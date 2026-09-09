@@ -21,6 +21,23 @@ after approval and are corrected in the documents that supersede them, not here.
 Five changes, five branches, in this order. `main` is green at `c4e18ff` and the
 phase plan stays paused.
 
+## Status — complete
+
+All five shipped on 2026-09-07, in the order planned.
+
+| PR  | What                                                                                | Branch                   | Merged                                              | Contract                                                              |
+| --- | ----------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | [What Profile owns, what Hub owns](#pr-1--adr-0013-what-profile-owns-what-hub-owns) | `tab-ownership-recut`    | [#11](https://github.com/haimlevtov/Samson/pull/11) | [ADR 0013](../adr/0013-profile-and-hub.md)                            |
+| 2   | [Accepting quests and challenges](#pr-2--accepting-quests-and-challenges)           | `hub-accept-challenges`  | [#12](https://github.com/haimlevtov/Samson/pull/12) | —                                                                     |
+| 3   | [Exercise progression graphs](#pr-3--exercise-progression-graphs-in-history)        | `history-exercise-graph` | [#13](https://github.com/haimlevtov/Samson/pull/13) | [ADR 0014](../adr/0014-exercise-progression-chart.md)                 |
+| 4   | [The coach you can talk to](#pr-4--the-coach-ask-for-a-plan-and-talk-to-it)         | `coach-chat`             | [#14](https://github.com/haimlevtov/Samson/pull/14) | [ADR 0015](../adr/0015-coach-chat.md), [spec](../specs/coach-chat.md) |
+| 5   | [The leaderboard](#pr-5--the-leaderboard)                                           | `hub-leaderboard`        | [#17](https://github.com/haimlevtov/Samson/pull/17) | [ADR 0016](../adr/0016-leaderboard.md)                                |
+
+**This document is the plan, not the record.** It is kept as approved — see the
+comment above the title for the three things that had already moved by the time
+it was committed. What the five changes turned into is in
+[Outcome](#outcome), at the end.
+
 ## Context
 
 Phases 0–4 shipped a working vertical slice, and the tab rework (ADR 0012) cut
@@ -246,3 +263,66 @@ at 375×812 for anything with a surface.
 
 Per the standing workflow: branch, PR, **reviewers**, merge only when green and
 clean, then delete the branch.
+
+---
+
+## Outcome
+
+Written 2026-09-09, after the fact, which is later than it should have been —
+this plan shipped without one while `phase-5-content-fill.md` kept a detailed
+record per PR. The entries below are shorter than that file's for the same
+reason: they are reconstructed from the merged work rather than written while it
+was fresh, so they say what shipped and where it diverged, and do not pretend to
+recall the review rounds in detail.
+
+All five merged on 2026-09-07. Three of the four "decisions taken before
+planning" survived contact; the fourth is the first entry below.
+
+### What diverged from the plan
+
+**The plan is requested, not served — and there is no button** (PR 4). The plan
+said `/coach` gets a **Create a plan** control. Nothing in the application
+creates a plan: a planner run is up to three planner+critic round trips at
+25–120 s each, which does not fit inside a serverless function, and making it fit
+means a job queue that `CLAUDE.md` puts out of scope. So the control reads **Show
+my plan**, and when no plan exists the card explains where plans come from rather
+than offering a button that would dead-end.
+[`docs/specs/coach-chat.md`](../specs/coach-chat.md) §1 carries the argument.
+
+**The ADR numbers moved.** The chat ADR is 0015, not the 0014 this plan names —
+the progression chart took 0014 while the chat branch waited — so the leaderboard
+became 0016. Recorded in the comment above the title as well, because that is
+where a reader starts.
+
+**Level arrived as planned** (PR 1) — `levelForXp` in `src/gamification/level.ts`,
+pure and unit-tested, with the curve written into
+[`docs/specs/xp-and-challenges.md`](../specs/xp-and-challenges.md) before the
+code. It sat at level 1 for every seeded user until the demo database was given
+XP, a year of history later in wall-clock terms and one day later in this repo's
+— see `phase-5-content-fill.md` PR 7.
+
+### What the plan did not anticipate
+
+Three follow-up PRs came straight out of using what these five built, and none of
+them is in the sequence above:
+
+|                                                     |                          |                                                                                                                                                                                                                                      |
+| --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [#15](https://github.com/haimlevtov/Samson/pull/15) | `profile-settings-route` | Settings moved from a disclosure on Profile to its own route. The `<details>` this plan argued for worked and was in the wrong place; `/settings` is an address people can say out loud, and ADR 0013 gained an amendment saying so. |
+| [#16](https://github.com/haimlevtov/Samson/pull/16) | `active-session-routing` | Which tab lights up for a route that no tab owns — the problem `OWNED_BY` in `src/ui/tabs.ts` exists to solve, found by adding routes this plan did not have.                                                                        |
+| [#19](https://github.com/haimlevtov/Samson/pull/19) | `profile-card-spacing`   | Layout, once Profile actually held everything ADR 0013 moved onto it.                                                                                                                                                                |
+
+The pattern is worth naming: **a tab rework is not finished when the tabs are
+right.** Each of these was invisible until there were enough surfaces for the
+navigation to be wrong about.
+
+### Still open from this plan
+
+- **The adversarial suite's escapes.** ADR 0015 §5 requires the suite to record
+  what got through, not only what was blocked, and the Verification table above
+  asks for it in as many words. The suite exists; the written record of escapes
+  does not.
+- **Topical confinement remains a judgement.** ADR 0015 says so and it has not
+  changed: there is no deterministic check for "is this about training", so the
+  guarantee is about the refusal's wording, the absence of tools and the numbers
+  the coach may state — never about the classifier being right.
