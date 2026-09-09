@@ -10,8 +10,16 @@
  * "plateaued" lifter who is quietly still progressing would let a broken planner
  * look correct.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ARCHETYPES, generateHistory, type Archetype, type GeneratedWorkout } from './archetypes';
+import {
+  ARCHETYPES,
+  generateHistory,
+  type Archetype,
+  type GeneratedWorkout,
+  type ProgrammeEntry,
+} from './archetypes';
 import { mulberry32 } from './rng';
 import { adherence } from '../metrics/adherence';
 import { bestE1rm } from '../metrics/e1rm';
@@ -117,6 +125,131 @@ describe('every archetype', () => {
       expect(generate(archetype, 7), archetype.key).toEqual(generate(archetype, 7));
     }
     expect(generate(byKey('beginner'), 7)).not.toEqual(generate(byKey('beginner'), 8));
+  });
+
+  describe('an entry the rotation can never reach', () => {
+    /*
+     * `generateHistory` filters entries with `e.day === day % PROGRAMME_DAYS`,
+     * so an entry with `day: 3` matches no iteration and contributes nothing —
+     * silently, which is the whole problem. It is the natural thing to write for
+     * a four-day archetype, and two of the five really do train four days a
+     * week; they cycle back to session 0 on the fourth.
+     *
+     * A dropped accessory is a progression-tree rung nobody can open with
+     * nothing to say why — the failure the bodyweight accessories were added to
+     * fix in the first place.
+     *
+     * AI-NOTE: only the "names the exercise" case asserts the wording — there
+     *          the diagnostic IS the feature. The rest assert the throw alone,
+     *          so rephrasing the message does not turn five tests red. If the
+     *          rotation ever grows, change PROGRAMME_DAYS and the day numbers
+     *          here; do not delete the cases.
+     */
+    const withEntry = (entry: Partial<ProgrammeEntry>): Archetype => {
+      const base = byKey('plateaued'); // daysPerWeek: 4, which is the trap
+      return {
+        ...base,
+        programme: [
+          ...base.programme,
+          {
+            exerciseSlug: 'pushups',
+            sets: 3,
+            reps: 10,
+            startingKg: 0,
+            incrementKg: 0,
+            day: 0,
+            ...entry,
+          },
+        ],
+      };
+    };
+
+    it('refuses a day past the end of the rotation', () => {
+      expect(() => generate(withEntry({ day: 3 }))).toThrow();
+      expect(() => generate(withEntry({ day: 9 }))).toThrow();
+    });
+
+    it('names the exercise and the day, so the typo is findable', () => {
+      // A guard that says only "invalid programme" makes the author re-read
+      // forty entries. The point is to land them on the one line, so this is
+      // the one case where the message text is the thing under test.
+      expect(() => generate(withEntry({ day: 3 }))).toThrow(/pushups has day 3/);
+    });
+
+    it('refuses a negative or fractional day', () => {
+      expect(() => generate(withEntry({ day: -1 }))).toThrow();
+      expect(() => generate(withEntry({ day: 1.5 }))).toThrow();
+    });
+
+    it('accepts every day the rotation does reach', () => {
+      for (const day of [0, 1, 2]) {
+        expect(() => generate(withEntry({ day })), `day ${day}`).not.toThrow();
+      }
+    });
+
+    it('refuses the rest of the class, not just the day', () => {
+      /*
+       * FOUND IN REVIEW: the first version of this guard checked `day` alone.
+       * Every one of these vanishes the same way — silently — and two of them
+       * are worse than an absent lift, because the exercise still appears in
+       * history having never been worked.
+       */
+      expect(() => generate(withEntry({ sets: 0 })), 'sets: 0').toThrow();
+      expect(() => generate(withEntry({ reps: 0 })), 'reps: 0').toThrow();
+      expect(() => generate(withEntry({ startingKg: -5 })), 'negative load').toThrow();
+    });
+
+    it('refuses a rotation day with nothing in it', () => {
+      /*
+       * The inverse of the day check, and the more expensive omission: a day
+       * with no entries produces no workout row at all — not completed, not
+       * skipped, not a rest day — so the date disappears and the adherence
+       * denominator shrinks with it.
+       */
+      const base = byKey('plateaued');
+      const missingDayTwo: Archetype = {
+        ...base,
+        programme: base.programme.filter((e) => e.day !== 2),
+      };
+      expect(() => generate(missingDayTwo)).toThrow(/session 2/);
+    });
+
+    it('leaves the shipped archetypes alone', () => {
+      // The guard runs on every call, so a false positive here would take out
+      // the seeder and the golden suite together.
+      for (const archetype of ARCHETYPES) {
+        expect(() => generate(archetype), archetype.key).not.toThrow();
+      }
+    });
+  });
+
+  it('prescribes only exercises the committed catalogue has', () => {
+    /*
+     * The same silent-drop class, one layer down and outside this file:
+     * `scripts/seed.ts` maps each slug to a catalogue id, and a miss used to
+     * drop the sets — leaving a workout marked `completed` with nothing in it,
+     * still awarded XP, while tests/planner/golden.ts built its ids from the
+     * slug with no lookup and so described a different history for the same
+     * person. The seeder throws now; this catches it offline, before anyone
+     * needs a database to find out.
+     *
+     * AI-NOTE: reads the COMMITTED snapshot, so `npm run catalogue:fetch`
+     *          dropping an exercise fails here rather than at seed time.
+     */
+    const snapshot = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'data/exercises.snapshot.json'), 'utf8')
+    ) as { exercises: { slug: string }[] };
+    const known = new Set(snapshot.exercises.map((e) => e.slug));
+
+    const missing = [
+      ...new Set(
+        ARCHETYPES.flatMap((a) => a.programme.map((e) => e.exerciseSlug)).filter(
+          (slug) => !known.has(slug)
+        )
+      ),
+    ];
+
+    expect(missing, 'prescribed exercises absent from data/exercises.snapshot.json').toEqual([]);
   });
 
   describe('an appended entry draws from the side stream', () => {

@@ -21,7 +21,15 @@ export interface ProgrammeEntry {
   startingKg: number;
   /** Added per progressed week. Zero for bodyweight movements. */
   incrementKg: number;
-  /** Which day of the training week this lift appears on, 0-indexed. */
+  /**
+   * Which session of the programme's rotation this lift appears in: 0, 1 or 2.
+   *
+   * NOT a day of the week, and not an index into `daysPerWeek` — the previous
+   * wording said "day of the training week", which invites `day: 3` for a
+   * four-day archetype. Two archetypes do train four days a week; they cycle
+   * back to session 0 on the fourth. `generateHistory` throws on anything
+   * outside the rotation rather than dropping it silently.
+   */
   day: number;
   /**
    * Draw this entry's randomness from the side stream instead of the shared one.
@@ -403,6 +411,20 @@ function progressedWeeks(archetype: Archetype, earned: number): number {
 const DETRAINING_RETENTION = 0.35;
 
 /**
+ * How many distinct sessions a programme rotates through.
+ *
+ * WHY this is not `archetype.daysPerWeek`: they are different numbers on
+ * purpose, and two of the five archetypes prove it. A four-day archetype trains
+ * on four calendar days — weekdays 0, 2, 4 and 6 — and cycles back to the first
+ * programme day on the fourth, so `daysPerWeek` is 4 while the rotation is 3.
+ *
+ * AI-NOTE: a `ProgrammeEntry.day` is an index into THIS rotation, not a day of
+ *          the week and not an index into `daysPerWeek`. Raising this means
+ *          writing the sessions to fill it; every archetype shares the rotation.
+ */
+const PROGRAMME_DAYS = 3;
+
+/**
  * Seeds the side stream `appended` entries draw from — see ProgrammeEntry.
  *
  * Any constant would do; it is fixed only so the database stays byte-identical.
@@ -474,6 +496,95 @@ function buildSets(
 }
 
 /**
+ * Refuses a programme that would silently omit prescribed work.
+ *
+ * WHY it is a whole-programme pass and not a check inside the day loop, where
+ * the `appended` guard sits: the filter there is `e.day === day % PROGRAMME_DAYS`,
+ * so an entry with `day: 3` is selected by no iteration at all. A check that runs
+ * per SELECTED day is exactly the check that cannot see it. That is the shape of
+ * every fault below — the work vanishes, and nothing is raised, logged or
+ * rendered differently.
+ *
+ * WHY it is worth throwing over: `day: 3` is the natural thing to write for a
+ * four-day archetype, and `daysPerWeek` genuinely is 4 for `plateaued` and
+ * `inconsistent`. A vanished accessory is a progression-tree rung nobody can
+ * ever open with nothing to say why — the failure the bodyweight accessories
+ * were added to fix in the first place, reintroduced by a typo.
+ *
+ * FOUND IN REVIEW: the first version checked `day` alone, which is one member of
+ * the class. The others are here because the class is the point.
+ *
+ * INVARIANT: the seeder refuses to produce history that silently omits
+ *            prescribed work.
+ *
+ * AI-NOTE: raising PROGRAMME_DAYS means filling the new session in every
+ *          programme — the check below enforces that rather than trusting it.
+ */
+export function validateProgramme(archetype: Archetype): void {
+  const problems: string[] = [];
+
+  /*
+   * "Matches no session" rather than "outside the rotation": three different
+   * conditions land here and only one is literally outside anything. `day: 1.5`
+   * is inside the range and still selected by nothing, so the sentence has to be
+   * true of all three.
+   */
+  for (const e of archetype.programme) {
+    if (!Number.isInteger(e.day) || e.day < 0 || e.day >= PROGRAMME_DAYS) {
+      problems.push(
+        `${e.exerciseSlug} has day ${e.day}, which matches no session in the ` +
+          `${PROGRAMME_DAYS}-day rotation — a programme day is a whole number from ` +
+          `0 to ${PROGRAMME_DAYS - 1}, an index into the rotation rather than a day ` +
+          'of the week or an index into daysPerWeek'
+      );
+    }
+
+    /*
+     * `sets: 0` is worse than it looks. For a bodyweight entry the loop below
+     * runs zero times and the lift is simply absent; for a loaded one the warmup
+     * block still fires, so the exercise appears in history having never been
+     * worked — which reads as real training and is not.
+     */
+    if (!Number.isInteger(e.sets) || e.sets < 1) {
+      problems.push(`${e.exerciseSlug} has sets ${e.sets}, so it would log no working set`);
+    }
+
+    // `reps: 0` is silently rewritten to 1 for working sets by the Math.max in
+    // buildSets, while warmups keep the 0. Two different answers to one typo.
+    if (!Number.isInteger(e.reps) || e.reps < 1) {
+      problems.push(`${e.exerciseSlug} has reps ${e.reps}, which buildSets would quietly rewrite`);
+    }
+
+    /*
+     * A negative load is caught eventually — by `weight_kg check (>= 0)` — but
+     * only on a run that reaches the database with a service-role key. Every
+     * offline consumer in `npm run verify` passes with it, so without this the
+     * failure is invisible until seed time.
+     */
+    if (e.startingKg < 0) {
+      problems.push(`${e.exerciseSlug} has a negative startingKg (${e.startingKg})`);
+    }
+  }
+
+  /*
+   * The inverse of the day check, and the more expensive omission of the two:
+   * a rotation day with NO entries produces no workout row at all — not
+   * completed, not skipped, and not a rest day either, because the rest loop
+   * excludes training weekdays. The date disappears and the adherence
+   * denominator shrinks with it.
+   */
+  for (let day = 0; day < PROGRAMME_DAYS; day++) {
+    if (!archetype.programme.some((e) => e.day === day)) {
+      problems.push(`session ${day} of the rotation has no entries, so that date would vanish`);
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`${archetype.key}: ${problems.join('; ')}.`);
+  }
+}
+
+/**
  * Generates one archetype's history, ending on `endDate`.
  *
  * Sessions land on fixed weekdays so adherence has something to be measured
@@ -486,6 +597,7 @@ export function generateHistory(
   rng: Rng
 ): GeneratedWorkout[] {
   const workouts: GeneratedWorkout[] = [];
+  validateProgramme(archetype);
 
   /*
    * The side stream, for entries marked `appended`.
@@ -540,7 +652,7 @@ export function generateHistory(
         continue;
       }
 
-      const entries = archetype.programme.filter((e) => e.day === day % 3);
+      const entries = archetype.programme.filter((e) => e.day === day % PROGRAMME_DAYS);
       if (entries.length === 0) continue;
 
       /*
@@ -557,7 +669,7 @@ export function generateHistory(
        */
       if (entries.every((e) => e.appended === true)) {
         throw new Error(
-          `${archetype.key}: day ${day % 3} holds only appended entries ` +
+          `${archetype.key}: day ${day % PROGRAMME_DAYS} holds only appended entries ` +
             `(${entries.map((e) => e.exerciseSlug).join(', ')}). ` +
             'An appended entry must share its day with a non-appended one, or it ' +
             'creates the session it is supposed to be invisible to.'
