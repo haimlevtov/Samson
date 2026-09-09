@@ -3,6 +3,30 @@
 Planned 2026-09-08, before any of the code below. Six PRs: this plan, then one
 per content item, in the order given.
 
+## Status — complete
+
+All five content items shipped, plus one PR that was not in the original six.
+
+| PR  | What                                                                            | Branch                      | Shipped    | Outcome                                                     |
+| --- | ------------------------------------------------------------------------------- | --------------------------- | ---------- | ----------------------------------------------------------- |
+| 1   | [This plan](#pr-1--this-plan-and-the-decision-recorded-where-it-can-be-found)   | `phase-5-content-fill-plan` | 2026-09-08 | —                                                           |
+| 2   | [Achievements across every tier](#pr-2--achievements-across-every-tier)         | `achievements-content`      | 2026-09-08 | [↓](#pr-2--achievements-2026-09-08)                         |
+| 3   | [Cumulative-tonnage comparisons](#pr-3--cumulative-tonnage-comparisons)         | `tonnage-comparisons`       | 2026-09-08 | [↓](#pr-3--tonnage-comparisons-2026-09-08)                  |
+| 4   | [The remaining personas](#pr-4--the-remaining-personas)                         | `remaining-personas`        | 2026-09-08 | [↓](#pr-4--the-remaining-personas-2026-09-08)               |
+| 5   | [Progression trees](#pr-5--progression-trees)                                   | `progression-trees`         | 2026-09-08 | [↓](#pr-5--progression-trees-2026-09-08)                    |
+| 6   | [The supplement evidence table](#pr-6--the-supplement-evidence-table)           | `supplement-evidence`       | 2026-09-09 | [↓](#pr-6--the-supplement-evidence-table-2026-09-09)        |
+| 7   | [Progress in the demo database](#pr-7--the-demo-database-has-no-progress-in-it) | `seed-progress`             | 2026-09-08 | [↓](#pr-7--the-demo-database-has-progress-in-it-2026-09-08) |
+
+**How to read this file.** Everything from the next heading down to the
+[Outcome](#outcome) is the plan as written on 2026-09-08, amended in place only
+where an amendment is marked as one. The status table above it was added
+2026-09-09 and is a record, not part of the plan. Everything below it is the record of what actually happened, and where the
+two disagree the Outcome is right — that is the point of keeping both.
+
+PR 7 was added on 2026-09-08 from a direct product request, after PR 6 was
+planned and before it was built, which is why the numbering and the dates
+disagree.
+
 > **`plans/phase-5.md` left the reschedule-or-cut question open. It is settled
 > here as rescheduled — but the decision was not this document's to make, and
 > pretending otherwise would misattribute it.**
@@ -482,6 +506,14 @@ _good_, only that it is consistent. `docs/plans/phase-2.md`'s Lesson 8 is the
 standing warning against treating the two as the same thing.
 
 ## Outcome
+
+**Newest first, by the date it shipped** — so PR 6 leads and PR 7 follows it,
+because PR 7 was inserted into the sequence after PR 6 had been planned. The
+[status table](#status--complete) is the same list in PR order.
+
+Each entry records what shipped, what the review round changed, and where the
+result departed from the plan above. They are longer than the plans they answer
+to, which is deliberate: the plan is a guess and the outcome is evidence.
 
 ### PR 6 — the supplement evidence table, 2026-09-09
 
