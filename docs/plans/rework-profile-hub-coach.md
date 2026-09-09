@@ -21,6 +21,13 @@ after approval and are corrected in the documents that supersede them, not here.
 Five changes, five branches, in this order. `main` is green at `c4e18ff` and the
 phase plan stays paused.
 
+> **This is the middle of phase 5**, PRs #11–#17, and the only one of its three
+> documents whose name does not say so. The others are
+> [`phase-5.md`](phase-5.md), the record of the phase around it, and
+> [`phase-5-content-fill.md`](phase-5-content-fill.md), the content the brief
+> asked for, built afterwards. [`README.md`](README.md) has the whole phase in
+> one PR table.
+
 ## Status — complete
 
 All five shipped on 2026-09-07, in the order planned.
