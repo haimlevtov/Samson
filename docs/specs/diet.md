@@ -205,23 +205,33 @@ The payload has **no numbers in it**. `dietFacts()` in `src/diet/energy.ts` is
 the allowlist that builds it, and it lives there rather than in the prompt layer
 so that widening it is a change to the file where the invariant is written down:
 
-| Field           | Type                                                                               |
-| --------------- | ---------------------------------------------------------------------------------- |
-| `as_of`         | the user's local date — `CLAUDE.md` #9, and the only field that may contain digits |
-| `goal`          | `cut` \| `maintain` \| `gain`                                                      |
-| `activity_band` | `sedentary` \| `light` \| `moderate` \| `high` \| `very high`                      |
-| `is_deficit`    | boolean                                                                            |
-| `floor_reached` | boolean — the clamp bound the target rather than the goal                          |
+| Field           | Type                                                          |
+| --------------- | ------------------------------------------------------------- |
+| `goal`          | `cut` \| `maintain` \| `gain`                                 |
+| `activity_band` | `sedentary` \| `light` \| `moderate` \| `high` \| `very high` |
+| `is_deficit`    | boolean                                                       |
+| `floor_reached` | boolean — the clamp bound the target rather than the goal     |
 
 The optional question is a separate fenced block, not a field. It is **the
 stage's only untrusted input**, and it is the reason there is fencing here at
 all — everything else in the payload is the app's own.
 
+**Four fields, and none of them can hold a digit.** `as_of` used to be a fifth
+and was removed in review: nothing read it, and a date correlated with a
+provider's request timestamp discloses roughly what part of the world somebody
+is in. `CLAUDE.md` #9 is satisfied by the engine evaluating against the user's
+local date, not by the model being told what it was.
+
 `dietReplySchema` has **no numeric field**, and returns two short prose fields:
-`summary` and `caveat`. `findUnknownNumbers` runs against an **empty** allowed
-set over both concatenated, so any numeral is rejected, corrected once in the
-unfenced channel (ADR 0008), and then answered by a constant. There is no
-fallback to unchecked prose.
+`summary` and `caveat`. The check is **`/\p{N}/u` over every string field**,
+derived from the parsed object rather than a hand-written list — any digit in
+any script is rejected, corrected once in the unfenced channel (ADR 0008), and
+then answered by a constant. There is no fallback to unchecked prose.
+
+**Not `findUnknownNumbers`, and that is the point.** Its pattern is `\d`, which
+is ASCII-only even under the `u` flag, so `١٨٠٠` and `１８００` passed it — the
+hole review found, recorded in ADR 0024 §2 with why the obvious fix does not
+work.
 
 **There is no transcript.** The chat fences replayed turns because its history is
 client-held and therefore untrusted (ADR 0015 §2); this stage answers one

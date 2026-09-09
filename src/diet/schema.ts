@@ -10,11 +10,16 @@
  * INVARIANT: the Zod schemas are the source of truth and the TS types are
  *            derived from them — CLAUDE.md § Conventions.
  *
- * AI-NOTE: adding a numeric field here would not merely widen the schema, it
- *          would delete a guarantee. `findUnknownNumbers` runs against an EMPTY
- *          allowed set for this stage, so a number the model returns has nowhere
- *          legitimate to come from — and a numeric field would route around the
- *          guard entirely, because the guard reads prose.
+ * AI-NOTE: adding a NUMERIC field here would not merely widen the schema, it
+ *          would delete a guarantee — the guard reads prose, so a number in its
+ *          own field routes around it entirely.
+ *
+ *          Adding a PROSE field is the quieter version of the same mistake, and
+ *          it is why `advice.ts` derives the checked string from
+ *          `Object.values(result.data)` rather than naming the fields. That
+ *          derivation is what makes a new field guarded by default; if anyone
+ *          ever replaces it with a hand-written list, this note is the reason
+ *          not to.
  */
 import { z } from 'zod';
 

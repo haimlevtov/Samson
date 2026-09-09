@@ -199,9 +199,16 @@ export interface EnergyTarget {
  *
  * `sessionsPerWeek` is deliberately absent: it is a number, and `activityBand`
  * says the same thing in a word.
+ *
+ * **`as_of` is absent too, and it used to be here.** It was the one field that
+ * could hold digits, which made "the payload carries no numbers" a claim with a
+ * footnote. Nothing in the prompt or the reply uses the date — CLAUDE.md #9 is
+ * satisfied by the ENGINE evaluating against the user's local date, not by the
+ * model being told what it was — and correlated with a provider's own request
+ * timestamp it discloses roughly which part of the world somebody is in. Removed
+ * in review: the invariant is now literally true, with no exception to remember.
  */
 export interface DietFacts {
-  as_of: LocalDate;
   goal: DietGoal;
   activity_band: ActivityBand;
   is_deficit: boolean;
@@ -210,7 +217,6 @@ export interface DietFacts {
 
 export function dietFacts(target: EnergyTarget): DietFacts {
   return {
-    as_of: target.asOf,
     goal: target.goal,
     activity_band: target.activityBand,
     is_deficit: target.isDeficit,

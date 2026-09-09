@@ -18,7 +18,6 @@
  * do it, so the adversarial suite runs with no key, no network and no database.
  */
 import { DIET_MAX_TOKENS } from '../llm/config';
-import { findUnknownNumbers } from '../persona/guard';
 import type { LlmCaller } from '../planner/types';
 import { dietFacts, type EnergyTarget } from './energy';
 import { DIET_SYSTEM, dietMessages, numeralCorrection } from './prompts';
@@ -32,18 +31,34 @@ import { dietReplySchema } from './schema';
 export const MAX_DIET_ATTEMPTS = 2;
 
 /**
- * INVARIANT: the empty set is the whole mechanism — ADR 0024 §2.
+ * Any digit, in any script.
  *
- * The chat's allowed set is its facts plus every numeral the user typed, which
- * ADR 0015 §4 defends because in a chat the only person an echoed number can
- * mislead is the person who supplied it. That reasoning does not survive a stage
- * that prescribes: "I want 800 calories" would authorise 800, and a model-chosen
- * calorie figure would render beside a computed target.
+ * FOUND IN REVIEW, and it falsified this stage's headline claim. The guard was
+ * `findUnknownNumbers(new Set(), prose)`, whose pattern is `\d` — **ASCII only,
+ * even under the `u` flag**. So `١٨٠٠` (Arabic-Indic), `१८००` (Devanagari),
+ * `１８００` (fullwidth) and `¹⁸⁰⁰` (superscript) all passed, and the model's
+ * figure rendered directly beneath the engine's. Asking the question in Arabic,
+ * Persian, Hindi or Bengali is enough to get a reply in native digits; no
+ * jailbreak needed. `advice.test.ts` could not see it either, because its
+ * assertion was `not.toMatch(/\d/)` — the test and the bug shared a blind spot.
  *
- * So nothing is authorised. Not the user's numerals, not the app's own figures —
- * the model was never given those either.
+ * WHY not widen `findUnknownNumbers` instead: `\p{Nd}` there would match, and
+ * then `Number('١٨٠٠')` is `NaN` and `guard.ts` SKIPS non-finite values — the
+ * widened match would be silently discarded and nothing would change. NFKC
+ * normalisation is only a partial fix: it folds fullwidth and superscripts and
+ * leaves Arabic-Indic and Devanagari alone. The ASCII assumption in `guard.ts`
+ * is load-bearing for the chat and the persona, where numerals are compared
+ * against a set of numbers; it is left as it is.
+ *
+ * This stage does not need membership logic at all, because nothing is allowed.
+ * `\p{N}` covers Nd, Nl and No, which is every case above in one predicate.
+ *
+ * AI-NOTE: if this stage ever gains an allowed set, this check cannot simply be
+ *          deleted in favour of `findUnknownNumbers` — that would reopen exactly
+ *          this hole. The non-ASCII digit problem would have to be solved in
+ *          `guard.ts` first, including the `Number.isFinite` skip.
  */
-const NOTHING_ALLOWED: ReadonlySet<number> = new Set();
+const ANY_DIGIT = /\p{N}/u;
 
 /**
  * What the user reads when the question is not about their diet or training.
@@ -132,17 +147,23 @@ export async function explainTarget(
     }
 
     /*
-     * INVARIANT: the guard runs over EVERY string field concatenated, the way
+     * INVARIANT: the guard runs over EVERY string field, the way
      *            `deliveredText()` does for the persona's three — not over one.
      *            The chat checks a single `reply` because a single `reply` is
      *            all it has; a second prose field here would otherwise be
      *            unguarded, which is the quiet way a guard stops covering the
      *            thing it was written for.
+     *
+     * FOUND IN REVIEW: this listed the two fields by name, so the comment above
+     * was a promise the code did not keep — adding a third to the schema would
+     * have left it unchecked with no test failing. Derived from the parsed
+     * object instead, so the schema is the only place the field list exists.
      */
-    const prose = `${result.data.summary}\n${result.data.caveat}`;
-    const unknown = findUnknownNumbers(NOTHING_ALLOWED, prose);
+    const prose = Object.values(result.data)
+      .filter((value): value is string => typeof value === 'string')
+      .join('\n');
 
-    if (unknown.length === 0) {
+    if (!ANY_DIGIT.test(prose)) {
       return {
         summary: result.data.summary,
         caveat: result.data.caveat,
@@ -155,7 +176,7 @@ export async function explainTarget(
     }
 
     // Unfenced, and last — ADR 0008.
-    messages.push({ role: 'user', content: numeralCorrection(unknown) });
+    messages.push({ role: 'user', content: numeralCorrection() });
   }
 
   /*

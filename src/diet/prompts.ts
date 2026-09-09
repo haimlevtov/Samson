@@ -22,10 +22,13 @@ import type { DietFacts } from './energy';
  *
  * AI-NOTE: nothing in this string is a control. Every sentence can be ignored by
  *          a sufficiently determined prompt and the stage still holds, because
- *          what holds is in `advice.ts`: an empty allowed set, a schema with no
- *          numeric field, and a target rendered by code that never entered this
- *          payload. If you find yourself strengthening the wording here to fix a
- *          behaviour, the fix belongs in code — ADR 0024.
+ *          what holds is in three other files — and a fix belongs in whichever
+ *          one owns the rule, never here:
+ *            - `advice.ts` — the `\p{N}` check, the retry, the constants.
+ *            - `schema.ts` — no numeric field, so there is nothing to route
+ *              around the check with.
+ *            - `energy.ts` / `DietPanel.tsx` — the target is computed and
+ *              rendered by code, and never entered this payload.
  */
 export const DIET_SYSTEM = `You are the user's strength coach, explaining a daily calorie target the application has already calculated.
 
@@ -93,9 +96,12 @@ export function dietMessages(facts: DietFacts, question: string | null): ChatMes
  *            corrective text inside the untrusted fence tells the model to fix a
  *            violation and to ignore the request in the same breath.
  *
- * The rejected numerals are named because a correction that says only "you used
- * a number" gets the same reply back with a different number in it.
+ * WHY it names no numeral, unlike the chat's version: the check is
+ * `/\p{N}/u.test(prose)` — a predicate over any script's digits, with nothing
+ * parsed out to name. Quoting the offending characters back would also mean
+ * putting them in the trusted region, which is a small thing to avoid for free.
+ * "Any digit at all" is the whole rule here and it is not ambiguous.
  */
-export function numeralCorrection(numbers: readonly number[]): string {
-  return `That reply contained ${numbers.join(', ')}. This stage may not state any figure at all — the application prints them. Say it in words: "a modest deficit", "a little above what you burn". Reply with JSON matching the schema exactly, and nothing else.`;
+export function numeralCorrection(): string {
+  return 'That reply contained a digit. This stage may not state any figure at all, in any script — the application prints them. Say it in words: "a modest deficit", "a little above what you burn". Reply with JSON matching the schema exactly, and nothing else.';
 }

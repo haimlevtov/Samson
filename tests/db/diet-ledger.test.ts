@@ -84,20 +84,29 @@ describe('a diet call can be logged at all', () => {
     expect(error).toBeNull();
   });
 
+  /*
+   * FOUND IN REVIEW: this asserted `>= 2` rows afterwards, which the cases above
+   * had already satisfied before it ran — it could not fail. Counted before and
+   * after instead, so the assertion is about THIS test's own two writes.
+   */
   it('makes a retry a second row rather than an update', async () => {
+    const count = async (): Promise<number> => {
+      const { count: rows } = await user.client
+        .from('llm_calls')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('stage', 'diet');
+      return rows ?? 0;
+    };
+
+    const before = await count();
     const first = await user.client.from('llm_calls').insert(row(user, { attempt: 1 }) as never);
     const second = await user.client.from('llm_calls').insert(row(user, { attempt: 2 }) as never);
     expect(first.error).toBeNull();
     expect(second.error).toBeNull();
 
-    const { data } = await user.client
-      .from('llm_calls')
-      .select('attempt')
-      .eq('user_id', user.id)
-      .eq('stage', 'diet');
-
-    // At least the two just written, plus whatever the cases above left.
-    expect((data ?? []).length).toBeGreaterThanOrEqual(2);
+    // Two inserts, two rows. An UPSERT on the same attempt would give one.
+    expect(await count()).toBe(before + 2);
   });
 });
 

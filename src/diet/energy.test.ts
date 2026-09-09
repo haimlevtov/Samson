@@ -597,38 +597,38 @@ describe('generated inputs, off the grid', () => {
  * this test is what fails when a figure is added to it.
  */
 describe('what a model may be told', () => {
-  it('carries no numbers at all', () => {
+  /*
+   * No exception, and there used to be one: `as_of` was in this payload and was
+   * the single field allowed to hold digits. Review pointed out that nothing
+   * used it and that a date correlated with a request timestamp discloses a
+   * rough region, so it went — and the property below became absolute, which is
+   * worth more than the field was.
+   *
+   * `\p{N}`, not `\d`: the same ASCII-only trap that let `١٨٠٠` past the reply
+   * guard would let a non-ASCII digit into the payload unnoticed here.
+   */
+  it('carries no digits at all, in any script', () => {
     const facts = dietFacts(ok(computeEnergy(input())));
 
     for (const [field, value] of Object.entries(facts)) {
       expect(typeof value, field).not.toBe('number');
-      // `as_of` is the one field allowed to contain digits — see below.
-      if (typeof value === 'string' && field !== 'as_of') {
-        expect(value, field).not.toMatch(/\d/);
-      }
+      if (typeof value === 'string') expect(value, field).not.toMatch(/\p{N}/u);
     }
   });
 
-  it('carries the date, and nothing else that identifies a body', () => {
+  it('carries four categories and nothing that identifies a body', () => {
     const facts = dietFacts(ok(computeEnergy(input())));
     expect(Object.keys(facts).sort()).toEqual([
       'activity_band',
-      'as_of',
       'floor_reached',
       'goal',
       'is_deficit',
     ]);
   });
 
-  /*
-   * `as_of` is the one exception and it is deliberate: a date is CLAUDE.md #9's
-   * requirement, it is the user's own local date rather than a body metric, and
-   * the chat's payload already carries the same field for the same reason. It is
-   * asserted separately so the "no numbers" property above stays absolute about
-   * everything else.
-   */
-  it('makes the date the only exception, on purpose', () => {
-    const facts = dietFacts(ok(computeEnergy(input({ today: '2026-01-02' }))));
-    expect(facts.as_of).toBe('2026-01-02');
+  it('does not vary with the date it was computed on', () => {
+    const january = dietFacts(ok(computeEnergy(input({ today: '2026-01-02' }))));
+    const september = dietFacts(ok(computeEnergy(input({ today: '2026-09-09' }))));
+    expect(january).toEqual(september);
   });
 });

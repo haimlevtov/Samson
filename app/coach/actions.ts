@@ -12,8 +12,9 @@ import {
   MAX_DIET_QUESTION_CHARS,
   MissingApiKeyError,
 } from '@/src/llm/config';
+import { z } from 'zod';
 import { explainTarget } from '@/src/diet/advice';
-import { computeEnergy } from '@/src/diet/energy';
+import { DIET_GOALS, computeEnergy } from '@/src/diet/energy';
 import { dietQuestionSchema } from '@/src/diet/schema';
 import { EMPTY_DIET, type DietState } from './diet-state';
 import { BudgetExceededError } from '@/src/llm/types';
@@ -156,7 +157,18 @@ export async function askDietAdvisor(_previous: DietState, formData: FormData): 
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const goal = String(formData.get('goal') ?? 'maintain');
+  /*
+   * FOUND IN REVIEW: this was a bare `String(...)`, while docs/specs/diet.md
+   * and ADR 0024 both said the action validates the goal with `z.enum`. The
+   * safety outcome survived — `normaliseGoal` in the engine falls to maintain
+   * for anything unrecognised, deliberately — but the named mechanism did not
+   * exist, and the raw string was echoed back into the `<select>`, so a
+   * hand-posted `goal=banana` rendered a control with nothing selected.
+   *
+   * `.catch` rather than a rejection: an unrecognised goal is not worth an
+   * error message, and maintain is the safe direction.
+   */
+  const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
   const parsedQuestion = dietQuestionSchema.safeParse(formData.get('question') ?? '');
   if (!parsedQuestion.success) {
     return {
@@ -223,7 +235,22 @@ export async function askDietAdvisor(_previous: DietState, formData: FormData): 
       return { result, summary: null, caveat: null, goal, error: cause.message };
     }
 
-    console.error('diet advisor failed', cause);
+    /*
+     * The NAME and a bounded message, never the object.
+     *
+     * FOUND IN REVIEW, and it is the same lens as the settings fix in PR 2 one
+     * hop out: `LlmCallFailedError` carries `attempts: LlmCallInsert[]`, and
+     * Node prints an Error's own enumerable properties after the stack — so
+     * logging `cause` wrote the user's auth UUID into the server log once per
+     * attempt. The message itself embeds the upstream body on an HTTP error,
+     * and providers commonly echo the request back, which here means the user's
+     * question — free text this feature's own adversarial list shows can be a
+     * health disclosure.
+     */
+    console.error(
+      'diet advisor failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
     return {
       result,
       summary: null,

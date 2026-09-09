@@ -2010,16 +2010,36 @@ details.quick-log[open] > summary {
      which carries the numbers. A screen reader reading "7" twice is noise. */
 }
 
+/* The diet advisor's figures — ADR 0024.
+
+   A definition list rather than a `.table-cards`, because four cells that mean
+   four different things are a key/value list and not two columns of one. The
+   responsive table class hides its labels above 760px when there is no <thead>,
+   which is what this replaced after review. `.row` supplies the flex layout;
+   this only has to space the pairs and let the value sit at the end. */
+.diet-figures {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.diet-figures dd {
+  margin: 0;
+  margin-left: auto;
+}
+
 /* The disclosure. A <details> so it needs no client state and stays keyboard
    and screen-reader navigable for free.
 
    Written for the settings DISCLOSURE (ADR 0013) and inherited by the coach's
-   plan (ADR 0015) when ADR 0013's amendment turned settings into a route. One
-   caller, therefore — this is not a shared block today, whatever its shape
-   suggests, and `details.quick-log` further up carries its own copies of the
-   marker reset, the tap target and the focus ring rather than joining here.
+   plan (ADR 0015) when ADR 0013's amendment turned settings into a route.
+   **The diet advisor joined it in phase 6 (ADR 0024)**, which is what the
+   AI-NOTE below asked for — so this IS a shared block now, and the old note
+   saying it had one caller has been removed rather than left to mislead.
+   `details.quick-log` further up still carries its own copies of the marker
+   reset, the tap target and the focus ring rather than joining here.
 
-   AI-NOTE: a second disclosure should join this selector list rather than copy
+   AI-NOTE: a third disclosure should join this selector list rather than copy
             it, and quick-log should be folded in when something else touches
             it. The two rules easiest to lose in a copy are the
             ::-webkit-details-marker reset and the :focus-visible ring —
