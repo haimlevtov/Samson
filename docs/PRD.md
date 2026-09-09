@@ -266,11 +266,14 @@ must demo without any native module. ~~Health Connect and HealthKit only if a
 test device exists.~~ **Out as of 2026-09-09** — the condition was a test device
 and there is none; naming it as out beats leaving it ambiguous.
 
-**The file formats are an open question, not a plan.** Three of the four are
-endurance formats and this is a strength app; there is no table a GPS track
-belongs in. [`plans/phase-6.md`](plans/phase-6.md) states the three readings —
-Apple Health only, all four with a decision about what a run becomes, or cut —
-and does not choose between them.
+**Settled 2026-09-09: deferred, and the acceptance criterion goes unmet.** The
+question was which formats were meant; the answer was to save Apple Health for
+later, and Apple Health was the only one of the four with somewhere to land — it
+carries a bodyweight time series and strength workouts, while the other three are
+endurance formats and this schema has no table a GPS track belongs in. Building
+those three would be parsers feeding a surface that does not exist, so the whole
+item waits. The reasoning, and the two open notes Apple Health would have closed,
+are in [`plans/phase-6.md`](plans/phase-6.md).
 
 ---
 

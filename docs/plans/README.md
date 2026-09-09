@@ -51,7 +51,7 @@ whether the feature exists.
 | [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
-| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | in progress                  |
+| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
 
 ## Phase 5 is three documents, and here is why
 
@@ -130,7 +130,7 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — five of the ten open items
+**Blocked on an OpenRouter key, not on work** — five of the twelve open items
 below, and worth
 grouping because one `.env.local` line closes them:
 
@@ -146,19 +146,40 @@ grouping because one `.env.local` line closes them:
 
 **Known gaps that need work:**
 
-| From                     | Item                                                                                                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                                                                            |
-| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                                                                              |
-| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                    |
-| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                         |
-| [phase-6.md](phase-6.md) | **A decision, not work:** which file-import formats are meant. Three of the four are endurance formats and this is a strength app. PR 6 is blocked until it is answered |
+| From                     | Item                                                                                                                                                                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md) | The `repeated` critic escalation is untested                                                                                                                                                                                                                                  |
+| [phase-3.md](phase-3.md) | The number guard is over digits, so "add ten kilos" passes                                                                                                                                                                                                                    |
+| [phase-3.md](phase-3.md) | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                                                                                                                          |
+| [phase-5.md](phase-5.md) | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                                                                                                                               |
+| [phase-6.md](phase-6.md) | **File import — an unmet acceptance criterion, by decision rather than by an API key.** Deferred 2026-09-09: Apple Health was the only one of the four formats with somewhere to land, and it is saved for later. The other three are endurance formats with no table to fill |
+| [phase-6.md](phase-6.md) | Apple Health would have closed two older notes — the bodyweight time series in `PRD.md` §8, and `tonnage.ts`'s AI-NOTE saying bodyweight-inclusive tonnage needs one first. Both stay open                                                                                    |
+| [phase-6.md](phase-6.md) | The browser pass at 375×812 was not run on PRs 2, 4 or 5. Review found a width bug and a colour-only state in that markup, so it is the check that catches exactly this                                                                                                       |
 
 **Not a gap, a property to keep stating accurately:** the chat's topical
 confinement is a mitigation rather than a guarantee, and
 [ADR 0015](../adr/0015-coach-chat.md) says so in a table. It came out of phase 5
 (PR #14), as did the start-action race (PR #16); only phase 3's and phase 2's
 items are inherited from earlier phases.
+
+## Phase 6, the last one, in one table
+
+Closed 2026-09-09. Five PRs shipped and one deferred, all planned in
+[phase-6.md](phase-6.md) before any of the code — which is the difference between
+this phase and phase 5, and the reason phase 5 needed three documents.
+
+| PR                                                  | Merged | What                                                                         |
+| --------------------------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| [#32](https://github.com/haimlevtov/Samson/pull/32) | 09-09  | The plan, committed before its code                                          |
+| [#33](https://github.com/haimlevtov/Samson/pull/33) | 09-09  | ADR 0024, the diet contract, and the four numbers nothing had ever asked for |
+| [#34](https://github.com/haimlevtov/Samson/pull/34) | 09-09  | The calorie clamp, and the negative BMR the sweep found                      |
+| [#35](https://github.com/haimlevtov/Samson/pull/35) | 09-09  | The diet stage: a model that may not write a number                          |
+| [#36](https://github.com/haimlevtov/Samson/pull/36) | 09-09  | Retrieval-only supplement answers                                            |
+| —                                                   | —      | File import, **deferred by decision** — the phase's one unmet criterion      |
+
+**Review found a user-facing defect in four of the five**, and three of those
+four were invisible to the tests written for them, because each test shared its
+code's assumption. `phase-6.md`'s close-out has the table.
 
 ## Where else to look
 

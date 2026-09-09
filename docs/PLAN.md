@@ -9,7 +9,13 @@ Each phase is written as a brief. Hand one to an agent in plan mode, review the
 plan it produces, then implement. Do not start a phase before the previous one
 meets its acceptance criteria.
 
-**Current phase: 6** — phases 0 to 5 are complete; each has a plan and a
+**Phase 6 is the last one, and it is closed as of 2026-09-09** — five PRs
+shipped (the diet advisor end to end, plus retrieval-only supplement answers) and
+file import deferred by decision, which leaves its criterion unmet. The
+close-out, and what review found in every one of those PRs, is in
+[`plans/phase-6.md`](plans/phase-6.md).
+
+Phases 0 to 5 are complete; each has a plan and a
 recorded outcome in `docs/plans/`, and
 [`plans/README.md`](plans/README.md) says what each one is, when it was written
 relative to its code, and carries phase 5's PR history in one table. Phase 5 shipped, but **not the phase written
@@ -26,11 +32,14 @@ its code. It **reorders the brief below** — the diet advisor first because it
 carries the phase's only adversarial acceptance criterion, file import last and
 blocked on a scope question the plan states rather than answers.
 
-**Three acceptance criteria from earlier phases are still unmet, and all three
-are blocked on an OpenRouter key rather than on work:** phase 2's cache hit rate
-and cost per plan generation, and phase 3's persona drift eval.
-`npm run eval:planner -- --live` and the drift eval are written and unrun. Phase
-4 met all four of its criteria, and every gap its outcome named is now closed.
+**Four acceptance criteria are unmet, and they are unmet for two different
+reasons.** Three wait on an OpenRouter key rather than on work: phase 2's cache
+hit rate and cost per plan generation, and phase 3's persona drift eval —
+`npm run eval:planner -- --live` and the drift eval are both written and unrun.
+The fourth is phase 6's file import, which waits on nothing: it was **deferred by
+decision** on 2026-09-09, and a permitted cut is still a criterion that was not
+met. Phase 4 met all four of its criteria, and every gap its outcome named is
+closed.
 
 ---
 
@@ -290,7 +299,13 @@ Each is self-contained. Cut any of them without breaking anything above.
 
 **Build**
 
-- File import: `.fit`, `.tcx`, `.gpx`, Apple Health XML
+- ~~File import: `.fit`, `.tcx`, `.gpx`, Apple Health XML~~ — **deferred
+  2026-09-09.** Apple Health was the only one of the four with somewhere to land:
+  it carries a bodyweight time series and strength workouts, while `.fit`, `.tcx`
+  and `.gpx` are endurance formats and this schema has no table a run belongs in.
+  The stakeholder asked to save Apple Health for later, which leaves nothing in
+  the item worth building now — three parsers producing rows nothing displays.
+  Recorded, with what it costs, in [`plans/phase-6.md`](plans/phase-6.md).
 - ~~Health Connect and HealthKit~~ — **out.** This entry conditioned them on a
   test device existing and none does. Named as out rather than left ambiguous.
 - ~~Diet advisor: maintenance computed by equation, bounded adjustment,
@@ -320,12 +335,20 @@ Each is self-contained. Cut any of them without breaking anything above.
 
 **Acceptance criteria**
 
-- File import is the primary path and demos without any native module
+- ~~File import is the primary path and demos without any native module~~ —
+  **UNMET, and deliberately.** Import is deferred (2026-09-09, below). This is
+  the phase's one unmet criterion and the project's fourth overall; the other
+  three wait on an API key, and this one waits on a decision that was made the
+  other way.
 - Adversarial suite: no prompt, persona, or user framing moves the calorie
-  floor. Every attempt blocked and logged.
+  floor. Every attempt blocked and logged. — **met**, phase 6 PR 4:
+  `src/diet/advice.test.ts` for blocked, `tests/db/diet-ledger.test.ts` for
+  logged. What it does not cover, including that no live model has ever been
+  called, is recorded in [`plans/phase-6.md`](plans/phase-6.md)'s Outcome.
 - A query as user A against the leaderboard view returns user B's display name
   and XP and **nothing else** — no email, no user_id, no set history. The RLS
-  coverage test in `tests/db` gains a case for the view, not an exemption.
+  coverage test in `tests/db` gains a case for the view, not an exemption. —
+  **met**, phase 5 PR #17, `tests/db/leaderboard.test.ts`.
 
 ---
 

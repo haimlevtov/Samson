@@ -22,11 +22,50 @@ planned until a scope question is answered.
 | 3   | [The arithmetic and the clamp](#pr-3--the-arithmetic-and-the-clamp)        | `diet-energy`       | shipped 09-09, [↓](#pr-3--the-arithmetic-and-the-clamp-2026-09-09) |
 | 4   | [The stage, the surface, and the adversarial suite](#pr-4--the-diet-stage) | `diet-stage`        | shipped 09-09, [↓](#pr-4--the-diet-stage-2026-09-09)               |
 | 5   | [Retrieval-only supplement answers](#pr-5--retrieval-only-supplements)     | `supplement-recall` | shipped 09-09, [↓](#pr-5--retrieval-only-supplements-2026-09-09)   |
-| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | blocked                                                            |
+| 6   | [File import](#pr-6--file-import)                                          | `history-import`    | **deferred 09-09**, [↓](#the-import-decision-2026-09-09)           |
 
-PR 6 is marked blocked rather than planned, and [the reason](#pr-6--file-import)
-is a scope question that has to be answered before it can be estimated. Nothing
-in PRs 2 to 5 depends on it.
+PR 6 was blocked rather than planned on a scope question. **That question was
+answered on 2026-09-09 and the answer defers the item** — see
+[the decision](#the-import-decision-2026-09-09). Nothing in PRs 2 to 5 depended
+on it, and the phase's other two acceptance criteria are met.
+
+## The import decision — 2026-09-09
+
+**The stakeholder's words: "skip apple health for now, save it for later."**
+
+That is a direct answer to only one of the three readings this plan set out, so
+what follows is an inference, marked as one rather than dressed up as the
+decision. **If it is wrong, this section is where to correct it.**
+
+Apple Health XML was the only one of the four formats with somewhere to land. It
+carries a **bodyweight time series** — the thing `docs/PRD.md` §8's risk table
+and the AI-NOTE in `src/metrics/tonnage.ts` both say is missing — and strength
+workouts, which the `workouts`/`sets` schema already models. `.fit`, `.tcx` and
+`.gpx` are endurance formats in practice: there is no table a 5 km run belongs
+in, no metric in `src/metrics/` that would read one, and importing one would
+produce a row nothing displays.
+
+So deferring Apple Health defers the half with the value in it, and building the
+other three now would be three parsers feeding a surface that does not exist.
+**The whole item is deferred**, rather than half-built.
+
+**What that costs, stated rather than absorbed:**
+
+- `docs/PLAN.md`'s phase-6 criterion _"file import is the primary path and demos
+  without any native module"_ is **UNMET**. It is the project's fourth unmet
+  acceptance criterion and the only one not waiting on an API key — this one
+  waits on a decision that was made the other way, which is a different thing and
+  should not be filed with the others.
+- The phase's own framing permits it in as many words — _"each is
+  self-contained; cut any of them without breaking anything above"_ — but a
+  permitted cut is still a criterion that was not met, and saying so is the
+  point of writing it down.
+- **Two existing notes stay open** that Apple Health would have closed: the
+  bodyweight time series in `docs/PRD.md` §8, and `src/metrics/tonnage.ts`'s
+  AI-NOTE saying bodyweight-inclusive tonnage needs one first.
+
+**When it comes back**, Apple Health XML alone is the version worth building —
+that was reading 1 below, and nothing about the reasoning has changed.
 
 ## Context
 
@@ -689,6 +728,43 @@ established.
 | Every PR    | Branch, PR, reviewer subagents, merge only when green, delete the branch                      |
 
 ## Outcome
+
+### The phase, closed 2026-09-09
+
+Five PRs shipped, one deferred. Three acceptance criteria: **two met, one unmet
+by decision.**
+
+| Criterion                                         | State                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------- |
+| File import is the primary path, no native module | **unmet** — deferred, see [the decision](#the-import-decision-2026-09-09) |
+| No framing moves the calorie floor, all logged    | **met** — `src/diet/advice.test.ts`, `tests/db/diet-ledger.test.ts`       |
+| Leaderboard returns name and XP and nothing else  | **met** in phase 5 — `tests/db/leaderboard.test.ts`                       |
+
+**What review did to this phase, counted, because it is the phase's most useful
+measurement and it is not a flattering one.** Every PR had findings, and four of
+them were defects that would have reached a user:
+
+| PR  | The one that mattered                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 2   | A column's scale rounded `299.99` to `300.0` and then rejected it — an error on a value the form offered                      |
+| 3   | Mifflin–St Jeor goes negative for inputs every column admits; the floor rescued the target and left a −745 kcal BMR beside it |
+| 4   | `\d` is ASCII-only, so the model could write the number in Arabic-Indic digits and it rendered                                |
+| 5   | The claim cap truncated ten of thirteen rows mid-sentence, severing a negation the selector then read as an endorsement       |
+
+Three of those four were **invisible to the tests written for them**, because the
+test shared the bug's assumption: the sweep iterated the one field with an
+unchecked lookup, the adversarial assertion was `not.toMatch(/\d/)` against an
+ASCII-only guard, and the row fixtures were all shorter than the cap that broke
+the real ones. That is the pattern worth carrying forward — a test written by the
+same hand as the code inherits its blind spot, and the reviewers are what found
+each one.
+
+**Two things this phase did not do, and both are stated in their own places
+rather than here alone:** no live model has ever been called, so every adversarial
+result is against a scripted one; and the browser pass at 375×812 was not run on
+PRs 2, 4 or 5 — which is not a formality, because review found a width bug in
+PR 4's markup and a colour-only state in PR 5's, and that pass is the check that
+catches exactly those.
 
 ### PR 5 — retrieval-only supplements, 2026-09-09
 
