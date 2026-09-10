@@ -367,49 +367,80 @@ describe('progressionLabels', () => {
 describe('progressionTicks', () => {
   const at = (weightKg: number, localDate: string) => ({ localDate, weightKg, reps: 5 });
 
-  it('prints the heaviest and the lightest, in that order', () => {
-    expect(
-      progressionTicks([at(100, '2026-09-01'), at(122.5, '2026-09-08'), at(90, '2026-09-15')])
-    ).toEqual([122.5, 90]);
+  it('prints nothing when the labels already carry both extremes', () => {
+    /*
+     * The commonest history there is: it only rises, so the first and last
+     * points ARE the minimum and the maximum and their labels print both, with
+     * the reps attached. An axis repeating them is two more figures saying what
+     * the chart just said.
+     */
+    const rising = [at(100, '2026-09-01'), at(110, '2026-09-08'), at(120, '2026-09-15')];
+
+    expect(progressionTicks(rising)).toEqual([]);
   });
 
-  it('never prints the padding progressionRange adds to a flat history', () => {
+  it('prints the trough of a deload, which no label reaches', () => {
+    // THE case ticks exist for. The 60 kg week is the lowest point on the
+    // chart and it is neither end nor the peak, so nothing else names it.
+    const deload = [
+      at(100, '2026-09-01'),
+      at(110, '2026-09-08'),
+      at(130, '2026-09-15'),
+      at(60, '2026-09-22'),
+      at(115, '2026-09-29'),
+    ];
+
+    expect(progressionTicks(deload)).toEqual([60]);
+  });
+
+  it('prints a peak whose label was dropped for crowding another', () => {
     /*
-     * THE case this function exists for. Six sessions at 100 kg give
-     * progressionRange a padded 90..110 so the line has somewhere to sit —
-     * printing that as an axis claims a 110 kg lift that never happened.
+     * The two rules meeting. `progressionLabels` drops a heaviest label that
+     * would land on the last one — and then the highest weight on the chart has
+     * nothing naming it, which is exactly the gap a tick fills.
+     */
+    const nearTie = [
+      ...Array.from({ length: 15 }, (_, i) =>
+        at(100 + i * 3, `2026-01-${String(i + 1).padStart(2, '0')}`)
+      ),
+      at(190, '2026-02-01'),
+      at(180, '2026-02-02'),
+      at(183, '2026-02-03'),
+      at(186, '2026-02-04'),
+      at(189, '2026-02-05'),
+    ];
+
+    expect(progressionLabels(nearTie).map((l) => l.kind)).not.toContain('heaviest');
+    expect(progressionTicks(nearTie)).toEqual([190]);
+  });
+
+  it('never prints a weight that was not lifted', () => {
+    /*
+     * INVARIANT, and the reason this function exists rather than reading
+     * `progressionRange`: that one PADS a flat history so the line has
+     * somewhere to sit, and printing the padded bound would put 110 kg on the
+     * axis of somebody who has only ever lifted 100.
      */
     const flat = [at(100, '2026-09-01'), at(100, '2026-09-08'), at(100, '2026-09-15')];
+    expect(progressionRange(flat).max).toBeGreaterThan(100);
 
-    expect(progressionRange(flat)).toEqual({ min: 90, max: 110 });
-    expect(progressionTicks(flat)).toEqual([100]);
-  });
+    const cases = [
+      flat,
+      [at(100, '2026-09-01'), at(130, '2026-09-08'), at(60, '2026-09-15'), at(115, '2026-09-22')],
+      [at(60, '2026-09-01'), at(60, '2026-09-08')],
+    ];
 
-  it('gives a flat line one tick rather than two reading the same number', () => {
-    expect(progressionTicks([at(60, '2026-09-01'), at(60, '2026-09-08')])).toHaveLength(1);
+    for (const points of cases) {
+      const lifted = new Set(points.map((p) => p.weightKg));
+      for (const tick of progressionTicks(points)) expect(lifted).toContain(tick);
+    }
   });
 
   it('has nothing to say about no sessions', () => {
     expect(progressionTicks([])).toEqual([]);
   });
-
-  it('reads the extremes of the whole history, not of its ends', () => {
-    // A chart that dips and recovers has its max in the middle, and an axis
-    // labelled from the first and last points would understate it.
-    const dip = [at(100, '2026-09-01'), at(130, '2026-09-08'), at(105, '2026-09-15')];
-
-    expect(progressionTicks(dip)).toEqual([130, 100]);
-  });
 });
 
-/**
- * Which side of its point each end label sits on.
- *
- * FOUND IN THE BROWSER: with both ends printed below their points, a rising
- * history drew "127.5 kg × 5" straight through the polyline and the three dots
- * before it. Nothing in the suite could have caught that, because the rule did
- * not exist — the side was a CSS constant.
- */
 describe('progressionLabels — the side the line is not on', () => {
   const at = (weightKg: number, localDate: string) => ({ localDate, weightKg, reps: 5 });
   const sideOf = (points: ProgressionPoint[], kind: string) =>
@@ -461,5 +492,69 @@ describe('progressionLabels — the side the line is not on', () => {
     ];
 
     expect(sideOf(peak, 'heaviest')).toBe('above');
+  });
+});
+
+/**
+ * The heaviest label is dropped when it would land on another one.
+ *
+ * FOUND IN REVIEW, and the reasoning it corrects is worth keeping: the first
+ * version claimed that printing the heaviest above its point and the ends below
+ * theirs guaranteed separation. It does not. An end label is only below when
+ * the line FALLS into it, so on a rising history the last label is above its
+ * point too — and a peak a kilogram higher than the final session, near the end
+ * of the axis, puts the two on the same line of text.
+ */
+describe('progressionLabels — the heaviest label gives way', () => {
+  /** 20 sessions rising to `peak` at index 15, then a dip and a rise to `end`. */
+  const shape = (peak: number, end: number, tail: number[]): ProgressionPoint[] => {
+    const weights = [...Array.from({ length: 15 }, (_, i) => 100 + i * 3), peak, ...tail, end];
+    return weights.map((weightKg, i) => ({
+      localDate: `2026-01-${String(i + 1).padStart(2, '0')}`,
+      weightKg,
+      reps: 5,
+    }));
+  };
+
+  const kinds = (points: ProgressionPoint[]) => progressionLabels(points).map((l) => l.kind);
+
+  it('drops it when the peak is barely above a rising last session', () => {
+    // Peak 190 at 15/19 of the axis; the run ends at 189, one kilogram down and
+    // rising — so both labels want the same row, a tenth of the axis apart.
+    expect(kinds(shape(190, 189, [180, 183, 186]))).toEqual(['first', 'last']);
+  });
+
+  it('keeps it when the same peak is well clear of the last session', () => {
+    // The only thing that changed is how far the run fell away from its peak.
+    expect(kinds(shape(190, 120, [110, 114, 117]))).toContain('heaviest');
+  });
+
+  it('keeps it when the line falls into the end, which puts that label below', () => {
+    // Same near-tie in weight, opposite direction into the last point, so the
+    // two labels are on opposite sides of their points and cannot meet.
+    expect(kinds(shape(190, 186, [180, 188, 189]))).toContain('heaviest');
+  });
+
+  it('holds the axis gap to what keeps a centred label inside the plot', () => {
+    /*
+     * The boundary MIN_LABEL_GAP actually names. A label centred on its point
+     * needs half its own width of axis either side, and nothing else in the
+     * suite pinned the constant anywhere near its value — it could have been
+     * anything from 0.06 to 0.47 and stayed green.
+     */
+    const run = (n: number, peakAt: number): ProgressionPoint[] =>
+      Array.from({ length: n }, (_, i) => ({
+        localDate: `2026-02-${String(i + 1).padStart(2, '0')}`,
+        weightKg: i === peakAt ? 200 : 100 + i,
+        reps: 5,
+      }));
+
+    // 1/11 = 0.09 of the axis: a centred label would hang off the left edge.
+    expect(kinds(run(12, 1))).toEqual(['first', 'last']);
+    // 2/11 = 0.18: the first position that clears it.
+    expect(kinds(run(12, 2))).toContain('heaviest');
+    // And the mirror at the other end: 10/11 = 0.91 out, 9/11 = 0.82 in.
+    expect(kinds(run(12, 10))).toEqual(['first', 'last']);
+    expect(kinds(run(12, 9))).toContain('heaviest');
   });
 });

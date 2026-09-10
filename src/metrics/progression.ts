@@ -153,6 +153,12 @@ export function progressionChange(points: readonly ProgressionPoint[]): number |
  * into a solid band and the line stops being a line. The table under it is the
  * heavier cost — each row is a card on a phone, roughly 60px, so 50 sessions is
  * already 3,000px of scroll.
+ *
+ * AI-NOTE: this figure is 300/49. It is tied to the axis width, so anything
+ *          that eats into the padding has to move it. A draft of the label work
+ *          took 34 units for an axis gutter and left this at 50, which put the
+ *          spacing at 5.4 against a 6-unit dot — the solid band the cap exists
+ *          to prevent, arrived at by a change nowhere near this line.
  */
 export const MAX_PLOTTED_SESSIONS = 50;
 
@@ -190,7 +196,14 @@ export function progressionView(
   };
 }
 
-/** Why a point carries a label, which is also what the label is FOR. */
+/**
+ * Why a point carries a label, which is also what the label is FOR.
+ *
+ * AI-NOTE: LiftChart renders this into a class name, so a fourth kind needs a
+ *          matching `.lift-chart-value.is-<kind>` rule in app/globals.css
+ *          setting `--lift-label-x`. Nothing in TypeScript will tell you: it
+ *          compiles, lints and renders, and the label lands on its own dot.
+ */
 export type LabelKind = 'first' | 'last' | 'heaviest';
 
 /**
@@ -213,14 +226,37 @@ export interface ProgressionLabel {
 }
 
 /**
+ * Roughly how much of the AXIS one label occupies.
+ *
+ * MEASURED at the width this app is built for: "82.5 kg × 5" is about 70px at
+ * 375px, where the axis is 266 of 320 viewBox units and so about 267px. 70/267
+ * is a touch over a quarter.
+ *
+ * _An earlier version of this file put it at 21% by dividing by the whole chart
+ * width rather than by the axis, and then used a smaller number still as the
+ * "clear air" needed between two labels — which does not follow from it either
+ * way: two boxes a quarter of the axis wide touch when their centres are a
+ * quarter apart, not less._
+ */
+export const LABEL_WIDTH_FRACTION = 0.26;
+
+/**
+ * How much of the VALUE RANGE a label's row occupies, so two labels this close
+ * in weight are on the same line of text.
+ *
+ * MEASURED the same way: a label plus its 8px offset is about 22px, and the
+ * plot area is 96 of 140 viewBox units — about 96px at 375px.
+ */
+export const LABEL_ROW_FRACTION = 0.23;
+
+/**
  * How close to an end of the axis the heaviest point may sit before its label
  * is dropped, as a fraction of the axis.
  *
- * MEASURED at the width this app is built for: a label reading "82.5 kg × 5" is
- * about 70px, the chart is about 330px wide at 375px, so a label owns roughly
- * 21% of the axis and two of them need 18% of clear air between their centres
- * to avoid touching. Below that the heaviest label is dropped rather than drawn
- * over the first or the last, which are the two the headline figure compares.
+ * WHY this exists, and it is NOT what stops labels overlapping: the heaviest
+ * label is CENTRED on its point, so it needs half its own width of axis on
+ * either side or it hangs outside the plot. Half of `LABEL_WIDTH_FRACTION` is
+ * 0.13; this is that with a margin.
  */
 export const MIN_LABEL_GAP = 0.18;
 
@@ -293,28 +329,62 @@ export function progressionLabels(points: readonly ProgressionPoint[]): Progress
   const at = heaviest / lastIndex;
   if (at < MIN_LABEL_GAP || at > 1 - MIN_LABEL_GAP) return labels;
 
-  // Always above: it is the topmost point, so nothing is drawn over it.
+  /*
+   * And the collision check, which is two-dimensional because the collision is.
+   *
+   * FOUND IN REVIEW. The claim was that putting the heaviest above its point
+   * and the ends below theirs guarantees separation. It does not, because an
+   * end label is only below when the line falls into it — a RISING history puts
+   * the last label above its point too, on the same side as the heaviest. Two
+   * labels on that side collide when they are close along the axis AND close in
+   * weight, and a peak a kilogram above the final session is exactly that.
+   *
+   * A label is centred on the heaviest and pinned to the outside edge at an
+   * end, so the end's centre sits half a label width inboard.
+   */
+  const spread = points[heaviest]!.weightKg - Math.min(...points.map((p) => p.weightKg));
+
+  for (const end of labels) {
+    if (end.side !== 'above') continue;
+
+    const endCentre =
+      end.kind === 'first' ? LABEL_WIDTH_FRACTION / 2 : 1 - LABEL_WIDTH_FRACTION / 2;
+    const sameRow =
+      spread === 0 ||
+      (points[heaviest]!.weightKg - end.point.weightKg) / spread < LABEL_ROW_FRACTION;
+
+    if (Math.abs(at - endCentre) < LABEL_WIDTH_FRACTION && sameRow) return labels;
+  }
+
+  // Above its point: it is the topmost, so nothing of the line is drawn over it.
   labels.push({ kind: 'heaviest', side: 'above', index: heaviest, point: points[heaviest]! });
   return labels;
 }
 
 /**
- * The one or two weights printed against the axis, heaviest first.
+ * The weights printed against the axis — the extremes of the history that no
+ * label already prints, heaviest first.
  *
  * INVARIANT: these come from the DATA, never from `progressionRange`. That
  *            function pads a flat history so the line has somewhere to sit, and
  *            printing the padded bound would put "110 kg" on the axis of a
  *            chart belonging to somebody who has only ever lifted 100.
  *
- * A flat line gets ONE tick. Two ticks reading the same number at the top and
- * bottom of an empty box is a scale that says nothing.
+ * **Usually there are none, and that is the point.** On a history that only
+ * rises, the first and last points ARE the extremes, so their labels already
+ * carry both numbers with the reps attached — an axis repeating them is two
+ * more figures saying what the chart just said. A tick appears exactly where
+ * the labels leave a gap: the trough of a deload, or a peak whose label was
+ * dropped for crowding another.
  *
- * AI-NOTE: weights, not positions. The caller already owns the geometry that
- *          turns a weight into a height, and it is the SAME function that
- *          places the line — so a tick cannot drift away from the height it
- *          names. An earlier version returned a `'top' | 'bottom' | 'middle'`
- *          discriminator alongside; nothing rendered it once the caller was
- *          positioning from `y()`.
+ * _This began as "always the max and the min in a left gutter". The gutter cost
+ * 11% of the axis on every chart, was still too narrow for "142.5 kg" at 320px,
+ * and on the commonest shape of all it spent that width printing the two
+ * numbers already on screen._
+ *
+ * AI-NOTE: weights, not positions. The caller owns the geometry that turns a
+ *          weight into a height, and it is the SAME function that places the
+ *          line — so a tick cannot drift away from the height it names.
  */
 export function progressionTicks(points: readonly ProgressionPoint[]): number[] {
   if (points.length === 0) return [];
@@ -323,5 +393,8 @@ export function progressionTicks(points: readonly ProgressionPoint[]): number[] 
   const min = Math.min(...weights);
   const max = Math.max(...weights);
 
-  return min === max ? [min] : [max, min];
+  const printed = new Set(progressionLabels(points).map((label) => label.point.weightKg));
+  const extremes = min === max ? [min] : [max, min];
+
+  return extremes.filter((weight) => !printed.has(weight));
 }

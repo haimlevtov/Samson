@@ -218,6 +218,15 @@ point 2 is the whole reason.
 wider screens are the enhancement. A `max-width` override is a desktop design
 apologising, and it is how the current sheet is written.
 
+**A `max-width` PROPERTY inside a `min-width` query is not the same thing, and
+some content needs one.** The rule above is about breakpoints: the phone layout
+must not be a desktop layout with overrides. Capping how wide a single element
+grows on a large screen is the opposite — it is the phone design refusing to be
+stretched. The sheet already does it for `.shell` (1000px) and the set grid
+(620px), and 2026-09-10 added the progression chart at 560px: an SVG scales with
+its viewBox and the HTML figures over it do not, so past that width a 6-unit dot
+outgrows the label beside it and the sparkline reads as a poster with captions.
+
 **Navigation is five fixed tabs at the bottom** — ADR 0012 — left to right:
 History, Coach, Hub, Workout, Profile. Bottom because that is where the thumb
 is, per §0. Each tab is a full-height target with an icon and a word; the icon

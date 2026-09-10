@@ -22,14 +22,7 @@ import { displayDate } from './format';
 /** viewBox units. The SVG scales to its container; these are just a grid. */
 const W = 320;
 const H = 140;
-/*
- * The left gutter is where the axis values live, and it is wider than the right
- * for that reason alone — ADR 0014's 2026-09-10 amendment. Nothing is drawn in
- * it, so the plot loses 34 units of a 300-unit axis and the ticks never sit on
- * top of the first point's label.
- */
-const PAD_LEFT = 44;
-const PAD_RIGHT = 10;
+const PAD_X = 10;
 const PAD_TOP = 18;
 const PAD_BOTTOM = 26;
 
@@ -68,8 +61,7 @@ export function LiftChart({
    *          render. Harmless, since that branch never drew it, but a NaN
    *          sitting in a variable is how the next edit ships a broken chart.
    */
-  const x = (i: number): number =>
-    PAD_LEFT + (i / (points.length - 1)) * (W - PAD_LEFT - PAD_RIGHT);
+  const x = (i: number): number => PAD_X + (i / (points.length - 1)) * (W - PAD_X * 2);
 
   const y = (weight: number): number =>
     PAD_TOP + (1 - (weight - range.min) / span) * (H - PAD_TOP - PAD_BOTTOM);

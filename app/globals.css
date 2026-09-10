@@ -2131,8 +2131,9 @@ details.quick-log[open] > summary {
   /* Fixed aspect via the viewBox; height follows so the chart keeps its shape
      from 320px to a desktop pane without a resize observer. */
   height: auto;
-  /* A dot sits r=3 from its centre, so the first and last points would be
-     clipped in half at the viewBox edge. Nothing else is drawn outside it. */
+  /* A dot sits r=3 from its centre — 4 when it carries a label — so the first
+     and last points would be clipped in half at the viewBox edge. Nothing else
+     is drawn outside it. */
   overflow: visible;
 }
 
@@ -2179,9 +2180,13 @@ details.quick-log[open] > summary {
 .lift-chart-value,
 .lift-chart-tick {
   position: absolute;
-  /* A wrapped "82.5 kg × 5" is two lines of label over a 140-unit chart. */
+  /* A wrapped "82.5 kg × 5" is two lines of label over a 140-unit chart. There
+     is no ellipsis either: half a weight is worse than none. */
   white-space: nowrap;
-  font-size: 0.72rem;
+  /* 0.75rem is this sheet's small-text size, shared with the hint and chip
+     copy. An earlier draft used 0.72 for no stated reason, in a change whose
+     whole argument is that these figures follow the reader's type scale. */
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
@@ -2218,21 +2223,29 @@ details.quick-log[open] > summary {
   color: var(--accent-text);
 }
 
+/* The fallback is load-bearing: an undefined custom property makes the whole
+   declaration invalid at computed-value time, so a LabelKind with no rule above
+   would drop its label unshifted on top of its own dot rather than degrade. */
 .lift-chart-value.is-below {
-  transform: translate(var(--lift-label-x), 8px);
+  transform: translate(var(--lift-label-x, -50%), 8px);
 }
 
 .lift-chart-value.is-above {
-  transform: translate(var(--lift-label-x), calc(-100% - 8px));
+  transform: translate(var(--lift-label-x, -50%), calc(-100% - 8px));
 }
 
-/* The axis, in the left gutter the viewBox reserves for it. Right-aligned so
-   two values of different widths share an edge. */
+/*
+ * An axis value, at the height it names.
+ *
+ * No width and no gutter. FOUND IN REVIEW: a fixed 11% box clipped every one of
+ * them at 320px — "142.5 kg" is 45px of ink in a 29px box — and the earlier
+ * fix of reserving a wider gutter cost 11% of the axis on every chart to print,
+ * on the commonest history shape, the two numbers the end labels already carry.
+ * There are usually no ticks at all now; see progressionTicks.
+ */
 .lift-chart-tick {
   left: 0;
-  width: 11%;
   transform: translateY(-50%);
-  text-align: right;
   color: var(--muted);
 }
 
