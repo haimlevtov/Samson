@@ -15,7 +15,7 @@ because several of them touch the same surface.
 | 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                        |
 | 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
 | 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | planned                                                              |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned                                                              |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
@@ -644,3 +644,72 @@ volume, and the rung above 25 would need a second look.
 **Not verified:** the browser pass at 375×812. `/hub` needs a session. This is
 the third consecutive PR to leave that debt, and PR 3 is the one that puts real
 content on the surface it would check.
+
+### PR 4 — the graphs show their numbers, 2026-09-10
+
+The chart labels **up to three points** — first, last and heaviest — plus an
+axis value wherever those leave one of the extremes unnamed. ADR 0014 amended
+first, in its own commit.
+
+**The plan asked for "a value at top and bottom" of the axis and that is not
+what shipped.** Built that way first: a 44-unit left gutter holding the maximum
+and the minimum. Three separate measurements killed it. It cost 11% of the axis
+on every chart — enough to push `MAX_PLOTTED_SESSIONS` past the dot spacing it
+was derived from, in a change nowhere near that constant. At 320px every tick
+rendered clipped: "142.5 kg" is 45px of ink in a 29px box. And on a history that
+only rises — the commonest shape there is — the first and last points ARE the
+extremes, so the gutter spent that width printing the two numbers the end labels
+already carry. Ticks now appear only where the labels leave a gap, which in
+practice means a deload's trough or a peak whose label was dropped. The plan's
+intent — the line has a scale, not just a shape — is met by the labels.
+
+**The browser pass ran, and it is the reason three of these are here.** The real
+component was rendered to a static page and every label's box AND ink measured
+at 320, 375, 760 and 1100px, in both themes: no overlaps, no clipping, nothing
+outside the plot. Two defects came out of it that no amount of reading would
+have found:
+
+- **A rising history drew the last label straight through the line and three
+  dots.** Both ends printed below their points; which side is free is a fact
+  about the data. `ProgressionLabel` carries a `side` now.
+- **At a wide width the chart read as a poster with captions** — inside the
+  1000px shell a dot was 18px beside an 11px figure. Capped at 560px from 760px
+  up, and recorded in `docs/specs/mobile-interface.md`.
+
+**What review changed, and one finding was a real bug.**
+
+- **The collision guarantee did not hold.** The ADR claimed that printing the
+  heaviest above its point and the ends below theirs separated them. The `side`
+  rule above breaks exactly that: on a rising history the last label is above
+  its point too, so a peak a kilogram over the final session, near the end of
+  the axis, lands on the same line of text. The check is two-dimensional now —
+  close along the axis AND close in weight — with the case in the suite. My
+  browser pass had not caught it because none of my cases had that shape.
+- **Every axis tick was clipped at 320px**, raised as speculative and true. My
+  own measurement had missed it: I compared element rectangles, and the text
+  was overflowing its box. The check now compares `scrollWidth` to
+  `clientWidth`.
+- **`MAX_PLOTTED_SESSIONS` had a MEASURED derivation the diff falsified** —
+  "300 units of axis" when the gutter had left 266. It carries an AI-NOTE now
+  tying it to the axis width.
+- **The 18% gap rule's own arithmetic was wrong twice over**: 21% by dividing by
+  the chart rather than the axis, and then "18% of clear air" between boxes a
+  quarter wide, which touch. It has an honest job now — a centred label needs
+  half its width of axis either side or it hangs outside the plot — and a test
+  that pins it in both directions.
+- **A test asserted `progressionRange`'s private 10% pad** from inside another
+  function's describe, so changing that fraction would have reddened a correct
+  test with a misleading message.
+- Also: a stale clipping rationale in `globals.css`; a `0.72rem` one-off where
+  the sheet uses `0.75rem`; a hand-copied `11%` gutter width that did not equal
+  the 13.75% gutter it named; `var(--lift-label-x)` with no fallback, which
+  would drop a future label onto its own dot rather than degrade; and no
+  AI-NOTE on the TypeScript union that `globals.css` has to mirror by hand.
+
+**One reviewer finding was wrong and the code says so.** A test was called
+redundant with the one above it; breaking the implementation showed it catches a
+bug the other misses — an axis reading the ends rather than the extremes. Kept.
+
+**Not verified:** the chart on its real route. `/history/[id]` needs a session,
+so what was measured is the real component rendered to a page with the real
+stylesheet, not the page itself.

@@ -2131,9 +2131,128 @@ details.quick-log[open] > summary {
   /* Fixed aspect via the viewBox; height follows so the chart keeps its shape
      from 320px to a desktop pane without a resize observer. */
   height: auto;
-  /* A dot sits r=3 from its centre, so the first and last points would be
-     clipped in half at the viewBox edge. Nothing else is drawn outside it. */
+  /* A dot sits r=3 from its centre — 4 when it carries a label — so the first
+     and last points would be clipped in half at the viewBox edge. Nothing else
+     is drawn outside it. */
   overflow: visible;
+}
+
+/* ---- the numbers over the line — ADR 0014, amended 2026-09-10 -------------
+ *
+ * These are HTML, not <text>. A <text> element inside a scaled viewBox ignores
+ * the reader's font size, so every figure here would be locked to whatever the
+ * viewBox happens to be — in the part of the card that is nothing but numbers.
+ * As spans they inherit the page's type scale like any other text.
+ *
+ * The overlay maps exactly onto the SVG because both fill the same positioned
+ * box and the SVG's height follows its viewBox. Positions arrive as inline
+ * percentages from the same x()/y() that draw the line.
+ */
+.lift-chart-plot {
+  position: relative;
+}
+
+/*
+ * FOUND IN THE BROWSER at a wide width. The SVG scales with its viewBox and the
+ * labels do not — correctly, since they are text at reading size — so inside
+ * the 1000px shell a dot grew to about 18px beside 11px figures, and the chart
+ * read as a poster with captions. Capping it keeps the sparkline a sparkline;
+ * the table below still uses the full width.
+ *
+ * A max-width inside a min-width query, which is what globals.css's header
+ * permits: the phone layout is the base and this adds a constraint for screens
+ * the base was never drawn for.
+ */
+@media (min-width: 760px) {
+  .lift-chart-plot {
+    max-width: 560px;
+  }
+}
+
+.lift-chart-overlay {
+  position: absolute;
+  inset: 0;
+  /* Decoration over a chart: every figure here is also a row of the table
+     below, and clicks belong to the page rather than to a label. */
+  pointer-events: none;
+}
+
+.lift-chart-value,
+.lift-chart-tick {
+  position: absolute;
+  /* A wrapped "82.5 kg × 5" is two lines of label over a 140-unit chart. There
+     is no ellipsis either: half a weight is worse than none. */
+  white-space: nowrap;
+  /* 0.75rem is this sheet's small-text size, shared with the hint and chip
+     copy. An earlier draft used 0.72 for no stated reason, in a change whose
+     whole argument is that these figures follow the reader's type scale. */
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.lift-chart-value {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/*
+ * Horizontal alignment is fixed by which end the label belongs to; the vertical
+ * side is a fact about the data and arrives as `is-above` / `is-below` from
+ * progressionLabels. Composed as two axes rather than six rules so the two
+ * cannot drift apart.
+ *
+ * The heaviest is always above — it is the topmost point, so nothing is drawn
+ * over it, and that also puts a label height of clear air between it and the
+ * ends however close together they sit along the axis. That separation, not the
+ * 18% gap rule, is what stops the three colliding.
+ *
+ * Left- and right-aligning the ends is what keeps them inside the box at the
+ * extremes of the axis.
+ */
+.lift-chart-value.is-first {
+  --lift-label-x: 0%;
+}
+
+.lift-chart-value.is-last {
+  --lift-label-x: -100%;
+}
+
+.lift-chart-value.is-heaviest {
+  --lift-label-x: -50%;
+  color: var(--accent-text);
+}
+
+/* The fallback is load-bearing: an undefined custom property makes the whole
+   declaration invalid at computed-value time, so a LabelKind with no rule above
+   would drop its label unshifted on top of its own dot rather than degrade. */
+.lift-chart-value.is-below {
+  transform: translate(var(--lift-label-x, -50%), 8px);
+}
+
+.lift-chart-value.is-above {
+  transform: translate(var(--lift-label-x, -50%), calc(-100% - 8px));
+}
+
+/*
+ * An axis value, at the height it names.
+ *
+ * No width and no gutter. FOUND IN REVIEW: a fixed 11% box clipped every one of
+ * them at 320px — "142.5 kg" is 45px of ink in a 29px box — and the earlier
+ * fix of reserving a wider gutter cost 11% of the axis on every chart to print,
+ * on the commonest history shape, the two numbers the end labels already carry.
+ * There are usually no ticks at all now; see progressionTicks.
+ */
+.lift-chart-tick {
+  left: 0;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+
+.lift-chart-dot.is-labelled {
+  /* The three points carrying a figure, so the eye can pair them up. */
+  stroke: var(--surface);
+  stroke-width: 2;
 }
 
 .lift-chart-line {
