@@ -1,6 +1,6 @@
 # ADR 0014 — The progression chart plots what you lifted, not what it implies
 
-**Status:** accepted, phase 5 — **amended 2026-09-07, see Consequences**
+**Status:** accepted, phase 5 — **amended 2026-09-07 and 2026-09-10, see Consequences**
 **Date:** 2026-09-07
 
 ## Context
@@ -80,6 +80,65 @@ browser there. The component receives points and draws them.
 (`src/metrics/types.ts`), and inventing a bodyweight figure would rewrite the
 user's history every time their weight changed. The chart says so instead.
 
+## Amended 2026-09-10 — the chart carries three numbers, and they are not SVG text
+
+The chart was "just lines": a shape with no scale, and the figures only in the
+table underneath. It now labels **three points and two axis values**.
+
+**The original decision said the reps live in the table, and the reason it gave
+was two reasons.** `src/ui/LiftChart.tsx` said _"Twelve labels inside a 320-unit
+viewBox collide at 375px, and a scaled `<text>` element ignores the user's font
+size"_. Those fail differently and only one of them is about counting:
+
+- **Collision** is a function of how many labels there are. Twelve collide;
+  three do not, unless two of them land on top of each other — which is a
+  condition that can be checked rather than hoped for.
+- **Font size** is a property of `<text>` inside a scaled `viewBox`, and it does
+  not improve at three labels. Text in an SVG that scales with its container
+  ignores the reader's font-size preference completely, and numbers under a
+  chart are the worst place in an app to do that.
+
+So the count objection is answered by labelling three, and the font-size
+objection is answered by **not using `<text>` at all**. The labels are ordinary
+HTML elements positioned over the SVG in percentages of its box. They inherit
+the page's type scale, they respond to the reader's font size, and they wrap and
+truncate under the same rules as any other text in the app.
+
+### Which three, and why those
+
+**First and last** are the two points the headline "+22.5 kg since 12 March"
+already compares, so labelling them shows the reader where that figure comes
+from. **The heaviest** is the third because a progression line's other question
+is "what is my best", and on a chart with a deload in it the best is neither end.
+
+The heaviest label is **dropped** when it would collide: when it is already the
+first or the last point, or when it sits within 18% of the axis from either end.
+That rule is in `progressionLabels` in `src/metrics/progression.ts` with the
+other shaping, not in the component — a label that silently overlaps another is
+a rendering bug nobody can write a test for from the outside.
+
+Ties on the heaviest weight take the **earliest** session, because the
+interesting fact about a repeated best is when it was first reached.
+
+### The axis says what was lifted, never what was padded
+
+`progressionRange` pads a flat history — six sessions all at 100 kg — so the
+line has somewhere to sit instead of dividing by zero. Printing that padded
+range as an axis would put "110 kg" on a chart belonging to somebody who has
+never lifted 110 kg.
+
+So the axis ticks come from the DATA: the maximum at the top of the plot and the
+minimum at the bottom. When those are equal there is one tick, on the line
+itself, and no top or bottom — a flat line's honest axis is one number.
+
+### The table stays, and the labels are hidden from screen readers
+
+The table is the accessible rendering of this chart and it always was. The
+overlay labels repeat three of its rows, so they carry `aria-hidden` — a screen
+reader that announced them would read the same three sessions twice, once
+without the context the table's headers give them. The `<svg>` keeps its
+`aria-label` summary. Nothing about what a non-visual reader gets has changed.
+
 ## Alternatives rejected
 
 **e1RM as the line, weight as points behind it.** The most informative and the
@@ -89,3 +148,15 @@ answering two questions.
 
 **Keep the icon pointing somewhere generic.** It is what has happened twice, and
 each time it produced a link that technically resolved and answered nothing.
+
+**A value on every point** (2026-09-10). The request was numbers on the chart,
+and the most literal reading is all of them. At 375px twelve labels of "82.5 kg
+× 5" need roughly 840px of horizontal room inside 330px of chart. The table
+already lists every session, in the one rendering that scrolls, wraps and reads
+aloud correctly — so "all of them" is not missing, it is one element lower down
+the card. Three labels answer where the line starts, where it ends and where it
+peaked, which is what the shape is being read for.
+
+**SVG `<text>` for the labels** (2026-09-10). Simpler to position — the
+component already has the coordinates — and it silently ignores the reader's
+font size, in the part of the card that is nothing but numbers.
