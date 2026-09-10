@@ -1,5 +1,10 @@
-import type { ProgressionPoint } from '../metrics/progression';
-import { progressionChange, progressionRange } from '../metrics/progression';
+import type { ProgressionLabel, ProgressionPoint } from '../metrics/progression';
+import {
+  progressionChange,
+  progressionLabels,
+  progressionRange,
+  progressionTicks,
+} from '../metrics/progression';
 import { displayDate } from './format';
 
 /**
@@ -17,7 +22,14 @@ import { displayDate } from './format';
 /** viewBox units. The SVG scales to its container; these are just a grid. */
 const W = 320;
 const H = 140;
-const PAD_X = 10;
+/*
+ * The left gutter is where the axis values live, and it is wider than the right
+ * for that reason alone — ADR 0014's 2026-09-10 amendment. Nothing is drawn in
+ * it, so the plot loses 34 units of a 300-unit axis and the ticks never sit on
+ * top of the first point's label.
+ */
+const PAD_LEFT = 44;
+const PAD_RIGHT = 10;
 const PAD_TOP = 18;
 const PAD_BOTTOM = 26;
 
@@ -56,7 +68,8 @@ export function LiftChart({
    *          render. Harmless, since that branch never drew it, but a NaN
    *          sitting in a variable is how the next edit ships a broken chart.
    */
-  const x = (i: number): number => PAD_X + (i / (points.length - 1)) * (W - PAD_X * 2);
+  const x = (i: number): number =>
+    PAD_LEFT + (i / (points.length - 1)) * (W - PAD_LEFT - PAD_RIGHT);
 
   const y = (weight: number): number =>
     PAD_TOP + (1 - (weight - range.min) / span) * (H - PAD_TOP - PAD_BOTTOM);
@@ -71,6 +84,16 @@ export function LiftChart({
   //            a subtraction in JSX, which made the page's headline figure the
   //            one number on screen with no test behind it.
   const change = progressionChange(points);
+
+  /*
+   * WHICH points carry a number, and which weights the axis prints. Both are
+   * decisions rather than geometry — including the rule that drops a heaviest
+   * label too close to an end — so both are in src/metrics/progression.ts where
+   * they can fail a test without a browser.
+   */
+  const labels = progressionLabels(points);
+  const ticks = progressionTicks(points);
+  const labelled = new Set(labels.map((entry: ProgressionLabel) => entry.index));
 
   const label = (p: ProgressionPoint): string =>
     `${p.weightKg} kg${p.reps === null ? '' : ` × ${p.reps}`}`;
@@ -89,34 +112,79 @@ export function LiftChart({
           reading, not a trend — train it again and this becomes a line.
         </p>
       ) : (
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          className="lift-chart-svg"
-          role="img"
-          aria-label={
-            `${points.length} sessions from ${displayDate(first.localDate)} to ` +
-            `${displayDate(last.localDate)}. Heaviest working set went from ` +
-            `${label(first)} to ${label(last)}.`
-          }
-        >
-          <polyline className="lift-chart-line" points={polyline()} fill="none" strokeWidth={2} />
-          {points.map((p, i) => (
-            <circle
-              key={p.localDate}
-              className="lift-chart-dot"
-              cx={x(i)}
-              cy={y(p.weightKg)}
-              r={3}
-            />
-          ))}
-        </svg>
+        /*
+         * The SVG draws; the numbers over it are HTML — ADR 0014's 2026-09-10
+         * amendment. A <text> element inside a scaled viewBox ignores the
+         * reader's font size, and the part of this card that is nothing but
+         * numbers is the worst place in the app to do that.
+         */
+        <div className="lift-chart-plot">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="lift-chart-svg"
+            role="img"
+            aria-label={
+              `${points.length} sessions from ${displayDate(first.localDate)} to ` +
+              `${displayDate(last.localDate)}. Heaviest working set went from ` +
+              `${label(first)} to ${label(last)}.`
+            }
+          >
+            <polyline className="lift-chart-line" points={polyline()} fill="none" strokeWidth={2} />
+            {points.map((p, i) => (
+              <circle
+                key={p.localDate}
+                className={`lift-chart-dot${labelled.has(i) ? ' is-labelled' : ''}`}
+                cx={x(i)}
+                cy={y(p.weightKg)}
+                r={labelled.has(i) ? 4 : 3}
+              />
+            ))}
+          </svg>
+
+          {/*
+           * aria-hidden on all of it: every figure below repeats a row of the
+           * table, which is the accessible rendering and has headers. A screen
+           * reader that read both would hear the same three sessions twice,
+           * the second time without the context that makes them mean anything.
+           */}
+          <div className="lift-chart-overlay" aria-hidden="true">
+            {ticks.map((weightKg) => (
+              <span
+                key={weightKg}
+                className="lift-chart-tick"
+                /*
+                 * Positioned by the same y() that places the line, rather than
+                 * by a CSS constant, so a tick cannot drift away from the
+                 * height it names when the padding changes.
+                 */
+                style={{ top: `${(y(weightKg) / H) * 100}%` }}
+              >
+                {weightKg} kg
+              </span>
+            ))}
+
+            {labels.map((entry) => (
+              <span
+                key={entry.kind}
+                className={`lift-chart-value is-${entry.kind} is-${entry.side}`}
+                style={{
+                  left: `${(x(entry.index) / W) * 100}%`,
+                  top: `${(y(entry.point.weightKg) / H) * 100}%`,
+                }}
+              >
+                {label(entry.point)}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
 
       {/*
-       * The reps live in this table rather than as SVG text. Twelve labels
-       * inside a 320-unit viewBox collide at 375px, and a scaled <text> element
-       * ignores the user's font size — which the numbers under a chart are
-       * exactly the wrong place to do.
+       * EVERY session's reading, which the chart deliberately does not carry.
+       * Three labels fit over the line; twelve collide at 375px, so this table
+       * is where the rest live — and it is also the accessible rendering, the
+       * one with headers that scrolls, wraps and reads aloud. ADR 0014 and its
+       * 2026-09-10 amendment.
        */}
       {/* Skipped for a single session: the sentence above already states it,
           and a one-row table repeating it verbatim is noise. */}

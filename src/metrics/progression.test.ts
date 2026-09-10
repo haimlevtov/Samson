@@ -10,7 +10,9 @@ import {
   MAX_PLOTTED_SESSIONS,
   exerciseProgression,
   progressionChange,
+  progressionLabels,
   progressionRange,
+  progressionTicks,
   progressionView,
   type ProgressionPoint,
 } from './progression';
@@ -272,5 +274,192 @@ describe('progressionView', () => {
     const copy = structuredClone(points);
     progressionView(points, true);
     expect(points).toEqual(copy);
+  });
+});
+
+/**
+ * The three figures printed over the line — ADR 0014, amended 2026-09-10.
+ *
+ * The chart is drawn in a browser and these decide what it says, so this is
+ * where a label that crowds another can fail without one.
+ */
+describe('progressionLabels', () => {
+  /** `n` sessions, all at 100 kg unless `peaks` names a heavier one. */
+  const run = (n: number, peaks: Record<number, number> = {}): ProgressionPoint[] =>
+    Array.from({ length: n }, (_, i) => ({
+      localDate: `2026-01-${String(i + 1).padStart(2, '0')}`,
+      weightKg: peaks[i] ?? 100,
+      reps: 5,
+    }));
+
+  it('labels the two ends, which is what the headline figure compares', () => {
+    const labels = progressionLabels(run(9));
+
+    expect(labels.map((l) => l.kind)).toEqual(['first', 'last']);
+    expect(labels.map((l) => l.index)).toEqual([0, 8]);
+  });
+
+  it('adds the heaviest when it is neither end', () => {
+    const labels = progressionLabels(run(9, { 4: 120 }));
+
+    expect(labels.map((l) => l.kind)).toEqual(['first', 'last', 'heaviest']);
+    expect(labels[2]?.index).toBe(4);
+    expect(labels[2]?.point.weightKg).toBe(120);
+  });
+
+  it('does not label the heaviest twice when it is already an end', () => {
+    /*
+     * A run that peaks on its last session is the ordinary shape of progress,
+     * so this is the common case rather than an edge one. It falls out of
+     * MIN_LABEL_GAP rather than needing its own branch — an end point sits at 0
+     * or 1 of the axis, outside any positive gap.
+     */
+    expect(progressionLabels(run(9, { 8: 120 })).map((l) => l.kind)).toEqual(['first', 'last']);
+    expect(progressionLabels(run(9, { 0: 120 })).map((l) => l.kind)).toEqual(['first', 'last']);
+  });
+
+  it('drops a heaviest label that would crowd an end', () => {
+    /*
+     * 20 sessions, peak on the second: 1/19 of the axis from the left. The
+     * layout puts it on its own row so it would not overlap — but a figure
+     * printed a few pixels from the first point's is unreadable anyway, and
+     * MIN_LABEL_GAP is what keeps it off.
+     */
+    expect(progressionLabels(run(20, { 1: 120 })).map((l) => l.kind)).toEqual(['first', 'last']);
+    expect(progressionLabels(run(20, { 18: 120 })).map((l) => l.kind)).toEqual(['first', 'last']);
+
+    // And it comes back once there is room, on the same history shape.
+    expect(progressionLabels(run(20, { 10: 120 })).map((l) => l.kind)).toContain('heaviest');
+  });
+
+  it('keeps the earliest of tied heaviest sessions', () => {
+    /*
+     * AI-NOTE: the alternative flips the label to a later date the day somebody
+     * repeats a best, which reads as the peak moving backwards along a chart
+     * that did not change shape.
+     */
+    expect(progressionLabels(run(11, { 3: 120, 7: 120 }))[2]?.index).toBe(3);
+  });
+
+  it('labels nothing when there is no line to label', () => {
+    // One session renders as a sentence, not a chart.
+    expect(progressionLabels(run(1))).toEqual([]);
+    expect(progressionLabels([])).toEqual([]);
+  });
+
+  it('labels both ends of a two-session chart and nothing else', () => {
+    const labels = progressionLabels(run(2, { 1: 120 }));
+
+    expect(labels.map((l) => l.index)).toEqual([0, 1]);
+  });
+
+  it('carries the point itself, so the caller does not index back into the array', () => {
+    // The caller positions from `index` and prints from `point`; if they could
+    // disagree the label would name one session and sit over another.
+    const points = run(9, { 4: 120 });
+
+    for (const entry of progressionLabels(points)) {
+      expect(entry.point).toBe(points[entry.index]);
+    }
+  });
+});
+
+describe('progressionTicks', () => {
+  const at = (weightKg: number, localDate: string) => ({ localDate, weightKg, reps: 5 });
+
+  it('prints the heaviest and the lightest, in that order', () => {
+    expect(
+      progressionTicks([at(100, '2026-09-01'), at(122.5, '2026-09-08'), at(90, '2026-09-15')])
+    ).toEqual([122.5, 90]);
+  });
+
+  it('never prints the padding progressionRange adds to a flat history', () => {
+    /*
+     * THE case this function exists for. Six sessions at 100 kg give
+     * progressionRange a padded 90..110 so the line has somewhere to sit —
+     * printing that as an axis claims a 110 kg lift that never happened.
+     */
+    const flat = [at(100, '2026-09-01'), at(100, '2026-09-08'), at(100, '2026-09-15')];
+
+    expect(progressionRange(flat)).toEqual({ min: 90, max: 110 });
+    expect(progressionTicks(flat)).toEqual([100]);
+  });
+
+  it('gives a flat line one tick rather than two reading the same number', () => {
+    expect(progressionTicks([at(60, '2026-09-01'), at(60, '2026-09-08')])).toHaveLength(1);
+  });
+
+  it('has nothing to say about no sessions', () => {
+    expect(progressionTicks([])).toEqual([]);
+  });
+
+  it('reads the extremes of the whole history, not of its ends', () => {
+    // A chart that dips and recovers has its max in the middle, and an axis
+    // labelled from the first and last points would understate it.
+    const dip = [at(100, '2026-09-01'), at(130, '2026-09-08'), at(105, '2026-09-15')];
+
+    expect(progressionTicks(dip)).toEqual([130, 100]);
+  });
+});
+
+/**
+ * Which side of its point each end label sits on.
+ *
+ * FOUND IN THE BROWSER: with both ends printed below their points, a rising
+ * history drew "127.5 kg × 5" straight through the polyline and the three dots
+ * before it. Nothing in the suite could have caught that, because the rule did
+ * not exist — the side was a CSS constant.
+ */
+describe('progressionLabels — the side the line is not on', () => {
+  const at = (weightKg: number, localDate: string) => ({ localDate, weightKg, reps: 5 });
+  const sideOf = (points: ProgressionPoint[], kind: string) =>
+    progressionLabels(points).find((l) => l.kind === kind)?.side;
+
+  const rising = [at(100, '2026-09-01'), at(110, '2026-09-08'), at(120, '2026-09-15')];
+  const falling = [at(120, '2026-09-01'), at(110, '2026-09-08'), at(100, '2026-09-15')];
+
+  it('puts both labels clear of a rising line', () => {
+    // Up and to the right from the first point, so below it is free; arriving
+    // from below-left at the last, so above it is free.
+    expect(sideOf(rising, 'first')).toBe('below');
+    expect(sideOf(rising, 'last')).toBe('above');
+  });
+
+  it('puts both labels clear of a falling line', () => {
+    expect(sideOf(falling, 'first')).toBe('above');
+    expect(sideOf(falling, 'last')).toBe('below');
+  });
+
+  it('reads the segment at each end, not the overall direction', () => {
+    /*
+     * The case a "did it go up overall" test would pass and a chart would fail:
+     * a history that ends lower than it started while its LAST segment rises.
+     * The last label has to clear that segment, not the whole line.
+     */
+    const dip = [at(120, '2026-09-01'), at(80, '2026-09-08'), at(100, '2026-09-15')];
+
+    expect(sideOf(dip, 'first')).toBe('above');
+    expect(sideOf(dip, 'last')).toBe('above');
+  });
+
+  it('keeps the two ends on opposite sides when a segment is flat', () => {
+    // Neither side is clearer of a horizontal segment, so the tie-break exists
+    // to stop both ends stacking onto the same row.
+    const flat = [at(100, '2026-09-01'), at(100, '2026-09-08'), at(100, '2026-09-15')];
+
+    expect(sideOf(flat, 'first')).toBe('below');
+    expect(sideOf(flat, 'last')).toBe('above');
+  });
+
+  it('always puts the heaviest above, because nothing is drawn over it', () => {
+    const peak = [
+      at(100, '2026-09-01'),
+      at(110, '2026-09-08'),
+      at(160, '2026-09-15'),
+      at(115, '2026-09-22'),
+      at(120, '2026-09-29'),
+    ];
+
+    expect(sideOf(peak, 'heaviest')).toBe('above');
   });
 });

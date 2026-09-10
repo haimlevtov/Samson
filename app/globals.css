@@ -2136,6 +2136,112 @@ details.quick-log[open] > summary {
   overflow: visible;
 }
 
+/* ---- the numbers over the line — ADR 0014, amended 2026-09-10 -------------
+ *
+ * These are HTML, not <text>. A <text> element inside a scaled viewBox ignores
+ * the reader's font size, so every figure here would be locked to whatever the
+ * viewBox happens to be — in the part of the card that is nothing but numbers.
+ * As spans they inherit the page's type scale like any other text.
+ *
+ * The overlay maps exactly onto the SVG because both fill the same positioned
+ * box and the SVG's height follows its viewBox. Positions arrive as inline
+ * percentages from the same x()/y() that draw the line.
+ */
+.lift-chart-plot {
+  position: relative;
+}
+
+/*
+ * FOUND IN THE BROWSER at a wide width. The SVG scales with its viewBox and the
+ * labels do not — correctly, since they are text at reading size — so inside
+ * the 1000px shell a dot grew to about 18px beside 11px figures, and the chart
+ * read as a poster with captions. Capping it keeps the sparkline a sparkline;
+ * the table below still uses the full width.
+ *
+ * A max-width inside a min-width query, which is what globals.css's header
+ * permits: the phone layout is the base and this adds a constraint for screens
+ * the base was never drawn for.
+ */
+@media (min-width: 760px) {
+  .lift-chart-plot {
+    max-width: 560px;
+  }
+}
+
+.lift-chart-overlay {
+  position: absolute;
+  inset: 0;
+  /* Decoration over a chart: every figure here is also a row of the table
+     below, and clicks belong to the page rather than to a label. */
+  pointer-events: none;
+}
+
+.lift-chart-value,
+.lift-chart-tick {
+  position: absolute;
+  /* A wrapped "82.5 kg × 5" is two lines of label over a 140-unit chart. */
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.lift-chart-value {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/*
+ * Horizontal alignment is fixed by which end the label belongs to; the vertical
+ * side is a fact about the data and arrives as `is-above` / `is-below` from
+ * progressionLabels. Composed as two axes rather than six rules so the two
+ * cannot drift apart.
+ *
+ * The heaviest is always above — it is the topmost point, so nothing is drawn
+ * over it, and that also puts a label height of clear air between it and the
+ * ends however close together they sit along the axis. That separation, not the
+ * 18% gap rule, is what stops the three colliding.
+ *
+ * Left- and right-aligning the ends is what keeps them inside the box at the
+ * extremes of the axis.
+ */
+.lift-chart-value.is-first {
+  --lift-label-x: 0%;
+}
+
+.lift-chart-value.is-last {
+  --lift-label-x: -100%;
+}
+
+.lift-chart-value.is-heaviest {
+  --lift-label-x: -50%;
+  color: var(--accent-text);
+}
+
+.lift-chart-value.is-below {
+  transform: translate(var(--lift-label-x), 8px);
+}
+
+.lift-chart-value.is-above {
+  transform: translate(var(--lift-label-x), calc(-100% - 8px));
+}
+
+/* The axis, in the left gutter the viewBox reserves for it. Right-aligned so
+   two values of different widths share an edge. */
+.lift-chart-tick {
+  left: 0;
+  width: 11%;
+  transform: translateY(-50%);
+  text-align: right;
+  color: var(--muted);
+}
+
+.lift-chart-dot.is-labelled {
+  /* The three points carrying a figure, so the eye can pair them up. */
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
 .lift-chart-line {
   stroke: var(--accent-text);
   stroke-linecap: round;

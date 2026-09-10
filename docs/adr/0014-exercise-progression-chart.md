@@ -111,11 +111,33 @@ already compares, so labelling them shows the reader where that figure comes
 from. **The heaviest** is the third because a progression line's other question
 is "what is my best", and on a chart with a deload in it the best is neither end.
 
-The heaviest label is **dropped** when it would collide: when it is already the
-first or the last point, or when it sits within 18% of the axis from either end.
-That rule is in `progressionLabels` in `src/metrics/progression.ts` with the
-other shaping, not in the component — a label that silently overlaps another is
-a rendering bug nobody can write a test for from the outside.
+**Two rows, and that is what actually stops them colliding.** _Written before
+building it, this section said the 18% rule was what prevented the collision.
+It is not._ The ends are printed **below** their points and the heaviest
+**above** its own — and the heaviest is by definition the topmost point, so
+whenever it is labelled at all the other two are strictly lower. There is a
+label height of clear air between the rows however close together they sit along
+the axis.
+
+Laid out on one row instead, the arithmetic does not work: a label reading
+"82.5 kg × 5" is about a fifth of the chart's width, so a centred middle label
+and a left-aligned first one only clear each other when the peak falls in the
+middle fifth of the history. The rule would have hidden the label in most of the
+cases it exists for.
+
+**The 18% rule does something smaller and is still worth having.** A figure
+printed a few pixels along from the first point's is unreadable even on its own
+row, so `progressionLabels` drops a heaviest label within 18% of the axis from
+either end. It lives in `src/metrics/progression.ts` with the other shaping
+rather than in the component, because a label that crowds another is a rendering
+fault with no failing test anywhere else.
+
+_A second thing that section got wrong, found by deliberately breaking the
+code:_ it also said the heaviest is dropped "when it is already the first or the
+last point", and there was a branch for exactly that. Deleting the branch turned
+no test red, because it could not — an end point sits at 0 or 1 of the axis,
+outside any positive gap, so the gap rule had always been handling it. The
+branch is gone.
 
 Ties on the heaviest weight take the **earliest** session, because the
 interesting fact about a repeated best is when it was first reached.
@@ -130,6 +152,14 @@ never lifted 110 kg.
 So the axis ticks come from the DATA: the maximum at the top of the plot and the
 minimum at the bottom. When those are equal there is one tick, on the line
 itself, and no top or bottom — a flat line's honest axis is one number.
+
+### The chart stops growing at 560px
+
+Found at a wide width rather than by reasoning. The SVG scales with its viewBox
+and the labels do not — correctly, because they are text at reading size — so
+inside the app's 1000px shell a dot grew to roughly 18px next to 11px figures
+and the sparkline read as a poster with captions. The plot is capped at 560px
+from 760px up; the table underneath still uses the full width.
 
 ### The table stays, and the labels are hidden from screen readers
 
