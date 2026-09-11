@@ -750,10 +750,11 @@ describe('the boundary of each remaining tier', () => {
     expect(await awardFor(user, '2026-10-10')).not.toContain('five-patterns');
 
     /*
-     * The two rows that point at custom exercises are removed explicitly:
-     * `on delete restrict` on sets.exercise_id would otherwise block afterAll's
-     * parallel user deletes. The removal throws only when the body did not, so
-     * a cleanup error can never replace the assertion that actually failed.
+     * The set on the STRANGER's exercise has to go before afterAll: its
+     * `on delete restrict` would block the stranger's delete if that ran before
+     * this user's in the parallel batch. The set on her own exercise would
+     * cascade away with her; it is removed alongside so the test leaves
+     * nothing either way.
      */
     const pointing: string[] = [];
     const logOn = async (workoutId: string, exerciseId: string): Promise<void> => {
@@ -774,7 +775,8 @@ describe('the boundary of each remaining tier', () => {
       pointing.push(data.id);
     };
 
-    let outcome: unknown;
+    let failed = false;
+    let failure: unknown;
     try {
       await logOn(await addWorkout(user, { localDate: '2026-10-11' }), theirs);
       expect(
@@ -787,22 +789,27 @@ describe('the boundary of each remaining tier', () => {
         'five-patterns'
       );
     } catch (error) {
-      outcome = error;
+      failed = true;
+      failure = error;
     }
 
     /*
      * The cleanup always runs, and the body's failure outranks it — without a
      * `throw` inside `finally`, which lint forbids for exactly the masking this
-     * is avoiding.
+     * is avoiding. `failed` is its own flag because `throw undefined` is legal
+     * and would otherwise read as a pass; a cleanup failure behind a body
+     * failure rides along as its `cause` rather than vanishing.
      */
+    let cleanup: Error | undefined;
     if (pointing.length > 0) {
       const { error } = await admin.from('sets').delete().in('id', pointing);
-      if (error && outcome === undefined) {
-        throw new Error(`removing the custom-exercise sets: ${error.message}`);
-      }
+      if (error) cleanup = new Error(`removing the custom-exercise sets: ${error.message}`);
     }
-    if (outcome !== undefined) {
-      throw outcome instanceof Error ? outcome : new Error(String(outcome));
+    if (failed) {
+      const error = failure instanceof Error ? failure : new Error(String(failure));
+      if (cleanup && error.cause === undefined) error.cause = cleanup;
+      throw error;
     }
+    if (cleanup) throw cleanup;
   });
 });

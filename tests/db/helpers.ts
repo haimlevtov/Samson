@@ -214,5 +214,10 @@ export async function signInAsArchetype(email: string): Promise<TestUser> {
 }
 
 export async function deleteTestUser(user: TestUser): Promise<void> {
-  await adminClient().auth.admin.deleteUser(user.id);
+  // FOUND IN REVIEW of PR #43: this discarded the error, so a delete blocked by
+  // `on delete restrict` failed silently and leaked the user and everything
+  // they owned. rls.test.ts's cleanup now depends on it succeeding, so it says
+  // when it does not.
+  const { error } = await adminClient().auth.admin.deleteUser(user.id);
+  if (error) throw new Error(`deleting test user ${user.email}: ${error.message}`);
 }

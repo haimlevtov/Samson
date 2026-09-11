@@ -1,8 +1,9 @@
 -- Samson 0055 — a set and a template item may only use an exercise the user may see
 --
 -- FOUND IN REVIEW of PR #43, 2026-09-11, by two reviewers independently. It
--- corrects that PR's own ADR amendment, which first called this column "an
--- existence oracle, no cross-user read today" — wrong on the second half.
+-- corrects that PR's own ADR amendment, which first put this column in "the
+-- same existence-oracle class, with no cross-user read today" — wrong on the
+-- second half.
 --
 -- THE READ. `five-patterns`, as last defined in 20260908090400, is
 --
@@ -48,9 +49,10 @@
 --    or a shared catalogue row with a null `user_id` — mirroring `exercises_read`
 --    exactly. `alter policy` replaces the whole expression, so each one keeps
 --    the check it already had: the workout (20260908140000) and the template
---    (20260911090000). Every column reference is qualified with its table, so a
---    column added to `workouts`, `workout_templates` or `exercises` later cannot
---    capture an unqualified name. `using` is untouched, for the reason both
+--    (20260911090000). Every column reference inside a subquery is qualified
+--    with its table, so a column added to `workouts`, `workout_templates` or
+--    `exercises` later cannot capture an unqualified name; the top-level
+--    `user_id` sits outside them. `using` is untouched, for the reason both
 --    earlier fixes give. Policy only: no DDL, and src/db/types.ts does not change.
 --
 -- 2. The predicate. The join is filtered to the evaluating user's own or shared
@@ -58,10 +60,13 @@
 --    written before this migration cannot feed it.
 --
 -- AI-NOTE: three columns of this class are still unchecked, pinned in
---          tests/db/schema-invariants.test.ts: the two on exercise_equipment,
---          whose primary key has no user_id (a key change, not a policy), and
---          user_equipment.equipment_tag_id. ADR 0003's 2026-09-11 amendment has
---          the rule; docs/plans/README.md tracks them.
+--          tests/db/schema-invariants.test.ts. The two on exercise_equipment
+--          need this same own-or-shared check for their cross-user half — a
+--          policy, no DDL — and, separately, a key change: the primary key has
+--          no user_id, so one user's link occupies the pair for everybody.
+--          user_equipment.equipment_tag_id is an existence oracle only. ADR
+--          0003's 2026-09-11 amendment has the rule; docs/plans/README.md
+--          tracks them.
 
 alter policy sets_own on public.sets
   using (user_id = auth.uid())

@@ -57,7 +57,7 @@ beforeAll(async () => {
   if (bobWorkout.error) throw new Error(bobWorkout.error.message);
   bobWorkoutId = bobWorkout.data.id;
 
-  // A template of bob's, for the two template_id cases below.
+  // A template of bob's, for the template_id cases below.
   const bobTemplate = await bob.client
     .from('workout_templates')
     .insert({ user_id: bob.id, name: 'bob only' })
@@ -66,7 +66,7 @@ beforeAll(async () => {
   if (bobTemplate.error) throw new Error(bobTemplate.error.message);
   bobTemplateId = bobTemplate.data.id;
 
-  // A custom exercise of bob's, for the two exercise_id cases below.
+  // A custom exercise of bob's, for the exercise_id cases below.
   const bobExercise = await bob.client
     .from('exercises')
     .insert({
@@ -99,6 +99,31 @@ beforeAll(async () => {
 
 afterAll(async () => {
   /*
+   * Users FIRST, and alice before bob. Deleting a user cascades away every
+   * set, template item and custom exercise they wrote — including a row a test
+   * here left pointing at somebody else's, on a run where a gap is open.
+   * Alice's rows are the ones that point at bob's, so she goes first; after
+   * that nothing references bob's exercise or template.
+   *
+   * FOUND IN REVIEW of PR #43: in the other order every cross-user test's own
+   * cleanup was load-bearing for this block, and those cleanups ignored their
+   * errors. Every step here runs even when an earlier one fails, and the
+   * failures are thrown together at the end: a failed user delete must not skip
+   * the system-row delete below, which is the one that leaks.
+   */
+  const failures: string[] = [];
+  const attempt = async (step: string, run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      failures.push(`${step}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  await attempt('deleting alice', () => deleteTestUser(alice));
+  await attempt('deleting bob', () => deleteTestUser(bob));
+
+  /*
    * The two SYSTEM rows have to be deleted by hand. Deleting the fixture users
    * cascades away everything they own, and `user_id is null` means these belong
    * to nobody — so nothing was cleaning them up.
@@ -123,23 +148,8 @@ afterAll(async () => {
    * AI-NOTE: any fixture written with `user_id: null` outlives its test. If you
    *          add one, delete it here.
    */
-  /*
-   * Users FIRST, and alice before bob. Deleting a user cascades away every
-   * set, template item and custom exercise they wrote — including a row a test
-   * here left pointing at somebody else's, on a run where a gap is open.
-   * Alice's rows are the ones that point at bob's, so she goes first; after
-   * that nothing references bob's exercise or template, and nothing references
-   * the shared fixtures below, `on delete restrict` or otherwise.
-   *
-   * FOUND IN REVIEW of PR #43: in the other order every cross-user test's own
-   * cleanup was load-bearing for this block, and those cleanups ignored their
-   * errors.
-   */
-  await deleteTestUser(alice);
-  await deleteTestUser(bob);
-
   const admin = adminClient();
-  const cleaned = await Promise.all([
+  const [achievement, exercise] = await Promise.all([
     admin.from('achievements').delete().eq('id', hiddenAchievementId),
     admin.from('exercises').delete().eq('id', systemExerciseId),
   ]);
@@ -147,22 +157,31 @@ afterAll(async () => {
   /*
    * FOUND IN REVIEW: a discarded error here is the same bug again, silently.
    * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`,
-   * `workout_template_items.exercise_id` AND `progression_nodes.exercise_id`, so
-   * a future test that logs a set
-   * against this fixture makes the delete fail — and swallowing that would
+   * `workout_template_items.exercise_id` AND `progression_nodes.exercise_id`.
+   * The users are gone by now, and with them every set and item this file
+   * wrote, so what can still block this delete is a row nobody here deletes —
+   * a progression node pointing at the fixture, say. Swallowing that would
    * reintroduce the leak this block was added to stop, with nothing saying so.
    */
-  for (const result of cleaned) {
-    if (result.error) throw new Error(`cleaning up a system fixture: ${result.error.message}`);
+  if (achievement.error) {
+    failures.push(`cleaning up the hidden achievement: ${achievement.error.message}`);
   }
+  if (exercise.error) {
+    failures.push(`cleaning up the system exercise: ${exercise.error.message}`);
+  }
+
+  if (failures.length > 0) throw new Error(`afterAll cleanup: ${failures.join('; ')}`);
 });
 
 describe('cross-user isolation', () => {
   it('shows alice only her own workouts', async () => {
+    // Every row, not a count: later tests in this file add sessions of hers, so
+    // a length of one held only while this test happened to run first.
     const { data, error } = await alice.client.from('workouts').select('id, user_id');
     expect(error).toBeNull();
-    expect(data).toHaveLength(1);
-    expect(data![0]!.user_id).toBe(alice.id);
+    expect(data!.length, 'her own workout from beforeAll').toBeGreaterThan(0);
+    expect(data!.every((row) => row.user_id === alice.id)).toBe(true);
+    expect(data!.map((row) => row.id)).not.toContain(bobWorkoutId);
   });
 
   it('returns nothing when alice asks for bob by id', async () => {
@@ -233,6 +252,7 @@ describe('cross-user isolation', () => {
     expect(error, 'alice attached a set to a workout she does not own').not.toBeNull();
     expect(error!.message.toLowerCase()).toContain('row-level security');
   });
+
   it('stops alice starting a session from one of bob templates', async () => {
     /*
      * FOUND IN REVIEW of PR #42, 2026-09-11 — the set case above, one table
@@ -345,6 +365,87 @@ describe('cross-user isolation', () => {
 
     expect(error, 'alice prescribed an exercise she cannot see').not.toBeNull();
     expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('stops alice moving her own set or template item onto bob rows', async () => {
+    /*
+     * The UPDATE path of `sets_own` and `workout_template_items_own`, one move
+     * per column the fixes added. The policies are `for all`, so `with check`
+     * runs on an update's new row — tried here rather than argued. Her rows
+     * start valid, on her own session and template and the catalogue, and each
+     * move breaks exactly one clause.
+     */
+    const { data: session, error: sessionError } = await alice.client
+      .from('workouts')
+      .insert({ user_id: alice.id, local_date: '2026-08-29', status: 'completed' })
+      .select('id')
+      .single();
+    expect(sessionError).toBeNull();
+
+    const { data: set, error: setError } = await alice.client
+      .from('sets')
+      .insert({
+        user_id: alice.id,
+        workout_id: session!.id,
+        exercise_id: systemExerciseId,
+        set_index: 0,
+        weight_kg: 60,
+        reps: 5,
+        is_warmup: false,
+      })
+      .select('id')
+      .single();
+    expect(setError).toBeNull();
+
+    const { data: template, error: templateError } = await alice.client
+      .from('workout_templates')
+      .insert({ user_id: alice.id, name: 'alice, moving' })
+      .select('id')
+      .single();
+    expect(templateError).toBeNull();
+
+    const { data: item, error: itemError } = await alice.client
+      .from('workout_template_items')
+      .insert({
+        user_id: alice.id,
+        template_id: template!.id,
+        exercise_id: systemExerciseId,
+        position: 0,
+        set_count: 3,
+        reps: 5,
+      })
+      .select('id')
+      .single();
+    expect(itemError).toBeNull();
+
+    const moves = [
+      [
+        'her set onto bob exercise',
+        () => alice.client.from('sets').update({ exercise_id: bobExerciseId }).eq('id', set!.id),
+      ],
+      [
+        'her item onto bob exercise',
+        () =>
+          alice.client
+            .from('workout_template_items')
+            .update({ exercise_id: bobExerciseId })
+            .eq('id', item!.id),
+      ],
+      [
+        'her item into bob template',
+        () =>
+          alice.client
+            .from('workout_template_items')
+            .update({ template_id: bobTemplateId })
+            .eq('id', item!.id),
+      ],
+    ] as const;
+
+    for (const [move, run] of moves) {
+      const { error } = await run();
+      expect(error, `alice moved ${move}`).not.toBeNull();
+      expect(error!.message.toLowerCase(), move).toContain('row-level security');
+    }
   });
 
   it('still lets a user use her own template, her own exercise and the catalogue', async () => {

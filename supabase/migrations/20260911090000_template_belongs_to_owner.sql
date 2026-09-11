@@ -30,11 +30,14 @@
 -- the next `security definer` function would read them. That is how the sets
 -- bug happened.
 --
--- AUDITED on hosted before this was applied there, read-only: no session and no
--- template item points at another user's template, so the tighter check strands
--- nothing. Checked rather than assumed: a row that had crossed would still be
--- visible and deletable, but no longer finishable, since finishing re-runs
--- `with check`.
+-- AUDITED on hosted, read-only. This migration had not been applied there when
+-- it was written, nor when review revised it — it reaches hosted by
+-- `supabase db push` after the PR merges; on 2026-09-11 hosted's `workouts_own`
+-- still read `(user_id = auth.uid())`. The audit found no session and no
+-- template item pointing at another user's template, so the tighter check
+-- strands nothing. Checked rather than assumed: a row that had crossed would
+-- still be visible and deletable, but no longer finishable, since finishing
+-- re-runs `with check`.
 --
 -- THE FIX: the write half only, as in 20260908140000.
 --   * `with check` now requires the template to be the writer's own. A null
@@ -42,9 +45,11 @@
 --   * `using` is untouched. It is the read/visibility half, and adding the
 --     clause there would hide a row already written across the boundary instead
 --     of leaving it visible to the owner who has to clean it up.
---   * Every column reference is qualified with its table — `workouts.template_id`,
---     not `template_id` — so a column added to `workout_templates` later cannot
---     capture the name. FOUND IN REVIEW; 20260911100000 does the same.
+--   * Every column reference inside a subquery is qualified with its table —
+--     `workouts.template_id`, not `template_id` — so a column added to
+--     `workout_templates` later cannot capture the name. The top-level
+--     `user_id` and `template_id is null` sit outside any subquery, where
+--     nothing can capture them. FOUND IN REVIEW; 20260911100000 does the same.
 --   * Policy only: no DDL, so src/db/types.ts does not change and no local stack
 --     is needed to regenerate it.
 --
@@ -56,9 +61,8 @@
 --
 -- AI-NOTE: tests/db/schema-invariants.test.ts reads every foreign key into a
 --          user-ownable table from the catalogue and fails on an unchecked one.
---          It lists the five columns still waiting for this same fix, all of
---          which point at tables that also hold shared catalogue rows — so
---          their check is "yours, or user_id is null", not "yours".
+--          It pins the three columns still unchecked. What each one needs is
+--          in 20260911100000's AI-NOTE and ADR 0003's 2026-09-11 amendment.
 
 alter policy workouts_own on public.workouts
   using (user_id = auth.uid())

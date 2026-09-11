@@ -5,11 +5,21 @@
 --
 -- WHY: catalogue rows are shared content, so user_id is nullable and NULL means
 --      "system content, readable by everyone". The invariant stays literally
---      true, and user-authored custom exercises work later with no migration.
---      See docs/adr/0002-catalogue-user-id.md.
--- AI-NOTE: every catalogue table repeats this exact policy pair. If you add
---          one, copy both policies or the rows become invisible, or writable by
---          the wrong user.
+--      true, and user-authored custom exercises need no new column — though
+--      they did need 20260911100000 before the tables that point at them were
+--      safe. See docs/adr/0002-catalogue-user-id.md.
+-- AI-NOTE: every catalogue table repeats this policy pair. If you add one, copy
+--          both policies or the rows become invisible, or writable by the wrong
+--          user. And if the table has a foreign key into another user-ownable
+--          table, the write policy must ALSO check the referenced row is the
+--          writer's own or shared: copied verbatim, it lets a user link to
+--          somebody else's row. `exercise_equipment_write` below is exactly
+--          that copy, pinned in tests/db/schema-invariants.test.ts — ADR
+--          0003's 2026-09-11 amendment.
+--
+--          Amended in place 2026-09-11, in review of PR #43. A comment outside
+--          a function body is not stored, so no database's copy of this
+--          migration changes — 20260908090400 set the precedent.
 
 create table public.equipment_tags (
   id uuid primary key default gen_random_uuid(),
