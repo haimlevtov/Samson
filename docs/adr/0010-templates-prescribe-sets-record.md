@@ -8,7 +8,9 @@
 A trainee should be able to tap a saved template and be training within one
 screen, rather than searching the catalogue for the same six movements every
 Monday. Templates come from two places: the user builds one (or saves a session
-they liked), and the coach's accepted plan contributes one per planned session.
+they liked), and the coach's accepted plan contributes one or more per planned
+session — a second import of a session is kept, its name given a counter
+(amended 2026-09-12, rework PR 7).
 
 _Amended 2026-09-11: a third, for demo data only._ `npm run seed` writes each
 archetype's programme as `user` templates, through `createTemplate` as the

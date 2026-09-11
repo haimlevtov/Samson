@@ -21,7 +21,7 @@ because several of them touch the same surface.
 | 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | planned — the key stays off Vercel until it ships                      |
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | in review, paused for 6b                                               |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)        |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                |
 
 PR 8 carries two of the requested changes because they are the same surface and
@@ -541,7 +541,8 @@ Docker session.
 **So the work is one entry point, not a feature.** The import lives on
 `/workout/new`; the request is a button **on the coach's plan**. Render the same
 control there, against the block already on screen, and reuse
-`createTemplateFromPlan` unchanged.
+`createTemplateFromPlan` — changed to name a second import (below), and after
+review to return a plain error rather than the database's.
 
 ### What is genuinely open, and both are small
 
@@ -553,7 +554,9 @@ control there, against the block already on screen, and reuse
   refuse another user's custom exercise, on insert and on update, and
   `tests/db/rls.test.ts` tries each case. **Still open here:** nothing inserts a
   `workout_templates` row under another user's `user_id`. The owner-only policy
-  covers it, but no test has tried, and this PR adds a second caller.
+  covers it, but no test has tried, and this PR renders the existing action on
+  a second page. _This said "adds a second caller"; `createTemplateFromPlan`
+  already called `createTemplate`, from `/workout/new`._
 - **There is no unique constraint on template name**, so importing the same
   session twice produces two identical rows. Decide: an error, a rename, or
   allowed. Currently it is allowed by accident rather than by decision.
@@ -564,6 +567,39 @@ control there, against the block already on screen, and reuse
   through the same action `/workout/new` uses.
 - `tests/db` covers the insert under RLS: a user can only write their own.
 - The duplicate case is decided and stated, not left to accident.
+
+### What looking found, and the decisions — 2026-09-11, before the code
+
+- **The control is `PlanImportForm`, unchanged but for its label and its
+  pending text ("Saving…"),** inside the
+  plan disclosure on `/coach`, under "The plan itself". It reads "Save as a
+  template" there, and still "Import from plan" on `/workout/new`. Same
+  action, `createTemplateFromPlan`; a success lands on the new template's page,
+  where Start is — the payoff the acceptance asks for, already built.
+- **The session list is built once.** `/workout/new` builds its options inline;
+  `/coach` would be a second copy. `planSessionOptions` in
+  `src/templates/plan.ts` builds them for both, with the same
+  `plannedSessionName` the import stores.
+- **A second import is allowed, and renamed with a counter** —
+  "Week 1 · Day 1 — Upper (2)". Not refused: a newer plan's session can share
+  week, day and focus with an older one, so a name says nothing about sameness.
+  Not silent either: two imports of one session match on everything the Workout
+  tab shows — name, lifts and number of set groups — so they cannot be told apart.
+  _Corrected in review: this also said templates are editable and that the tab
+  lists them by name alone. Neither is true; the decision stands on the reason
+  above._
+- **Only names the app generates are renamed** — a plan import's, and a
+  session import's default `Session of <date>`. A name the user types is
+  kept as typed; it is theirs.
+- **No constraint in the database.** A name is not an identity, so there is
+  nothing to make unique. Two submissions at the same instant could still
+  produce two equal names — harmless, the case this rule exists to make rare,
+  and the button is disabled while a save is in flight, so a double tap in one
+  tab cannot.
+- **RLS**: a `tests/db` case in which one user tries to insert a
+  `workout_templates` row under another's `user_id`. The owner-only policy
+  refuses it today; this PR renders the existing action on a second page, so
+  it is asserted rather than assumed.
 
 ---
 
@@ -583,6 +619,11 @@ Coach
 - **The Voice card stays with the plan, and PR 6's preview with it** — it is
   where a coach is picked. A user with no plan gets the questionnaire and no
   Voice card, so no preview, which is also how it works today.
+- **"Save as a template" stays inside the plan disclosure** (PR 7): it exists
+  only when there is a plan — not in the questionnaire, generating or failed
+  states. PR 8's plan generation is what makes a newer plan's session sharing
+  week, day and focus with an older one common, which is the case PR 7's
+  counter exists for.
 
 - **"Eating" becomes "Diet".**
 - **"Stay where I am" becomes "Maintenance."**
@@ -665,8 +706,10 @@ deliberate.**" The code comment this PR quotes cites that spec as its authority.
 
 So:
 
-- **`docs/specs/coach-chat.md`** — §1 rewritten for one box and a plan control;
-  §5 and §6 extended if routing is a second call.
+- **`docs/specs/coach-chat.md`** — §1 rewritten for one box and a plan control,
+  and the "Save as a template" control PR 7 put inside the plan disclosure; its
+  "four controls" count was already short before PR 7. §5 and §6 extended if
+  routing is a second call.
 - **`docs/PRD.md`** — §5.3 (coaching, currently "Specified") and the diet and
   supplement entries at §5.7.
 - **A home for the routing decision.** The plan calls it "the new thing, and it
@@ -1124,3 +1167,45 @@ call was made after the fix, at the owner's request. The first press after the
 merge is the check, about $0.01; a wrong rate sounds too fast or slow, and a
 type other than PCM fails with the row naming it. Whether each coach sounds
 like its direction is still for the owner's ear.
+
+**Heard, 2026-09-11, after #50 merged:** six successful calls, about eight
+seconds each — slower than the "few seconds" ADR 0025 expected — and the
+owner's verdict, "voice perfect". The castings stand.
+
+### PR 7 — a plan becomes a template, 2026-09-12
+
+Shipped as decided before the code: `PlanImportForm` on `/coach`, inside the
+plan disclosure, labelled "Save as a template"; one `planSessionOptions` builds
+the session list for both pages; a second import of a session, or a second
+default `Session of <date>`, gets a counter — `distinctName` in
+`src/templates/naming.ts` — and a name the user types is kept.
+`tests/db/rls.test.ts` now tries to write a template under another user's id,
+on insert and on update.
+
+**Paused for 6b** on 2026-09-11, at the owner's call, and resumed once 6b had
+shipped and been heard.
+
+**What review found:**
+
+- **Two false reasons in the duplicate decision.** Templates are not editable
+  in the app — there is no edit control — and the Workout tab shows each
+  template's lifts and number of set groups, not its name alone. The decision stands on
+  the reason that was true: a newer plan's session can share week, day and
+  focus with an older one, and two imports of one session match on everything
+  the tab shows. Corrected here, in the spec, and in `naming.ts`.
+- **"A second caller of `createTemplate`" was a second page for an existing
+  action** — `createTemplateFromPlan` already called it on `/workout/new`. It
+  mattered because this repo has shipped a false security comment before.
+- **The import's raw database errors reached the browser**, now from `/coach`
+  too. They are generic now, with a bounded log line.
+- **"Already passed `rules.ts` and the critic"** holds for blocks the planner
+  pipeline wrote; a user can write their own accepted `plan_runs` row, which
+  reaches only their own templates.
+- **Smaller:** a comment's twelve-week block is eight (the planner's cap); ADR
+  0010's "one per planned session" is "one or more"; spec §6 cited a default
+  name §5 never states.
+
+**Not verified:** the browser pass on `/coach`, which this plan said to clear
+before PR 7 added a button there — it still needs a session. The
+`personas.test.ts` change this branch carried from #46's review went with the
+variant test itself, which 6b removed.

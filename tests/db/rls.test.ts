@@ -250,6 +250,42 @@ describe('cross-user isolation', () => {
     expect(error!.message.toLowerCase()).toContain('row-level security');
   });
 
+  it('stops alice creating a template in bob name', async () => {
+    /*
+     * Rework plan PR 7. `workout_templates_own` refuses a row whose `user_id`
+     * is not the writer's, and nothing had tried: every template test wrote
+     * the user's own. PR 7 renders the existing import action on a second page,
+     * /coach, so the policy is asserted rather than assumed. (This said "a
+     * second caller of `createTemplate`"; the action already called it, from
+     * /workout/new. FOUND IN REVIEW.)
+     */
+    const { error } = await alice.client
+      .from('workout_templates')
+      .insert({ user_id: bob.id, name: 'planted in bob list' });
+
+    expect(error, 'alice created a template owned by bob').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('stops alice handing one of her own templates to bob', async () => {
+    // The UPDATE half of the same policy: `with check` runs on the new row, so
+    // a template cannot be moved into another user's list after it is made.
+    const { data: own, error: ownError } = await alice.client
+      .from('workout_templates')
+      .insert({ user_id: alice.id, name: 'alice keeps this one' })
+      .select('id')
+      .single();
+    expect(ownError).toBeNull();
+
+    const { error } = await alice.client
+      .from('workout_templates')
+      .update({ user_id: bob.id })
+      .eq('id', own!.id);
+
+    expect(error, 'alice moved her template into bob list').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
   it('stops alice starting a session from one of bob templates', async () => {
     /*
      * FOUND IN REVIEW of PR #42, 2026-09-11 — the set case above, one table

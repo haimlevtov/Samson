@@ -2,7 +2,7 @@
 
 Status: authoritative
 Date: 2026-09-05
-Governs: `src/templates/`, `src/db/templates.ts`, `app/templates/`
+Governs: `src/templates/`, `src/db/templates.ts`, `app/workout/` (this said `app/templates/`, which does not exist)
 
 This document is the contract. As with `planner-rules.md` and
 `xp-and-challenges.md`, the tests for `src/templates/` are written from this
@@ -30,9 +30,11 @@ than a permission:
 | `user`   | The trainee builds one by hand, or saves a session they have just logged — or `npm run seed`, for the demo archetypes |
 | `coach`  | A session from the newest accepted plan is imported                                                                   |
 
-Both kinds are owned by the user, editable by the user, and deletable by the
-user. `source` exists so the UI can say where a template came from, and so
-"what did the coach actually give me" stays answerable after the user edits it.
+Both kinds are owned by the user and deletable by the user. The policy would
+allow an edit, but the app offers none — a template is started or deleted.
+`source` exists so the UI can say where a template came from. _This said
+"editable by the user", and a later decision leaned on it; corrected
+2026-09-12, rework PR 7._
 
 **The seeder writes `user` templates, and through the same door.** Each demo
 archetype gets one per session of its programme's rotation, built by
@@ -160,8 +162,10 @@ Rules:
 
 WHY `rpe` is dropped: RPE is an outcome, not an instruction. Three sets that
 felt 7, 8 and 9 are one prescription, not three, and grouping by RPE would
-shatter every template into single sets. A user who wants a target RPE can add
-one; the deriver will not invent it from how hard last Tuesday felt.
+shatter every template into single sets. The deriver will not invent a target RPE
+from how hard last Tuesday felt, and the builder offers none to add. _This
+said "a user who wants a target RPE can add one"; nothing in the app does,
+corrected 2026-09-12 with §1._
 
 4. A run longer than the 20-set bound splits into consecutive groups rather
    than being clamped, so no set is lost.
@@ -186,9 +190,21 @@ a slug → exercise id map built from the catalogue.
   and names the missing slugs. It is not silently dropped: a pressing day
   missing its press is worse than an error message.
 - The name is `Week N · Day M — <focus>`, truncated to the 80-character bound.
+- **A name the user already has gets a counter**: `… (2)`, then `(3)`, the
+  base cut with `…` so the whole stays inside the bound — `distinctName` in
+  `src/templates/naming.ts`, which takes the first free counter. Importing a
+  session twice is allowed, because a newer plan's session can share week, day
+  and focus with an older one; but two such copies match on everything the
+  Workout tab shows — name, lifts and number of set groups — so the counter tells them
+  apart. The same applies to the name `createTemplateFromSession` gives a
+  template saved from a session with the name left blank, `Session of <date>`.
+  A name the user types is kept as typed. Decided in the rework plan, PR 7.
 
-The block being imported has already passed `rules.ts` and the safety critic.
-This step calls no model and makes no judgement; it is a copy.
+A block the planner pipeline wrote has already passed `rules.ts` and the
+safety critic. (`plan_runs` also lets a user insert their own accepted row; a
+block written that way reaches only that user's own templates, which they can
+already build by hand.) This step calls no model and makes no judgement; it is
+a copy.
 
 ## 7. Out of scope
 

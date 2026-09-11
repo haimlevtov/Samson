@@ -4,16 +4,11 @@ import { createServerDb, currentUser } from '@/src/db/server';
 import { availableExercises } from '@/src/db/exercises';
 import { listWorkouts } from '@/src/db/training';
 import { latestAcceptedPlan } from '@/src/db/personas';
-import { plannedSessionName } from '@/src/templates/plan';
+import { planSessionOptions } from '@/src/templates/plan';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { TemplateBuilder, type PickerExercise } from '../TemplateBuilder';
-import {
-  PlanImportForm,
-  SessionImportForm,
-  type PlanSessionOption,
-  type SessionOption,
-} from '../ImportForms';
+import { PlanImportForm, SessionImportForm, type SessionOption } from '../ImportForms';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,14 +55,9 @@ export default async function NewTemplatePage() {
       label: `${displayDate(w.localDate)} · ${w.setCount} set${w.setCount === 1 ? '' : 's'}`,
     }));
 
-  const planSessions: PlanSessionOption[] = (plan?.block.weeks ?? []).flatMap((week) =>
-    week.sessions.map((session) => ({
-      weekNumber: week.week_number,
-      dayIndex: session.day_index,
-      // The same label the import itself will store — src/templates/plan.ts.
-      label: plannedSessionName(week.week_number, session),
-    }))
-  );
+  // The same builder /coach uses, labelled with the name the import starts from;
+  // a second import of a session adds a counter to it.
+  const planSessions = planSessionOptions(plan?.block);
 
   return (
     <>

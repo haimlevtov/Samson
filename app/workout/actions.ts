@@ -4,12 +4,18 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
-import { createTemplate, deleteTemplate, exerciseIdsBySlug } from '@/src/db/templates';
+import {
+  createTemplate,
+  deleteTemplate,
+  exerciseIdsBySlug,
+  listTemplates,
+} from '@/src/db/templates';
 import { latestAcceptedPlan } from '@/src/db/personas';
 import { activeWorkout, loadWorkout } from '@/src/db/training';
 import { templateDraftSchema } from '@/src/templates/schema';
 import { templateFromSession } from '@/src/templates/derive';
 import { templateFromPlannedSession } from '@/src/templates/plan';
+import { distinctName } from '@/src/templates/naming';
 import type { TemplateFormState } from './form-state';
 
 /**
@@ -24,13 +30,27 @@ import type { TemplateFormState } from './form-state';
  *            sets appear when the user does the work.
  */
 
-/** Zod says what is wrong in a sentence; anything else gets a plain fallback. */
+/**
+ * Zod says what is wrong in a sentence; anything else gets a plain fallback.
+ *
+ * WHY not `Error.message`, which this returned until review of PR 7: the other
+ * errors these actions can throw are database ones — `listing templates: …`,
+ * `creating template items: …` — or a malformed items payload's JSON error, and
+ * passing them on handed the browser table and column names. PR 7 made one of
+ * them reachable from /coach as well. The name and a bounded message go to the
+ * server log instead, as the coach's actions do; see `sendChatMessage` for why
+ * never the whole object.
+ */
 function explain(cause: unknown, fallback: string): string {
   if (cause instanceof z.ZodError) {
     const issue = cause.issues[0];
     return issue ? `${issue.path.join('.') || 'form'}: ${issue.message}` : fallback;
   }
-  return cause instanceof Error ? cause.message : fallback;
+  console.error(
+    'template action failed',
+    cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+  );
+  return fallback;
 }
 
 /** Build one by hand: the items come from the browser as JSON and are re-parsed. */
@@ -93,9 +113,19 @@ export async function createTemplateFromSession(
       };
     }
 
-    const name = String(formData.get('name') ?? '').trim();
+    // A typed name is the user's and is kept as typed; only the default the
+    // app generates is kept apart from names they already have — rework plan
+    // PR 7, docs/specs/workout-templates.md §6.
+    const typed = String(formData.get('name') ?? '').trim();
+    const name =
+      typed !== ''
+        ? typed
+        : distinctName(
+            `Session of ${workout.localDate}`,
+            (await listTemplates(db)).map((t) => t.name)
+          );
     const draft = templateDraftSchema.parse({
-      name: name === '' ? `Session of ${workout.localDate}` : name,
+      name,
       source: 'user',
       notes: derived.truncated
         ? 'Saved from a session with more set groups than a template can hold; the last ones were dropped.'
@@ -151,8 +181,13 @@ export async function createTemplateFromPlan(
       return { error: `The catalogue has no exercise for: ${imported.missingSlugs.join(', ')}.` };
     }
 
+    // A second import of one session is allowed, and gets a counter so the
+    // Workout tab can tell the copies apart — rework plan PR 7.
     const draft = templateDraftSchema.parse({
-      name: imported.name,
+      name: distinctName(
+        imported.name,
+        (await listTemplates(db)).map((t) => t.name)
+      ),
       source: 'coach',
       notes: null,
       items: imported.items,

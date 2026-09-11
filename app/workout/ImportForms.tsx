@@ -3,15 +3,10 @@
 import { useActionState, useState } from 'react';
 import { createTemplateFromPlan, createTemplateFromSession } from './actions';
 import { EMPTY_TEMPLATE_FORM, type TemplateFormState } from './form-state';
+import type { PlanSessionOption } from '@/src/templates/plan';
 
 export interface SessionOption {
   id: string;
-  label: string;
-}
-
-export interface PlanSessionOption {
-  weekNumber: number;
-  dayIndex: number;
   label: string;
 }
 
@@ -70,8 +65,18 @@ export function SessionImportForm({ sessions }: { sessions: SessionOption[] }) {
  * INVARIANT: the numbers are read server-side from the accepted `plan_runs`
  *            block — CLAUDE.md #1. This form sends a week and a day, and could
  *            not send a prescription if it wanted to.
+ *
+ * Rendered on `/workout/new` and, since rework PR 7, inside the coach's plan on
+ * `/coach` — the same control and the same action, with a label that reads
+ * right where it stands.
  */
-export function PlanImportForm({ sessions }: { sessions: PlanSessionOption[] }) {
+export function PlanImportForm({
+  sessions,
+  submitLabel = 'Import from plan',
+}: {
+  sessions: PlanSessionOption[];
+  submitLabel?: string;
+}) {
   const [state, action, pending] = useActionState<TemplateFormState, FormData>(
     createTemplateFromPlan,
     EMPTY_TEMPLATE_FORM
@@ -110,7 +115,7 @@ export function PlanImportForm({ sessions }: { sessions: PlanSessionOption[] }) 
       {state.error ? <p className="error small">{state.error}</p> : null}
 
       <button type="submit" disabled={pending}>
-        {pending ? 'Importing…' : 'Import from plan'}
+        {pending ? 'Saving…' : submitLabel}
       </button>
     </form>
   );

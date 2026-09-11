@@ -5,6 +5,8 @@ import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import { hasApiKey } from '@/src/llm/config';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { planSessionOptions } from '@/src/templates/plan';
+import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole } from './CoachConsole';
 import { ChatPanel } from './ChatPanel';
 import { DietPanel } from './DietPanel';
@@ -80,7 +82,7 @@ export default async function CoachPage() {
 
           {/*
            * The plan is revealed, not served — the user's own request, and the
-           * right default regardless: a twelve-week block unrolled on load is
+           * right default regardless: an eight-week block unrolled on load is
            * most of a screen nobody asked for.
            *
            * A <details> rather than client state: it needs no JavaScript, it is
@@ -104,6 +106,20 @@ export default async function CoachPage() {
                   number in it, and a number it states that is not here is rejected automatically.
                 </FieldHint>
               </h2>
+
+              {/*
+               * A plan becomes a template — rework plan, PR 7. The same control
+               * and the same action as /workout/new, so a session saved here is
+               * the one saved there: copied verbatim from this block, and a
+               * second copy gets a counter rather than a twin. Above the weeks,
+               * not below them: an eight-week block would bury it.
+               */}
+              <div className="card">
+                <PlanImportForm
+                  sessions={planSessionOptions(plan.block)}
+                  submitLabel="Save as a template"
+                />
+              </div>
 
               {plan.block.weeks.map((week) => (
                 <div key={week.week_number} className="card week-card">

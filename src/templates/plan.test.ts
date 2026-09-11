@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { plannedSessionSchema, type PlannedSession } from '../planner/schema';
 import { templateDraftSchema } from './schema';
-import { plannedSessionName, templateFromPlannedSession } from './plan';
+import { planSessionOptions, plannedSessionName, templateFromPlannedSession } from './plan';
 
 const SQUAT_ID = '11111111-1111-4111-8111-111111111111';
 const BENCH_ID = '22222222-2222-4222-8222-222222222222';
@@ -146,5 +146,27 @@ describe('templateFromPlannedSession', () => {
         items: result.items,
       })
     ).not.toThrow();
+  });
+});
+
+describe('planSessionOptions', () => {
+  it('lists every session in order, labelled with the name the import starts from', () => {
+    const upper: PlannedSession = { ...session, day_index: 0, focus: 'Upper body' };
+    const block = {
+      weeks: [
+        { week_number: 1, sessions: [upper, session] },
+        { week_number: 2, sessions: [upper] },
+      ],
+    };
+
+    expect(planSessionOptions(block)).toEqual([
+      { weekNumber: 1, dayIndex: 0, label: plannedSessionName(1, upper) },
+      { weekNumber: 1, dayIndex: 2, label: plannedSessionName(1, session) },
+      { weekNumber: 2, dayIndex: 0, label: plannedSessionName(2, upper) },
+    ]);
+  });
+
+  it('lists nothing when there is no plan', () => {
+    expect(planSessionOptions(null)).toEqual([]);
   });
 });
