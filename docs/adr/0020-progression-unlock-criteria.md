@@ -166,14 +166,14 @@ in the picker.
 
 **Found in review of PR #42.** The home-gym programme carried `chair-squat`,
 which the catalogue tags `machine` and home-gym does not own. Tracing why led to
-the legs tree, where three of the five rungs had been chosen by NAME, and all
-three names mislead:
+the legs tree, where three of the five rungs were lifts the app could not give a
+bodyweight user — two of them chosen by a name that misleads:
 
-| Rung               | Slug                         | What the catalogue entry describes                                      |
-| ------------------ | ---------------------------- | ----------------------------------------------------------------------- |
-| Chair Squat (root) | `chair-squat`                | A Smith-machine squat: set the bar, step under it, lift it off the rack |
-| Split Squat        | `split-squats`               | A jumping split, filed under `stretching`                               |
-| Pistol Squat       | `smith-machine-pistol-squat` | A Smith-machine split stance, not a pistol                              |
+| Rung               | Slug                         | What the catalogue entry describes                                       |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
+| Chair Squat (root) | `chair-squat`                | A Smith-machine squat: set the bar, step under it, lift it off the rack  |
+| Split Squat        | `split-squats`               | A jumping split, filed under `stretching`                                |
+| Pistol Squat       | `smith-machine-pistol-squat` | A real pistol squat, under a Smith bar: honestly named, tagged `machine` |
 
 `availableExercises` offers only lifts in `PROGRAMMABLE_CATEGORIES` whose
 equipment tag the user owns. So a user without a machine could never log the
@@ -207,8 +207,13 @@ were refused:
 
 It is a rung shorter than before. The catalogue has no bodyweight pistol or
 split squat a user can log — `split-squats` is the jumping split above, and the
-real ones need dumbbells, a kettlebell or a Smith machine — so the ladder ends
-on the explosive single-leg rung the catalogue does have, rather than on a name.
+real ones need a barbell, dumbbells, a kettlebell, a Smith machine or a
+suspension trainer — so the ladder ends on the explosive split-stance rung the
+catalogue does have. **Corrected in review:** this amendment first called the
+Smith pistol "a split stance, not a pistol", from a truncated read of its
+instructions — the mistake it warns about, one level down. Its instructions
+hold one leg off the ground; the name is honest, and the lift is still a
+machine lift at the top of a bodyweight ladder.
 The two criteria that survive keep their numbers. The step-up needs a step or a
 bench; the source files it under bodyweight, and so does this. Migration
 `20260911120000`.

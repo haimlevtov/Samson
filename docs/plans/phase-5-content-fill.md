@@ -654,7 +654,9 @@ invented-content list, where the project keeps that kind of admission.
 
 ### PR 5 — progression trees, 2026-09-08
 
-Four trees, twenty nodes, a reader, a pure evaluator and a surface. The table
+Four trees, twenty nodes, a reader, a pure evaluator and a surface. _Nineteen
+since 2026-09-11: the legs tree lost a rung that nobody could open — ADR 0020's
+amendment._ The table
 had been in the schema since migration 0002 with no rows and no reader; this is
 both, in one change, with the contract committed ahead of it.
 

@@ -170,15 +170,17 @@ end $$;
 The catalogue has **no** `push-up`, `pistol-squat`, `hollow-hold`,
 `diamond-push-up` or `dragon-flag` — every obvious guess. It has `pushups`,
 `plank`, `hanging-pike`, `inverted-row`, `chin-up`, `pullups`, `muscle-up`.
-Query for the slug first; a miss writes a null and says nothing.
+Query for the slug first. A criterion naming a slug the catalogue lacks is a
+rung nobody can open, and `tests/db/progression.test.ts` fails on it.
 
 Existing is not enough. A criterion's lift has to be one the app will let a
 user LOG, or the rung above it can never open:
 
-1. **Read its instructions, not its name.** `chair-squat` is a Smith-machine
-   squat, `split-squats` is a jumping split, and `smith-machine-pistol-squat`
-   is not a pistol. All three were rungs of the legs tree, chosen by name —
-   ADR 0020's 2026-09-11 amendment.
+1. **Read its instructions, all of them, not its name.** `chair-squat` is a
+   Smith-machine squat and `split-squats` is a jumping split filed under
+   stretching; both were rungs of the legs tree, chosen by name — ADR 0020's
+   2026-09-11 amendment. That amendment then misread a third from the first
+   lines of its instructions and had to be corrected, so read to the end.
 2. **Its category must be in `PROGRAMMABLE_CATEGORIES`** (`src/db/exercises.ts`).
    The picker hides every other category, `stretching` included, from every
    user.
@@ -202,9 +204,12 @@ rows:
 - no cycles: walking `parent_id` from any node terminates
 - `tree` is consistent down a chain — a `push` node's parent is not `pull`
 
-The lookup-missed case is the one that bites: `select` with no match inserts a
-null rather than failing, so a typo'd PARENT slug produces an orphan. Count the
-rows the migration meant to write, and raise if they are not all there.
+The lookup-missed case is the one that bites, and fails silently either way. In
+the loop template above, a missed PARENT lookup inserts the row with a null
+parent — an orphan, which the "exactly one root" test catches. In a
+join-per-level insert like `20260911120000`, a miss inserts nothing at all, so
+count the rows the migration meant to write and raise if they are not all
+there.
 
 ## Related
 
@@ -214,6 +219,8 @@ rows the migration meant to write, and raise if they are not all there.
   never executed
 - `docs/PLAN.md` phase 5 — where the trees are actually listed
 - `docs/adr/0020-progression-unlock-criteria.md` — the criteria contract
-- `supabase/migrations/20260908120000_progression_trees.sql` — the four shipped
-  trees, and the model to copy
+- `supabase/migrations/20260908120000_progression_trees.sql` — the push, pull
+  and core trees, and the loop to copy. Its legs rows are retired.
+- `supabase/migrations/20260911120000_legs_tree_on_the_floor.sql` — the legs
+  tree as shipped, and why its first version was replaced
 - `supabase/migrations/20260824150203_catalogue.sql` — the table
