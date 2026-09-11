@@ -11,7 +11,7 @@ import { MAX_CHAT_MESSAGE_CHARS, MAX_HISTORY_TURNS } from '../llm/config';
 import type { ChatMessage } from '../llm/types';
 import type { CoachFacts } from './facts';
 import { CHAT_SYSTEM, chatMessages, factsBlock, unknownNumberCorrection } from './prompts';
-import type { ChatTurn } from './schema';
+import { COACH_ROUTES, type ChatTurn } from './schema';
 
 const FENCE = '<<<SAMSON-UNTRUSTED>>>';
 
@@ -35,8 +35,17 @@ const FACTS: CoachFacts = {
 const turn = (role: ChatTurn['role'], text: string): ChatTurn => ({ role, text });
 const contentOf = (messages: ChatMessage[]): string => messages.map((m) => m.content).join('\n');
 
-/** chatMessages returns the payload and its quotable set together. */
-const payload = (history: ChatTurn[], message: string) => chatMessages(FACTS, history, message);
+/**
+ * chatMessages returns the payload and its quotable set together.
+ *
+ * The other routes' context is empty here on purpose: this file is about the
+ * facts, the fencing and the quotable set, and `routing.test.ts` is where the
+ * diet and candidate blocks are asserted. An empty evidence list and a null diet
+ * mean neither block is rendered, so nothing in these assertions is measuring
+ * the wrong string.
+ */
+const payload = (history: ChatTurn[], message: string) =>
+  chatMessages(FACTS, history, message, { diet: null, evidence: [] });
 const msgs = (history: ChatTurn[], message: string) => payload(history, message).messages;
 const allowedFor = (history: ChatTurn[], message: string) => payload(history, message).allowed;
 
@@ -48,12 +57,27 @@ describe('CHAT_SYSTEM', () => {
     expect(CHAT_SYSTEM).not.toContain('${');
   });
 
-  it('states the scope, the two-field contract and the number rule', () => {
-    expect(CHAT_SYSTEM).toContain('on_topic');
-    expect(CHAT_SYSTEM).toContain('NUMBERS');
+  it('names every route, the field contract and both number rules', () => {
+    // A route missing from the prompt is a route the model cannot choose, and
+    // the schema would then reject nothing — it admits all four.
+    for (const route of COACH_ROUTES) expect(CHAT_SYSTEM).toContain(`"${route}"`);
+    expect(CHAT_SYSTEM).toContain('route');
+    expect(CHAT_SYSTEM).toContain('supplement_slug');
+
+    /*
+     * Two number rules, not one: the training route may quote the facts and the
+     * diet route may write no digit at all. A prompt carrying only the first
+     * would ask the model to do the thing the diet guard rejects, and every
+     * diet answer would cost two calls before falling to a constant.
+     */
+    expect(CHAT_SYSTEM).toContain('NUMBERS ON THE "training" ROUTE');
+    expect(CHAT_SYSTEM).toContain('NUMBERS ON THE "diet" ROUTE');
+
     // It must tell the model the refusal is not its to write, or it will keep
     // trying to argue with the user inside a discarded string.
     expect(CHAT_SYSTEM).toMatch(/discarded|replaced/i);
+    // And that prose on the supplement route is not shown, for the same reason.
+    expect(CHAT_SYSTEM).toMatch(/not shown at all/i);
   });
 
   it('tells the model to send injury and pain to a professional', () => {

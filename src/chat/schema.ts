@@ -10,35 +10,75 @@
 import { z } from 'zod';
 
 import { MAX_CHAT_MESSAGE_CHARS } from '../llm/config';
+import { NO_MATCH } from '../diet/schema';
 
-export const chatReplySchema = z.strictObject({
-  /**
-   * Whether the user's message is about their own training.
-   *
-   * INVARIANT: declared FIRST, deliberately — ADR 0015 §3. A model generating
-   *            tokens in order commits to the classification before it writes
-   *            the answer, rather than justifying an answer it has already
-   *            written. Reordering these two fields is a behavioural change,
-   *            not a cosmetic one.
-   *
-   * AI-NOTE: this is the model classifying itself, which is a mitigation and
-   *          not a control. What it actually buys is that the WORDING of a
-   *          refusal is code — see `OFF_TOPIC_REPLIES`. Do not describe this
-   *          field, in a report or a comment, as confining the chat.
-   */
-  on_topic: z.boolean(),
+/**
+ * Which of the three answers the box is giving — ADR 0015 §6.
+ *
+ * `off_topic` is what `on_topic: false` was. One field deciding one thing beats
+ * a boolean and an enum that could disagree with each other.
+ */
+export const COACH_ROUTES = ['training', 'diet', 'supplement', 'off_topic'] as const;
+export type CoachRoute = (typeof COACH_ROUTES)[number];
 
-  /**
-   * The answer, at most 700 characters — a few sentences on a phone.
-   *
-   * WHY it is required even when `on_topic` is false: a nullable field would
-   * give the model a second way to return nothing, and the caller discards this
-   * string in that branch regardless.
-   */
-  reply: z.string().min(1).max(700),
-});
+/**
+ * What one turn of the box may return.
+ *
+ * INVARIANT: built per call from the rows the question will be answered
+ *            against, so the supplement allowlist IS the schema — ADR 0023, kept
+ *            through the merge into one box rather than restated. A slug the
+ *            model invents fails the gateway's own validation and is retried,
+ *            instead of reaching a lookup and returning a silent null. A
+ *            membership test applied after the call would have been the weaker
+ *            shape, and one box is not a reason to accept it.
+ *
+ * INVARIANT: flat, not a discriminated union — docs/specs/coach-chat.md §2. A
+ *            union compiles to `anyOf`, which the structured-output modes across
+ *            `STAGE_MODELS` support unevenly, and `provider.require_parameters`
+ *            turns an unsupported keyword into a routing error rather than a
+ *            graceful degrade. Every field is required; the caller reads only
+ *            the ones the route licenses.
+ */
+export function coachReplySchema(slugs: readonly string[]) {
+  const admitted = [NO_MATCH, ...slugs] as [string, ...string[]];
 
-export type ChatReply = z.infer<typeof chatReplySchema>;
+  return z.strictObject({
+    /**
+     * INVARIANT: declared FIRST, deliberately — ADR 0015 §3 and §6. A model
+     *            generating tokens in order commits to the route before it
+     *            writes the answer, rather than justifying one it has already
+     *            written. Reordering these fields is a behavioural change, not
+     *            a cosmetic one.
+     *
+     * AI-NOTE: this is the model classifying itself, which is a mitigation and
+     *          not a control — twice over now, because it decides both whether
+     *          to answer and which guard will check the answer. What it buys is
+     *          that the WORDING of a refusal is code and that SOME guard always
+     *          runs. Do not describe it, in a report or a comment, as confining
+     *          the box.
+     */
+    route: z.enum(COACH_ROUTES),
+
+    /**
+     * The answer, at most 700 characters — a few sentences on a phone.
+     *
+     * WHY it is required on every route, including the two that discard it: a
+     * nullable field would give the model a second way to return nothing.
+     */
+    reply: z.string().min(1).max(700),
+
+    /**
+     * The row to render on the `supplement` route, or `NO_MATCH`.
+     *
+     * WHY it is required on every route rather than optional: same reason as
+     * `reply`. `NO_MATCH` is the member every other route carries, and it is
+     * also the honest answer when no row covers the question.
+     */
+    supplement_slug: z.enum(admitted),
+  });
+}
+
+export type CoachReply = z.infer<ReturnType<typeof coachReplySchema>>;
 
 /**
  * One turn of the visible transcript.

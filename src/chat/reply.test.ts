@@ -17,9 +17,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { CallOptions, LlmResult } from '../llm/types';
+import type { EvidenceRow } from '../db/evidence';
+import type { DietFacts } from '../diet/energy';
+import { NO_MATCH } from '../diet/schema';
 import type { CoachFacts } from './facts';
 import { MAX_CHAT_ATTEMPTS, OFF_TOPIC_REPLIES, UNVERIFIED_NUMBER_REPLY, askCoach } from './reply';
-import type { ChatReply, ChatTurn } from './schema';
+import type { CoachReply, ChatTurn } from './schema';
 
 const FACTS: CoachFacts = {
   as_of: '2026-09-09',
@@ -40,13 +43,43 @@ const FACTS: CoachFacts = {
 
 const turn = (role: ChatTurn['role'], text: string): ChatTurn => ({ role, text });
 
+/** Categories, never figures — ADR 0024 §1. What the diet route answers from. */
+const DIET: DietFacts = {
+  goal: 'cut',
+  activity_band: 'light',
+  is_deficit: true,
+  floor_reached: false,
+};
+
+/** Two rows, so "the closest row" and "a row that exists" are different things. */
+const EVIDENCE = [
+  {
+    slug: 'creatine',
+    supplement: 'Creatine monohydrate',
+    claim: 'Increases strength output over weeks of training.',
+    grade: 'A',
+    dose: '5 g daily',
+    caution: null,
+    citation_doi: '10.1000/creatine',
+  },
+  {
+    slug: 'bcaa',
+    supplement: 'BCAAs',
+    claim: 'Does not add to a diet already adequate in protein.',
+    grade: 'D',
+    dose: null,
+    caution: null,
+    citation_doi: '10.1000/bcaa',
+  },
+] as unknown as EvidenceRow[];
+
 interface Harness {
   call: <T>(o: CallOptions<T>) => Promise<LlmResult<T>>;
   captured: CallOptions<unknown>[];
 }
 
 /** A model that returns exactly what the test scripts, in order. */
-function harness(script: ChatReply[]): Harness {
+function harness(script: CoachReply[]): Harness {
   const captured: CallOptions<unknown>[] = [];
   let next = 0;
   return {
@@ -66,11 +99,43 @@ function harness(script: ChatReply[]): Harness {
   };
 }
 
-const ask = (h: Harness, message: string, history: ChatTurn[] = []) =>
-  askCoach('u1', { facts: FACTS, history, message }, { call: h.call });
+const ask = (
+  h: Harness,
+  message: string,
+  history: ChatTurn[] = [],
+  over: { diet?: DietFacts | null; evidence?: readonly EvidenceRow[] } = {}
+) =>
+  askCoach(
+    'u1',
+    {
+      facts: FACTS,
+      history,
+      message,
+      diet: over.diet === undefined ? DIET : over.diet,
+      evidence: over.evidence ?? EVIDENCE,
+    },
+    { call: h.call }
+  );
 
-const onTopic = (reply: string): ChatReply => ({ on_topic: true, reply });
-const offTopic = (reply: string): ChatReply => ({ on_topic: false, reply });
+/*
+ * Every route carries `supplement_slug`, because the schema requires it on all
+ * four — a nullable field would give the model a second way to return nothing.
+ * These helpers are what a route "looks like" coming back from the model.
+ */
+const onTopic = (reply: string): CoachReply => ({
+  route: 'training',
+  reply,
+  supplement_slug: NO_MATCH,
+});
+const offTopic = (reply: string): CoachReply => ({
+  route: 'off_topic',
+  reply,
+  supplement_slug: NO_MATCH,
+});
+// The `diet` and `supplement` routes are exercised in routing.test.ts, which is
+// where the guards belonging to them live. This file is the adversarial suite:
+// what an attacker can make the box say, which is a question about the two
+// prose routes.
 
 // ---------------------------------------------------------------------------
 // The ordinary case, which has to keep working
@@ -84,7 +149,7 @@ describe('askCoach — answering a training question', () => {
     );
 
     expect(answer.text).toContain('streak intact');
-    expect(answer.onTopic).toBe(true);
+    expect(answer.route).toBe('training');
     expect(answer.substituted).toBe(false);
     expect(answer.attempts).toBe(1);
   });
@@ -147,7 +212,7 @@ describe('adversarial — the refusal is code, not a generation', () => {
 
       expect(OFF_TOPIC_REPLIES).toContain(answer.text);
       expect(answer.substituted).toBe(true);
-      expect(answer.onTopic).toBe(false);
+      expect(answer.route).toBe('off_topic');
       expect(answer.text).not.toContain('system prompt');
       expect(answer.text).not.toContain('poem');
     });
@@ -157,7 +222,7 @@ describe('adversarial — the refusal is code, not a generation', () => {
     const persuasive = 'x'.repeat(690);
     const answer = await ask(harness([offTopic(persuasive)]), 'write my essay');
     expect(answer.text).not.toContain('x'.repeat(20));
-    expect(answer.text.length).toBeLessThan(120);
+    expect(answer.text!.length).toBeLessThan(120);
   });
 
   it('does not retry a refusal — one call, one answer', async () => {
@@ -218,7 +283,7 @@ describe('adversarial — multi-turn, the class this stage added', () => {
         history
       );
       expect(OFF_TOPIC_REPLIES).toContain(answer.text);
-      history = [...history, turn('user', `attempt ${i}`), turn('coach', answer.text)];
+      history = [...history, turn('user', `attempt ${i}`), turn('coach', answer.text!)];
     }
   });
 });
@@ -253,7 +318,7 @@ describe('adversarial — numbers the metrics engine never produced', () => {
     expect(answer.substituted).toBe(true);
     expect(answer.attempts).toBe(MAX_CHAT_ATTEMPTS);
     // The user is told why, not shown an empty box — mobile-interface.md §4.
-    expect(answer.text.length).toBeGreaterThan(40);
+    expect(answer.text!.length).toBeGreaterThan(40);
   });
 
   it('does not let the correction itself widen what may be quoted', async () => {
@@ -309,7 +374,7 @@ describe('ordinary coaching questions are not swept up', () => {
      */
     const h = harness([onTopic('That is one for a physio, not for me. Stop the session.')]);
     const answer = await ask(h, 'my knee has been clicking and it hurts, what is wrong with it?');
-    expect(answer.onTopic).toBe(true);
+    expect(answer.route).toBe('training');
     expect(answer.substituted).toBe(false);
   });
 });
@@ -433,6 +498,8 @@ describe('what this stage does NOT stop, recorded rather than implied', () => {
         },
         history: [],
         message: 'how is it going?',
+        diet: DIET,
+        evidence: EVIDENCE,
       },
       { call: h.call }
     );
