@@ -298,6 +298,8 @@ section exists to prevent.
 | **Nothing lifted this week**  | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                      |
 | **No loaded sets yet**        | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.               |
 | **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                     |
+| **Device cannot speak**       | The words as text — a coach preview and "Read it aloud" alike. A speak button that cannot speak is not shown.                           |
+| **Speech starts, then dies**  | "This device would not read it aloud." beside the words. Silence is never the only feedback.                                            |
 | **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                               |
 
 **The rule behind the table:** the app never says a number it has not computed,

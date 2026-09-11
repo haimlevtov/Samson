@@ -188,3 +188,21 @@ point on the scale rather than trusting them to.
 **One consequence worth naming for whoever adds the fourth persona:** the
 variant is content now, so the `add-persona` skill has to set it. A new `en-GB`
 coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
+
+> **Amended 2026-09-11 — a second kind of persona speech.** Everything above
+> treats what a persona says as model output, checked when it is generated:
+> banned phrases by `phraseUsed`, numbers by the guard, the rest by
+> `scanOutput` in the gateway. The sample line (migration `20260911130000`) is
+> WRITTEN instead — one stored line per coach, spoken by the Voice card's
+> preview before a coach delivers the plan.
+>
+> Stored rather than generated because a generated line needs an API key and
+> none is configured, and a preview that needs a key cannot preview. It is held
+> to the same three checks, by `tests/db/personas.test.ts` in CI rather than at
+> generation time.
+>
+> The column is writable on a user's own persona row, and delivery never reads
+> it — so it never reaches the delivery stage at all. The coach action hands
+> delivery `asPersona`, which picks the fields delivery reads and nothing else,
+> so a later edit that spreads the persona into a prompt cannot carry user text
+> outside the fence (CLAUDE.md #11).

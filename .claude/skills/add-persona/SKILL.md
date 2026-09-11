@@ -1,6 +1,6 @@
 ---
 name: add-persona
-description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity or humour tier, or assigning its device voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
+description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or assigning its device voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
 ---
 
 # Adding a persona
@@ -27,14 +27,14 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
-| `sample_line` | what the Coach tab's preview speaks before a plan exists. See below |
+| `sample_line` | what the Coach tab's Voice card speaks when a coach is previewed. See below |
 
 ### `sample_line` is the coach's first impression
 
-One sentence or three, 280 characters at most, in the character's own voice —
+A few short sentences, 280 characters at most, in the character's own voice —
 it is spoken, so write it to be heard. The same rules bind it as bind every
 word the persona says: **no numeral** (a coach states no figure it was not
-given — invariant #1), **none of the row's own banned phrases**, and a clean
+given — CLAUDE.md #1), **none of the row's own banned phrases**, and a clean
 pass through `scanOutput` in `src/llm/safety.ts`. `tests/db/personas.test.ts`
 checks all three for every shipped persona, so a new row without a line, or
 with one that breaks a rule, fails there.
@@ -165,6 +165,11 @@ it('gives no two personas of one language the same voice variant', async () => {
 });
 ```
 
+**The sample line** needs no new case: `tests/db/personas.test.ts` already
+checks every shipped persona's line — present, unlike the others, no numeral,
+none of its own banned phrases, clean through `scanOutput` — so a new row is
+held to it the moment it lands.
+
 **Also update `SHIPPED_PERSONA_SLUGS`** in `src/persona/schema.ts`. It is not a
 source of truth — the rows are — but `tests/db/personas.test.ts` asserts the two
 agree, so a migration that adds a row without touching it fails there.
@@ -201,7 +206,9 @@ been evaluated for drift — it has not.
 - `docs/adr/0006-persona-boundary.md` — the persona changes delivery, never content
 - `docs/adr/0005-llm-safety.md` §1 — why a column is fenced, not concatenated
 - `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
-  pair, and the closest model to copy
+  pair, and the closest model to copy. Its insert predates `sample_line`; add it
+- `supabase/migrations/20260911130000_persona_sample_line.sql` — the preview
+  line, and the rules it is held to
 - `supabase/migrations/20260901154757_shipped_personas.sql` — the original three
 - `supabase/migrations/20260907120000_persona_voice_variant.sql` — why the
   variant is a column rather than an array index

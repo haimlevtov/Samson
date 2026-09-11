@@ -17,7 +17,7 @@ because several of them touch the same surface.
 | 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)   |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | in review, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)   |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
 
@@ -316,6 +316,8 @@ a template is a prescription. Programme to template is the faithful mapping.
 ## PR 6 — hear a coach before you pick one
 
 **Branch `persona-preview`.** A button per persona that speaks a sample line.
+_As built: one "Hear *coach*" control, for the selected chip — see the decisions
+below._
 
 `src/ui/speak.ts` already wraps `speechSynthesis` with `canSpeak`, `primeVoices`,
 `speak` and `stopSpeaking`, and `CoachConsole` already picks a voice per persona.
@@ -334,9 +336,9 @@ pin — the local CLI is 2.117.0, the version that turned every open PR red), an
 `supabase stop && wsl --shutdown` in the same turn.
 
 **The alternative was considered and rejected:** generating the line through the
-persona stage would be in-character and needs an API key, which makes a preview
-button that cannot preview. A stored line works offline, which is what a demo
-needs.
+persona stage would sound right and needs an API key, which makes a preview
+button that cannot preview. A stored line needs no key, and none is configured —
+the reason every model-backed surface is scripted today.
 
 ### Acceptance
 
@@ -367,10 +369,20 @@ needs.
   safety claim about a model.
 - **Every state renders something**, §4 of the mobile spec: a device that
   cannot speak shows the line as text; a device that starts and then dies shows
-  it with the same note "Read it aloud" uses. Changing the selected chip stops a
-  preview mid-sentence, as unmount already does.
-- **The browser pass needs a signed-in session**, which this work cannot create.
-  It goes on the plans README's browser-pass row rather than being claimed.
+  it with the same note "Read it aloud" uses. A row with no line — possible only
+  for a user's own persona — renders no preview at all, rather than a button that
+  says nothing.
+- **Changing the selected chip stops whatever is speaking** — a preview, or a
+  delivered plan being read aloud — as unmount already does. The chip is the
+  user's answer to "who do I want to hear now", so the last coach does not talk
+  over it. _Written in review: the first version of this said "stops a preview",
+  and review found it stops the delivery's reading too._
+- **The preview appears where the Voice card does**, which is once a plan has
+  been accepted: it is heard before a coach DELIVERS the plan, not before a plan
+  exists. A user with no plan sees the "No accepted plan yet" card.
+- **The browser pass needs a signed-in session**, which this agent does not
+  create: it does not type passwords, the published demo one included. It goes
+  on the plans README's browser-pass row rather than being claimed.
 
 ---
 
@@ -438,6 +450,10 @@ Coach
   Plan          — the accepted block, or the questionnaire if there is none
   Diet          — goal, the figures, and ONE question box
 ```
+
+- **The Voice card stays with the plan, and PR 6's preview with it** — it is
+  where a coach is picked. A user with no plan gets the questionnaire and no
+  Voice card, so no preview, which is also how it works today.
 
 - **"Eating" becomes "Diet".**
 - **"Stay where I am" becomes "Maintenance."**
@@ -579,7 +595,8 @@ same turn — `supabase stop && wsl --shutdown`.
 ## The browser pass, still outstanding
 
 Phase 6 PRs 2, 4 and 5 were merged without it, because `/coach` and `/settings`
-need a session and this agent does not type passwords. Review found **a width bug
+need a session and this agent does not type passwords. So were this plan's PRs 2
+to 6, for the same reason — PR 6's preview is on `/coach`. Review found **a width bug
 in one and a colour-only state in the other**, which is exactly what that pass
 catches.
 
@@ -879,3 +896,45 @@ never exercised, and without it the seed would fail at the write. It has a test.
 session. The equipment acceptance is now met against the catalogue tag — what the
 app itself checks — where the first version checked programme membership and
 called that equipment.
+
+### PR 6 — hear a coach before you pick one, 2026-09-11
+
+Shipped as planned: `personas.sample_line`, a line in each of the five coaches'
+own voices, and a "Hear _coach_" control in the Voice card for the selected
+chip, spoken with the same voice settings a delivery from that coach uses and
+shown as text on a device that cannot speak. The column was added with one
+Docker session and the pinned CLI; the types diff is the three `sample_line`
+lines and nothing else.
+
+**What review found:**
+
+- **"Before a plan exists" was false in three places** — the skill, the column
+  comment and a test. The Voice card only renders once a plan is accepted, so
+  the preview is heard before a coach _delivers_ the plan. The plan's own intro
+  had it right; the decisions below it did not.
+- **A chip change stops the delivery's reading too**, not only a preview. Kept,
+  and written down: the chip is the user's answer to who they want to hear.
+- **Two copies of "this persona's voice settings"** — the preview's and the
+  delivery's — with nothing tying them together. They share one helper now.
+- **The persona handed to delivery carried the user-writable line** it never
+  reads. Safe only while the prompt builder names fields one by one; delivery
+  now gets `asPersona`, which picks exactly the fields it reads.
+- **Deploy order.** The Coach page selects the new column, so the migration goes
+  to hosted before the merge rather than after — a nullable column is safe for
+  the code still running.
+
+**The Docker session taught two things worth keeping:**
+
+- **Windows reserves TCP 54301–54400 on this machine**, which covers every port
+  in `supabase/config.toml` (54320–54329): `supabase start` fails with "forbidden
+  by its access permissions". The session ran on 553xx through a temporary
+  config change that was restored, with no diff. Releasing the reservation is a
+  system change (restarting `winnat` as admin) and was left to the owner.
+- **`docker info` answering at once did not mean Docker was already running.**
+  It was read that way, and `wsl --shutdown` was skipped to spare another
+  project's containers — which had in fact started with the daemon this session
+  launched. Review caught it from their uptime; WSL was shut down and Docker
+  Desktop quit. Check Docker Desktop's process start time, not the daemon's
+  first answer.
+
+**Not verified:** a browser pass on `/coach`, which needs a session.
