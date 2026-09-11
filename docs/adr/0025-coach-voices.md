@@ -285,8 +285,10 @@ may return; a declared `content-length` over it is refused before the body is
 read. Outside the bounds is `schema_invalid`, charged and not retried.
 
 **The cost of WAV:** 48 KB a second, so a ten- to fifteen-second line is 0.5 to
-0.7 MB across the server action, and the longest line — about thirty-two seconds
-at the pace the Cost section assumes — about 1.5 MB. Fine for a
+0.7 MB across the server action, and the longest line — about thirty seconds, the
+pace the Cost section assumes — about 1.4 MB. The ceiling is a fixed 4.32 MB
+(ninety seconds at 24 kHz) whatever rate a response names, because what cannot
+cross a Vercel response is bytes. Fine for a
 preview; the later PR that reads a whole plan aloud should reconsider it.
 
 **Still open, and the owner noticed it:** the card said "The voice did not come
@@ -295,7 +297,7 @@ A refusal from the provider — no credit, a rejected request — deserves its o
 line. Not built here.
 
 **Not verified live.** The fix was built and reviewed without a live call, at
-the owner's request to keep test spend down. The first press after it deploys
+the owner's request to keep test spend down. The first press after it merges
 is the check, about $0.01: a wrong rate sounds too fast or too slow, and a
 content type other than `audio/pcm` or `audio/l16` fails as `schema_invalid`
 with the row naming the type it got.
