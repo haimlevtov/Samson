@@ -48,9 +48,15 @@ limit.**
 
 1. **The ceiling is set by the database, not its owner.** A trigger on
    `public.users`, before insert and update: a row inserted by `authenticated`
-   gets the column's default whatever it asked for, and an update by
+   is given the default ceiling whatever it asked for, and an update by
    `authenticated` that changes the ceiling is refused. The seeder and an operator — the
    service role — can still set it. A CHECK adds "and not NaN".
+   - **The trigger writes the figure, it does not read the column's default.**
+     A `BEFORE INSERT` trigger runs after the default has already been
+     substituted, so there is nothing left to distinguish "the user asked for
+     0.50" from "the user asked for nothing". It restates the literal, which
+     makes $0.50 live in two places — the column default and the trigger body —
+     carrying an AI-NOTE in the migration to change both together.
    - **Why a trigger, not a column privilege:** a column-level REVOKE does
      nothing while the table-level UPDATE grant stands, and narrowing that grant
      means re-listing every column Settings writes. Migration `20260908090300`
@@ -71,6 +77,11 @@ limit.**
      user's own client — CLAUDE.md #10 forbids the service role in application
      code — so `llm_calls_insert_own` is how CLAUDE.md #3 holds. What a user can
      still do with it is add to their own spend, which limits nobody but them.
+   - **The residual, stated:** unbounded inserts into one's own ledger are still
+     free storage and free CPU on every later sum. Nothing here rate-limits
+     them. It is self-denial rather than a bypass — the rows raise the writer's
+     own spend and close their own gate — so it fails in the safe direction, and
+     bounding it is a rate limit rather than a constraint.
 3. **No profile, no call.** `enforceBudget` refuses a caller whose budget
    lookup finds no row — `NoProfileError`, before any request. The row it would
    write cannot exist: `llm_calls.user_id` references `public.users`. So the
@@ -79,6 +90,12 @@ limit.**
    could pass — **the owner's to accept or refuse**, as ADR 0025's was.
    `DEFAULT_WEEKLY_BUDGET_USD` goes with the fallback: the default is the
    column's.
+   - **What the caller sees:** `NoProfileError` is not classified as a refusal
+     cause anywhere yet, so a surface that catches it shows its generic failure
+     — the Coach's "that did not come through", the planner's failed run. That
+     is honest (the call did fail) but it is not diagnostic, and the path is
+     unreachable while the seeder and the tests are the only things making
+     profiles. Naming the cause belongs with whatever opens sign-up.
 4. **Parallel spend is documented, not reserved.** A reservation — a per-user
    advisory lock and a pending row — is out of proportion for a one-demo project
    (CLAUDE.md, out of scope). The ceiling that bounds a burst is the OpenRouter
@@ -88,8 +105,12 @@ limit.**
 
 - **The key may go on Vercel once this is merged and pushed**, with a credit
   limit on it. The README's deploy table says so.
-- `llm_calls.created_at` is the database's now. A test that needs old spend
-  writes it with the service role; none does today.
+- `llm_calls.created_at` is the database's now, **for every writer including the
+  service role** — the trigger has no role exemption, deliberately: a date the
+  project itself can forge is one an operator can be talked into forging. A test
+  or a backfill that needs an old row inserts it and then UPDATEs `created_at`
+  with the service role, which the trigger does not touch because it fires
+  `before insert` only. None does today.
 - A user can still see and write their own ledger rows, and can only ever
   charge themselves more.
 - **Whether sign-up is open on the hosted project is for the owner to check.**

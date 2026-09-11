@@ -114,8 +114,8 @@ be reconciled. `sumSpendSince` then charges each spoken attempt
 split `TIMEOUT_ASSUMED_COST_USD` already makes (ADR 0007): the ledger stays
 measured, the gate stays conservative.
 
-So the gateway's default budget of **$0.50 per user per week** allows **25
-previews**, and a user who spends it on previews has none left for a plan or the
+So the default budget of **$0.50 per user per week** — the column's, since ADR
+0026 — allows **25 previews**, and a user who spends it on previews has none left for a plan or the
 chat that week. A replay within one visit is free: the page keeps the audio it
 already fetched. Automated tests cost nothing — they run against a scripted
 gateway with no key, as every stage's do.

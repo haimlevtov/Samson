@@ -35,7 +35,11 @@ begin
   -- writing this table would run as its owner and pass — there are none today.
   if current_user = 'authenticated' then
     if tg_op = 'INSERT' then
-      -- AI-NOTE: the column default, restated. Change both together.
+      -- AI-NOTE: the column's default (migration 20260824150139), restated as a
+      --          literal and NOT read from it: a BEFORE INSERT trigger runs
+      --          after the default has been substituted, so there is nothing
+      --          left here to tell "asked for 0.50" from "asked for nothing".
+      --          $0.50 therefore lives in two places. Change both together.
       new.llm_weekly_budget_usd := 0.50;
     elsif new.llm_weekly_budget_usd is distinct from old.llm_weekly_budget_usd then
       raise exception 'the weekly LLM budget is not the user''s to change'

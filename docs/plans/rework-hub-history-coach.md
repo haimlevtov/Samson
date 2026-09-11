@@ -1143,8 +1143,9 @@ docs and resilience — all recorded in ADR 0025's addendum:
   carried NULs. Now charged once and never retried; a body that is not text is
   described rather than quoted, and every field the provider can fill is
   cleaned at the one writer.
-- **The budget can be moved by its owner**, in older code. Planned as 6c, and
-  the key stays off Vercel until it ships.
+- **The budget can be moved by its owner**, in older code. Planned as 6c and
+  closed there — [ADR 0026](../adr/0026-budget-integrity.md); the key goes on
+  Vercel with a credit limit on it.
 
 **Deploy order.** Both migrations add only, and `listPersonas` selects the new
 columns, so they went to hosted before the merge (2026-09-11). The old

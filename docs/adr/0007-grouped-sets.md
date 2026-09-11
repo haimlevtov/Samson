@@ -144,15 +144,19 @@ Fourteen timeouts, every one with `cost_credits` null, because the gateway
 never reads a response and so has nothing to write. Invariant #3 is satisfied
 in letter — a row exists per attempt — and defeated in spirit.
 
-It matters beyond accounting. `sumSpendSince` reads `cost_credits`, so the
-budget gate cannot see this spend **at all**, and a timeout loop is precisely
-the runaway that gate exists to stop. It was blind to the one failure mode it
-was built for.
+It matters beyond accounting. The spend sum counted `cost_credits` and nothing
+else, so the budget gate could not see this spend **at all**, and a timeout loop
+is precisely the runaway that gate exists to stop. It was blind to the one
+failure mode it was built for.
 
 **Fix:** the ledger keeps recording only measured cost — mixing estimates into
 `cost_credits` would corrupt the token-economics deliverable, which is a graded
-output. Instead `sumSpendSince` adds a documented, deliberately pessimistic
-charge per timed-out row. The gate over-estimates; the analysis stays truthful.
+output. Instead the gate adds a documented, deliberately pessimistic charge per
+timed-out row. The gate over-estimates; the analysis stays truthful.
+
+_Where that charge is applied moved in ADR 0026: `llm_spend_summary` counts the
+timed-out rows in SQL and `spendFrom` (`src/db/ledger.ts`) prices them. The
+split is the same — the database counts, config says what a count costs._
 
 **AI-NOTE:** `TIMEOUT_ASSUMED_COST_USD` is a guess, and it is a guess in the
 safe direction. If the ledger ever gains a real figure for timed-out calls —
