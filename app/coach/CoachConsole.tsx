@@ -1,15 +1,25 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useState, useSyncExternalStore } from 'react';
 import { deliverForPersona } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
-import { canSpeak, primeVoices, speak, spokenIntensity, stopSpeaking } from '@/src/ui/speak';
-import type { Persona } from '@/src/persona/schema';
+import {
+  canSpeak,
+  personaSpeech,
+  previewSpeech,
+  primeVoices,
+  speak,
+  stopSpeaking,
+} from '@/src/ui/speak';
+import type { ListedPersona } from '@/src/db/personas';
 
-export interface CoachPersona extends Persona {
+export interface CoachPersona extends ListedPersona {
   /** BCP-47 hint from the row. Best effort — see src/ui/speak.ts. */
   voice: string | null;
 }
+
+/** Speech support does not change during a visit, so there is nothing to watch. */
+const noSubscription = () => () => {};
 
 /**
  * The plan and the voice, side by side.
@@ -30,6 +40,19 @@ export function CoachConsole({
 }) {
   const [selected, setSelected] = useState(personas[0]?.slug ?? '');
   const [speechFailed, setSpeechFailed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  /*
+   * WHY not `canSpeak()` in render, as the delivery below uses it: that block
+   * only exists after a client-side action, but the preview is on first paint.
+   * The server has no `speechSynthesis`, so a render-time check would print the
+   * text version on the server and a button in the browser — a hydration
+   * mismatch. The server snapshot is false, and the client re-renders with the
+   * real answer.
+   */
+  const speakable = useSyncExternalStore(noSubscription, canSpeak, () => false);
+  const chosen = personas.find((p) => p.slug === selected) ?? null;
+  const preview = chosen ? previewSpeech(chosen) : null;
   const [state, formAction, pending] = useActionState<DeliveryState, FormData>(
     deliverForPersona,
     EMPTY_DELIVERY
@@ -63,18 +86,31 @@ export function CoachConsole({
    * Stop talking whenever the delivery changes underneath us.
    *
    * WHY: `speechSynthesis` is a global queue that outlives this subtree, and
-   * the only other cancels are a new `speak()` call, the Stop button, and
-   * unmount. Without this, delivering again while the previous read is still
-   * playing leaves the screen showing one coach while the audio reads another
-   * — the same mismatch this component's `speaking` lookup exists to prevent,
-   * moved from the click boundary to the delivery boundary. It also covers the
-   * failure case, where `state.delivered` goes null and the text disappears
-   * while the voice carries on.
+   * the only other cancels are a new `speak()` call, the Stop button, a chip
+   * change (below), and unmount. Without this, delivering again while the
+   * previous read is still playing leaves the screen showing one coach while
+   * the audio reads another — the same mismatch this component's `speaking`
+   * lookup exists to prevent, moved from the click boundary to the delivery
+   * boundary. It also covers the failure case, where `state.delivered` goes
+   * null and the text disappears while the voice carries on.
    */
   useEffect(() => {
     stopSpeaking();
     setSpeechFailed(false);
   }, [state.delivered, state.personaSlug]);
+
+  /*
+   * And whenever the chip changes — stopping WHATEVER is speaking, a preview or
+   * the delivered plan being read aloud, on purpose. The chip is the user's
+   * answer to "who do I want to hear now", so the last coach does not talk over
+   * it; without this, one coach's preview carries on in that coach's voice
+   * while another coach's chip is lit. `stopSpeaking` is global, so a narrower
+   * stop would need its own record of what is playing.
+   */
+  useEffect(() => {
+    stopSpeaking();
+    setPreviewFailed(false);
+  }, [selected]);
 
   return (
     <>
@@ -97,6 +133,41 @@ export function CoachConsole({
             </button>
           ))}
         </div>
+
+        {/*
+         * The preview — rework plan, PR 6. Every state renders something
+         * (docs/specs/mobile-interface.md §4): a device that cannot speak gets
+         * the line as text rather than a dead button, and one that starts and
+         * then dies gets the text with the same note "Read it aloud" uses.
+         */}
+        {preview && chosen ? (
+          <>
+            {speakable ? (
+              <div className="row">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setPreviewFailed(false);
+                    const started = speak(preview.text, {
+                      ...preview.options,
+                      onFailure: () => setPreviewFailed(true),
+                    });
+                    if (!started) setPreviewFailed(true);
+                  }}
+                >
+                  Hear {chosen.name}
+                </button>
+              </div>
+            ) : null}
+            {!speakable || previewFailed ? (
+              <p className="muted small">
+                {previewFailed ? 'This device would not read it aloud. ' : null}
+                {chosen.name}: “{preview.text}”
+              </p>
+            ) : null}
+          </>
+        ) : null}
 
         <form action={formAction} className="coach-actions">
           <input type="hidden" name="personaSlug" value={selected} />
@@ -152,9 +223,7 @@ export function CoachConsole({
                        */
                       setSpeechFailed(false);
                       const started = speak(spoken, {
-                        lang: speaking?.voice ?? null,
-                        intensity: spokenIntensity(speaking?.intensity ?? 3, state.gentle),
-                        variant: speaking?.voiceVariant ?? 0,
+                        ...personaSpeech(speaking, state.gentle),
                         onFailure: () => setSpeechFailed(true),
                       });
                       if (!started) setSpeechFailed(true);

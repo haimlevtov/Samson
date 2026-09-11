@@ -53,7 +53,7 @@ reasons.** Four wait on an OpenRouter key rather than on work:
 - **phase 2** — cache hit rate, and cost per plan generation per model.
 - **phase 3** — the persona drift eval.
 
-`npm run eval:planner -- --live` and the drift eval are both written and unrun.
+`npm run eval:planner -- --live` is written and unrun; the persona drift eval is not written at all (corrected 2026-09-11 — this said both were written).
 
 The fifth waits on nothing: **phase 6's file import was deferred by decision** on
 2026-09-09, and a permitted cut is still a criterion that was not met. Phase 4

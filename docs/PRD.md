@@ -168,6 +168,12 @@ language hint (`tts_voice_id`, a BCP-47 tag) and a `tts_voice_variant` saying
 which of the matching voices this coach takes. Persona voice is therefore tone,
 rate and word choice rather than timbre.
 
+**A coach can be heard before it is chosen (2026-09-11).** Each row also
+carries a sample line, which the Voice card on Coach speaks in that coach's
+voice — or shows as text on a device that cannot speak — so picking a coach is
+not a blind choice. It is written, not generated: a stored line needs no API
+key.
+
 Personas may not alter any number in the plan they receive, asserted by test. A
 tone override forces a gentler register when an injury or a run of missed
 sessions is flagged, regardless of which persona is selected. High-frequency

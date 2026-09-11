@@ -16,6 +16,8 @@ import { createTestUser, deleteTestUser, type TestUser } from './helpers';
 import { listPersonas } from '../../src/db/personas';
 import { SHIPPED_PERSONA_SLUGS, HUMOR_ORDER } from '../../src/persona/schema';
 import { phraseUsed } from '../../src/persona/deliver';
+import { numbersIn } from '../../src/persona/guard';
+import { scanOutput } from '../../src/llm/safety';
 import { resolveTone, GENTLE_MAX_INTENSITY } from '../../src/persona/tone';
 
 let user: TestUser;
@@ -114,6 +116,63 @@ describe('the shipped roster', () => {
         phraseUsed(VOCABULARY.toLowerCase(), phrase)
       );
       expect(fired, `${persona.slug} would reject a legitimate delivery`).toEqual([]);
+    }
+  });
+});
+
+describe('the line each coach is heard by before it is picked', () => {
+  /*
+   * Rework plan PR 6, and the add-persona skill: `sample_line` is what the Voice
+   * card speaks when a coach is previewed, before it delivers the plan, so it
+   * obeys what every word a persona says obeys. Checked per row through the
+   * shipped reader and the shipped checks — a copy of any of them here would
+   * measure the copy.
+   *
+   * The roster is exactly the shipped coaches (the first case in this file), so
+   * "every persona" below is every shipped one.
+   */
+  const lines = async () =>
+    (await roster()).map((persona) => ({ persona, line: persona.sampleLine?.trim() ?? '' }));
+
+  it('gives every shipped coach a line', async () => {
+    const missing = (await lines()).filter(({ line }) => line === '').map((l) => l.persona.slug);
+    expect(missing).toEqual([]);
+  });
+
+  it('gives each coach its own line', async () => {
+    // The acceptance is "something recognisably its own". Distinct is the part
+    // a test can hold; the voice of each line is content, read in review.
+    // Slugs, not a count: vitest truncates long values in a failure, so
+    // comparing lengths would print two numbers and name nobody. FOUND IN
+    // REVIEW — the first version claimed it printed the lines.
+    const seen = new Set<string>();
+    const repeated: string[] = [];
+    for (const { persona, line } of await lines()) {
+      if (seen.has(line)) repeated.push(persona.slug);
+      seen.add(line);
+    }
+    expect(repeated, 'coaches whose line repeats an earlier one').toEqual([]);
+  });
+
+  it('states no numeral, because a coach says no number it was not given', async () => {
+    // Invariant #1, through the numeral pattern the persona guard uses. That
+    // pattern reads DIGITS — "add ten kilos" passes it, the known gap in
+    // src/persona/guard.ts — so this holds numerals, not every number word.
+    for (const { persona, line } of await lines()) {
+      expect([...numbersIn(line)], persona.slug).toEqual([]);
+    }
+  });
+
+  it("uses none of the coach's own banned phrases", async () => {
+    for (const { persona, line } of await lines()) {
+      const used = persona.bannedPhrases.filter((phrase) => phraseUsed(line.toLowerCase(), phrase));
+      expect(used, persona.slug).toEqual([]);
+    }
+  });
+
+  it('passes the scanner every completion goes through', async () => {
+    for (const { persona, line } of await lines()) {
+      expect(scanOutput(line), persona.slug).toEqual([]);
     }
   });
 });

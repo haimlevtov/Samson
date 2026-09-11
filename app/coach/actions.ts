@@ -28,7 +28,7 @@ import { EMPTY_CHAT, type ChatState } from './chat-state';
 import { adherence } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { deliverPlan } from '@/src/persona/deliver';
-import type { HumorLevel } from '@/src/persona/schema';
+import { asPersona, type HumorLevel } from '@/src/persona/schema';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
 
 const ADHERENCE_WINDOW_DAYS = 28;
@@ -375,9 +375,13 @@ export async function deliverForPersona(
   if (!user) redirect('/sign-in');
 
   const [personas, plan] = await Promise.all([listPersonas(db), latestAcceptedPlan(db)]);
-  const persona = personas.find((p) => p.slug === slug);
+  const listed = personas.find((p) => p.slug === slug);
 
-  if (!persona) return { ...EMPTY_DELIVERY, error: 'That coach is not available.' };
+  if (!listed) return { ...EMPTY_DELIVERY, error: 'That coach is not available.' };
+
+  // INVARIANT: delivery gets only the fields it reads — not the preview line,
+  //            which a user can write on their own row — CLAUDE.md #11.
+  const persona = asPersona(listed);
   if (!plan) {
     return { ...EMPTY_DELIVERY, personaSlug: slug, error: 'There is no accepted plan to deliver.' };
   }

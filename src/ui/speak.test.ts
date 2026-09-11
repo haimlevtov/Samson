@@ -14,7 +14,14 @@
  * anything about the browser.
  */
 import { describe, expect, it } from 'vitest';
-import { pickVoice, spokenIntensity, voiceSettings, type VoiceLike } from './speak';
+import {
+  personaSpeech,
+  pickVoice,
+  previewSpeech,
+  spokenIntensity,
+  voiceSettings,
+  type VoiceLike,
+} from './speak';
 import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
 import type { Persona } from '../persona/schema';
 
@@ -198,5 +205,68 @@ describe('spokenIntensity', () => {
         );
       }
     }
+  });
+});
+
+describe('previewSpeech', () => {
+  const rival = {
+    sampleLine: 'Your move.',
+    voice: 'en-GB',
+    intensity: 4,
+    voiceVariant: 1,
+  };
+
+  it('speaks the line in the voice a delivery from the same coach would use', () => {
+    /*
+     * The preview answers "what does this coach sound like", so it must be the
+     * coach the user is about to choose: the row's language, its variant, and
+     * the intensity an ordinary — not gentle — delivery is read at.
+     */
+    expect(previewSpeech(rival)).toEqual({
+      text: 'Your move.',
+      options: { lang: 'en-GB', intensity: spokenIntensity(4, false), variant: 1 },
+    });
+  });
+
+  it('sounds exactly like an ordinary delivery from the same coach', () => {
+    // FOUND IN REVIEW: the preview's settings and the delivery's were built
+    // separately. Both come from personaSpeech now; this holds the preview to
+    // the delivery's own call, so they cannot drift apart again.
+    expect(previewSpeech(rival)!.options).toEqual(personaSpeech(rival, false));
+  });
+
+  it('never softens the preview, which has no training week to be gentle about', () => {
+    expect(previewSpeech({ ...rival, intensity: 5 })!.options.intensity).toBe(5);
+  });
+
+  it('offers nothing for a row with no line, rather than a button that says nothing', () => {
+    expect(previewSpeech({ ...rival, sampleLine: null })).toBeNull();
+    expect(previewSpeech({ ...rival, sampleLine: '   ' })).toBeNull();
+  });
+
+  it('trims the line it speaks', () => {
+    expect(previewSpeech({ ...rival, sampleLine: '  Your move.  ' })!.text).toBe('Your move.');
+  });
+});
+
+describe('personaSpeech', () => {
+  const analyst = { voice: 'en-US', intensity: 2, voiceVariant: 0 };
+
+  it("is the coach's language, variant and intensity", () => {
+    expect(personaSpeech({ ...analyst, intensity: 4 }, false)).toEqual({
+      lang: 'en-US',
+      intensity: 4,
+      variant: 0,
+    });
+  });
+
+  it('softens on a gentle week by the same clamp the words use', () => {
+    expect(personaSpeech({ ...analyst, intensity: 5 }, true).intensity).toBe(
+      spokenIntensity(5, true)
+    );
+  });
+
+  it('falls back to the defaults the delivery always used before a coach is known', () => {
+    expect(personaSpeech(null, false)).toEqual({ lang: null, intensity: 3, variant: 0 });
   });
 });
