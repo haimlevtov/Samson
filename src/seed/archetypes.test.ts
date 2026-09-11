@@ -23,11 +23,13 @@ import {
 import {
   ARCHETYPES,
   generateHistory,
+  templatesFor,
   type Archetype,
   type GeneratedWorkout,
   type ProgrammeEntry,
 } from './archetypes';
 import { mulberry32 } from './rng';
+import { templateDraftSchema } from '../templates/schema';
 import { adherence } from '../metrics/adherence';
 import { bestE1rm } from '../metrics/e1rm';
 import { addDays, daysBetween, startOfWeek } from '../metrics/dates';
@@ -603,5 +605,169 @@ describe('inconsistent', () => {
     const sloppy = weeklyE1rm(toSets(generate(byKey('inconsistent'))), lift);
     const diligent = weeklyE1rm(toSets(generate(byKey('beginner'))), lift);
     expect(sloppy.at(-1)!.e1rm).toBeLessThan(diligent.at(-1)!.e1rm);
+  });
+});
+
+/**
+ * The Workout tab's templates — rework plan PR 5.
+ *
+ * The plan's acceptance names the equipment ceiling as the case that matters:
+ * a template is something the user taps Start on, so a prescription the
+ * home-gym lifter cannot load is a session that fails at the first set.
+ */
+describe('the templates each archetype is seeded with', () => {
+  it('gives every archetype one template per session of its rotation', () => {
+    for (const archetype of ARCHETYPES) {
+      const templates = templatesFor(archetype, generate(archetype));
+
+      expect(
+        templates.map((t) => t.name),
+        archetype.key
+      ).toEqual(['Day A', 'Day B', 'Day C']);
+      for (const template of templates) {
+        // createTemplate refuses an empty template, and so should this.
+        expect(template.items.length, `${archetype.key} ${template.name}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('prescribes only lifts from the archetype’s own programme', () => {
+    // Equipment-appropriate by construction: the programme is what the history
+    // was generated from, and the history already respects the equipment.
+    for (const archetype of ARCHETYPES) {
+      const allowed = new Set(archetype.programme.map((e) => e.exerciseSlug));
+      for (const item of templatesFor(archetype, generate(archetype)).flatMap((t) => t.items)) {
+        expect(allowed, `${archetype.key}: ${item.exerciseSlug}`).toContain(item.exerciseSlug);
+      }
+    }
+  });
+
+  it('never prescribes above the home-gym dumbbell ceiling', () => {
+    // THE case the plan names. The dumbbells stop at 30 kg, and a template is
+    // the thing a user starts without re-reading.
+    const archetype = byKey('home-gym');
+    const items = templatesFor(archetype, generate(archetype)).flatMap((t) => t.items);
+
+    expect(items.some((i) => i.exerciseSlug.startsWith('barbell-'))).toBe(false);
+    for (const item of items) {
+      if (item.weightKg !== null) {
+        expect(item.weightKg, item.exerciseSlug).toBeLessThanOrEqual(archetype.loadCeilingKg!);
+      }
+    }
+  });
+
+  it('prescribes where the lifter is now, not their week-one loads', () => {
+    /*
+     * The failure this guards: building from the programme alone would give a
+     * beginner twelve weeks in the 60 kg squat they started on. Their history
+     * says otherwise, and a template that ignores it is a regression button.
+     */
+    const archetype = byKey('beginner');
+    const history = generate(archetype);
+    const squat = templatesFor(archetype, history)
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'barbell-full-squat')!;
+    const heaviestEver = Math.max(
+      ...history
+        .flatMap((w) => w.sets)
+        .filter((s) => s.exerciseSlug === 'barbell-full-squat' && !s.isWarmup)
+        .map((s) => s.weightKg ?? 0)
+    );
+
+    expect(squat.weightKg).toBeGreaterThan(60);
+    // Never more than anything they have actually lifted.
+    expect(squat.weightKg).toBeLessThanOrEqual(heaviestEver);
+  });
+
+  it('leaves bodyweight lifts without a load, rather than a load of zero', () => {
+    const bodyweight = new Set(['pullups', 'plank', 'pushups']);
+    for (const archetype of ARCHETYPES) {
+      const items = templatesFor(archetype, generate(archetype)).flatMap((t) => t.items);
+      for (const item of items.filter((i) => bodyweight.has(i.exerciseSlug))) {
+        expect(item.weightKg, `${archetype.key}: ${item.exerciseSlug}`).toBeNull();
+      }
+    }
+  });
+
+  it('passes the app’s own template schema, so createTemplate cannot refuse it', () => {
+    /*
+     * The seeder writes through createTemplate, which re-parses with this same
+     * schema before touching the database. A bound broken here would fail the
+     * whole seed run for one archetype — caught offline instead.
+     */
+    const fakeId = (slug: string) =>
+      `00000000-0000-4000-8000-${slug.length.toString(16).padStart(12, '0')}`;
+
+    for (const archetype of ARCHETYPES) {
+      for (const template of templatesFor(archetype, generate(archetype))) {
+        const draft = {
+          name: template.name,
+          source: 'user' as const,
+          notes: null,
+          items: template.items.map((item) => ({
+            exerciseId: fakeId(item.exerciseSlug),
+            setCount: item.setCount,
+            reps: item.reps,
+            weightKg: item.weightKg,
+            rpe: null,
+            restSeconds: null,
+          })),
+        };
+        expect(
+          () => templateDraftSchema.parse(draft),
+          `${archetype.key} ${template.name}`
+        ).not.toThrow();
+      }
+    }
+  });
+
+  it('holds exactly its own session of the rotation, in programme order', () => {
+    /*
+     * FOUND BY BREAKING IT: putting every lift into every template turned no
+     * test red. A user who taps Start on "Day A" gets whatever Day A holds, so
+     * a template carrying the whole programme would be a three-hour session
+     * that nothing here noticed.
+     */
+    for (const archetype of ARCHETYPES) {
+      templatesFor(archetype, generate(archetype)).forEach((template, day) => {
+        expect(
+          template.items.map((i) => i.exerciseSlug),
+          `${archetype.key} ${template.name}`
+        ).toEqual(archetype.programme.filter((e) => e.day === day).map((e) => e.exerciseSlug));
+      });
+    }
+  });
+
+  it('reads a logged load of zero as no load, the way the schema spells it', () => {
+    /*
+     * FOUND BY BREAKING IT: the generator writes bodyweight sets as null, so
+     * dropping the zero filter changed nothing and the guard was unreachable.
+     * Kept rather than deleted, because the contract is real — a null weight is
+     * the absence of external load, not a load of zero — and a history can say
+     * 0. Hand-built here, since the generator never will.
+     */
+    const history: GeneratedWorkout[] = [
+      {
+        localDate: '2026-08-10',
+        status: 'completed',
+        notes: null,
+        sets: [
+          {
+            exerciseSlug: 'pullups',
+            weightKg: 0,
+            reps: 6,
+            rpe: 8,
+            isWarmup: false,
+            restSeconds: 90,
+            setIndex: 0,
+          },
+        ],
+      },
+    ];
+    const pullups = templatesFor(byKey('beginner'), history)
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'pullups')!;
+
+    expect(pullups.weightKg).toBeNull();
   });
 });

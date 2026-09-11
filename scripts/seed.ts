@@ -19,10 +19,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   ARCHETYPES,
   generateHistory,
+  templatesFor,
   validateProgramme,
   type Archetype,
   type GeneratedWorkout,
 } from '../src/seed/archetypes';
+import { createTemplate } from '../src/db/templates';
 import { assignFromPool, type PoolTemplate } from '../src/gamification/assignment';
 import { localDateIn } from '../src/metrics/dates';
 import type { ChallengeContext } from '../src/gamification/challenge';
@@ -243,6 +245,7 @@ async function seedArchetype(
   offered: number;
   rejected: number;
   accepted: number;
+  templates: number;
 }> {
   const created = await admin.auth.admin.createUser({
     email: archetype.email,
@@ -456,12 +459,46 @@ async function seedArchetype(
     pool,
   });
 
+  /*
+   * The Workout tab's templates — one per session of the rotation, built by
+   * `templatesFor` from the programme with today's loads.
+   *
+   * Written through `createTemplate` as the signed-in archetype rather than
+   * with the service role, the same discipline `awardSession` and the
+   * challenge acceptance follow: its Zod parse and its compensating delete are
+   * the app's, and a seeded row the app itself could not have written is worth
+   * very little.
+   *
+   * AI-NOTE: not wrapped in `withRetry`. createTemplate is two plain inserts,
+   *          and that function's INVARIANT is to wrap only idempotent calls — a
+   *          retry after a lost response would write a second "Day A".
+   */
+  const drafts = templatesFor(archetype, history);
+  for (const draft of drafts) {
+    await createTemplate(user, userId, {
+      name: draft.name,
+      source: 'user',
+      notes: null,
+      items: draft.items.map((item) => ({
+        // Safe: the sets loop above throws on any slug the catalogue lacks,
+        // and every template slug is a programme slug the history logged.
+        exerciseId: exerciseBySlug.get(item.exerciseSlug)!,
+        setCount: item.setCount,
+        reps: item.reps,
+        weightKg: item.weightKg,
+        rpe: null,
+        restSeconds: null,
+      })),
+    });
+  }
+
   return {
     workouts: history.length,
     sets: setCount,
     awarded,
     badges: badges.size,
     ...challenges,
+    templates: drafts.length,
   };
 }
 
@@ -801,12 +838,12 @@ async function main(): Promise<void> {
   const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
-    const { archetype, workouts, sets, awarded, badges, offered, rejected, accepted } =
+    const { archetype, workouts, sets, awarded, badges, offered, rejected, accepted, templates } =
       result.value;
     console.log(
       `  ${archetype.key.padEnd(13)} ${workouts} workouts, ${String(sets).padStart(3)} sets, ` +
         `${String(awarded).padStart(5)} XP, ${badges} badge(s), ` +
-        `${offered} offered / ${accepted} active / ${rejected} rejected`
+        `${offered} offered / ${accepted} active / ${rejected} rejected, ${templates} templates`
     );
   }
   if (failures.length > 0) {

@@ -767,3 +767,91 @@ export function generateHistory(
 
   return workouts.filter((w) => w.localDate <= endDate);
 }
+
+/** One prescribed set group, before the seeder resolves its slug to an id. */
+export interface SeedTemplateItem {
+  exerciseSlug: string;
+  setCount: number;
+  reps: number;
+  /** INVARIANT: kilograms — CLAUDE.md #8. Null is bodyweight, not zero. */
+  weightKg: number | null;
+}
+
+export interface SeedTemplate {
+  name: string;
+  items: SeedTemplateItem[];
+}
+
+/**
+ * One workout template per session of the rotation, built from the programme.
+ *
+ * WHY the programme and not `templateFromSession()`: that function turns what
+ * was DONE into a template, and ADR 0010's load-bearing rule is that a
+ * prescription and a record are different things. `buildSets` drifts a rep off
+ * later sets, so a template saved from a logged session would prescribe
+ * "1×5, 2×4" because that is what happened. The programme is the archetype's
+ * prescription, and a template is a prescription.
+ *
+ * WHY the load comes from the history anyway: a template prescribing
+ * `startingKg` would hand someone twelve weeks in their week-one loads. So the
+ * shape — which lifts, how many sets, how many reps — is the programme's, and
+ * the weight is the heaviest working set of the most recent session that had
+ * the lift in it. Where that lifter is now.
+ *
+ * Rest is deliberately absent: the programme never specifies one, and the
+ * session grid falls back to its own default. A seeded figure the programme
+ * does not contain would be invented.
+ *
+ * Pure, so `src/seed/archetypes.test.ts` can assert the equipment ceiling
+ * offline — the plan's acceptance names that as the case that matters.
+ */
+export function templatesFor(
+  archetype: Archetype,
+  history: readonly GeneratedWorkout[]
+): SeedTemplate[] {
+  /*
+   * Newest session first, by date rather than by array position: the history is
+   * built week by week with rest days pushed after each week's sessions, so the
+   * last element is not the last session by date.
+   */
+  const newestFirst = [...history].sort((a, b) => (a.localDate < b.localDate ? 1 : -1));
+
+  const latestLoad = new Map<string, number | null>();
+  for (const workout of newestFirst) {
+    const working = workout.sets.filter((set) => !set.isWarmup);
+    for (const slug of new Set(working.map((set) => set.exerciseSlug))) {
+      if (latestLoad.has(slug)) continue;
+      /*
+       * A zero is treated as no load, the same line `plottable` draws in
+       * src/metrics/progression.ts: a bodyweight set has no external load, and
+       * the template schema spells that null rather than 0.
+       */
+      const loads = working
+        .filter((set) => set.exerciseSlug === slug && set.weightKg !== null && set.weightKg > 0)
+        .map((set) => set.weightKg as number);
+      latestLoad.set(slug, loads.length === 0 ? null : Math.max(...loads));
+    }
+  }
+
+  return Array.from({ length: PROGRAMME_DAYS }, (_, day) => ({
+    // "Day A" rather than a descriptive name: the Workout tab's card already
+    // lists the lifts under it, which is what makes a template name readable.
+    name: `Day ${String.fromCharCode(65 + day)}`,
+    items: archetype.programme
+      .filter((entry) => entry.day === day)
+      .map((entry) => {
+        const logged = latestLoad.get(entry.exerciseSlug);
+        return {
+          exerciseSlug: entry.exerciseSlug,
+          setCount: entry.sets,
+          reps: entry.reps,
+          /*
+           * `undefined` is a lift the history never reached — every session of
+           * it skipped. The programme's own starting load is the honest
+           * fallback, and a zero there means bodyweight, not "no load".
+           */
+          weightKg: logged !== undefined ? logged : entry.startingKg > 0 ? entry.startingKg : null,
+        };
+      }),
+  }));
+}
