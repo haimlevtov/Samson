@@ -15,7 +15,7 @@ const SPEECH: LlmStage = 'speech';
 
 /**
  * Speech rows that reached a 200: `ok`, and `schema_invalid` for a 200 with no
- * usable mp3 — the wrong type, no bytes, or a body that failed mid-read. Either
+ * usable audio — the wrong type, no samples, or a body that failed mid-read. Either
  * may have been billed, so both are charged. (A timeout during that read keeps
  * its own status and is charged `TIMEOUT_ASSUMED_COST_USD`.)
  */
