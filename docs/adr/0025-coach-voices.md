@@ -239,7 +239,8 @@ and written here before their code.
   sums in JavaScript what PostgREST returns, and PostgREST stops at 1,000; and an
   account with no profile row is charged against the default budget while its
   ledger inserts fail — after the paid call. The budget is the one thing bounding
-  speech, so these close in rework plan PR 6c, **before `OPENROUTER_API_KEY` goes
+  speech, so these close in rework plan PR 6c — [ADR 0026](0026-budget-integrity.md) —
+  **before `OPENROUTER_API_KEY` goes
   on Vercel — Production and Preview alike**, as the README's deploy table now
   says. The clamps in `chargedFor` and the NaN-proof gate are what landed here.
 - **The function's time limit is assumed, not pinned.** A speech press takes at

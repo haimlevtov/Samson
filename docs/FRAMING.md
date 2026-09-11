@@ -191,7 +191,7 @@ the product if wrong.
 | Bodyweight movements contribute zero tonnage                           | `tonnage.ts`          | **Load-bearing** — a bodyweight-only user shows a flat zero line |
 | Warm-ups are excluded from tonnage and can never set a PR              | `tonnage.ts`, `pr.ts` |                                                                  |
 | Adherence is shown over a 4-week window                                | `workouts/page.tsx`   |                                                                  |
-| Default LLM budget is $0.50 per user per week                          | `config.ts`           | **Load-bearing** — a low cap silently truncates phase 2 evals    |
+| Default LLM budget is $0.50 per user per week                          | `users` column        | **Load-bearing** — a low cap silently truncates phase 2 evals    |
 | 3 attempts, 60s timeout, 500ms backoff                                 | `config.ts`           |                                                                  |
 | Speech: 2 attempts, 20s timeout                                        | `config.ts`           |                                                                  |
 | A spoken preview is charged $0.02 against the budget                   | `config.ts`           | **Load-bearing** — 25 previews spend a default week              |

@@ -19,7 +19,7 @@ because several of them touch the same surface.
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)     | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
 | 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
-| 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | planned — the key stays off Vercel until it ships                      |
+| 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | in progress, [ADR 0026](../adr/0026-budget-integrity.md)               |
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)        |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                |
@@ -480,7 +480,8 @@ have failed. ADR 0025's closing section records the correction.
 
 **Branch `budget-integrity`.** Added 2026-09-11 from the security review of #49,
 and recorded in [ADR 0025](../adr/0025-coach-voices.md)'s addendum. Starts after
-6b merges; it touches the same gateway and ledger code.
+6b merges; it touches the same gateway and ledger code. **Decided in
+[ADR 0026](../adr/0026-budget-integrity.md), committed first.**
 
 **Why it is ordered before the key goes on Vercel:** the weekly budget is the
 one thing bounding what a signed-in user can spend on the project's key, and
