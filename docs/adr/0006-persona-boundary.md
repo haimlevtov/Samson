@@ -207,6 +207,7 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > so a later edit that spreads the persona into a prompt cannot carry THE SAMPLE
 > LINE there. It does not make the rest of the row trusted: `name`,
 > `system_prompt` and `banned_phrases` are writable on a user's own row too,
-> and `src/persona/prompts.ts` fences and cleans them, as it did before
-> (CLAUDE.md #11). _Narrowed in review: the first version of this paragraph said
+> and `src/persona/prompts.ts` handles them as it did before: it fences
+> `system_prompt`, and cleans `name` (the fence label) and `banned_phrases`
+> (outside the fence) (CLAUDE.md #11). _Narrowed in review: the first version of this paragraph said
 > no user text at all could reach a prompt that way._

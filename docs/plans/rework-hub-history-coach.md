@@ -606,7 +606,8 @@ both themes, which is not the page — and PR 6's preview is on `/coach`.
 **Seven of the eight PRs above have something to look at in a browser** — every
 one except this plan, and PR 5 explicitly requires opening each seeded Profile.
 Five of them change markup. If the pass stays unrun the same class of defect will
-keep shipping, so it is worth clearing before PR 8 rather than after it.
+keep shipping, so it is worth clearing before PR 7 — which adds a button to
+`/coach` — rather than after PR 8.
 
 ---
 
