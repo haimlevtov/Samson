@@ -343,7 +343,7 @@ export default async function ProfilePage() {
       </h2>
       {/*
        * Not "no sets logged": a bodyweight-only lifter has logged plenty, and
-       * this branch is reached whenever no set carries external load.
+       * this branch is reached whenever no working set carries external load.
        */}
       {weekly.length === 0 ? (
         <p className="card muted">
