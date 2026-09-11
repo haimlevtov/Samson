@@ -77,9 +77,9 @@ npm run dev         # http://localhost:3000
 ```
 
 Add an [OpenRouter](https://openrouter.ai/keys) key too if you want real model
-calls. Without one the app still runs: the coach's delivery, the chat and the
-diet advisor say a key is missing, and the coach voices show their lines as
-text. `npm run verify` needs none.
+calls. Without one the app still runs: the coach's delivery, the chat, the diet
+advisor and History's free-text log say a key is missing, and the coach voices
+show their lines as text. `npm run verify` needs none.
 
 New migrations go to the hosted project with `npm run db:push`, after
 `supabase link --project-ref mqcnpuupzknwpvhkbpci` once.
@@ -153,12 +153,18 @@ Live at **https://samson-fit.vercel.app**, auto-deployed from `main`.
 Vercel → Settings → Environment Variables. Copy the first two straight out of
 your working `.env.local` so they cannot drift:
 
-| Variable             | Required | Notes                                            |
-| -------------------- | -------- | ------------------------------------------------ |
-| `SUPABASE_URL`       | yes      | Without it every page 500s                       |
-| `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                             |
-| `OPENROUTER_API_KEY` | yes      | All model calls, and the coaches' voices as well |
-| `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard          |
+| Variable             | Required | Notes                                         |
+| -------------------- | -------- | --------------------------------------------- |
+| `SUPABASE_URL`       | yes      | Without it every page 500s                    |
+| `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                          |
+| `OPENROUTER_API_KEY` | not yet  | Not before the budget fix — ADR 0025 addendum |
+| `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard       |
+
+**`OPENROUTER_API_KEY` stays off Vercel — Production and Preview alike — until
+the budget-integrity PR lands** ([ADR 0025](docs/adr/0025-coach-voices.md)'s
+addendum). The weekly budget is what bounds a signed-in user's spend on the
+project's key, and today its owner can move it. Before the key goes on at all,
+set a credit limit on it in the OpenRouter dashboard.
 
 **WHY no `NEXT_PUBLIC_` prefix:** nothing client-side touches Supabase. The only
 client component is the rest timer, and it has no database access — every query

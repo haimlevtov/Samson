@@ -52,7 +52,7 @@ whether the feature exists.
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
 | [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
-| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 6 of 9 shipped               |
+| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 6 of 11 shipped              |
 
 ## Phase 5 is three documents, and here is why
 
@@ -132,7 +132,7 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — eight of the nineteen open items
+**Blocked on an OpenRouter key, not on work** — eight of the twenty open items
 below, and worth
 grouping because one `.env.local` line closes them:
 
@@ -163,6 +163,7 @@ grouping because one `.env.local` line closes them:
 | [phase-6.md](phase-6.md)                                   | The browser pass at 375×812 was not run on PRs 2, 4 or 5. Review found a width bug and a colour-only state in that markup, so it is the check that catches exactly this                                                                                                                                                                                                                                                                                                                              |
 | [rework-hub-history-coach.md](rework-hub-history-coach.md) | This plan's PRs have not had the browser pass on their signed-in pages either; PR 4's graph was rendered and measured as a component, not on its page. Each touches a signed-in surface, and this agent does not type passwords                                                                                                                                                                                                                                                                      |
 | [ADR 0003](../adr/0003-grants-and-rls.md)                  | Three foreign keys that no write policy checks: `exercise_equipment.exercise_id` and `.equipment_tag_id` — linking to another user's custom row would be closed by the same own-or-shared `with check` as `20260911100000`, a policy only, while one user's link occupying the pair for everybody needs a key change, since the primary key has no `user_id` — and `user_equipment.equipment_tag_id`, an existence oracle only. Pinned in `tests/db/schema-invariants.test.ts`, so a fourth fails CI |
+| [ADR 0025](../adr/0025-coach-voices.md)                    | **The weekly budget can be moved by its owner** — a raised ceiling, negative or NaN rows, a thousand planted rows, no profile row. Rework PR 6c, and the OpenRouter key stays off Vercel until it ships                                                                                                                                                                                                                                                                                              |
 | [ADR 0020](../adr/0020-progression-unlock-criteria.md)     | Two trees stall for a bodyweight-only user: pull cannot open its chin-up rung (it asks for band-assisted pull-ups, tagged `other`), and push cannot open its handstand rung (parallel-bar dips); the muscle-up asks for weighted pull-ups. Content decisions — a dip needs bars — pinned in `tests/db/progression.test.ts`, so a new one fails CI                                                                                                                                                    |
 
 **Not a gap, a property to keep stating accurately:** the chat's topical

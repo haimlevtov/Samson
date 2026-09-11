@@ -1,6 +1,6 @@
 # ADR 0025 — A coach speaks in a synthesised character voice, through the gateway
 
-**Status:** accepted, rework plan PR 6b
+**Status:** accepted, rework plan PR 6b — with an [addendum after the code](#addendum-after-the-code-2026-09-11--what-two-rounds-of-review-of-49-found)
 **Date:** 2026-09-11
 **Supersedes:** [ADR 0006](0006-persona-boundary.md)'s "there is no TTS provider"
 and its device-voice allocation, for coaches. ADR 0006 still governs what a
@@ -8,6 +8,7 @@ persona may SAY.
 
 > Written before the code it governs, in its own commit — and corrected before
 > that code, in a second one. See [Corrected before the code](#corrected-before-the-code-2026-09-11).
+> What review found after the code is in [the addendum](#addendum-after-the-code-2026-09-11--what-two-rounds-of-review-of-49-found).
 
 ## Context
 
@@ -46,8 +47,8 @@ stored in its row, through the gateway.**
    a direction written for a person is what a real-time voice will need too.
 2. **Through the gateway** — CLAUDE.md #2 and #3. A `speech` stage, and
    `callSpeech` beside `callLLM` in `src/llm/gateway.ts`: the same weekly budget
-   gate, the same retries, an `llm_calls` row for every attempt, failures
-   included.
+   gate, the same retry loop — shorter, see the addendum — and an `llm_calls` row
+   for every attempt, failures included.
 3. **One model, no fallback model.** A voice name belongs to one model — Gemini's
    `Algenib` means nothing to another — so a fallback would speak in a voice
    nobody cast, which is the mismatch this ADR exists to end. A retry goes to
@@ -167,10 +168,12 @@ The first version also said the per-character price would be "estimated in code"
 without saying where the estimate goes. It goes in the budget gate, never in a
 row, for the reason `TIMEOUT_ASSUMED_COST_USD` gives.
 
-## Addendum after the code, 2026-09-11 — what review of #49 found
+## Addendum after the code, 2026-09-11 — what two rounds of review of #49 found
 
-Recorded after the code, at the reviewers' prompting. The first two points were
-decided in the code commit and belonged here before it.
+Recorded after the code, at the reviewers' prompting. The first three points,
+and the failed-row and null-token parts of the seventh, were decided in the code
+commit and belonged here before it; the rest were decided in answer to review,
+and written here before their code.
 
 - **The speech stage is exempt from ADR 0005 §3 and §4.** `callSpeech` sends no
   `SAFETY_PREAMBLE`, because a speech model would read it aloud, and runs no
@@ -181,29 +184,61 @@ decided in the code commit and belonged here before it.
   later PR that speaks a delivered plan changes that — its transcript is
   model-written from the user's own notes, so untrusted (CLAUDE.md #11) — and
   must strip audio tags and this script's own labels before speaking it.
-- **Two assertions throw before a call exists, and write no `llm_calls` row**:
+- **One assertion throws before a call exists, and writes no `llm_calls` row**:
   an input over `SPEECH_MAX_INPUT_CHARS` (1,200; the column limits allow 1,104
-  at the most) and no speech model configured. Both come before the budget
-  gate, so nothing is sent or charged; CLAUDE.md #3's "every call" begins there.
+  at the most, so nothing reaches it). It comes before the budget gate, so
+  nothing is sent or charged, and the gateway reads CLAUDE.md #3's "every call"
+  as beginning there — **a reading the owner of CLAUDE.md may refuse**. _The code
+  commit had a second, for no speech model configured; the model is now the
+  constant `SPEECH_MODEL` and cannot be missing._
 - **Retries are shorter than a text stage's**: two attempts of twenty seconds,
-  where text gets three of sixty. A preview is a button press.
-- **Only `audio/mpeg` is audio.** A 200 carrying anything else — an error body,
-  another format — or no bytes at all is recorded `schema_invalid`, is not
-  retried, and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a
-  200 and may have been billed, so one charge per press rather than none, and
-  never two. The first version accepted any `audio/` type, and a model ignoring
+  where a text stage gets three of sixty by default. A preview is a button
+  press. And `LLM_MODELS`, which swaps text models for an eval run, never
+  reaches a speech call — it would recast every coach.
+- **Only mp3 is audio, and nothing after a 200 is retried.** A 200 labelled
+  anything but `audio/mpeg` (or its alias `audio/mp3`), a 200 with no bytes, or
+  a 200 whose body fails mid-read is recorded `schema_invalid`, is not retried,
+  and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a 200 and
+  may have been billed, so one charge per press rather than none, and never two.
+  The browser is handed the constant `audio/mpeg`, never the provider's header.
+  The code commit accepted any `audio/` type, so a model ignoring
   `response_format` would have cached an unplayable clip for every coach.
-- **What the gate charges, completely.** A spoken attempt $0.02; a timed-out one
-  `TIMEOUT_ASSUMED_COST_USD`, $0.05, as for every stage, so a press that times
-  out twice counts $0.10; a failed one nothing. A negative `cost_credits` counts
-  as zero. The token columns are null as well as the cost. And the gate reads
-  the spend before the call and the row lands after it, so presses sent at once
-  all pass — the unreserved gap ADR 0015 §5 and ADR 0024 already name.
+- **A ledger row's text is made storable at the one writer.** Postgres refuses a
+  NUL in `text`, and half a surrogate pair — which a 500-character cut can
+  leave — so `openLedger` cleans both, for every stage. Found in the second
+  round: a wrong-format audio body read as text carried NULs, the insert failed,
+  and the call it was written to charge went unrecorded. Such a body is now
+  described, not quoted.
+- **A replayed clip and a failed URL on the card.** The Voice card's fetching,
+  cache and in-flight presses live in `src/speech/player.ts`, injected and
+  tested: one press pays for a clip, a second press joins the call in flight,
+  a cached replay supersedes a fetch still coming, and a clip that will not play
+  is dropped so the next press fetches again.
+- **What the gate charges, completely.** A speech attempt that reached a 200,
+  $0.02; a timed-out one `TIMEOUT_ASSUMED_COST_USD`, $0.05, as for every stage,
+  so a press that times out twice counts $0.10; an `http_error` attempt — no 200
+  came back — nothing. A negative `cost_credits` counts as zero and one that is
+  not a finite number as unlimited, and the gate denies a spend or a budget that
+  is NaN: `numeric` accepts 'NaN', and every comparison with it is false. The
+  token columns are null as well as the cost. And the gate reads the spend before
+  the call and the row lands after it, so presses sent at once all pass — the
+  unreserved gap ADR 0015 §5 and ADR 0024 already name.
 - **The budget has holes older than this ADR**, found by the security review and
-  not closed here: a user can raise their own `llm_weekly_budget_usd` (the
-  `authenticated` role has table-wide UPDATE on `users`), can insert a
-  negative-cost `llm_calls` row of their own, and an account with no profile row
-  is charged against the default budget while its ledger inserts fail — after
-  the paid call. The budget is the one thing bounding speech, so these close in
-  their own PR **before `OPENROUTER_API_KEY` goes on Vercel**. The clamp in
-  `chargedFor` is the part that landed here.
+  not closed here. A user can raise their own `llm_weekly_budget_usd` (the
+  `authenticated` role has table-wide UPDATE on `users`); can insert their own
+  `llm_calls` rows with a negative or NaN cost or a `created_at` in the future;
+  can bury real spend under a thousand planted rows, because `sumSpendSince`
+  sums in JavaScript what PostgREST returns, and PostgREST stops at 1,000; and an
+  account with no profile row is charged against the default budget while its
+  ledger inserts fail — after the paid call. The budget is the one thing bounding
+  speech, so these close in rework plan PR 6c, **before `OPENROUTER_API_KEY` goes
+  on Vercel — Production and Preview alike**, as the README's deploy table now
+  says. The clamps in `chargedFor` and the NaN-proof gate are what landed here.
+- **The function's time limit is assumed, not pinned.** A speech press takes at
+  most about 41 seconds, and a chat turn on the same page about three minutes.
+  Both fit Vercel's Fluid compute default of 300 seconds, which this project —
+  created 2026-08-24, after Fluid became the default for new projects — is
+  assumed to have; Vercel's API does not report it. It is not pinned with
+  `maxDuration`: 300 on a Hobby project without Fluid fails the deploy, and 60
+  would cut the chat off. If Fluid is ever off, a function killed mid-call writes
+  no row for a call that may have been billed.

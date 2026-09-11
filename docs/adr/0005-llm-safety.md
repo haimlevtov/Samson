@@ -1,6 +1,7 @@
 # ADR 0005 — Injection, conduct and abuse: five layers, four of them code
 
-**Status:** accepted, phase 2 (cross-cutting)
+**Status:** accepted, phase 2 (cross-cutting) — amended 2026-09-11: the speech
+stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md)
 **Date:** 2026-09-01
 
 ## Context

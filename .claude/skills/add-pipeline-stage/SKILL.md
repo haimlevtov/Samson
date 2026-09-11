@@ -30,11 +30,13 @@ export type LlmStage =
 **`src/llm/models.ts`** — add a fallback array to `STAGE_MODELS`. It is a
 `Record<LlmStage, …>`, so the compiler will demand this.
 
-> Every slug there was checked against OpenRouter's `/models` endpoint for
-> `structured_outputs` support. A model without it fails **every** call in the
-> stage, and `provider.require_parameters` turns that into a routing error
-> rather than a silent plain-text response. Reuse a slug already in the file
-> unless you have checked a new one the same way.
+> Every text-stage slug there was checked against OpenRouter's `/models`
+> endpoint for `structured_outputs` support — the speech entry is the exception:
+> it returns audio, and was checked against `/models?output_modalities=speech`.
+> A text model without it fails **every** call in the stage, and
+> `provider.require_parameters` turns that into a routing error rather than a
+> silent plain-text response. Reuse a slug already in the file unless you have
+> checked a new one the same way.
 
 **`src/llm/config.ts`** — a `*_MAX_TOKENS` constant. Say in the comment what
 the expected output size is and why the ceiling is where it is. A ceiling far
@@ -144,9 +146,12 @@ Two things are new, and both cost something to forget:
 
 - **A provider that reports no price** leaves `cost_credits` null. Never put an
   estimate in the row; add the stage to `chargedFor` in `src/db/ledger.ts` so
-  the budget gate charges an assumption, as it does for timeouts.
-- **`tests/unit/invariants.test.ts` names the gateway's entry points.** A new
-  exported `call*` function fails it until it is added there on purpose.
+  the budget gate charges an assumption, as it does for timeouts — for every
+  status that reached a 200, not only `ok`, and never retry an attempt that is
+  charged, or one press pays twice. #49 learned both in review.
+- **`tests/unit/invariants.test.ts` names every export of the gateway.** A new
+  export of any kind — a `callX`, a helper, a const — fails it until it is added
+  there on purpose, and a re-export or default export fails it outright.
 
 ## Before you call it done
 
