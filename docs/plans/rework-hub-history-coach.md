@@ -16,7 +16,7 @@ because several of them touch the same surface.
 | 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
 | 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned                                                              |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | in progress                                                          |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
@@ -246,6 +246,56 @@ breakpoint where they fit, and no labels below it — but start with three.
   looks emptier than it is. **The first step is to look rather than to guess:**
   open each seeded user's Profile and list what renders blank or as an em dash,
   then fill what should not be. This plan does not pre-judge the list.
+
+### What looking found, and what it decided — 2026-09-11
+
+**Profile shows nothing blank for any archetype.** Looked at by running the
+page's own metric functions — `adherence`, `currentStreak`, `acwr`,
+`tonnageByWeek`, `totalTonnage`, `exerciseBests` — over each archetype's
+generated history, on seven consecutive seed dates. Every tile populates. XP,
+level and badges come from the database rather than those functions, and CI's
+seed log has shown non-zero XP and badges for all five since phase 4. **This is
+not a browser pass**: `/profile` needs a session. It is the same data through
+the same code, which is the next best thing and is stated as exactly that.
+
+The biometrics are not on Profile at all — they are on `/settings` — and the
+seeder has filled them since phase 6 PR 2. So the premise that the profile
+"looks emptier than it is" does not survive measuring; what was empty for demo
+users is the **Workout tab**, which had no templates.
+
+**One real defect turned up and is not fixed here.** The "This week" tonnage
+tile reads `tonnageByWeek(...).at(-1)`, and `tonnageByWeek` only emits weeks
+that had sets — so for anyone who has not trained yet this week it prints last
+week's figure under this week's label. It never triggers on seeded data (zero
+of 35 archetype-days), which is why nobody has seen it; it bites real users. It
+is a metrics fix with its own test, not seed data, so it is its own task.
+
+**Templates are built from the programme, not from a logged session.** The app
+already has `templateFromSession()` — "save this as a template" — and reusing it
+would look like the one-definition choice. It is the wrong definition: it turns
+what was DONE into a template, and ADR 0010's load-bearing rule is that a
+prescription and a record are different things. `buildSets` drifts a rep off
+later sets, so a template saved from a session would prescribe "1×5, 2×4"
+because that is what happened. The programme is the archetype's prescription;
+a template is a prescription. Programme to template is the faithful mapping.
+
+- **One per rotation day, so three rather than "one or two".** The programme
+  rotates through three sessions, and a template per session is the literal
+  reading of "the barbell user gets its barbell days".
+- **Weight is the most recent working weight the archetype actually logged for
+  that lift.** A template prescribing `startingKg` would hand someone twelve
+  weeks in their week-one loads. Bodyweight lifts are `null`, which the schema
+  defines as no external load rather than zero.
+- **Rest is left unprescribed.** The programme never specifies one, and the
+  session grid falls back to its 120s default; inventing a figure the programme
+  does not contain is worse than defaulting.
+- **`source: 'user'`.** These are the lifter's own routine. `coach` templates
+  come from importing an accepted plan, which is PR 7's surface, and seeding
+  them here would pre-empt the thing PR 7 builds.
+- **Written through `createTemplate` as the signed-in archetype**, the same
+  discipline as `award_session_xp` and `accept_challenge`: its Zod validation
+  and compensating delete are the app's, and a seeded row the app itself could
+  not have written is worth very little.
 
 ### Acceptance
 
