@@ -183,7 +183,10 @@ and read aloud at 1, and the Analyst's at 2 and read at 1. This ADR's Decision
 section already fixed the tone override as a single rule in code, and a second
 definition of "gentle" living in a client component contradicted it. It now
 imports the same constant, and `speak.test.ts` asserts the two agree at every
-point on the scale rather than trusting them to.
+point on the scale rather than trusting them to. _Superseded 2026-09-11 by the
+amendment below: the voice no longer reads intensity at all, so there is no
+second clamp to agree with. A gentle week slows the voice by a fixed factor,
+and the words keep `resolveTone`'s clamp._
 
 **One consequence worth naming for whoever adds the fourth persona:** the
 variant is content now, so the `add-persona` skill has to set it. A new `en-GB`
