@@ -301,3 +301,7 @@ the owner's request to keep test spend down. The first press after it merges
 is the check, about $0.01: a wrong rate sounds too fast or too slow, and a
 content type other than `audio/pcm` or `audio/l16` fails as `schema_invalid`
 with the row naming the type it got.
+
+**Verified live, 2026-09-11, after #50 merged:** six calls, all `ok`, about
+eight seconds each — slower than the "few seconds" the Consequences expect —
+and the owner, having heard the coaches: "voice perfect".

@@ -30,9 +30,11 @@ than a permission:
 | `user`   | The trainee builds one by hand, or saves a session they have just logged — or `npm run seed`, for the demo archetypes |
 | `coach`  | A session from the newest accepted plan is imported                                                                   |
 
-Both kinds are owned by the user, editable by the user, and deletable by the
-user. `source` exists so the UI can say where a template came from, and so
-"what did the coach actually give me" stays answerable after the user edits it.
+Both kinds are owned by the user and deletable by the user. The policy would
+allow an edit, but the app offers none — a template is started or deleted.
+`source` exists so the UI can say where a template came from. _This said
+"editable by the user", and a later decision leaned on it; corrected
+2026-09-12, rework PR 7._
 
 **The seeder writes `user` templates, and through the same door.** Each demo
 archetype gets one per session of its programme's rotation, built by
@@ -187,14 +189,20 @@ a slug → exercise id map built from the catalogue.
   missing its press is worse than an error message.
 - The name is `Week N · Day M — <focus>`, truncated to the 80-character bound.
 - **A name the user already has gets a counter**: `… (2)`, then `(3)`, the
-  base truncated so the whole stays inside the bound. Importing a session
-  twice is allowed — a user may keep the coach's version beside an edited one —
-  but the Workout tab lists templates by name, so the copies must be told
-  apart. The same applies to §5's default name, `Session of <date>`. A name
-  the user types is kept as typed. Decided in the rework plan, PR 7.
+  base cut with `…` so the whole stays inside the bound — `distinctName` in
+  `src/templates/naming.ts`, which takes the first free counter. Importing a
+  session twice is allowed, because a newer plan's session can share week, day
+  and focus with an older one; but two such copies match on everything the
+  Workout tab shows — name, lifts and set count — so the counter tells them
+  apart. The same applies to the name `createTemplateFromSession` gives a
+  template saved from a session with the name left blank, `Session of <date>`.
+  A name the user types is kept as typed. Decided in the rework plan, PR 7.
 
-The block being imported has already passed `rules.ts` and the safety critic.
-This step calls no model and makes no judgement; it is a copy.
+A block the planner pipeline wrote has already passed `rules.ts` and the
+safety critic. (`plan_runs` also lets a user insert their own accepted row; a
+block written that way reaches only that user's own templates, which they can
+already build by hand.) This step calls no model and makes no judgement; it is
+a copy.
 
 ## 7. Out of scope
 
