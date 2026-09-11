@@ -143,6 +143,16 @@ joints are absent.
 _This is the highest-unknown part of the product._ It is scheduled early
 specifically so that if it does not work, there is still time to change course.
 
+**Extended (rework PR 8a, 2026-09-12).** Coaching is not only plan generation:
+the coach answers a **training question** in the one box on `/coach`, alongside
+the diet and supplement routes described at §5.7. Which of the three a question
+gets is a route the model names, and the guard that checks the answer is the one
+belonging to that route — a mitigation rather than a control, and a wrong route
+is a worse answer rather than an unsafe one. Contract:
+[`specs/coach-chat.md`](specs/coach-chat.md). Threat model:
+[ADR 0015](adr/0015-coach-chat.md), including
+[§6](adr/0015-coach-chat.md#amendment-2026-09-12--6-one-box-three-answers).
+
 ### 5.4 Voice — **Specified** (phase 3)
 
 Three coach personas at launch: the Rival, the Analyst, and one of the Sergeant
@@ -303,10 +313,15 @@ row. `specs/diet.md` §4b.
 
 **Changed (rework PR 8a, 2026-09-12).** The three question boxes on Coach — the
 chat, the diet question and the supplement lookup — are **one box**, which routes
-a question to one of those three answers. Every guarantee above is unchanged:
-the supplement answer is still a row chosen from an allowlist, the diet answer
-still may contain no numeral, and the calorie target is still computed and
-rendered by code. What changed is that the user no longer has to classify their
+a question to one of those three answers. The guarantees above hold, with **one
+change of kind recorded rather than glossed**: the supplement answer is still a
+row chosen from an allowlist, and the only thing anything READS from the model on
+that route is still the slug — but the merged schema does carry a `reply` field
+the other routes need, discarded unread here. "It has no text field" is now "the
+text field is not read", which is procedural where it was structural
+([ADR 0023](adr/0023-evidence-rows.md), 2026-09-12). The diet answer still may
+contain no numeral, and the calorie target is still computed and rendered by
+code. What changed for the user is that they no longer have to classify their
 own question to be answered. The routing is a model's judgement and is recorded
 as a mitigation rather than a control —
 [ADR 0015 §6](adr/0015-coach-chat.md#amendment-2026-09-12--6-one-box-three-answers).

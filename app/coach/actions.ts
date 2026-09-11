@@ -30,6 +30,27 @@ const ADHERENCE_WINDOW_DAYS = 28;
 const RECENT_NOTES = 5;
 
 /**
+ * What every return that is NOT a fresh supplement answer carries.
+ *
+ * INVARIANT: `row` is set ONLY from an `askCoach` answer, and no return in this
+ *            file spreads `previous` — FOUND IN REVIEW, and it was the sharpest
+ *            finding on this PR.
+ *
+ * WHY, in two parts. `previous` is CLIENT-SUPPLIED: the same reasoning that
+ * makes the transcript untrusted (it is held by the browser because this stage
+ * stores nothing) makes every other field of it untrusted too. A crafted POST
+ * carrying a `row` of its own would have been handed straight back and rendered
+ * by `EvidenceBody` — the component `/evidence` uses — as a curated, grade-A
+ * health claim with a working DOI. Nothing in the old `askAboutSupplement` could
+ * do that, because it never read its previous state at all.
+ *
+ * And even honestly: the surface renders the row against the NEWEST turn, so a
+ * row carried forward past a failure would appear under the user's question
+ * rather than under an answer to it.
+ */
+const ANSWERLESS = { row: null, supplementMiss: false } as const;
+
+/**
  * One turn of the coach box — ADR 0015 §6, docs/specs/coach-chat.md.
  *
  * Replaces `sendChatMessage`, `askDietAdvisor` and `askAboutSupplement`. One
@@ -130,16 +151,16 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
    * for a sentence on every change, and a user comparing three goals paid three
    * times.
    */
-  if (message === '') return { ...previous, turns, result, goal, error: null };
+  if (message === '') return { turns, result, goal, ...ANSWERLESS, error: null };
 
   if (message.length > MAX_CHAT_MESSAGE_CHARS) {
     // Rejected rather than silently truncated: the user should know the coach
     // did not read the second half of what they wrote.
     return {
-      ...previous,
       turns,
       result,
       goal,
+      ...ANSWERLESS,
       error: `That is longer than the ${MAX_CHAT_MESSAGE_CHARS} characters the coach reads at once.`,
     };
   }
@@ -189,6 +210,10 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       result,
       goal,
       row: answer.row,
+      // The route is known HERE and nowhere else. The surface renders the
+      // `/evidence` link from this rather than by recognising the constant's
+      // text, which a user could type themselves — see `coach-state.ts`.
+      supplementMiss: answer.route === 'supplement' && answer.row === null,
       error: null,
     };
   } catch (cause) {
@@ -212,7 +237,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * them first: the target renders whether or not a model could be reached.
      */
     if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
-      return { ...previous, turns: trim(withUser), result, goal, error: cause.message };
+      return { turns: trim(withUser), result, goal, ...ANSWERLESS, error: cause.message };
     }
 
     /*
@@ -231,10 +256,10 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
     );
     return {
-      ...previous,
       turns: trim(withUser),
       result,
       goal,
+      ...ANSWERLESS,
       error: 'The coach could not answer that one. The figures above are still yours.',
     };
   }
@@ -296,7 +321,7 @@ export async function deliverForPersona(
       error: null,
     };
   } catch (cause) {
-    // The same allowlist `sendChatMessage` uses, and for the same reason —
+    // The same allowlist `askTheCoach` uses, and for the same reason —
     // this one was returning `cause.message` verbatim, which reaches the
     // browser as a raw Postgres error, or as the first 500 characters of an
     // upstream provider response body. FOUND IN REVIEW, 2026-09-07.
@@ -304,7 +329,7 @@ export async function deliverForPersona(
       return { ...EMPTY_DELIVERY, personaSlug: slug, error: cause.message };
     }
 
-    // Name and bounded message only — see `sendChatMessage` for what the object
+    // Name and bounded message only — see `askTheCoach` for what the object
     // carries. This was the third site with the same leak.
     console.error(
       'persona delivery failed',
@@ -355,12 +380,12 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
     return { ok: true, audio: spoken.audio, contentType: spoken.contentType };
   } catch (cause) {
     // Refusals the card can explain are named; everything else is generic,
-    // for the reason `sendChatMessage` gives — src/speech/refusal.ts.
+    // for the reason `askTheCoach` gives — src/speech/refusal.ts.
     const reason = refusalFor(cause);
 
     if (reason === 'failed') {
       // Name and bounded message only — `LlmCallFailedError` carries every
-      // ledger row, and every row carries the user's id. See `sendChatMessage`.
+      // ledger row, and every row carries the user's id. See `askTheCoach`.
       console.error(
         'coach voice failed',
         cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'

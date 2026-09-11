@@ -26,7 +26,7 @@
  */
 import type { ChatTurn } from '@/src/chat/schema';
 import type { EvidenceRow } from '@/src/db/evidence';
-import type { EnergyResult } from '@/src/diet/energy';
+import type { DietGoal, EnergyResult } from '@/src/diet/energy';
 
 export interface CoachState {
   /** The visible conversation, oldest first. Bounded by MAX_TRANSCRIPT_TURNS. */
@@ -37,8 +37,14 @@ export interface CoachState {
    * because it costs no model call.
    */
   result: EnergyResult | null;
-  /** Echoed back so the select keeps its value across a round trip. */
-  goal: string;
+  /**
+   * Echoed back so the select keeps its value across a round trip.
+   *
+   * `DietGoal`, derived from `DIET_GOALS`, rather than `string` — CLAUDE.md
+   * § Conventions. The action narrows it with `z.enum` before it gets here, so
+   * typing it wider would only hide that the narrowing happened.
+   */
+  goal: DietGoal;
   /**
    * The row a `supplement` answer resolved to, for the newest turn only.
    *
@@ -48,6 +54,18 @@ export interface CoachState {
    *            accident of the type.
    */
   row: EvidenceRow | null;
+  /**
+   * The newest answer was a supplement question no row covered.
+   *
+   * WHY a flag rather than the surface comparing the turn's text against
+   * `NO_SUPPLEMENT_MATCH_REPLY`: that comparison was the first shape, and it was
+   * wrong twice over. A user who typed that sentence verbatim would have got the
+   * `/evidence` link rendered under their OWN turn, and importing the constant
+   * dragged `src/chat/reply.ts`'s whole graph — the system prompt, the guards,
+   * `src/llm/safety.ts` — into the client bundle. The server knows the answer's
+   * route; it says so here.
+   */
+  supplementMiss: boolean;
   error: string | null;
 }
 
@@ -56,5 +74,6 @@ export const EMPTY_COACH: CoachState = {
   result: null,
   goal: 'maintain',
   row: null,
+  supplementMiss: false,
   error: null,
 };

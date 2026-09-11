@@ -3,7 +3,7 @@
  *
  * `docs/PLAN.md` phase 6: _"no prompt, persona, or user framing moves the
  * calorie floor. Every attempt blocked **and logged**."_ The blocked half is
- * `src/diet/advice.test.ts`, against a scripted model. This half cannot be
+ * `src/chat/routing.test.ts`, against a scripted model. This half cannot be
  * tested there at all: **the unit suite mocks the gateway, so it never inserts a
  * row and structurally cannot see one** — `.claude/skills/add-pipeline-stage/SKILL.md`
  * says so in as many words, and it is why the `chat` stage's missing constraint

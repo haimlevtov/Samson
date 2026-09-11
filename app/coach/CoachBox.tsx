@@ -2,13 +2,19 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
-import { NO_SUPPLEMENT_MATCH_REPLY } from '@/src/chat/reply';
+import { DIET_GOALS, type DietGoal } from '@/src/diet/energy';
 import { EvidenceBody } from '@/src/ui/EvidenceCard';
 import { askTheCoach } from './actions';
 import { EMPTY_COACH, type CoachState } from './coach-state';
 
-/** What each goal means, in the user's words rather than the schema's. */
-const GOAL_BLURB: Record<string, string> = {
+/**
+ * What each goal means, in the user's words rather than the schema's.
+ *
+ * `Record<DietGoal, string>`, so a goal added to `DIET_GOALS` fails to compile
+ * here rather than rendering an empty option. It was `Record<string, string>`,
+ * which made this a second, unguarded copy of the goal set.
+ */
+const GOAL_BLURB: Record<DietGoal, string> = {
   cut: 'Lose weight',
   maintain: 'Maintenance',
   gain: 'Gain weight',
@@ -21,8 +27,15 @@ const GOAL_BLURB: Record<string, string> = {
  * the order decides what a malformed state falls back to. `DIET_GOALS` is
  * `['cut', 'maintain', 'gain']` for the engine's own reasons; here the fail case
  * has to be the same one the engine picks, and that is maintain.
+ *
+ * Derived from `DIET_GOALS` rather than listed again: reordering is the point,
+ * but MEMBERSHIP is not this file's to decide, and a hand-written list would
+ * silently drop a fourth goal instead of showing it.
  */
-const GOAL_ORDER = ['maintain', 'cut', 'gain'] as const;
+const GOAL_ORDER: readonly DietGoal[] = [
+  'maintain',
+  ...DIET_GOALS.filter((goal) => goal !== 'maintain'),
+];
 
 /** What each refusal says, in the app's words rather than a model's. */
 function Refusal({ state }: { state: CoachState }) {
@@ -91,8 +104,10 @@ function Refusal({ state }: { state: CoachState }) {
  * WHY the goal, the figures and the box are ONE component: the box needs the
  * selected goal to answer a diet question, and lifting that into a shared parent
  * would be the same state in a less obvious place. One form carries all of it,
- * which is also why a goal change costs no model call — the action recomputes
- * and returns before it would reach one.
+ * which is also why changing the goal with the message box EMPTY costs no model
+ * call — the action recomputes and returns before it would reach one. With text
+ * typed, either button spends a call, because both submit the one form and the
+ * action cannot tell which was pressed.
  *
  * INVARIANT: every figure below is rendered from `computeEnergy`'s own result —
  *            CLAUDE.md #6. The model is not given them and may not write a digit
@@ -314,7 +329,14 @@ export function CoachBox() {
                   </div>
                 ) : null}
 
-                {turn.text === NO_SUPPLEMENT_MATCH_REPLY ? (
+                {/*
+                 * From the server's flag, not by recognising the constant's
+                 * text: a user who typed that sentence would otherwise get the
+                 * link under their own turn, and importing the constant pulls
+                 * the whole stage — prompts, guards, safety — into the client
+                 * bundle. See `coach-state.ts`.
+                 */}
+                {state.supplementMiss && i === state.turns.length - 1 ? (
                   <p className="muted small">
                     <a href="/evidence">the whole table is here</a>.
                   </p>

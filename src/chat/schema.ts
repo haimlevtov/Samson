@@ -10,7 +10,21 @@
 import { z } from 'zod';
 
 import { MAX_CHAT_MESSAGE_CHARS } from '../llm/config';
-import { NO_MATCH } from '../diet/schema';
+
+/**
+ * "No row answers this" — the member every non-supplement route carries.
+ *
+ * Moved here from `src/diet/schema.ts` with the lookup it belongs to (ADR 0015
+ * §6). It is a sentinel rather than a null field because the enum is the whole
+ * control: a nullable slug would be a second way for the model to say nothing,
+ * and this way "none of them" is a value the allowlist admits rather than an
+ * absence the code has to interpret.
+ *
+ * AI-NOTE: a migration adding an evidence row whose slug is literally this
+ *          string would shadow it — `src/chat/reply.ts` handles the sentinel
+ *          before the lookup for that reason, and `routing.test.ts` pins it.
+ */
+export const NO_MATCH = '__none__';
 
 /**
  * Which of the three answers the box is giving — ADR 0015 §6.

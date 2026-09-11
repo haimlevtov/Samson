@@ -75,10 +75,21 @@ needs Postgres.
 A `z.strictObject`. Derive the TS type with `z.infer`; never hand-write a
 parallel interface.
 
-Field order can matter. In the chat stage `on_topic` is declared before `reply`
-so a model generating in order commits to the classification before writing the
-answer. If ordering carries meaning like that, say so in a comment — it reads as
-cosmetic otherwise and will be "tidied".
+Field order can matter. In the chat stage `route` is declared before `reply` so
+a model generating in order commits to the classification before writing the
+answer. If ordering carries meaning like that, say so in a comment **and assert
+it** — `src/chat/prompts.test.ts` checks `Object.keys(schema.shape)[0]`, because
+a comment alone reads as cosmetic and will be "tidied".
+
+_It was `on_topic` until rework PR 8a, which merged three stages into one and
+replaced that boolean with a four-member `route` enum — ADR 0015 §6. The
+principle did not change; the field did._
+
+**A schema can be a function of the call.** `coachReplySchema(slugs)` builds its
+`supplement_slug` field as a `z.enum` over the rows that particular question
+will be answered against, so an invented slug fails the gateway's own validation
+rather than reaching a lookup. If your stage picks from a list, the list belongs
+in the schema rather than in a check afterwards — ADR 0023.
 
 ### 4. The prompt — `src/<stage>/prompts.ts`
 

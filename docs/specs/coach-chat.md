@@ -70,7 +70,7 @@ because the transcript is re-sent with every message — so without it, a user w
 has wandered somewhere unhelpful pays for that history on every subsequent turn
 and cannot get out of it except by leaving the page.
 
-**Supplements** stays in the page header. It is the only route to `/evidence` —
+**Supplements** stays in the page header. It is the only NAVIGATIONAL route to `/evidence` —
 [ADR 0023](../adr/0023-evidence-rows.md) — and it is on Coach because a
 supplement question is a coaching question that this coach cannot answer well.
 
@@ -100,16 +100,19 @@ cuff about creatine.
 | `MAX_CHAT_ATTEMPTS`      | 2                                                            | Matches the persona stage: a model that invents a number twice will not stop on the third ask |
 | Models                   | `anthropic/claude-haiku-4.5`, then `google/gemini-2.5-flash` | Conversational and cheap. This is the highest-frequency call in the app                       |
 
-**The ceiling is unchanged, and it has to be the largest of the three.** 400 is
-already above `DIET_MAX_TOKENS` (300) and `SUPPLEMENT_MAX_TOKENS` (60), so the
-box answers a diet question at least as fully as the panel it replaces did. The
-same applies to the input cap: `MAX_CHAT_MESSAGE_CHARS` (800) is above
-`MAX_DIET_QUESTION_CHARS` (400), so no question that fit before is rejected now.
+**The ceiling is unchanged, and it had to be the largest of the three.** It was
+already above the diet stage's 300 and the supplement lookup's 60, so the box
+answers a diet question at least as fully as the panel it replaces did; the same
+holds for the input cap, which was 800 against the diet question's 400, so no
+question that fit before is rejected now. **Those three constants are deleted**
+rather than left unreferenced — a ceiling nothing reads is a ceiling nobody is
+held to, and the next editor would have had to work out which one the box
+actually runs under.
 
 ### The schema
 
-**Built per call from the rows the question is answered against**, the way
-`supplementReplySchema` already is — `docs/specs/diet.md` §4b:
+**Built per call from the rows the question is answered against**, the way the
+supplement lookup's own schema was — `docs/specs/diet.md` §4b:
 
 ```ts
 coachReplySchema(slugs) = z.strictObject({
@@ -208,7 +211,7 @@ ADR 0024's allowed set for this stage is empty, and `\p{N}` is the whole check.
 The figures the user reads are the ones the page computed and rendered; the
 model explains a number it was never shown.
 
-On a second failure the user gets `UNEXPLAINED_REPLY` and the target still
+On a second failure the user gets `UNEXPLAINED_DIET_REPLY` and the target still
 renders, which is the point of computing it first.
 
 _The panel's two fields (`summary` and `caveat`) become one `reply`._ They were
@@ -267,10 +270,21 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
    numeric leaves** plus every numeral in the user's own turns. What this does
    and does not guarantee is in ADR 0015 §4, and it is weaker than it sounds: it
    enforces that every numeral appeared in what the model was fed, not that a
-   figure is true. `diet` uses the same function against an **empty** allowed
-   set, which is ADR 0024's `\p{N}` check expressed as a membership test with no
-   members. `supplement` reads no prose, so it has no number guard — it has the
-   allowlist instead.
+   figure is true. `diet` does **not** use that function: it uses its own
+   `\p{N}` predicate, and the difference is load-bearing rather than stylistic —
+   see below. `supplement` reads no prose, so it has no number guard at all; it
+   has the allowlist instead.
+
+> **The diet route's check is `/\p{N}/u`, not `findUnknownNumbers(new Set(), …)`.**
+> Those look equivalent — "an allowed set with no members" — and they are not.
+> `findUnknownNumbers` matches `\d`, which is **ASCII only, even under the `u`
+> flag**, so `١٨٠٠`, `१८००`, `１８００` and `¹⁸⁰⁰` all passed it and the model's
+> figure rendered directly beneath the engine's. Asking in Arabic, Persian,
+> Hindi or Bengali was enough; no jailbreak needed. Widening that function is
+> not the fix either: `Number('١٨٠٠')` is `NaN` and the guard skips non-finite
+> values, so a widened match would be silently discarded. The ASCII assumption
+> there is load-bearing for the training route, where numerals are compared
+> against a set of numbers. `src/chat/routing.test.ts` holds the two apart.
 
 `chatMessages` returns `{ messages, allowed }` from **one pass**, so the
 quotable set cannot drift from what was sent. Two exclusions matter:
@@ -315,7 +329,7 @@ each asserts a guard rather than a classification:
 - every route returns its own shape: prose for `training`, prose with no numeral
   for `diet`, a **row** for `supplement`, a constant for `off_topic`
 - a `diet` reply carrying any numeral is rejected, retried, and falls to
-  `UNEXPLAINED_REPLY` — the empty allowed set holds on this route
+  `UNEXPLAINED_DIET_REPLY` — the empty allowed set holds on this route
 - a `supplement_slug` outside the enum is a **schema failure**, retried by the
   gateway, never a lookup by a model-supplied string — the allowlist is the
   schema, so there is no membership test to forget

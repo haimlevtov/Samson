@@ -77,8 +77,8 @@ npm run dev         # http://localhost:3000
 ```
 
 Add an [OpenRouter](https://openrouter.ai/keys) key too if you want real model
-calls. Without one the app still runs: the coach's delivery, the chat, the diet
-advisor and History's free-text log say a key is missing, and the coach voices
+calls. Without one the app still runs: the coach's delivery, the one question
+box and History's free-text log say a key is missing, and the coach voices
 show their lines as text. `npm run verify` needs none.
 
 New migrations go to the hosted project with `npm run db:push`, after

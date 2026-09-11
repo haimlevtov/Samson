@@ -38,7 +38,7 @@ import type { TemplateFormState } from './form-state';
  * `creating template items: …` — or a malformed items payload's JSON error, and
  * passing them on handed the browser table and column names. PR 7 made one of
  * them reachable from /coach as well. The name and a bounded message go to the
- * server log instead, as the coach's actions do; see `sendChatMessage` for why
+ * server log instead, as the coach's actions do; see `askTheCoach` for why
  * never the whole object.
  */
 function explain(cause: unknown, fallback: string): string {

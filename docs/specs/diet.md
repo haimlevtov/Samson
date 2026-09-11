@@ -200,7 +200,20 @@ into looking sane.
 
 ## 4. What the model is given, and what comes back — **built**
 
-The payload has **no numbers in it**. `dietFacts()` in `src/diet/energy.ts` is
+> **Amended 2026-09-12, rework PR 8a.** This section described a stage of its
+> own. The diet answer is a ROUTE of the coach box now, and four statements
+> below are no longer true of the payload: it also carries the training facts,
+> the supplement candidates and up to eight fenced transcript turns, because all
+> three are prepared before the route is known. What did NOT change is the part
+> the guarantees rest on — the target is computed and rendered by code and is
+> never in the payload, no biometric crosses at all, and the allowed set on this
+> route is still empty. Each false statement is marked in place. The full
+> accounting is in [ADR 0024](../adr/0024-diet-advisor.md)'s 2026-09-12
+> amendment.
+
+The payload has **no numbers in it**. _(No longer true of the whole payload —
+`factsBlock` carries training figures. Still true of the diet block itself, and
+no biometric crosses on any route.)_ `dietFacts()` in `src/diet/energy.ts` is
 the allowlist that builds it, and it lives there rather than in the prompt layer
 so that widening it is a change to the file where the invariant is written down:
 
@@ -213,7 +226,9 @@ so that widening it is a change to the file where the invariant is written down:
 
 The optional question is a separate fenced block, not a field. It is **the
 stage's only untrusted input**, and it is the reason there is fencing here at
-all — everything else in the payload is the app's own.
+all — everything else in the payload is the app's own. _(No longer the only one:
+since PR 8a the replayed transcript and the supplement claim text are untrusted
+inputs on this route too, and both are fenced.)_
 
 **Four fields, and none of them can hold a digit.** `as_of` used to be a fifth
 and was removed in review: nothing read it, and a date correlated with a
@@ -232,10 +247,13 @@ is ASCII-only even under the `u` flag, so `١٨٠٠` and `１８００` passed i
 hole review found, recorded in ADR 0024 §2 with why the obvious fix does not
 work.
 
-**There is no transcript.** The chat fences replayed turns because its history is
-client-held and therefore untrusted (ADR 0015 §2); this stage answers one
-question about one figure and keeps nothing, so that channel does not exist to
-be attacked.
+**There is no transcript.** _(FALSE since PR 8a, and it is the most consequential
+line in this section.)_ It read: the chat fences replayed turns because its
+history is client-held and therefore untrusted (ADR 0015 §2), while this stage
+answered one question about one figure and kept nothing, so that channel did not
+exist to be attacked. A diet answer is now produced inside that transcript, so
+the channel exists and ADR 0015 §2 is what guards it — every turn fenced, the
+coach’s own included, and no `assistant` role in the payload.
 
 Code renders every figure the user sees: the target, the floor, the resting
 burn, the maintenance figure and the protein target. The model's prose sits
@@ -264,7 +282,7 @@ not change and are the reason this is an amendment rather than a redesign:
   rather than only on a diet one, because a route is not known until the answer
   comes back and `computeEnergy` is pure arithmetic — ADR 0015 §6.
 - **The allowed set is still empty**, so a diet answer containing any numeral is
-  still rejected, retried, and replaced by `UNEXPLAINED_REPLY`.
+  still rejected, retried, and replaced by `UNEXPLAINED_DIET_REPLY`.
 
 What did change: the answer is **one field rather than `summary` and `caveat`**.
 Those were two because the panel rendered a sentence and a muted line under it;
@@ -282,8 +300,10 @@ the contract for what a row means; this is what happens when one is asked for.
 actually presented — `strictObject` so nothing rides along beside the slug, and
 the enum so the slug itself is an allowlist. So:
 
-- there is **no text field**, and therefore no generated sentence to guard, to
-  discard, or to render by accident;
+- there is **no text field that is read** — it was no text field at all until
+  PR 8a, and the merged schema carries a `reply` the other routes need, which
+  this route discards unread. Procedural where it was structural; §4c and
+  [ADR 0023](../adr/0023-evidence-rows.md)’s 2026-09-12 amendment say so;
 - a slug the model invents fails the gateway's own validation and is retried,
   rather than reaching `.eq('slug', modelString)` and returning a silent null —
   `docs/plans/phase-3.md`'s rule for the planner, applied here;

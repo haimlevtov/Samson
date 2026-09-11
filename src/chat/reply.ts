@@ -20,11 +20,10 @@ import { findUnknownNumbers } from '../persona/guard';
 import type { LlmCaller } from '../planner/types';
 import type { EvidenceRow } from '../db/evidence';
 import type { DietFacts } from '../diet/energy';
-import { numeralCorrection } from '../diet/prompts';
-import { NO_MATCH } from '../diet/schema';
+
 import type { CoachFacts } from './facts';
-import { CHAT_SYSTEM, chatMessages, unknownNumberCorrection } from './prompts';
-import { coachReplySchema, type CoachRoute, type ChatTurn } from './schema';
+import { CHAT_SYSTEM, chatMessages, numeralCorrection, unknownNumberCorrection } from './prompts';
+import { NO_MATCH, coachReplySchema, type CoachRoute, type ChatTurn } from './schema';
 
 /**
  * WHY only two: the same reasoning as `MAX_DELIVERY_ATTEMPTS`. A model that

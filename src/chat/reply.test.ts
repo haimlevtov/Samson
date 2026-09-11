@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import type { CallOptions, LlmResult } from '../llm/types';
 import type { EvidenceRow } from '../db/evidence';
 import type { DietFacts } from '../diet/energy';
-import { NO_MATCH } from '../diet/schema';
+import { NO_MATCH } from './schema';
 import type { CoachFacts } from './facts';
 import { MAX_CHAT_ATTEMPTS, OFF_TOPIC_REPLIES, UNVERIFIED_NUMBER_REPLY, askCoach } from './reply';
 import type { CoachReply, ChatTurn } from './schema';
@@ -324,7 +324,7 @@ describe('adversarial — numbers the metrics engine never produced', () => {
   it('does not let the correction itself widen what may be quoted', async () => {
     /*
      * The correction names the rejected figure, so it now appears in the
-     * messages array. If `allowedNumbers` were recomputed after appending it,
+     * messages array. If `allowed` were recomputed after appending it,
      * the second attempt could quote the very number the first was rejected
      * for — the guard would authorise whatever it just refused.
      */
@@ -386,7 +386,7 @@ describe('ordinary coaching questions are not swept up', () => {
 describe('what this stage does NOT stop, recorded rather than implied', () => {
   it('passes an off-topic answer through when the model misclassifies it', async () => {
     /*
-     * THE CENTRAL LIMITATION — ADR 0015 §3. `on_topic` is the model judging
+     * THE CENTRAL LIMITATION — ADR 0015 §3. `route` is the model judging
      * itself. A model that has been talked out of its role reports true and
      * answers anyway, and this stage faithfully returns it.
      *

@@ -185,3 +185,52 @@ model picked answers the question asked. A wrong answer here is a wrong **row**,
 rendered correctly — which is a smaller failure than an invented claim, and is
 not nothing. It is recorded as a passing test in `src/diet/supplements.test.ts`
 under "what retrieval does NOT stop".
+
+---
+
+## Amendment, 2026-09-12 — the lookup moved into the one box
+
+**Status:** accepted, rework plan PR 8a —
+[ADR 0015 §6](0015-coach-chat.md#amendment-2026-09-12--6-one-box-three-answers).
+
+`lookUpSupplement` and `src/diet/supplements.ts` are gone. A supplement question
+is now one route of the coach box. The 2026-09-09 amendment above describes a
+question box on `/coach` that no longer exists; this is what replaced it.
+
+**What is unchanged, and it is the whole argument of this ADR:**
+
+- **The allowlist is still the schema.** `coachReplySchema(slugs)` builds
+  `supplement_slug` as a `z.enum` over the rows the answer will be resolved
+  against, so an invented slug still fails the gateway's own validation and is
+  retried rather than reaching a lookup and returning a silent null. A
+  membership test after the call would have been the weaker shape and was
+  deliberately not taken.
+- **The row handed back is an object from that same array**, never refetched by
+  a model-supplied string, and `NO_MATCH` is handled before the lookup so a
+  migration adding a row with that slug cannot shadow the sentinel.
+- **Code renders the row**, through the same `EvidenceBody` the table uses, so
+  the grade, claim, dose, caution and citation are the table's own words. There
+  is no paraphrase to soften a D-graded row.
+
+**What changed, and it is a real weakening of one guarantee's KIND:**
+
+> "There is **no text field in the schema**, so there is no generated sentence
+> to guard, to discard, or to render by accident."
+
+The merged schema has a `reply` field, because the other three routes need one.
+On the supplement route it is **discarded unread** — `askCoach` returns
+`text: null` and the surface has nothing to render it into. So the guarantee
+went from **structural** (the field does not exist) to **procedural** (the field
+exists and one branch declines to read it), which is the same shape as ADR 0015
+§3's off-topic discard and is weaker than what this ADR originally bought.
+
+`src/chat/routing.test.ts` asserts it: a model that writes a dose and a
+recommendation in `reply` on that route has neither reach the caller.
+
+**The does-not-guarantee item is re-homed.** The 2026-09-09 amendment recorded
+"nothing checks that the row actually answers the question" as a passing test in
+`src/diet/supplements.test.ts` under "what retrieval does NOT stop". That file
+was deleted with the stage. The limitation is unchanged and is restated here:
+**the model's choice of row is not verified by anything.** A near miss returned
+as a hit renders a real row, correctly, in answer to a question it does not
+answer — a smaller failure than an invented claim, and not nothing.

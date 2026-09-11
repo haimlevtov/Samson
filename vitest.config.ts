@@ -24,11 +24,18 @@ export default defineConfig({
     //          is not meaningful and would force the number back down.
     //
     //          Note the inward consequence as well: EVERYTHING added under
-    //          src/diet/ now inherits 95/95/90/95. Phase 6 PR 4 puts schema.ts,
-    //          prompts.ts and advice.ts there — a module of prompt constants and
-    //          a retry loop with a correction path are exactly the shapes that
-    //          drag branch coverage under a threshold, so budget for it rather
-    //          than discovering it in CI.
+    //          src/diet/ inherits 95/95/90/95, so budget for it rather than
+    //          discovering it in CI.
+    //
+    //          That cut both ways in rework PR 8a. The prompt, schema and retry
+    //          loop phase 6 put here moved into src/chat/ with the stage they
+    //          served, and DELETING well-tested code dropped the function figure
+    //          below the threshold — the remaining files were fine, there were
+    //          simply fewer covered functions in the denominator's numerator.
+    //          The fix was to delete what had no caller rather than to write
+    //          tests for dead code. src/diet/ is the deterministic engine again:
+    //          biometrics.ts and energy.ts, which is what CLAUDE.md #6 put the
+    //          threshold here for.
     coverage: {
       provider: 'v8',
       include: ['src/metrics/**/*.ts', 'src/diet/**/*.ts'],
