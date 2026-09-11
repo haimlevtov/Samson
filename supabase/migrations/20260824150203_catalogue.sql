@@ -21,7 +21,7 @@
 --          amendment.
 --
 -- FOUND IN REVIEW of PR #43, 2026-09-11: the note above used to say "copy both
--- policies". Amended in place, as 20260908090400 did for its own: a comment
+-- policies". Amended in place, and 20260908090400 set the precedent: a comment
 -- outside a function body is not stored in any schema object, so no database
 -- changes.
 

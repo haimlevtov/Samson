@@ -21,6 +21,10 @@
 -- covers it as before. CREATE OR REPLACE resets `security definer` and the
 -- `search_path` setting unless they are restated, so both are. It keeps grants;
 -- they are re-asserted anyway, as 20260908090200 did.
+--
+-- Like 20260911090000 and 20260911100000, this had not reached hosted when it
+-- was written or when review revised its stored comment; it goes by
+-- `supabase db push` after the PR merges.
 
 create or replace function public.evaluate_achievements(p_user_id uuid)
 returns setof uuid

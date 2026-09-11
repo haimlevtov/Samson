@@ -438,9 +438,11 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
    * asked for 'MEMBER', which also counts a membership that passes on no
    * privileges. Supabase makes `authenticated` NOINHERIT, so a restrictive
    * policy for a role granted to it would have read as a check Postgres never
-   * runs. None of these weakenings changes today's answer — every real table
-   * has one write policy — which is why the verdict also runs over synthetic
-   * policies below.
+   * runs. None of the three changes today's answer. The first two cannot,
+   * because every table this judges has one write policy, which is why the
+   * verdict also runs over synthetic policies below. The third cannot because
+   * no policy is granted to a role `authenticated` belongs to, and it has no
+   * synthetic case: the cases create nothing, so there is no such role.
    *
    * It is a proxy — it proves the author wrote a clause about that row, not that
    * the clause is correct — so the behavioural halves live in
@@ -571,9 +573,9 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
   const readOnly = policy({ cmd: 'SELECT', with_check: null, qual: BARE });
 
   /*
-   * The verdict itself, so it cannot quietly weaken. The second and fourth
-   * cases are the two versions review rejected: each reads checked under the
-   * weaker rule.
+   * The verdict itself, so the first two rules review rejected cannot quietly
+   * return. The second and fourth cases are those two: each reads checked
+   * under the weaker rule.
    */
   it.each<[string, SyntheticPolicy[], { writable: boolean; checked: boolean }]>([
     ['one permissive policy with the clause', [policy()], { writable: true, checked: true }],

@@ -750,11 +750,12 @@ describe('the boundary of each remaining tier', () => {
     expect(await awardFor(user, '2026-10-10')).not.toContain('five-patterns');
 
     /*
-     * The set on the STRANGER's exercise has to go before afterAll: its
-     * `on delete restrict` would block the stranger's delete if that ran before
-     * this user's in the parallel batch. The set on her own exercise would
-     * cascade away with her; it is removed alongside so the test leaves
-     * nothing either way.
+     * Both custom-exercise sets are removed here rather than left to afterAll.
+     * That deletes users in creation order, so she goes before the stranger and
+     * her set on his exercise would cascade away before its `on delete
+     * restrict` could block him — but this test should not lean on the order
+     * of a hook written for the whole file, and removing the rows leaves
+     * nothing behind either way.
      */
     const pointing: string[] = [];
     const logOn = async (workoutId: string, exerciseId: string): Promise<void> => {
