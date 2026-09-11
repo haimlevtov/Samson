@@ -3,14 +3,16 @@
  *
  * The evaluator is unit-tested in `src/gamification/unlocks.test.ts` against
  * literals. What needs a database is the shape of the ROWS: `level` agrees with
- * `parent_id`, no cycles, a chain never changes tree, and every criterion names
- * an exercise the catalogue actually has.
+ * `parent_id`, no cycles, a chain never changes tree — and every criterion names
+ * a lift the app will actually let somebody log.
  *
- * That last one is not hypothetical — the catalogue has no `push-up`, no
- * `pistol-squat` and no `hollow-hold`, all obvious guesses, all wrong, and a
- * criterion naming one is a rung nobody can ever open.
+ * That last one used to read "an exercise the catalogue actually has", and ADR
+ * 0020's 2026-09-11 amendment is why it changed: the legs tree named slugs that
+ * all existed, and still had a root a bodyweight user could not log and a top
+ * rung nobody could open. So the cases at the end ask `availableExercises`, the
+ * picker itself, for real users with real equipment.
  *
- * The skill also asks for "every `exercise_id` resolves". That property is now
+ * The skill used to ask for "every `exercise_id` resolves". That property is
  * inverted, and the two cases below say why: a migration cannot depend on the
  * exercise catalogue, because the catalogue is seeded and the seed runs after
  * migrations. CI found it; hosted could not have.
@@ -19,8 +21,17 @@
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
-import { loadProgressionTrees } from '../../src/db/progression';
+import {
+  adminClient,
+  anonClient,
+  createTestUser,
+  deleteTestUser,
+  deleteTestUsers,
+  signInAsArchetype,
+  type TestUser,
+} from './helpers';
+import { loadProgressionTrees, loadUnlockSets } from '../../src/db/progression';
+import { availableExercises } from '../../src/db/exercises';
 import { unlockStates } from '../../src/gamification/unlocks';
 
 let user: TestUser;
@@ -270,5 +281,144 @@ describe('a user cannot author a node', () => {
       .eq('slug', target.slug);
 
     expect(error).not.toBeNull();
+  });
+});
+
+describe('every rung opens with a lift the app will offer', () => {
+  /*
+   * ADR 0020, amended 2026-09-11. A criterion is matched against logged sets,
+   * so one naming a lift the picker does not offer a user is a rung that user
+   * can never open — and it looks exactly like a rung nobody has opened yet. The
+   * legs tree had two: its root's lift was a Smith-machine squat, which the
+   * picker never offers a bodyweight user, and `split-squats` is filed under
+   * stretching, which it hides from everyone. 20260908120000 checked that each
+   * slug EXISTED, and every one did.
+   *
+   * Asked of `availableExercises` itself, for real users with real grants,
+   * rather than re-derived from the category list and the equipment tags: the
+   * question is what the app will offer, and that function is what answers it.
+   */
+  let everything: TestUser;
+  let floorOnly: TestUser;
+
+  const grant = async (who: TestUser, slugs: string[] | 'all'): Promise<void> => {
+    // Through the user's own client, so RLS decides which tags they may link,
+    // rather than a service-role read the `user_id` filter alone would guard.
+    let query = who.client.from('equipment_tags').select('id').is('user_id', null);
+    if (slugs !== 'all') query = query.in('slug', slugs);
+    const { data: tags, error } = await query;
+    if (error || !tags || tags.length === 0) {
+      throw new Error(`reading equipment tags: ${error?.message ?? 'none found'}`);
+    }
+    const granted = await who.client
+      .from('user_equipment')
+      .insert(tags.map((tag) => ({ user_id: who.id, equipment_tag_id: tag.id })));
+    if (granted.error) throw new Error(`granting equipment: ${granted.error.message}`);
+  };
+
+  beforeAll(async () => {
+    // One at a time, not Promise.all: if the second create failed, the
+    // destructuring would never run and the first user would leak.
+    everything = await createTestUser('tree-everything');
+    floorOnly = await createTestUser('tree-floor');
+    await Promise.all([grant(everything, 'all'), grant(floorOnly, ['bodyweight'])]);
+  }, 60_000);
+
+  afterAll(async () => {
+    await deleteTestUsers(everything, floorOnly);
+  });
+
+  /** Every `sets_at` criterion, as the rung it opens and the lift it asks for. */
+  const asks = async (): Promise<{ rung: string; level: number; lift: string }[]> =>
+    (await trees()).flatMap((node) =>
+      'kind' in node.criteria && node.criteria.kind === 'sets_at'
+        ? [{ rung: node.slug, level: node.level, lift: node.criteria.exercise }]
+        : []
+    );
+
+  const offered = async (who: TestUser): Promise<Set<string>> => {
+    const slugs = new Set((await availableExercises(who.client, who.id)).map((e) => e.slug));
+    // PostgREST stops at max_rows (1000, supabase/config.toml) without saying
+    // so, and a truncated list would read as lifts the app does not offer.
+    expect(slugs.size, 'the candidate list hit the row cap').toBeLessThan(1000);
+    return slugs;
+  };
+
+  it('asks only for lifts the app offers somebody', async () => {
+    const all = await offered(everything);
+    expect(all.size, 'is the catalogue seeded?').toBeGreaterThan(0);
+
+    const closed = (await asks())
+      .filter((ask) => !all.has(ask.lift))
+      .map((ask) => `${ask.rung} -> ${ask.lift}`);
+
+    expect(closed, 'a rung no user can ever open').toEqual([]);
+  });
+
+  it('opens the first rung of every tree with bodyweight alone', async () => {
+    const floor = await offered(floorOnly);
+
+    const shut = (await asks())
+      .filter((ask) => ask.level === 1 && !floor.has(ask.lift))
+      .map((ask) => `${ask.rung} -> ${ask.lift}`);
+
+    expect(shut, 'a tree a bodyweight user cannot start climbing').toEqual([]);
+  });
+
+  it('names the rungs a bodyweight-only user cannot open, so a new one fails', async () => {
+    /*
+     * Pinned rather than tolerated. All three sit above the first rung and ask
+     * for gear the catalogue tags `other` — bars to dip on, a band, a weight
+     * belt — so they are content decisions of their own, tracked in
+     * docs/plans/README.md, not bugs of the legs tree's kind. Changing one
+     * changes this list on purpose; a new one fails here.
+     */
+    const floor = await offered(floorOnly);
+
+    const needGear = (await asks())
+      .filter((ask) => !floor.has(ask.lift))
+      .map((ask) => `${ask.rung} -> ${ask.lift}`)
+      .sort();
+
+    expect(needGear).toEqual([
+      'pull-chin -> band-assisted-pull-up',
+      'pull-muscle-up -> weighted-pull-ups',
+      'push-handstand -> parallel-bar-dip',
+    ]);
+  });
+});
+
+describe('the seeded home-gym lifter climbs what his equipment allows', () => {
+  it('opens the legs tree to the lunge, and no further', async () => {
+    /*
+     * ADR 0020's 2026-09-11 amendment changed the programme with the tree.
+     * Home-gym logged `chair-squat`, a machine lift he does not own; he now logs
+     * bodyweight squats at 3 × 21, one over the lunge rung's 3 × 20, because a
+     * later set drops a rep a quarter of the time. This holds the CLIMB: the
+     * shipped reader and evaluator, over the seeded history, as the tree page
+     * would show it. It cannot hold the margin — at 20 some sessions still clear
+     * the rung — so src/seed/archetypes.test.ts holds that, session by session.
+     *
+     * He logs walking lunges at 3 × 12, short of the step-up's 3 × 16, so the
+     * climb stops at the lunge. Stated here so a change to either number is a
+     * decision rather than a drift.
+     *
+     * AI-NOTE: this reads the SEEDED demo user, so it holds on a stack seeded
+     *          since the amendment — CI seeds every run. Against hosted it fails
+     *          until hosted is reseeded, which is the point: the demo would show
+     *          the old climb.
+     */
+    const homeGym = await signInAsArchetype('homegym@samson.test');
+    const [nodes, unlock] = await Promise.all([
+      loadProgressionTrees(homeGym.client),
+      loadUnlockSets(homeGym.client),
+    ]);
+
+    expect(unlock.truncated, 'his history hit the reader cap').toBe(false);
+    const open = unlockStates(nodes, unlock.sets)
+      .filter((state) => state.node.tree === 'legs' && state.unlocked)
+      .map((state) => state.node.slug);
+
+    expect(open.sort()).toEqual(['legs-lunge', 'legs-squat']);
   });
 });

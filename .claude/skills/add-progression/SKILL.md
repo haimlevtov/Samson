@@ -165,26 +165,51 @@ begin
 end $$;
 ```
 
-### Check every slug before you write it
+### Check every slug before you write it — three things, not one
 
 The catalogue has **no** `push-up`, `pistol-squat`, `hollow-hold`,
 `diamond-push-up` or `dragon-flag` — every obvious guess. It has `pushups`,
-`chair-squat`, `plank`, `hanging-pike`, `inverted-row`, `chin-up`, `pullups`,
-`muscle-up`. Query for the slug first; a miss writes a null and says nothing.
+`plank`, `hanging-pike`, `inverted-row`, `chin-up`, `pullups`, `muscle-up`.
+Query for the slug first. A criterion naming a slug the catalogue lacks is a
+rung nobody can open, and `tests/db/progression.test.ts` fails on it.
+
+Existing is not enough. A criterion's lift has to be one the app will let a
+user LOG, or the rung above it can never open:
+
+1. **Read its instructions, all of them, not its name.** `chair-squat` is a
+   Smith-machine squat and `split-squats` is a jumping split filed under
+   stretching; both were rungs of the legs tree, chosen by name — ADR 0020's
+   2026-09-11 amendment. That amendment then misread a third from the first
+   lines of its instructions and had to be corrected, so read to the end.
+2. **Its category must be in `PROGRAMMABLE_CATEGORIES`** (`src/db/exercises.ts`).
+   The picker hides every other category, `stretching` included, from every
+   user.
+3. **Its equipment decides who can open the rung.** The rung above a root must
+   open with `bodyweight` alone. Higher up, gear is allowed, but as a decision:
+   the test below names every rung a bodyweight-only user cannot open.
 
 ## Tests
 
 A `tests/db/` case, because everything worth checking here is a property of the
 rows:
 
-- every node's `exercise_id` resolves — a null one means the slug lookup missed
-  and the insert silently wrote nothing useful
+- every node's `exercise_id` is null — the opposite of what this said first. A
+  migration cannot depend on the seeded catalogue (`20260908120200`), so a
+  node names its lift only through the criterion of the rung above it
+- every criterion names a lift `availableExercises` offers somebody, and the
+  rung above every root opens with bodyweight alone — asked of the app's own
+  picker for real users, so a lift chosen by name fails CI instead of shipping
+  a rung nobody can open
 - `level` equals the parent's `level + 1`, and a root has level 0
 - no cycles: walking `parent_id` from any node terminates
 - `tree` is consistent down a chain — a `push` node's parent is not `pull`
 
-The lookup-missed case is the one that bites: `select` with no match inserts a
-null rather than failing, so a typo'd slug produces a node pointing at nothing.
+The lookup-missed case is the one that bites, and fails silently either way. In
+the loop template above, a missed PARENT lookup inserts the row with a null
+parent — an orphan, which the "exactly one root" test catches. In a
+join-per-level insert like `20260911120000`, a miss inserts nothing at all, so
+count the rows the migration meant to write and raise if they are not all
+there.
 
 ## Related
 
@@ -194,6 +219,8 @@ null rather than failing, so a typo'd slug produces a node pointing at nothing.
   never executed
 - `docs/PLAN.md` phase 5 — where the trees are actually listed
 - `docs/adr/0020-progression-unlock-criteria.md` — the criteria contract
-- `supabase/migrations/20260908120000_progression_trees.sql` — the four shipped
-  trees, and the model to copy
+- `supabase/migrations/20260908120000_progression_trees.sql` — the push, pull
+  and core trees, and the loop to copy. Its legs rows are retired.
+- `supabase/migrations/20260911120000_legs_tree_on_the_floor.sql` — the legs
+  tree as shipped, and why its first version was replaced
 - `supabase/migrations/20260824150203_catalogue.sql` — the table

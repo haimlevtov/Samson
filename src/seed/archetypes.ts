@@ -51,11 +51,11 @@ export interface ProgrammeEntry {
    * simply been re-rolled underneath the fixture.
    *
    * WHY a side stream rather than "make the entry deterministic": a set draws
-   * three times — rep drift, the RPE coin flip, and rest seconds. Suppressing
-   * all three would give every accessory set in twelve weeks the same RPE and
-   * the same rest, which is the "reads as fake on sight" failure `roundToPlate`
-   * exists to avoid. The side stream keeps the variety and spends it out of a
-   * different purse.
+   * up to three times — rep drift (not on the first set), the RPE coin flip,
+   * and rest seconds. Suppressing all three would give every accessory set in
+   * twelve weeks the same RPE and the same rest, which is the "reads as fake on
+   * sight" failure `roundToPlate` exists to avoid. The side stream keeps the
+   * variety and spends it out of a different purse.
    *
    * AI-NOTE: set this on an entry ADDED after a golden baseline exists. An
    *          entry that legitimately belongs in the middle of a programme has
@@ -269,10 +269,24 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
     day: 0,
     appended: true,
   },
+  // The legs tree's root, and the lift that opens its next rung: 3 × 20 in one
+  // session. 21 because a later set drops a rep a quarter of the time. This was
+  // `chair-squat` — a Smith-machine squat tagged `machine`, which this
+  // archetype does not own — until ADR 0020's 2026-09-11 amendment. Same side
+  // stream, same number of draws: a zero load draws nothing, and the count
+  // depends on `sets` alone, which did not change — so no other entry's
+  // numbers move.
+  //
+  // AI-NOTE: three numbers hold each other up. The lunge rung asks 3 × 20
+  //          (supabase/migrations/20260911120000_legs_tree_on_the_floor.sql);
+  //          this clears it every session, which src/seed/archetypes.test.ts
+  //          holds; and his walking lunges below, at 3 × 12, stop short of the
+  //          step-up's 3 × 16 on purpose — the climb tests/db/progression.test.ts
+  //          pins. Change one and check the other two.
   {
-    exerciseSlug: 'chair-squat',
+    exerciseSlug: 'bodyweight-squat',
     sets: 3,
-    reps: 16,
+    reps: 21,
     startingKg: 0,
     incrementKg: 0,
     day: 2,
@@ -794,15 +808,15 @@ export type EquipmentOf = ReadonlyMap<string, string>;
  * The app offers a user only lifts whose catalogue equipment tag they own —
  * `availableExercises` in src/db/exercises.ts, CLAUDE.md #5 — and until this
  * nothing held the programmes to that rule. FOUND IN REVIEW: the home-gym
- * programme carries `chair-squat`, which the catalogue tags `machine`, so that
- * archetype's history logs a lift the app would never let him pick.
+ * programme carried `chair-squat`, which the catalogue tags `machine`, so that
+ * archetype's history logged a lift the app would never let him pick. Fixed by
+ * ADR 0020's 2026-09-11 amendment — the legs tree changed, and the programme
+ * with it — so every archetype's list is empty now.
  *
- * AI-NOTE: the programme is not corrected here, because `chair-squat` is the
- *          root of the legs progression tree and the fix is a content decision
- *          with three candidates — the catalogue tag, the tree root, or the
- *          programme. This function keeps a template from repeating the
- *          mistake, and `src/seed/archetypes.test.ts` pins the list so a NEW
- *          mismatch fails loudly instead of being left out in silence.
+ * AI-NOTE: this function keeps an out-of-grant lift out of a template, and
+ *          `src/seed/archetypes.test.ts` pins every list at empty — the pin is
+ *          what makes a NEW mismatch fail loudly instead of vanishing from a
+ *          template in silence.
  */
 export function outOfGrant(archetype: Archetype, equipmentOf: EquipmentOf): string[] {
   const granted = new Set(archetype.equipment.map((grant) => grant.slug));

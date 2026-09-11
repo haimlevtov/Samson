@@ -1,6 +1,6 @@
 # ADR 0020 — Unlock criteria are structured data, interpreted, never executed
 
-**Status:** accepted, phase 5
+**Status:** accepted, phase 5 — amended 2026-09-11
 **Date:** 2026-09-08
 
 > Written **before** the code it governs, which the three ADRs before it in this
@@ -155,6 +155,87 @@ is named for the question it answers.
 - **`level` stays denormalised** and must agree with `parent_id`, as the skill
   says. `tests/db` asserts it, along with no cycles and no tree changing
   mid-chain.
+
+## Amended 2026-09-11 — a criterion is a promise the app has to be able to keep
+
+A criterion names the lift that opens the rung above it, and the evaluator
+matches it against logged sets. So a criterion naming a lift nobody can log is a
+rung nobody can open — and it looks exactly like a rung nobody has opened yet.
+The tree renders, the rung stays locked, and the lift it asks for never appears
+in the picker.
+
+**Found in review of PR #42.** The home-gym programme carried `chair-squat`,
+which the catalogue tags `machine` and home-gym does not own. Tracing why led to
+the legs tree, where three of the five rungs were lifts the app could not give a
+bodyweight user — two of them chosen by a name that misleads:
+
+| Rung               | Slug                         | What the catalogue entry describes                                       |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
+| Chair Squat (root) | `chair-squat`                | A Smith-machine squat: set the bar, step under it, lift it off the rack  |
+| Split Squat        | `split-squats`               | A jumping split, filed under `stretching`                                |
+| Pistol Squat       | `smith-machine-pistol-squat` | A real pistol squat, under a Smith bar: honestly named, tagged `machine` |
+
+`availableExercises` offers only lifts in `PROGRAMMABLE_CATEGORIES` whose
+equipment tag the user owns. So a user without a machine could never log the
+root's lift, and the tree stopped at its root for every bodyweight user — the
+audience a squat ladder exists for. And `split-squats` is `stretching`, which the
+picker filters out for everyone, so the pistol rung could not open for any user
+at all. Migration `20260908120000` records that every slug "was confirmed to
+exist first". Each one did. Existing was the wrong test; the question is whether
+the app will let a user log it.
+
+**Decision: change the tree, not the tag.** The three candidates, and why two
+were refused:
+
+- **Retag `chair-squat` as `bodyweight`.** Refused: the source is right about a
+  lift that needs a rack, and the tree was wrong about it. A catalogue that lies
+  to fix a tree breaks the equipment filter for everyone who reads it — which is
+  CLAUDE.md #5's whole point.
+- **Change only the programme.** Refused as the whole fix: it would satisfy the
+  seed's check and leave the root unreachable for every real bodyweight user.
+  The programme changes too, but as a consequence.
+- **Change the tree.** Chosen. The legs tree is rebuilt from lifts the catalogue
+  files as bodyweight and programmable, each checked against its instructions
+  rather than its name:
+
+| Level | Rung                    | Opens with                      |
+| ----- | ----------------------- | ------------------------------- |
+| 0     | Bodyweight Squat        | — the root                      |
+| 1     | Walking Lunge           | 3 × 20 bodyweight squats        |
+| 2     | Step-Up with Knee Raise | 3 × 16 walking lunges           |
+| 3     | Split Jump              | 3 × 12 step-ups with knee raise |
+
+It is a rung shorter than before. The catalogue has no bodyweight pistol or
+split squat a user can log — `split-squats` is the jumping split above, and the
+real ones need a barbell, dumbbells, a kettlebell, a Smith machine or a
+suspension trainer — so the ladder ends on the explosive split-stance rung the
+catalogue does have. **Corrected in review:** this amendment first called the
+Smith pistol "a split stance, not a pistol", from a truncated read of its
+instructions — the mistake it warns about, one level down. Its instructions
+hold one leg off the ground; the name is honest, and the lift is still a
+machine lift at the top of a bodyweight ladder.
+The two criteria that survive keep their numbers. The step-up needs a step or a
+bench; the source files it under bodyweight, and so does this. Migration
+`20260911120000`.
+
+The home-gym programme's appended `chair-squat` becomes `bodyweight-squat` — what
+its comment, "push-ups and air squats", meant all along — prescribed at 3 × 21,
+because a later set drops a rep a quarter of the time and the next rung asks for
+twenty.
+
+**The rule, held by a test.** Every criterion names a lift `availableExercises`
+offers a user who owns every equipment tag, so no rung is closed to everyone. And
+the rung above every root opens with bodyweight alone, so every tree can be
+started with a floor. `tests/db/progression.test.ts` asks the app's own reader,
+for real users with real grants, rather than re-deriving the answer from the
+category list.
+
+It also pins the rungs a bodyweight-only user cannot open. Three remain, all
+above the first rung, all asking for gear the catalogue tags `other`:
+`push-handstand` (it asks for parallel-bar dips), `pull-chin` (band-assisted
+pull-ups) and `pull-muscle-up` (weighted pull-ups). Those are content decisions
+of their own rather than bugs of this kind — a dip needs bars — and they are
+tracked in `docs/plans/README.md`. A fourth fails CI.
 
 ## Related
 
