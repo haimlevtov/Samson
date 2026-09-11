@@ -160,6 +160,20 @@ export const SPEECH_TIMEOUT_MS = 20_000;
 export const SPEECH_MAX_ATTEMPTS = 2;
 
 /**
+ * The shortest and longest clip the speech stage accepts, in seconds of audio —
+ * ADR 0025, "Corrected after the first live calls".
+ *
+ * WHY a floor: the WAV header makes any bytes playable, so a 200 carrying a few
+ * bytes of junk would be charged, cached and played as a click with no message.
+ * A quarter second is shorter than any line a coach says.
+ * WHY a ceiling: the longest line spoken slowly is about thirty seconds, and a
+ * Vercel function may return about 4.5 MB — ninety seconds of 24 kHz PCM is
+ * about 4.3 MB. Past it the clip could not reach the browser anyway.
+ */
+export const SPEECH_MIN_AUDIO_SECONDS = 0.25;
+export const SPEECH_MAX_AUDIO_SECONDS = 90;
+
+/**
  * Charged against the budget for each speech attempt that reached a 200 and did
  * not time out — a clip, or a 200 with no usable one — ADR 0025, Cost and
  * addendum. A timed-out attempt is charged TIMEOUT_ASSUMED_COST_USD instead.

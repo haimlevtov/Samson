@@ -11,11 +11,20 @@
 /**
  * The model's output: 16-bit little-endian mono at 24 kHz — the parameters
  * Google's own speech-generation guide writes its wave file with.
+ *
+ * AI-NOTE: these belong to SPEECH_MODEL in src/llm/models.ts. A different model
+ *          may answer in another rate, width or byte order, and this header
+ *          would then play its samples as noise or at the wrong speed.
  */
 export const PCM_SAMPLE_RATE = 24_000;
 const CHANNELS = 1;
 const BITS_PER_SAMPLE = 16;
 const HEADER_BYTES = 44;
+
+/** How many bytes one second of the model's PCM takes at `rate`. */
+export function pcmBytesPerSecond(rate: number): number {
+  return (rate * CHANNELS * BITS_PER_SAMPLE) / 8;
+}
 
 /**
  * The sample rate a content type names, as in `audio/L16;rate=24000`, or the

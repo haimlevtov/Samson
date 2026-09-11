@@ -326,8 +326,8 @@ const speechOptions = {
   voice: 'Algenib',
 };
 
-/** Two 16-bit samples of raw PCM, as the model sends them. */
-const PCM = new Uint8Array([0x10, 0x00, 0xf0, 0xff]);
+/** Half a second of raw 24 kHz PCM, as the model sends it — past the quarter-second floor. */
+const PCM = new Uint8Array(24_000).map((_, i) => i % 251);
 
 const audioResponse = (body: BodyInit = PCM, headers: Record<string, string> = {}) =>
   new Response(body, {
@@ -541,11 +541,51 @@ describe('callSpeech', () => {
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
   });
 
-  it('treats a single byte as no samples — half of one 16-bit sample is not audio', async () => {
-    const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array([7])));
+  it('refuses a clip under a quarter second, which the WAV header would make playable junk', async () => {
+    // FOUND IN REVIEW of #50: a few bytes of junk behind a valid header would
+    // be charged, cached and played as a click with no message.
+    const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array(1_000)));
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip is 1000 bytes of PCM; it must be 12000 to 4320000');
+  });
+
+  it('refuses a clip that declares more than ninety seconds, and cancels it unread', async () => {
+    let cancelled = false;
+    const endless = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(1_024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(endless, {
+          status: 200,
+          headers: { 'content-type': 'audio/pcm', 'content-length': '99999999' },
+        })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip declares 99999999 bytes; the most is 4320000');
+    // Cancelled rather than read: an endless body would otherwise run until the
+    // timeout, holding every byte in memory.
+    expect(cancelled).toBe(true);
+  });
+
+  it('refuses a clip longer than ninety seconds that did not declare its length', async () => {
+    // At 8 kHz ninety seconds is 1,440,000 bytes; two more is one sample over.
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(new Uint8Array(1_440_002), { 'content-type': 'audio/pcm;rate=8000' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip is 1440002 bytes of PCM; it must be 4000 to 1440000');
   });
 
   it('ignores LLM_MODELS, which swaps text models and would recast every coach', async () => {

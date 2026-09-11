@@ -51,7 +51,7 @@ class FakeAudio implements AudioLike {
 
 const OK: VoiceResult = {
   ok: true,
-  audio: new Uint8Array([0xff, 0xf3]),
+  audio: new Uint8Array([0, 0]),
   contentType: 'audio/wav',
 };
 

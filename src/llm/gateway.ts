@@ -24,7 +24,9 @@ import {
   OPENROUTER_BASE_URL,
   RETRY_BASE_DELAY_MS,
   SPEECH_MAX_ATTEMPTS,
+  SPEECH_MAX_AUDIO_SECONDS,
   SPEECH_MAX_INPUT_CHARS,
+  SPEECH_MIN_AUDIO_SECONDS,
   SPEECH_TIMEOUT_MS,
   attributionHeaders,
   modelOverrideFromEnv,
@@ -32,7 +34,7 @@ import {
   type Env,
 } from './config';
 import { SPEECH_MODEL, modelsForStage } from './models';
-import { pcmRate, pcmToWav } from './wav';
+import { pcmBytesPerSecond, pcmRate, pcmToWav } from './wav';
 import {
   buildRequestBody,
   normalizeUsage,
@@ -113,9 +115,14 @@ function isRetryableHttp(status: number): boolean {
 }
 
 /**
- * What `response_format: 'pcm'` may come back labelled: `audio/pcm`, the
- * provider's documented type, or `audio/l16`, the registered name for 16-bit
- * linear PCM. Compared lowercased.
+ * What `response_format: 'pcm'` may come back labelled, compared lowercased:
+ * `audio/pcm`, the provider's documented type, or `audio/l16`.
+ *
+ * WHY `audio/l16` is read as little-endian: RFC 2586 registers L16 as
+ * big-endian, but Google labels this model's little-endian output
+ * `audio/L16`, and `pcmToWav` writes the samples as they arrive. A provider
+ * sending true big-endian L16 would play as noise — ADR 0025, "Corrected
+ * after the first live calls".
  */
 const PCM_TYPES: ReadonlySet<string> = new Set(['audio/pcm', 'audio/l16']);
 
@@ -564,19 +571,39 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
         retryable = false;
       } else {
         reached200 = true;
-        const pcm = new Uint8Array(await response.arrayBuffer());
-        // Fewer than two bytes is not one 16-bit sample.
-        if (pcm.byteLength < 2) {
-          // Same as above: a 200, the wrong shape, charged, not retried.
+        /*
+         * Between a quarter second and ninety seconds of samples — the bounds
+         * and why are at SPEECH_MIN_AUDIO_SECONDS. Outside them is the same as
+         * above: a 200, the wrong shape, charged, not retried. A declared
+         * length past the ceiling is refused before the body is read.
+         */
+        const rate = pcmRate(contentType);
+        const perSecond = pcmBytesPerSecond(rate);
+        const minBytes = Math.ceil(SPEECH_MIN_AUDIO_SECONDS * perSecond);
+        const maxBytes = SPEECH_MAX_AUDIO_SECONDS * perSecond;
+        const declared = Number(response.headers.get('content-length') ?? Number.NaN);
+
+        if (declared > maxBytes) {
+          await response.body?.cancel();
           row.status = 'schema_invalid';
-          row.error = 'the response declared PCM and carried no samples';
+          row.error = `the clip declares ${declared} bytes; the most is ${maxBytes}`;
           retryable = false;
         } else {
-          row.status = 'ok';
-          // Measured in the sense that matters: one model was requested and no
-          // fallback array was sent, so the model that answered is this one.
-          row.model_used = model;
-          spoken = pcmToWav(pcm, pcmRate(contentType));
+          const pcm = new Uint8Array(await response.arrayBuffer());
+          if (pcm.byteLength < minBytes || pcm.byteLength > maxBytes) {
+            row.status = 'schema_invalid';
+            row.error = `the clip is ${pcm.byteLength} bytes of PCM; it must be ${minBytes} to ${maxBytes}`;
+            retryable = false;
+          } else {
+            // Wrapped first, so `ok` and `model_used` are set only once there
+            // is a clip to hand on.
+            const wav = pcmToWav(pcm, rate);
+            row.status = 'ok';
+            // Measured in the sense that matters: one model was requested and
+            // no fallback array was sent, so the model that answered is this one.
+            row.model_used = model;
+            spoken = wav;
+          }
         }
       }
     } catch (cause) {

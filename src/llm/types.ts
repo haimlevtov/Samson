@@ -142,7 +142,7 @@ export interface SpeechOptions {
 }
 
 export interface SpeechResult {
-  /** Over a plain ArrayBuffer — what `response.arrayBuffer()` gives — so a Blob takes it as it is. */
+  /** Over a plain ArrayBuffer — what `pcmToWav` allocates — so a Blob takes it as it is. */
   audio: Uint8Array<ArrayBuffer>;
   /**
    * Always `audio/wav`: the gateway accepts only the raw PCM it asked for and
