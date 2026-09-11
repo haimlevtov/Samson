@@ -112,8 +112,8 @@ Enforced three ways, because a comment is not a control:
 
    _Amended 2026-09-11: false twice, for the same reason both times._ There is
    no scoped subquery. The evaluator binds the user id as `$1`, and each
-   predicate's own `where s.user_id = $1` scopes the sets it starts from. A
-   predicate that joins onward — to `workouts` (fixed in `20260908140000`), to
+   predicate's own `user_id = $1` scopes the table it starts from, `sets` or
+   `workouts`. A predicate that joins onward — to `workouts` (fixed in `20260908140000`), to
    `exercises` (fixed in `20260911100000`, the `five-patterns` predicate) —
    reads the joined table with RLS off, because `evaluate_achievements` is
    `security definer`. Scoping the first table is not scoping the join. Both

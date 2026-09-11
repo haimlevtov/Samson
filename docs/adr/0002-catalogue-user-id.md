@@ -105,6 +105,7 @@ without an ownership clause still passes, and `tests/db/rls.test.ts` is where
 the behaviour is tried.
 
 The consequence that custom exercises "work later with no migration" was wrong
-for the same reason. They needed `20260911100000`: until then `sets` and
-`workout_template_items` accepted a row pointing at another user's custom
-exercise, and the `five-patterns` badge read its movement pattern across users.
+for the same reason. `sets` and `workout_template_items` needed
+`20260911100000`: until then both accepted a row pointing at another user's
+custom exercise, and the `five-patterns` badge read its movement pattern across
+users. `exercise_equipment` still accepts one, and is pinned as above.

@@ -86,18 +86,21 @@ against.
 > `tests/db/schema-invariants.test.ts` reads every foreign key into a table with
 > a `user_id` column from the live catalogue and judges INSERT and UPDATE
 > separately. A command is checked when EVERY permissive policy that applies to
-> it, for any role a signed-in user holds or inherits, mentions both the column
-> and the table it references — permissive policies are ORed, so one without the
-> clause reopens the gap whatever the others say — or when a restrictive policy
-> that applies to it does, restrictive policies being ANDed. A column is checked
-> when both commands are. That is a text match, deliberately, and so a proxy: it
-> proves somebody wrote a clause about the row, not that the clause is right.
-> The behavioural half is `tests/db/rls.test.ts`, where one user actually tries.
-> The guard is calibrated against `sets.workout_id`, which it must report as
-> checked, and its verdict is also run over synthetic policies — two permissive
-> ones with the clause on only one, a restrictive one covering INSERT alone — so
-> the rule cannot quietly weaken while every real table has a single policy and
-> the answer would not change.
+> it mentions both the column and the table it references — permissive policies
+> are ORed, so one without the clause reopens the gap whatever the others say —
+> or when a restrictive policy that applies to it does, restrictive policies
+> being ANDed. A column is checked when both commands are. "Applies" is decided
+> the way Postgres decides it: `for all` or that command, granted to `public`
+> or to a role whose privileges `authenticated` inherits. That is a text match,
+> deliberately, and so a proxy: it proves somebody wrote a clause about the row,
+> not that the clause is right. The behavioural half is `tests/db/rls.test.ts`,
+> where one user actually tries. The guard is calibrated against
+> `sets.workout_id`, which it must report as checked, and its verdict is also run
+> over synthetic policies — two permissive ones with the clause on only one, a
+> restrictive one covering INSERT alone — so neither rule that review rejected
+> can quietly return while every real table has a single write policy and the
+> answer would not change. Inheritance itself has no synthetic case: a role for
+> `authenticated` to inherit from cannot be made without DDL.
 >
 > **Five columns were unchecked when the guard was first written, and the first
 > version of this paragraph called all five "the same existence-oracle class,
@@ -115,7 +118,7 @@ against.
 > depth. **Three remain, pinned in the guard.** The two on `exercise_equipment`
 > have two problems, and only one needs a key change. Linking a row to another
 > user's custom exercise or tag is the cross-user half, and the same
-> own-or-shared `with check` as `20260911100000` closes it, with no DDL.
+> own-or-shared `with check` as `20260911100000` would close it, with no DDL.
 > Separately, the table's primary key has no `user_id` at all, so one user's
 > link occupies that pair for everybody and the duplicate-key error says so —
 > that half is the key change. `user_equipment.equipment_tag_id` has `user_id`
