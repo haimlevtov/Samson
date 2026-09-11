@@ -487,8 +487,9 @@ one thing bounding what a signed-in user can spend on the project's key, and
 today its owner can move it:
 
 - **Raise it.** `users.llm_weekly_budget_usd` is writable by its owner — the
-  `authenticated` role holds table-wide UPDATE on `users`. A trigger refuses
-  the change, the same fix `display_name` and `timezone` got.
+  `authenticated` role holds table-wide UPDATE on `users`. A trigger refuses an
+  owner's change to it. The same table-wide UPDATE is what let `display_name`
+  and `timezone` take bad values, fixed with a CHECK and a validating trigger.
 - **Cancel spend with planted rows.** `llm_calls_insert_own` accepts any cost
   and any `created_at`: a negative or NaN cost, a date in 2099, or a thousand
   zero-cost rows that push real spend past PostgREST's 1,000-row cut, because
@@ -705,8 +706,8 @@ themes for anything with a surface. `npm run test:db` where a migration is
 involved.
 
 **Docker once per column change**, for the `src/db/types.ts` regeneration
-CLAUDE.md requires: PR 6, PR 6b, and the migration after 6b's deploy that drops
-the device-voice columns. Announced before it starts and stopped in the same
+CLAUDE.md requires: PR 6, PR 6b, the migration after 6b's deploy that drops the
+device-voice columns (6d), and 6c if its spend sum becomes an RPC. Announced before it starts and stopped in the same
 turn — `supabase stop && wsl --shutdown`. _This said "exactly once, in PR 6",
 written before 6b existed._
 
@@ -1095,8 +1096,9 @@ docs and resilience — all recorded in ADR 0025's addendum:
   removing it.
 - **A 200 without usable audio** was accepted, then retried and charged nothing,
   then — the second round — written to a row Postgres refused, because the body
-  carried NULs. Now charged once, never retried, and described rather than
-  quoted, with every ledger row cleaned at the one writer.
+  carried NULs. Now charged once and never retried; a body that is not text is
+  described rather than quoted, and every field the provider can fill is
+  cleaned at the one writer.
 - **The budget can be moved by its owner**, in older code. Planned as 6c, and
   the key stays off Vercel until it ships.
 

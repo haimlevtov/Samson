@@ -147,11 +147,13 @@ Two things are new, and both cost something to forget:
 - **A provider that reports no price** leaves `cost_credits` null. Never put an
   estimate in the row; add the stage to `chargedFor` in `src/db/ledger.ts` so
   the budget gate charges an assumption, as it does for timeouts — for every
-  status that reached a 200, not only `ok`, and never retry an attempt that is
-  charged, or one press pays twice. #49 learned both in review.
-- **`tests/unit/invariants.test.ts` names every export of the gateway.** A new
-  export of any kind — a `callX`, a helper, a const — fails it until it is added
-  there on purpose, and a re-export or default export fails it outright.
+  status that reached a 200, not only `ok`, and never retry an attempt that
+  reached a 200, or one press pays twice. (A timeout before any 200 is charged
+  and retried, as for every stage.) #49 learned both in review.
+- **`tests/unit/invariants.test.ts` names every export of the gateway** — every
+  function, class, const, let, var, enum, namespace, type and interface. A new
+  one fails it until it is added there on purpose, and a re-export or default
+  export fails it outright.
 
 ## Before you call it done
 

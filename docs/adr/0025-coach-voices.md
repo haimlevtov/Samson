@@ -200,20 +200,24 @@ and written here before their code.
   a 200 whose body fails mid-read is recorded `schema_invalid`, is not retried,
   and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a 200 and
   may have been billed, so one charge per press rather than none, and never two.
+  If the timer runs out during that read, the attempt is recorded `timeout`
+  instead — charged `TIMEOUT_ASSUMED_COST_USD`, and not retried either.
   The browser is handed the constant `audio/mpeg`, never the provider's header.
   The code commit accepted any `audio/` type, so a model ignoring
   `response_format` would have cached an unplayable clip for every coach.
 - **A ledger row's text is made storable at the one writer.** Postgres refuses a
   NUL in `text`, and half a surrogate pair — which a 500-character cut can
-  leave — so `openLedger` cleans both, for every stage. Found in the second
-  round: a wrong-format audio body read as text carried NULs, the insert failed,
-  and the call it was written to charge went unrecorded. Such a body is now
-  described, not quoted.
+  leave — so `openLedger` cleans both, and caps the length, in every field the
+  provider can fill (`error`, `model_used`, `openrouter_id`), for every stage.
+  Found in the second round: a wrong-format audio body read as text carried
+  NULs, the insert failed, and the call it was written to charge went
+  unrecorded. A body that is not text is now described, not quoted.
 - **A replayed clip and a failed URL on the card.** The Voice card's fetching,
   cache and in-flight presses live in `src/speech/player.ts`, injected and
   tested: one press pays for a clip, a second press joins the call in flight,
-  a cached replay supersedes a fetch still coming, and a clip that will not play
-  is dropped so the next press fetches again.
+  a cached replay supersedes a fetch still coming, a clip that will not play
+  is dropped so the next press fetches again, and a clip that cannot be turned
+  into a URL is a failure the card shows, not a press left on "Finding…".
 - **What the gate charges, completely.** A speech attempt that reached a 200,
   $0.02; a timed-out one `TIMEOUT_ASSUMED_COST_USD`, $0.05, as for every stage,
   so a press that times out twice counts $0.10; an `http_error` attempt — no 200
