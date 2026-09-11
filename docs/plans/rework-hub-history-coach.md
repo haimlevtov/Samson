@@ -595,15 +595,18 @@ same turn — `supabase stop && wsl --shutdown`.
 ## The browser pass, still outstanding
 
 Phase 6 PRs 2, 4 and 5 were merged without it, because `/coach` and `/settings`
-need a session and this agent does not type passwords. So were this plan's PRs 2
-to 6, for the same reason — PR 6's preview is on `/coach`. Review found **a width bug
+need a session and this agent does not type passwords. Review found **a width bug
 in one and a colour-only state in the other**, which is exactly what that pass
 catches.
+
+This plan's PRs have not had it on their signed-in pages either. PR 4 came
+closest — its graph was rendered and measured as a component at four widths in
+both themes, which is not the page — and PR 6's preview is on `/coach`.
 
 **Seven of the eight PRs above have something to look at in a browser** — every
 one except this plan, and PR 5 explicitly requires opening each seeded Profile.
 Five of them change markup. If the pass stays unrun the same class of defect will
-keep shipping, so it is worth clearing before PR 2 rather than after PR 8.
+keep shipping, so it is worth clearing before PR 8 rather than after it.
 
 ---
 
@@ -911,7 +914,7 @@ lines and nothing else.
 - **"Before a plan exists" was false in three places** — the skill, the column
   comment and a test. The Voice card only renders once a plan is accepted, so
   the preview is heard before a coach _delivers_ the plan. The plan's own intro
-  had it right; the decisions below it did not.
+  had it right; the false wording was only in those three places.
 - **A chip change stops the delivery's reading too**, not only a preview. Kept,
   and written down: the chip is the user's answer to who they want to hear.
 - **Two copies of "this persona's voice settings"** — the preview's and the

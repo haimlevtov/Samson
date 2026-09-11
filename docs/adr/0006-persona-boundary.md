@@ -204,5 +204,9 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > The column is writable on a user's own persona row, and delivery never reads
 > it — so it never reaches the delivery stage at all. The coach action hands
 > delivery `asPersona`, which picks the fields delivery reads and nothing else,
-> so a later edit that spreads the persona into a prompt cannot carry user text
-> outside the fence (CLAUDE.md #11).
+> so a later edit that spreads the persona into a prompt cannot carry THE SAMPLE
+> LINE there. It does not make the rest of the row trusted: `name`,
+> `system_prompt` and `banned_phrases` are writable on a user's own row too,
+> and `src/persona/prompts.ts` fences and cleans them, as it did before
+> (CLAUDE.md #11). _Narrowed in review: the first version of this paragraph said
+> no user text at all could reach a prompt that way._
