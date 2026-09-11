@@ -13,6 +13,7 @@ import { addDays, startOfWeek } from '../metrics/dates';
 import type { LocalDate, WorkoutStatus } from '../metrics/types';
 import type { Sex } from '../diet/biometrics';
 import { chance, jitter, mulberry32, randomInt, roundToPlate, type Rng } from './rng';
+import type { TemplateDraft, TemplateItemDraft } from '../templates/schema';
 
 export interface ProgrammeEntry {
   exerciseSlug: string;
@@ -768,18 +769,46 @@ export function generateHistory(
   return workouts.filter((w) => w.localDate <= endDate);
 }
 
-/** One prescribed set group, before the seeder resolves its slug to an id. */
-export interface SeedTemplateItem {
+/**
+ * One prescribed set group, before the seeder resolves its slug to an id.
+ *
+ * Derived from the Zod-inferred draft rather than written out beside it —
+ * CLAUDE.md: types come from the schema — so a bound or a nullability change in
+ * src/templates/schema.ts reaches the seed without anyone remembering to.
+ */
+export type SeedTemplateItem = Pick<TemplateItemDraft, 'setCount' | 'reps' | 'weightKg'> & {
   exerciseSlug: string;
-  setCount: number;
-  reps: number;
-  /** INVARIANT: kilograms — CLAUDE.md #8. Null is bodyweight, not zero. */
-  weightKg: number | null;
-}
+};
 
 export interface SeedTemplate {
   name: string;
   items: SeedTemplateItem[];
+}
+
+/** Catalogue equipment tag by exercise slug, from `data/exercises.snapshot.json`. */
+export type EquipmentOf = ReadonlyMap<string, string>;
+
+/**
+ * Programme lifts this archetype's equipment does not allow.
+ *
+ * The app offers a user only lifts whose catalogue equipment tag they own —
+ * `availableExercises` in src/db/exercises.ts, CLAUDE.md #5 — and until this
+ * nothing held the programmes to that rule. FOUND IN REVIEW: the home-gym
+ * programme carries `chair-squat`, which the catalogue tags `machine`, so that
+ * archetype's history logs a lift the app would never let him pick.
+ *
+ * AI-NOTE: the programme is not corrected here, because `chair-squat` is the
+ *          root of the legs progression tree and the fix is a content decision
+ *          with three candidates — the catalogue tag, the tree root, or the
+ *          programme. This function keeps a template from repeating the
+ *          mistake, and `src/seed/archetypes.test.ts` pins the list so a NEW
+ *          mismatch fails loudly instead of being left out in silence.
+ */
+export function outOfGrant(archetype: Archetype, equipmentOf: EquipmentOf): string[] {
+  const granted = new Set(archetype.equipment.map((grant) => grant.slug));
+  return archetype.programme
+    .map((entry) => entry.exerciseSlug)
+    .filter((slug) => !granted.has(equipmentOf.get(slug) ?? ''));
 }
 
 /**
@@ -790,29 +819,38 @@ export interface SeedTemplate {
  * prescription and a record are different things. `buildSets` drifts a rep off
  * later sets, so a template saved from a logged session would prescribe
  * "1×5, 2×4" because that is what happened. The programme is the archetype's
- * prescription, and a template is a prescription.
+ * prescription, and a template is a prescription — so lifts, sets and reps are
+ * copied from it and never from the log.
  *
  * WHY the load comes from the history anyway: a template prescribing
  * `startingKg` would hand someone twelve weeks in their week-one loads. So the
- * shape — which lifts, how many sets, how many reps — is the programme's, and
- * the weight is the heaviest working set of the most recent session that had
- * the lift in it. Where that lifter is now.
+ * weight is the heaviest working set of the most recent session that had the
+ * lift in it — where that lifter is now — and never above the archetype's
+ * equipment ceiling.
  *
- * Rest is deliberately absent: the programme never specifies one, and the
- * session grid falls back to its own default. A seeded figure the programme
- * does not contain would be invented.
+ * Lifts outside the archetype's equipment are left out (`outOfGrant`), and a
+ * session left with nothing in it is not emitted, because createTemplate
+ * refuses an empty template. Rest is deliberately absent: the programme never
+ * specifies one, and the session grid falls back to its own default.
  *
- * Pure, so `src/seed/archetypes.test.ts` can assert the equipment ceiling
- * offline — the plan's acceptance names that as the case that matters.
+ * Pure, so `src/seed/archetypes.test.ts` can hold all of this offline.
  */
 export function templatesFor(
   archetype: Archetype,
-  history: readonly GeneratedWorkout[]
+  history: readonly GeneratedWorkout[],
+  equipmentOf: EquipmentOf
 ): SeedTemplate[] {
+  const excluded = new Set(outOfGrant(archetype, equipmentOf));
+  const ceiling = archetype.loadCeilingKg;
+  // INVARIANT: capped equipment is a hard ceiling — CLAUDE.md #5 — on every
+  //            path, including a history that generateHistory did not make.
+  const capped = (kg: number): number => (ceiling === undefined ? kg : Math.min(kg, ceiling));
+
   /*
-   * Newest session first, by date rather than by array position: the history is
-   * built week by week with rest days pushed after each week's sessions, so the
-   * last element is not the last session by date.
+   * Newest session first, by date. The generator's own output would come out
+   * the same without the sort — rest days carry no sets, so where they sit in
+   * the array changes nothing — but this function takes any history, and a
+   * caller's array order is not a promise about dates.
    */
   const newestFirst = [...history].sort((a, b) => (a.localDate < b.localDate ? 1 : -1));
 
@@ -822,9 +860,10 @@ export function templatesFor(
     for (const slug of new Set(working.map((set) => set.exerciseSlug))) {
       if (latestLoad.has(slug)) continue;
       /*
-       * A zero is treated as no load, the same line `plottable` draws in
-       * src/metrics/progression.ts: a bodyweight set has no external load, and
-       * the template schema spells that null rather than 0.
+       * A logged zero is read as no load. The schema would accept 0, but the
+       * templates migration says what null means — "not the same claim as a
+       * load of zero" — and `plottable` in src/metrics/progression.ts draws the
+       * same line. A bodyweight set has no external load to prescribe.
        */
       const loads = working
         .filter((set) => set.exerciseSlug === slug && set.weightKg !== null && set.weightKg > 0)
@@ -838,20 +877,54 @@ export function templatesFor(
     // lists the lifts under it, which is what makes a template name readable.
     name: `Day ${String.fromCharCode(65 + day)}`,
     items: archetype.programme
-      .filter((entry) => entry.day === day)
-      .map((entry) => {
+      .filter((entry) => entry.day === day && !excluded.has(entry.exerciseSlug))
+      .map((entry): SeedTemplateItem => {
         const logged = latestLoad.get(entry.exerciseSlug);
+        /*
+         * `undefined` is a lift the history never reached. The programme's own
+         * starting load is the honest fallback — and a startingKg of zero is how
+         * this file writes a bodyweight lift, so it becomes null for the same
+         * reason a logged zero does.
+         */
+        const fallback = entry.startingKg > 0 ? capped(entry.startingKg) : null;
         return {
           exerciseSlug: entry.exerciseSlug,
           setCount: entry.sets,
           reps: entry.reps,
-          /*
-           * `undefined` is a lift the history never reached — every session of
-           * it skipped. The programme's own starting load is the honest
-           * fallback, and a zero there means bodyweight, not "no load".
-           */
-          weightKg: logged !== undefined ? logged : entry.startingKg > 0 ? entry.startingKg : null,
+          weightKg: logged === undefined ? fallback : logged === null ? null : capped(logged),
         };
       }),
-  }));
+  })).filter((template) => template.items.length > 0);
+}
+
+/**
+ * The draft `createTemplate` takes, from a seeded template.
+ *
+ * Shared by the seeder and its test, so the mapping the seed actually runs is
+ * the one the test parses. FOUND IN REVIEW: the test rebuilt the draft by hand,
+ * which meant the seeder's own copy was never checked offline.
+ *
+ * `exerciseId` is whatever `idOf` returns, with no fallback. A slug the
+ * catalogue lacks becomes an empty string, which fails `z.uuid()` inside
+ * createTemplate loudly rather than writing a template with a hole in it — and
+ * the "prescribes only exercises the committed catalogue has" test is what
+ * keeps that from happening at all.
+ */
+export function toTemplateDraft(
+  template: SeedTemplate,
+  idOf: (slug: string) => string | undefined
+): TemplateDraft {
+  return {
+    name: template.name,
+    source: 'user',
+    notes: null,
+    items: template.items.map((item) => ({
+      exerciseId: idOf(item.exerciseSlug) ?? '',
+      setCount: item.setCount,
+      reps: item.reps,
+      weightKg: item.weightKg,
+      rpe: null,
+      restSeconds: null,
+    })),
+  };
 }

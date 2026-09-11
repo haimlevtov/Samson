@@ -19,9 +19,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   ARCHETYPES,
   generateHistory,
+  outOfGrant,
   templatesFor,
+  toTemplateDraft,
   validateProgramme,
   type Archetype,
+  type EquipmentOf,
   type GeneratedWorkout,
 } from '../src/seed/archetypes';
 import { createTemplate } from '../src/db/templates';
@@ -236,7 +239,8 @@ async function seedArchetype(
   exerciseBySlug: Map<string, string>,
   endDate: string,
   tagBySlug: Map<string, string>,
-  pool: readonly PoolTemplate[]
+  pool: readonly PoolTemplate[],
+  equipmentOf: EquipmentOf
 ): Promise<{
   workouts: number;
   sets: number;
@@ -246,6 +250,7 @@ async function seedArchetype(
   rejected: number;
   accepted: number;
   templates: number;
+  excluded: string[];
 }> {
   const created = await admin.auth.admin.createUser({
     email: archetype.email,
@@ -461,7 +466,8 @@ async function seedArchetype(
 
   /*
    * The Workout tab's templates — one per session of the rotation, built by
-   * `templatesFor` from the programme with today's loads.
+   * `templatesFor` from the programme at the most recent logged loads, leaving
+   * out any lift the archetype's equipment does not allow.
    *
    * Written through `createTemplate` as the signed-in archetype rather than
    * with the service role, the same discipline `awardSession` and the
@@ -473,23 +479,15 @@ async function seedArchetype(
    *          and that function's INVARIANT is to wrap only idempotent calls — a
    *          retry after a lost response would write a second "Day A".
    */
-  const drafts = templatesFor(archetype, history);
+  const drafts = templatesFor(archetype, history, equipmentOf);
   for (const draft of drafts) {
-    await createTemplate(user, userId, {
-      name: draft.name,
-      source: 'user',
-      notes: null,
-      items: draft.items.map((item) => ({
-        // Safe: the sets loop above throws on any slug the catalogue lacks,
-        // and every template slug is a programme slug the history logged.
-        exerciseId: exerciseBySlug.get(item.exerciseSlug)!,
-        setCount: item.setCount,
-        reps: item.reps,
-        weightKg: item.weightKg,
-        rpe: null,
-        restSeconds: null,
-      })),
-    });
+    // toTemplateDraft is the same mapping src/seed/archetypes.test.ts parses,
+    // and it fails loudly on a slug the catalogue lacks — see its doc comment.
+    await createTemplate(
+      user,
+      userId,
+      toTemplateDraft(draft, (slug) => exerciseBySlug.get(slug))
+    );
   }
 
   return {
@@ -499,6 +497,7 @@ async function seedArchetype(
     badges: badges.size,
     ...challenges,
     templates: drafts.length,
+    excluded: outOfGrant(archetype, equipmentOf),
   };
 }
 
@@ -781,6 +780,9 @@ async function main(): Promise<void> {
 
   console.log(`Seeding catalogue (${snapshot.license})`);
   const exerciseBySlug = await seedCatalogue(admin, snapshot);
+  // The equipment tag each lift carries — what the app filters on, and so what
+  // a seeded template has to respect (outOfGrant, CLAUDE.md #5).
+  const equipmentOf: EquipmentOf = new Map(snapshot.exercises.map((e) => [e.slug, e.equipment]));
 
   const { data: tags } = await admin.from('equipment_tags').select('id, slug').is('user_id', null);
   const tagBySlug = new Map((tags ?? []).map((t) => [t.slug, t.id]));
@@ -825,7 +827,15 @@ async function main(): Promise<void> {
   const results = await Promise.allSettled(
     ARCHETYPES.map(async (archetype) => ({
       archetype,
-      ...(await seedArchetype(admin, archetype, exerciseBySlug, endDate, tagBySlug, pool)),
+      ...(await seedArchetype(
+        admin,
+        archetype,
+        exerciseBySlug,
+        endDate,
+        tagBySlug,
+        pool,
+        equipmentOf
+      )),
     }))
   );
 
@@ -838,12 +848,23 @@ async function main(): Promise<void> {
   const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
-    const { archetype, workouts, sets, awarded, badges, offered, rejected, accepted, templates } =
-      result.value;
+    const {
+      archetype,
+      workouts,
+      sets,
+      awarded,
+      badges,
+      offered,
+      rejected,
+      accepted,
+      templates,
+      excluded,
+    } = result.value;
     console.log(
       `  ${archetype.key.padEnd(13)} ${workouts} workouts, ${String(sets).padStart(3)} sets, ` +
         `${String(awarded).padStart(5)} XP, ${badges} badge(s), ` +
-        `${offered} offered / ${accepted} active / ${rejected} rejected, ${templates} templates`
+        `${offered} offered / ${accepted} active / ${rejected} rejected, ${templates} templates` +
+        (excluded.length > 0 ? ` (left out, not in grant: ${excluded.join(', ')})` : '')
     );
   }
   if (failures.length > 0) {

@@ -1,6 +1,6 @@
 # ADR 0010 — A template prescribes; `sets` records
 
-**Status:** accepted, phase 5 — consequences updated for ADR 0011
+**Status:** accepted, phase 5 — consequences updated for ADR 0011; context amended 2026-09-11
 **Date:** 2026-09-05
 
 ## Context
@@ -9,6 +9,12 @@ A trainee should be able to tap a saved template and be training within one
 screen, rather than searching the catalogue for the same six movements every
 Monday. Templates come from two places: the user builds one (or saves a session
 they liked), and the coach's accepted plan contributes one per planned session.
+
+_Amended 2026-09-11: a third, for demo data only._ `npm run seed` writes each
+archetype's programme as `user` templates, through `createTemplate` as the
+signed-in archetype. Nothing below changes — the seeder writes no `sets` for a
+template either, and its history is written separately, as the record of what
+the archetype did.
 
 The obvious implementation is to copy the template's prescription into `sets`
 rows when the session starts, so the session opens pre-populated and the user
