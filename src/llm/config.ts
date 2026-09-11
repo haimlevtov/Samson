@@ -138,6 +138,67 @@ export const PLANNER_TIMEOUT_MS = 120_000;
  */
 export const TIMEOUT_ASSUMED_COST_USD = 0.05;
 
+/**
+ * The longest input the speech stage sends — ADR 0025.
+ *
+ * WHY a ceiling on characters: a speech model has no `max_tokens`, and what it
+ * is billed on is what it says. The input is src/speech/script.ts's preamble
+ * (184) and labels (40), a direction of at most 600 characters and a line of at
+ * most 280 (both column limits): 1,104 at the most, which src/speech/script.test.ts
+ * holds under this.
+ *
+ * INVARIANT: `callSpeech` refuses any input longer than this, so there is no
+ *            unbounded speech call — CLAUDE.md #2.
+ */
+export const SPEECH_MAX_INPUT_CHARS = 1_200;
+
+/**
+ * A preview is a button press, and a few seconds of audio takes a few seconds
+ * to make. Two attempts of twenty seconds bounds the wait at under a minute.
+ */
+export const SPEECH_TIMEOUT_MS = 20_000;
+export const SPEECH_MAX_ATTEMPTS = 2;
+
+/**
+ * The shortest and longest clip the speech stage accepts — ADR 0025,
+ * "Corrected after the first live calls".
+ *
+ * WHY a floor, in seconds: the WAV header makes any bytes playable, so a 200
+ * carrying a few bytes of junk would be charged, cached and played as a click
+ * with no message. A quarter second is shorter than any line a coach says.
+ * WHY a ceiling, in bytes: a Vercel function may return about 4.5 MB, and what
+ * cannot cross it is bytes, whatever rate a response names — a seconds-based
+ * ceiling at 48 kHz would have allowed twice this. 4,320,000 is ninety seconds
+ * of the model's 24 kHz PCM, three times the longest line spoken slowly.
+ */
+export const SPEECH_MIN_AUDIO_SECONDS = 0.25;
+export const SPEECH_MAX_AUDIO_BYTES = 4_320_000;
+
+/**
+ * Charged against the budget for each speech attempt that reached a 200 and did
+ * not time out — a clip, or a 200 with no usable one — ADR 0025, Cost and
+ * addendum. A timed-out attempt is charged TIMEOUT_ASSUMED_COST_USD instead.
+ *
+ * WHY this exists: the provider returns audio and no price, so a speech row
+ * records cost_credits null and the gate would otherwise count every preview
+ * as free. The same split TIMEOUT_ASSUMED_COST_USD makes — the ledger records
+ * only what was measured, and the estimate is applied by the budget gate alone
+ * (src/db/ledger.ts).
+ *
+ * Sized for the longest line the stage accepts: 280 characters spoken slowly
+ * is about thirty seconds, 750 audio tokens at 25 a second, $0.015 at $20 per
+ * million, plus the direction as input at $1 per million. About $0.016,
+ * rounded up. A typical line costs half of it, so this is pessimistic, which
+ * is the safe direction for a budget.
+ *
+ * AI-NOTE: sized for a sample line and nothing longer. The PR that reads a
+ *          delivered plan aloud — a minute or more — must replace this flat
+ *          figure with one that scales with what is spoken, before it ships.
+ *          And as with TIMEOUT_ASSUMED_COST_USD: if a real figure becomes
+ *          available, delete the assumption rather than tuning it.
+ */
+export const SPEECH_ASSUMED_COST_USD = 0.02;
+
 export class MissingApiKeyError extends Error {
   constructor() {
     // WHY: named error rather than a hang or a cryptic 401, because the phase 0
@@ -152,6 +213,18 @@ export function readApiKey(env: Env = process.env): string {
   const key = env['OPENROUTER_API_KEY'];
   if (!key || key.trim() === '') throw new MissingApiKeyError();
   return key;
+}
+
+/**
+ * Whether a key is set, without handing it to the caller.
+ *
+ * For a page deciding whether to offer something only a model can do — the
+ * Coach tab's voice, which shows a line as text rather than a button that
+ * cannot speak (docs/specs/mobile-interface.md §4).
+ */
+export function hasApiKey(env: Env = process.env): boolean {
+  const key = env['OPENROUTER_API_KEY'];
+  return key !== undefined && key.trim() !== '';
 }
 
 /** Optional attribution headers. Cosmetic; calls succeed without them. */

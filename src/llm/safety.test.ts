@@ -241,7 +241,7 @@ describe('the persona layer, now that a crude row exists', () => {
    * the persona migration claims one covers what the other misses and a claim
    * like that has to be checked:
    *
-   *   scanOutput      — every stage, every completion, tuned against coaching
+   *   scanOutput      — every text stage, every completion, tuned against coaching
    *                     vocabulary so it does not fire on "body fat".
    *   banned_phrases  — per persona, per row, for the idiom a character reaches
    *                     for that the scanner deliberately does not match.

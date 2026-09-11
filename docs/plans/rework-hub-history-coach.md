@@ -10,16 +10,19 @@ because several of them touch the same surface.
 
 ## Status
 
-| PR  | What                                                                                      | Branch                 | State                                                                  |
-| --- | ----------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
-| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                          |
-| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)   |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)            |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | in progress                                                            |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                                |
+| PR  | What                                                                                       | Branch                 | State                                                                  |
+| --- | ------------------------------------------------------------------------------------------ | ---------------------- | ---------------------------------------------------------------------- |
+| 1   | [This plan](#pr-1--this-plan)                                                              | `rework-plan`          | shipped 09-09                                                          |
+| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                    | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)   |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                    | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)            |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                      | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)     | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
+| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
+| 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | planned — the key stays off Vercel until it ships                      |
+| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | in review, paused for 6b                                               |
+| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                |
 
 PR 8 carries two of the requested changes because they are the same surface and
 would conflict as separate branches.
@@ -326,6 +329,9 @@ delivered.
 
 ### This is the one PR that needs Docker, and it needs it once
 
+_Written for PR 6, before 6b existed. 6b needed Docker too, and so will 6d — see
+Verification._
+
 A sample line is **content**, and CLAUDE.md #7 puts content in the database — so
 it is a column on `personas`, not a constant in a `Record<string, string>` in
 code. A new column means regenerating `src/db/types.ts`, which CLAUDE.md says
@@ -383,6 +389,129 @@ the reason every model-backed surface is scripted today.
 - **The browser pass needs a signed-in session**, which this agent does not
   create: it does not type passwords, the published demo one included. It goes
   on the plans README's browser-pass row rather than being claimed.
+
+---
+
+## PR 6b — each coach speaks in character
+
+**Branch `coach-tts`.** Added 2026-09-11, from the user's report after PR 6
+shipped the preview — "coach doesn't have fitting voice to persona" — and their
+rule: **a coach voice that does not fit its personality is useless.** PR 7 is
+paused for it, at the user's call. The decision is
+[ADR 0025](../adr/0025-coach-voices.md), committed first.
+
+### What looking found
+
+Measured on this machine's browser, which offers Microsoft David, Mark and Zira
+and nothing else: the Sergeant spoke in **Zira** — a light female voice — at the
+highest pitch and rate of the five, the Old Master faster than normal, and the
+Analyst and the Physio in the Old Master's and the Rival's voices. The voice
+was the Nth device voice of a language, sorted by name.
+
+**PR #48 tried to fix it on the device** — choose voices by kind, shape each
+coach with its own pitch and rate — and review showed the ceiling: three device
+voices cannot make five characters, and choosing by kind only moved the
+collisions. On a machine whose British voices are one male and two female, all
+three British coaches would have collapsed onto one. **Closed unmerged.**
+
+**The claim that no browser voice could sound like a samurai master was wrong in
+the way that mattered.** It is true of `speechSynthesis`; products with character
+voices do not use it. And OpenRouter now serves text-to-speech
+(`/api/v1/audio/speech`), where `google/gemini-3.1-flash-tts-preview` takes a
+written direction for tone, pace and character. The key and the gateway this
+project already has can speak in character.
+
+**Corrected before the code:** this first named `openai/gpt-4o-mini-tts`, from
+OpenRouter's own speech example. It is not in OpenRouter's catalogue — checked
+against `/api/v1/models?output_modalities=speech` — so the first call would
+have failed. ADR 0025's closing section records the correction.
+
+### The decisions
+
+- **Each coach's voice is a direction in its row**: `tts_voice`, the provider's
+  voice, and `tts_instructions`, how the character speaks, in words.
+- **A `speech` stage through the gateway**: `callSpeech` beside `callLLM`, with
+  the budget gate, retries and an `llm_calls` row per attempt. The stage needs
+  the `llm_calls.stage` migration the add-pipeline-stage skill warns about.
+  **One model and no fallback model**: a voice name belongs to one model.
+- **This PR voices the preview only**, the coach's own sample line looked up by
+  slug, **from a shared row only** — a user can write their own persona row,
+  and reading one would let them make the server speak anything. **Reading a delivered plan aloud is a later PR, not yet planned**: the delivery has to be
+  stored server-side first, because the server never speaks text the browser
+  sends.
+- **No mismatched fallback, and device voices leave the coach entirely.**
+  Without a key, budget or a working call, the line is shown as text. The
+  device-voice columns and the picker had no other consumer and go with it; the
+  rest timer keeps its neutral "Rest over." **The columns go in two steps**:
+  nothing reads them after this PR, and the first migration after its deploy
+  drops them — dropping them in the same push breaks the running app, which
+  still selects them, until the deploy lands.
+- **The characters**, as directions, from the personas' own descriptions:
+
+  | Coach          | Voice     | Direction, in short                                  |
+  | -------------- | --------- | ---------------------------------------------------- |
+  | The Old Master | `Algenib` | an old samurai sword master: deep, grave, unhurried  |
+  | The Sergeant   | `Alnilam` | a drill sergeant on the parade ground: loud, clipped |
+  | The Rival      | `Puck`    | a cocky training partner: dry, quick, a smirk in it  |
+  | The Analyst    | `Erinome` | a sports scientist: calm, precise, no hype           |
+  | The Physio     | `Sulafat` | an experienced physio: warm, gentle, unhurried       |
+
+- **Cost**: about $0.005 to $0.01 a preview, at about $0.03 a minute of speech.
+  OpenRouter reports no price for a speech call, so the row records none and
+  the budget gate charges each spoken preview a flat, pessimistic $0.02 —
+  twenty-five previews in the gateway's $0.50 per user per week. A replay in the
+  same visit is free. Automated tests spend nothing.
+- **Where it is going**: a coach that talks to the user live, mid-workout. Not
+  built here — real-time work is out of scope today — but the direction in the
+  row is written so that session can use it.
+
+### Acceptance
+
+- With the key set, "Hear _coach_" plays that coach's line in its character
+  voice, and each of the five sounds like its description.
+- Without the key, the Voice card shows each line as text and offers no button;
+  nothing speaks in a device voice.
+- Every call writes an `llm_calls` row with stage `speech`, and a user past the
+  weekly budget is refused with a row, not a charge.
+
+---
+
+## PR 6c — the budget cannot be moved by its owner
+
+**Branch `budget-integrity`.** Added 2026-09-11 from the security review of #49,
+and recorded in [ADR 0025](../adr/0025-coach-voices.md)'s addendum. Starts after
+6b merges; it touches the same gateway and ledger code.
+
+**Why it is ordered before the key goes on Vercel:** the weekly budget is the
+one thing bounding what a signed-in user can spend on the project's key, and
+today its owner can move it:
+
+- **Raise it.** `users.llm_weekly_budget_usd` is writable by its owner — the
+  `authenticated` role holds table-wide UPDATE on `users`. A trigger refuses an
+  owner's change to it. The same table-wide UPDATE is what let `display_name`
+  and `timezone` take bad values, fixed with a CHECK and a validating trigger.
+- **Cancel spend with planted rows.** `llm_calls_insert_own` accepts any cost
+  and any `created_at`: a negative or NaN cost, a date in 2099, or a thousand
+  zero-cost rows that push real spend past PostgREST's 1,000-row cut, because
+  `sumSpendSince` sums in JavaScript. Checks that refuse negative and NaN (a
+  `>= 0` check lets NaN through), a trigger that sets `created_at` to `now()`,
+  and the sum done in SQL.
+- **Spend from no profile row.** The budget lookup returns null, the default
+  applies, and every ledger insert fails its foreign key after the paid call. The
+  gate refuses a caller with no row instead.
+- **Concurrent calls all pass the gate.** Read, call, write: no reservation. The
+  likely call is to keep documenting it, as ADR 0015 §5 and ADR 0024 do.
+
+Not the app's to do, and the owner's: a credit limit on the OpenRouter key, and
+checking whether sign-up is open on the hosted project.
+
+## PR 6d — the device-voice columns go
+
+**Branch `drop-device-voice`.** ADR 0025 §6's second step: `tts_voice_id` and
+`tts_voice_variant` have had no reader since 6b, and are dropped by the first
+migration after 6b is deployed — never in the same push, which would break the
+running app until the deploy landed. Regenerates `src/db/types.ts`, so one more
+Docker session.
 
 ---
 
@@ -606,9 +735,11 @@ Each PR: `npm run verify`, `npm run build`, and the browser at 375×812 in both
 themes for anything with a surface. `npm run test:db` where a migration is
 involved.
 
-**Docker exactly once, in PR 6**, for the one column that forces a
-`src/db/types.ts` regeneration. Announced before it starts and stopped in the
-same turn — `supabase stop && wsl --shutdown`.
+**Docker once per column change**, for the `src/db/types.ts` regeneration
+CLAUDE.md requires: PR 6, PR 6b, the migration after 6b's deploy that drops the
+device-voice columns (6d), and 6c if its spend sum becomes an RPC. Announced before it starts and stopped in the same
+turn — `supabase stop && wsl --shutdown`. _This said "exactly once, in PR 6",
+written before 6b existed._
 
 | Change           | The check that matters                                                       |
 | ---------------- | ---------------------------------------------------------------------------- |
@@ -617,6 +748,7 @@ same turn — `supabase stop && wsl --shutdown`.
 | Graphs           | No label overlaps another at 320px                                           |
 | Seed furnishings | A seeded template starts a session; the empty-Profile list is named          |
 | Persona preview  | Five voices, and a text fallback where speech is unavailable                 |
+| Coach voices     | Each line in its coach's voice; no key, text and no button; a row per call   |
 | Plan → template  | RLS on the insert, and the duplicate case decided                            |
 | One box          | Every guarantee from ADR 0015, 0023 and 0024 still has its test              |
 | Plan generation  | Every state renders; the key gap is stated, not implied                      |
@@ -631,11 +763,13 @@ catches.
 
 This plan's PRs have not had it on their signed-in pages either. PR 4 came
 closest — its graph was rendered and measured as a component at four widths in
-both themes, which is not the page — and PR 6's preview is on `/coach`.
+both themes, which is not the page — and the Voice card PRs 6 and 6b built is on
+`/coach`.
 
-**Seven of the eight PRs above have something to look at in a browser** — every
-one except this plan, and PR 5 explicitly requires opening each seeded Profile.
-Five of them change markup. If the pass stays unrun the same class of defect will
+**Eight of the eleven PRs above have something to look at in a browser** —
+every one except this plan and the two with no surface, 6c and 6d; PR 5
+explicitly requires opening each seeded Profile.
+Six of them change markup. If the pass stays unrun the same class of defect will
 keep shipping, so it is worth clearing before PR 7 — which adds a button to
 `/coach` — rather than after PR 8.
 
@@ -972,3 +1106,51 @@ lines and nothing else.
   first answer.
 
 **Not verified:** a browser pass on `/coach`, which needs a session.
+
+### PR 6b — each coach speaks in character, 2026-09-11
+
+Shipped with a correction before the code: the model ADR 0025 first named,
+`openai/gpt-4o-mini-tts`, is not in OpenRouter's catalogue, and the coaches were
+cast on `google/gemini-3.1-flash-tts-preview` instead — Algenib, Alnilam, Puck,
+Erinome and Sulafat, each with a written direction. A `speech` stage through the
+gateway, a Voice card that fetches each coach's line once per visit, and no
+device voice for any coach.
+
+**What two rounds of review found**, four reviewers each — security, conventions,
+docs and resilience — all recorded in ADR 0025's addendum:
+
+- **The card's audio logic had four bugs** — a failed clip cached forever, a
+  second press paying twice, a clip arriving after unmount and leaking, Stop left
+  up after an OS pause — and two more in the module they moved to. It is
+  `src/speech/player.ts` now, with every sequence tested and each fix checked by
+  removing it.
+- **A 200 without usable audio** was accepted, then retried and charged nothing,
+  then — the second round — written to a row Postgres refused, because the body
+  carried NULs. Now charged once and never retried; a body that is not text is
+  described rather than quoted, and every field the provider can fill is
+  cleaned at the one writer.
+- **The budget can be moved by its owner**, in older code. Planned as 6c, and
+  the key stays off Vercel until it ships.
+
+**Deploy order.** Both migrations add only, and `listPersonas` selects the new
+columns, so they went to hosted before the merge (2026-09-11). The old
+device-voice columns stay until 6d.
+
+**Docker once**, to regenerate the types: every migration applied from zero on
+553xx, the db suite 249 of 249, then `supabase stop`, `wsl --shutdown` and Docker
+Desktop quit.
+
+**Not verified at merge:** a browser pass on `/coach`, which needs a session; and
+**no voice had been synthesised** — the key had not been spent on it.
+
+**The first live presses failed, and the ledger said why for free.** HTTP 402:
+the OpenRouter account had never held credit, and the owner added some. Then HTTP
+400: Gemini TTS through OpenRouter answers only in `pcm`, though its model page
+lists mp3 too, and the gateway asked for mp3. Fixed in #50 (`speech-pcm`), in
+the commits after this record: the gateway asks for PCM, keeps a clip between a
+quarter second and ninety seconds, and wraps it in a WAV header for the browser
+— ADR 0025, "Corrected after the first live calls". **Not verified live:** no
+call was made after the fix, at the owner's request. The first press after the
+merge is the check, about $0.01; a wrong rate sounds too fast or slow, and a
+type other than PCM fails with the row naming it. Whether each coach sounds
+like its direction is still for the owner's ear.

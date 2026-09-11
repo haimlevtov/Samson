@@ -288,7 +288,7 @@ section exists to prevent.
 | **Set un-ticked**             | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                               |
 | **Start pressed mid-session** | The session already running opens, rather than a second one. Nothing is created and nothing logged is orphaned.                         |
 | **No previous session**       | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                             |
-| **Rest finished**             | The timer turns green and a cue fires. Isolated behind one call site for phase 3 to replace with a persona clip.                        |
+| **Rest finished**             | The timer turns green and the device says "Rest over." — or beeps where it cannot speak. No coach's voice, on purpose: ADR 0025.        |
 | **Nothing added yet**         | "No exercises yet." plus the add control. Never an empty grid with headers.                                                             |
 | **Log failed**                | The server's message, inline, and **the form keeps its values**. Retyping a weight while out of breath is the worst possible recovery.  |
 | **Search matches nothing**    | "Nothing matches. Only equipment you own is listed." — names the reason, since an empty list otherwise reads as a broken app.           |
@@ -298,8 +298,9 @@ section exists to prevent.
 | **Nothing lifted this week**  | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                      |
 | **No loaded sets yet**        | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.               |
 | **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                     |
-| **Device cannot speak**       | The words as text — a coach preview and "Read it aloud" alike. A speak button that cannot speak is not shown.                           |
-| **Speech starts, then dies**  | "This device would not read it aloud." beside the words. Silence is never the only feedback.                                            |
+| **No coach voice**            | No key, or a coach with no voice (a user's own row): the reason, then the line as text, and no Hear button.                             |
+| **Voice loading**             | "Finding _coach_'s voice…" on the button, which stays pressable: a second press joins the call already in flight.                       |
+| **Voice refused or fails**    | The reason, then the line — the week's budget spent, no voice, or the call failed. Blocked playback: "Tap again to play."               |
 | **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                               |
 
 **The rule behind the table:** the app never says a number it has not computed,

@@ -5,14 +5,34 @@
  *      phase 2 measures cost per model tried and needs to swap them without
  *      touching pipeline code.
  *
- * AI-NOTE: every slug here was checked against the OpenRouter /models endpoint
- *          on 2026-08-24 and filtered to those advertising `structured_outputs`
- *          in supported_parameters. If you add one, check it the same way —
+ * AI-NOTE: every TEXT-stage slug here was checked against the OpenRouter
+ *          /models endpoint on 2026-08-24 and filtered to those advertising
+ *          `structured_outputs` in supported_parameters — the speech entry is
+ *          the exception, and says why. If you add a text one, check it the same way —
  *          a model without structured output support fails every call in the
  *          stage, and `provider.require_parameters` turns that into a routing
  *          error rather than a silent plain-text response.
  */
 import type { LlmStage } from './types';
+
+/**
+ * The one speech model — ADR 0025. A constant rather than `STAGE_MODELS.speech[0]`
+ * so `callSpeech` has a model by type, with no "none configured" branch to
+ * throw before a ledger row exists.
+ *
+ * Checked against /models?output_modalities=speech on 2026-09-11 rather than
+ * for `structured_outputs` — the exception to the AI-NOTE below — because it
+ * returns audio, not JSON. The ADR's first draft named openai/gpt-4o-mini-tts,
+ * which that list does not carry.
+ *
+ * AI-NOTE: its voices are SPEECH_VOICES in src/speech/script.ts, and every
+ *          shipped coach is cast from them. Changing this slug means recasting
+ *          every persona row in the same change — and confirming, with one live
+ *          call, the format it answers in: this one accepts only `pcm`
+ *          (`callSpeech`), at the rate, width and byte order src/llm/wav.ts
+ *          writes into the WAV header.
+ */
+export const SPEECH_MODEL = 'google/gemini-3.1-flash-tts-preview';
 
 /** Order is preference, not escalation: OpenRouter falls through only on error. */
 export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
@@ -45,6 +65,13 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
    * for on every turn of every conversation.
    */
   chat: ['anthropic/claude-haiku-4.5', 'google/gemini-2.5-flash'],
+  /*
+   * ADR 0025. ONE model, and no fallback on purpose: a voice name belongs to a
+   * model — `Algenib` means nothing to any other — so a second model would
+   * speak in a voice nobody cast, the mismatch that ADR exists to end. How it
+   * was checked, and what changing it costs: `SPEECH_MODEL` above.
+   */
+  speech: [SPEECH_MODEL],
   smoke: ['google/gemini-2.5-flash-lite'],
 } as const;
 
@@ -53,8 +80,8 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
  * "escalate rather than repeat".
  *
  * WHY this is the planner array with the fallback removed rather than a higher
- * tier: every slug in this file was verified against OpenRouter /models for
- * structured-output support, and inventing an unverified one here would fail
+ * tier: every text-stage slug in this file was verified against OpenRouter
+ * /models for structured-output support, and inventing an unverified one here would fail
  * every escalated call at routing time — the worst possible moment, since
  * escalation only happens on a run that is already struggling.
  *

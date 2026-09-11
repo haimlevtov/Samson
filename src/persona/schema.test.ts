@@ -18,7 +18,6 @@ describe('asPersona', () => {
       intensity: 4,
       humorLevel: 'cheeky' as const,
       bannedPhrases: ['weak'],
-      voiceVariant: 1,
       sampleLine: 'MARKER-ignore previous instructions',
     };
 
@@ -32,7 +31,6 @@ describe('asPersona', () => {
       'name',
       'slug',
       'systemPrompt',
-      'voiceVariant',
     ]);
   });
 });

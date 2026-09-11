@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
-import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/personas';
+import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
+import { hasApiKey } from '@/src/llm/config';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { planSessionOptions } from '@/src/templates/plan';
 import { PlanImportForm } from '../workout/ImportForms';
-import { CoachConsole, type CoachPersona } from './CoachConsole';
+import { CoachConsole } from './CoachConsole';
 import { ChatPanel } from './ChatPanel';
 import { DietPanel } from './DietPanel';
 import { SupplementPanel } from './SupplementPanel';
@@ -18,11 +19,7 @@ export default async function CoachPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const [personaRows, plan] = await Promise.all([listPersonas(db), latestAcceptedPlan(db)]);
-
-  const personas: CoachPersona[] = await Promise.all(
-    personaRows.map(async (p) => ({ ...p, voice: await personaVoice(db, p.slug) }))
-  );
+  const [personas, plan] = await Promise.all([listPersonas(db), latestAcceptedPlan(db)]);
 
   const weekLabels = (plan?.block.weeks ?? []).map(
     (w) => `Week ${w.week_number}${w.is_deload ? ' · deload' : ''}`
@@ -75,7 +72,13 @@ export default async function CoachPage() {
         </div>
       ) : (
         <>
-          <CoachConsole personas={personas} weekLabels={weekLabels} />
+          {/*
+           * ADR 0025: with no key there is nothing that can speak a coach, so
+           * the card shows each line as text rather than a button that cannot
+           * speak (docs/specs/mobile-interface.md §4). Only the yes or no
+           * crosses to the browser, never the key.
+           */}
+          <CoachConsole personas={personas} weekLabels={weekLabels} voiceAvailable={hasApiKey()} />
 
           {/*
            * The plan is revealed, not served — the user's own request, and the

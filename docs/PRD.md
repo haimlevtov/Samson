@@ -147,7 +147,9 @@ specifically so that if it does not work, there is still time to change course.
 
 Three coach personas at launch: the Rival, the Analyst, and one of the Sergeant
 or the Old Master. Each is a database row — system prompt, language and voice
-variant, intensity, humour tier, banned phrases — not a code branch.
+variant, intensity, humour tier, banned phrases — not a code branch. _Since
+2026-09-11 ([ADR 0025](adr/0025-coach-voices.md)) a voice and a written
+direction take the place of the language and variant, which nothing reads._
 
 **Five as of 2026-09-08**, phase 5's content fill. The Old Master was the one
 picked at launch; the **Sergeant** is the other half of that sentence, finally
@@ -158,6 +160,17 @@ three shipped coaches sat at intensity 2, 3 and 4, so choosing between them
 changed the jokes more than the register. Note that it is _not_ the tone
 override below — that applies regardless of which persona is selected and is
 therefore an argument against needing a gentle coach, not for one.
+
+**Replaced 2026-09-11: a coach speaks in a synthesised character voice**
+([ADR 0025](adr/0025-coach-voices.md)). Device voices could not carry five
+characters — on one machine the Sergeant spoke in a light female voice — and a
+voice that does not fit its coach is worse than none. Each coach's row now holds
+a voice and a written direction ("an old samurai sword master: deep, grave,
+unhurried"), spoken by a steerable TTS model through OpenRouter and the gateway.
+Without the key, the coach's words are shown and nothing speaks. Only the
+coach's sample line is spoken so far: the delivered plan is no longer read
+aloud, and comes back in the coach's voice once deliveries are stored
+server-side (ADR 0025 §4). The paragraph below is the history.
 
 **Corrected 2026-09-07.** This said "TTS voice", which promised something the
 project does not have: there is no TTS provider and the only key here is for
@@ -170,16 +183,21 @@ rate and word choice rather than timbre.
 
 **A coach can be heard before it is chosen (2026-09-11).** Each row also
 carries a sample line, which the Voice card on Coach speaks in that coach's
-voice — or shows as text on a device that cannot speak — so picking a coach is
-not a blind choice. It is written, not generated: a stored line needs no API
-key.
+voice — or shows as text when the voice is unavailable — so picking a coach is
+not a blind choice. It is written, not generated. _Amended the same day by
+ADR 0025: the line is still stored, but speaking it in character now needs the
+key, and without it the line is shown rather than spoken._
 
 Personas may not alter any number in the plan they receive, asserted by test. A
 tone override forces a gentler register when an injury or a run of missed
-sessions is flagged, regardless of which persona is selected. High-frequency
-cues (rest over, set logged, PR hit, last set) are spoken live by the browser,
-with a tone as the fallback where speech is unavailable — not precomputed audio,
-for the same reason as above.
+sessions is flagged, regardless of which persona is selected. Of the
+high-frequency cues only one is announced: the device says "Rest over.", with a
+tone as the fallback where it cannot speak. It is deliberately not a coach's
+voice — it is nobody's line, and it has to fire offline, on time and without
+spending the budget (ADR 0025). Set logged, PR hit and last set are not
+announced. _Corrected 2026-09-11: this said all four were spoken live by the
+browser, and explained the missing precomputed audio with a reason that is now
+history._
 
 ### 5.5 Progression and rewards — **Built** (phases 4–5)
 
