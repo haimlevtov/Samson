@@ -649,8 +649,9 @@ describe('the templates each archetype is seeded with', () => {
      * tag is one the user owns (`availableExercises`, CLAUDE.md #5).
      *
      * FOUND IN REVIEW: this test used to check "is in the programme", with a
-     * comment saying the history already respects the equipment. It does not:
-     * the home-gym programme carries a machine-tagged lift.
+     * comment saying the history already respects the equipment. It did not:
+     * the home-gym programme carried a machine-tagged lift, until ADR 0020's
+     * 2026-09-11 amendment.
      */
     for (const archetype of ARCHETYPES) {
       const granted = new Set(archetype.equipment.map((g) => g.slug));
@@ -661,25 +662,32 @@ describe('the templates each archetype is seeded with', () => {
     }
   });
 
-  it('knows the one programme lift outside its grant, and leaves it out', () => {
+  it('prescribes no programme lift outside its grant', () => {
     /*
-     * Pinned rather than merely tolerated. Fixing `chair-squat` — the catalogue
-     * tag, the legs tree's root, or the programme — changes this expectation on
-     * purpose; a NEW mismatch fails here instead of vanishing from a template
-     * in silence.
+     * Pinned rather than merely tolerated. This held `home-gym: chair-squat` —
+     * a Smith-machine squat in a programme for dumbbells, bands and a floor —
+     * until ADR 0020's 2026-09-11 amendment rebuilt the legs tree from lifts a
+     * floor allows and the programme followed it. A NEW mismatch fails here
+     * instead of vanishing from a template in silence.
+     *
+     * Asked of the programme rather than the templates, because `build` leaves
+     * an out-of-grant lift out, and a template-level check could not see one.
      */
     expect(Object.fromEntries(ARCHETYPES.map((a) => [a.key, outOfGrant(a, EQUIPMENT_OF)]))).toEqual(
       {
         beginner: [],
         plateaued: [],
         returning: [],
-        'home-gym': ['chair-squat'],
+        'home-gym': [],
         inconsistent: [],
       }
     );
-    expect(
-      build(byKey('home-gym')).flatMap((t) => t.items.map((i) => i.exerciseSlug))
-    ).not.toContain('chair-squat');
+
+    // And the lift that replaced it reaches his templates rather than being
+    // filtered out with it.
+    expect(build(byKey('home-gym')).flatMap((t) => t.items.map((i) => i.exerciseSlug))).toContain(
+      'bodyweight-squat'
+    );
   });
 
   it('copies each session’s lifts, sets and reps from the programme, never from the log', () => {

@@ -269,10 +269,16 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
     day: 0,
     appended: true,
   },
+  // The legs tree's root, and the lift that opens its next rung: 3 × 20 in one
+  // session. 21 because a later set drops a rep a quarter of the time. This was
+  // `chair-squat` — a Smith-machine squat tagged `machine`, which this
+  // archetype does not own — until ADR 0020's 2026-09-11 amendment. Same side
+  // stream, same number of draws: a zero load draws nothing and three sets
+  // draw three times each, so no other entry's numbers move.
   {
-    exerciseSlug: 'chair-squat',
+    exerciseSlug: 'bodyweight-squat',
     sets: 3,
-    reps: 16,
+    reps: 21,
     startingKg: 0,
     incrementKg: 0,
     day: 2,
@@ -794,15 +800,14 @@ export type EquipmentOf = ReadonlyMap<string, string>;
  * The app offers a user only lifts whose catalogue equipment tag they own —
  * `availableExercises` in src/db/exercises.ts, CLAUDE.md #5 — and until this
  * nothing held the programmes to that rule. FOUND IN REVIEW: the home-gym
- * programme carries `chair-squat`, which the catalogue tags `machine`, so that
- * archetype's history logs a lift the app would never let him pick.
+ * programme carried `chair-squat`, which the catalogue tags `machine`, so that
+ * archetype's history logged a lift the app would never let him pick. Fixed by
+ * ADR 0020's 2026-09-11 amendment — the legs tree changed, and the programme
+ * with it — so every archetype's list is empty now.
  *
- * AI-NOTE: the programme is not corrected here, because `chair-squat` is the
- *          root of the legs progression tree and the fix is a content decision
- *          with three candidates — the catalogue tag, the tree root, or the
- *          programme. This function keeps a template from repeating the
- *          mistake, and `src/seed/archetypes.test.ts` pins the list so a NEW
- *          mismatch fails loudly instead of being left out in silence.
+ * AI-NOTE: `src/seed/archetypes.test.ts` pins every list at empty, so a NEW
+ *          mismatch fails loudly; this function keeps a template from
+ *          prescribing one meanwhile, rather than leaving it out in silence.
  */
 export function outOfGrant(archetype: Archetype, equipmentOf: EquipmentOf): string[] {
   const granted = new Set(archetype.equipment.map((grant) => grant.slug));
