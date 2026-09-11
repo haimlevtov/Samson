@@ -93,10 +93,13 @@ export interface Persona {
  * carries `sampleLine`, which a user can write on their own persona row, and
  * delivery never reads it. Passing the row through was safe only while the
  * prompt builder names fields one at a time; a later edit that spread the
- * persona into a message would put user text outside the fence — CLAUDE.md
- * #11, ADR 0006's 2026-09-11 amendment. Picking makes that impossible rather
- * than merely absent, and a field added to a reader type later cannot leak
- * either.
+ * persona into a message would have carried the line outside the fence —
+ * CLAUDE.md #11, ADR 0006's 2026-09-11 amendment. Picking keeps THE LINE, and
+ * any field a reader type gains later, out of delivery altogether.
+ *
+ * It does not make the fields it keeps trusted: `name`, `systemPrompt` and
+ * `bannedPhrases` are writable on a user's own row as well, and
+ * src/persona/prompts.ts fences and cleans them.
  */
 export function asPersona(row: Persona): Persona {
   return {

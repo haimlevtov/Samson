@@ -124,9 +124,9 @@ describe('the line each coach is heard by before it is picked', () => {
   /*
    * Rework plan PR 6, and the add-persona skill: `sample_line` is what the Voice
    * card speaks when a coach is previewed, before it delivers the plan, so it
-   * obeys what every word a persona says obeys. Checked
-   * per row through the shipped reader and the shipped checks — a copy of any
-   * of them here would measure the copy.
+   * obeys what every word a persona says obeys. Checked per row through the
+   * shipped reader and the shipped checks — a copy of any of them here would
+   * measure the copy.
    *
    * The roster is exactly the shipped coaches (the first case in this file), so
    * "every persona" below is every shipped one.
@@ -142,10 +142,16 @@ describe('the line each coach is heard by before it is picked', () => {
   it('gives each coach its own line', async () => {
     // The acceptance is "something recognisably its own". Distinct is the part
     // a test can hold; the voice of each line is content, read in review.
-    // toHaveLength against the Set, as the voice-variant case above does, so a
-    // failure prints the lines themselves and names the duplicate.
-    const said = (await lines()).map(({ line }) => line);
-    expect(said).toHaveLength(new Set(said).size);
+    // Slugs, not a count: vitest truncates long values in a failure, so
+    // comparing lengths would print two numbers and name nobody. FOUND IN
+    // REVIEW — the first version claimed it printed the lines.
+    const seen = new Set<string>();
+    const repeated: string[] = [];
+    for (const { persona, line } of await lines()) {
+      if (seen.has(line)) repeated.push(persona.slug);
+      seen.add(line);
+    }
+    expect(repeated, 'coaches whose line repeats an earlier one').toEqual([]);
   });
 
   it('states no numeral, because a coach says no number it was not given', async () => {

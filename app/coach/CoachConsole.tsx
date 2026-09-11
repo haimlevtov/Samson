@@ -89,10 +89,10 @@ export function CoachConsole({
    * the only other cancels are a new `speak()` call, the Stop button, a chip
    * change (below), and unmount. Without this, delivering again while the
    * previous read is still playing leaves the screen showing one coach while
-   * the audio reads another — the same mismatch this component's `speaking` lookup exists to prevent,
-   * moved from the click boundary to the delivery boundary. It also covers the
-   * failure case, where `state.delivered` goes null and the text disappears
-   * while the voice carries on.
+   * the audio reads another — the same mismatch this component's `speaking`
+   * lookup exists to prevent, moved from the click boundary to the delivery
+   * boundary. It also covers the failure case, where `state.delivered` goes
+   * null and the text disappears while the voice carries on.
    */
   useEffect(() => {
     stopSpeaking();
