@@ -21,7 +21,7 @@ because several of them touch the same surface.
 | 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | planned — the key stays off Vercel until it ships                      |
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | in review, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)            |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)        |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                |
 
 PR 8 carries two of the requested changes because they are the same surface and
@@ -541,7 +541,8 @@ Docker session.
 **So the work is one entry point, not a feature.** The import lives on
 `/workout/new`; the request is a button **on the coach's plan**. Render the same
 control there, against the block already on screen, and reuse
-`createTemplateFromPlan` — changed only to name a second import, below.
+`createTemplateFromPlan` — changed to name a second import (below), and after
+review to return a plain error rather than the database's.
 
 ### What is genuinely open, and both are small
 
@@ -583,7 +584,7 @@ control there, against the block already on screen, and reuse
   "Week 1 · Day 1 — Upper (2)". Not refused: a newer plan's session can share
   week, day and focus with an older one, so a name says nothing about sameness.
   Not silent either: two imports of one session match on everything the Workout
-  tab shows — name, lifts and set count — so they cannot be told apart.
+  tab shows — name, lifts and number of set groups — so they cannot be told apart.
   _Corrected in review: this also said templates are editable and that the tab
   lists them by name alone. Neither is true; the decision stands on the reason
   above._
@@ -705,8 +706,10 @@ deliberate.**" The code comment this PR quotes cites that spec as its authority.
 
 So:
 
-- **`docs/specs/coach-chat.md`** — §1 rewritten for one box and a plan control;
-  §5 and §6 extended if routing is a second call.
+- **`docs/specs/coach-chat.md`** — §1 rewritten for one box and a plan control,
+  and the "Save as a template" control PR 7 put inside the plan disclosure; its
+  "four controls" count was already short before PR 7. §5 and §6 extended if
+  routing is a second call.
 - **`docs/PRD.md`** — §5.3 (coaching, currently "Specified") and the diet and
   supplement entries at §5.7.
 - **A home for the routing decision.** The plan calls it "the new thing, and it
@@ -1186,7 +1189,7 @@ shipped and been heard.
 
 - **Two false reasons in the duplicate decision.** Templates are not editable
   in the app — there is no edit control — and the Workout tab shows each
-  template's lifts and set count, not its name alone. The decision stands on
+  template's lifts and number of set groups, not its name alone. The decision stands on
   the reason that was true: a newer plan's session can share week, day and
   focus with an older one, and two imports of one session match on everything
   the tab shows. Corrected here, in the spec, and in `naming.ts`.

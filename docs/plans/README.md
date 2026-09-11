@@ -52,7 +52,7 @@ whether the feature exists.
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
 | [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
-| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 6 of 11 shipped              |
+| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 8 of 11 shipped              |
 
 ## Phase 5 is three documents, and here is why
 
@@ -132,9 +132,10 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — seven of the twenty open items
-below, and worth
-grouping because one `.env.local` line closes them:
+**Waiting on live model runs, not on work** — seven of the twenty open items
+below, and worth grouping. _This said "blocked on an OpenRouter key", closed by
+one `.env.local` line; a funded key exists since 2026-09-11 (rework PR 6b), so
+each now needs a run that spends it._
 
 | From                     | Item                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

@@ -2,7 +2,7 @@
 
 Status: authoritative
 Date: 2026-09-05
-Governs: `src/templates/`, `src/db/templates.ts`, `app/templates/`
+Governs: `src/templates/`, `src/db/templates.ts`, `app/workout/` (this said `app/templates/`, which does not exist)
 
 This document is the contract. As with `planner-rules.md` and
 `xp-and-challenges.md`, the tests for `src/templates/` are written from this
@@ -162,8 +162,10 @@ Rules:
 
 WHY `rpe` is dropped: RPE is an outcome, not an instruction. Three sets that
 felt 7, 8 and 9 are one prescription, not three, and grouping by RPE would
-shatter every template into single sets. A user who wants a target RPE can add
-one; the deriver will not invent it from how hard last Tuesday felt.
+shatter every template into single sets. The deriver will not invent a target RPE
+from how hard last Tuesday felt, and the builder offers none to add. _This
+said "a user who wants a target RPE can add one"; nothing in the app does,
+corrected 2026-09-12 with §1._
 
 4. A run longer than the 20-set bound splits into consecutive groups rather
    than being clamped, so no set is lost.
@@ -193,7 +195,7 @@ a slug → exercise id map built from the catalogue.
   `src/templates/naming.ts`, which takes the first free counter. Importing a
   session twice is allowed, because a newer plan's session can share week, day
   and focus with an older one; but two such copies match on everything the
-  Workout tab shows — name, lifts and set count — so the counter tells them
+  Workout tab shows — name, lifts and number of set groups — so the counter tells them
   apart. The same applies to the name `createTemplateFromSession` gives a
   template saved from a session with the name left blank, `Session of <date>`.
   A name the user types is kept as typed. Decided in the rework plan, PR 7.
