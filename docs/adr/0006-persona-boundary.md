@@ -1,6 +1,7 @@
 # ADR 0006 — The persona speaks; it does not decide
 
-**Status:** accepted, phase 3 — **amended 2026-09-02 and 2026-09-07, see below**
+**Status:** accepted, phase 3 — **amended 2026-09-02, 2026-09-07 and 2026-09-11,
+see below; voice superseded by [ADR 0025](0025-coach-voices.md)**
 **Date:** 2026-09-01
 
 ## Context

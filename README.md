@@ -77,7 +77,9 @@ npm run dev         # http://localhost:3000
 ```
 
 Add an [OpenRouter](https://openrouter.ai/keys) key too if you want real model
-calls — everything except `npm run smoke:llm` works without one.
+calls. Without one the app still runs: the coach's delivery, the chat and the
+diet advisor say a key is missing, and the coach voices show their lines as
+text. `npm run verify` needs none.
 
 New migrations go to the hosted project with `npm run db:push`, after
 `supabase link --project-ref mqcnpuupzknwpvhkbpci` once.

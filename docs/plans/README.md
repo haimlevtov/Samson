@@ -52,7 +52,7 @@ whether the feature exists.
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
 | [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
-| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 5 of 8 shipped               |
+| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 6 of 9 shipped               |
 
 ## Phase 5 is three documents, and here is why
 
@@ -132,19 +132,20 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Blocked on an OpenRouter key, not on work** — seven of the eighteen open items
+**Blocked on an OpenRouter key, not on work** — eight of the nineteen open items
 below, and worth
 grouping because one `.env.local` line closes them:
 
-| From                     | Item                                                                                                                               |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [phase-2.md](phase-2.md) | Cache hit rate measured and recorded — **unmet acceptance criterion**                                                              |
-| [phase-2.md](phase-2.md) | Cost per plan generation recorded per model — **unmet acceptance criterion**                                                       |
-| [phase-2.md](phase-2.md) | Live acceptance rate across the thirty golden cases                                                                                |
-| [phase-3.md](phase-3.md) | The persona drift eval — "does turn 80 still sound like turn 3" — **unmet acceptance criterion**                                   |
-| [phase-3.md](phase-3.md) | No persona has ever spoken; every delivery in the suite is scripted                                                                |
-| [phase-0.md](phase-0.md) | A gateway call writes a complete `llm_calls` row — **unmet acceptance criterion**, and this list did not carry it until 2026-09-09 |
-| [phase-6.md](phase-6.md) | No live model has ever answered a diet question; every adversarial result is against a scripted one                                |
+| From                                      | Item                                                                                                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [phase-2.md](phase-2.md)                  | Cache hit rate measured and recorded — **unmet acceptance criterion**                                                              |
+| [phase-2.md](phase-2.md)                  | Cost per plan generation recorded per model — **unmet acceptance criterion**                                                       |
+| [phase-2.md](phase-2.md)                  | Live acceptance rate across the thirty golden cases                                                                                |
+| [phase-3.md](phase-3.md)                  | The persona drift eval — "does turn 80 still sound like turn 3" — **unmet acceptance criterion**                                   |
+| [phase-3.md](phase-3.md)                  | No persona has ever spoken; every delivery in the suite is scripted                                                                |
+| [phase-0.md](phase-0.md)                  | A gateway call writes a complete `llm_calls` row — **unmet acceptance criterion**, and this list did not carry it until 2026-09-09 |
+| [phase-6.md](phase-6.md)                  | No live model has ever answered a diet question; every adversarial result is against a scripted one                                |
+| [rework, 6b](rework-hub-history-coach.md) | No coach voice has ever been synthesised; the five castings in migration `20260911140100` are unheard                              |
 
 `npm run eval:planner -- --live` is written and unrun. The persona drift eval is not written at all — `package.json` has no script for it, and the add-persona skill says so.
 
@@ -154,7 +155,7 @@ grouping because one `.env.local` line closes them:
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [phase-2.md](phase-2.md)                                   | The `repeated` critic escalation is untested                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | [phase-3.md](phase-3.md)                                   | The number guard is over digits, so "add ten kilos" passes                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| [phase-3.md](phase-3.md)                                   | Voice is `speechSynthesis`, not the precomputed clips PLAN.md briefs                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| [phase-3.md](phase-3.md)                                   | Coaches speak through the gateway's speech stage (ADR 0025), but only a preview line: a delivered plan is not read aloud until a later PR. "Rest over." is still device speech, and set logged, PR hit and last set are not announced at all — none of it the precomputed clips PLAN.md briefs                                                                                                                                                                                                       |
 | [phase-5.md](phase-5.md)                                   | The start-action race — two tabs or two devices; the guarantee is a partial unique index, deliberately deferred                                                                                                                                                                                                                                                                                                                                                                                      |
 | [phase-6.md](phase-6.md)                                   | **File import — an unmet acceptance criterion, by decision rather than by an API key.** Deferred 2026-09-09: Apple Health was the only one of the four formats with somewhere to land, and it is saved for later. The other three are endurance formats with no table to fill                                                                                                                                                                                                                        |
 | [phase-6.md](phase-6.md)                                   | Apple Health would have closed two older notes — the bodyweight time series in `PRD.md` §8, and `tonnage.ts`'s AI-NOTE saying bodyweight-inclusive tonnage needs one first. Both stay open                                                                                                                                                                                                                                                                                                           |
@@ -198,7 +199,7 @@ to think of the case first. `phase-6.md`'s close-out has the table.
 
 - [`docs/PLAN.md`](../PLAN.md) — the phase brief and its acceptance criteria.
   The plans here say how a phase was executed; PLAN.md says what it owed.
-- [`docs/adr/`](../adr/) — the decisions. Twenty-four of them, and several
+- [`docs/adr/`](../adr/) — the decisions. Twenty-five of them, and several
   carry the honest note that they were written after their code at a reviewer's
   prompting rather than before it.
 - [`docs/specs/`](../specs/) — the written contracts tests are built from.

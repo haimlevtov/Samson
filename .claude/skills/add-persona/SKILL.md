@@ -22,8 +22,8 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `slug` | stable, lowercase, never reused |
 | `name` | what the chip says — "The Rival" |
 | `system_prompt` | a description of a **character**, see below |
-| `tts_voice` | the speech model's voice name, e.g. `Algenib`. **See §2** |
-| `tts_instructions` | how the character speaks, in words. **See §2** |
+| `tts_voice` | the speech model's voice name, e.g. `Algenib`; 64 characters at most. **See §2** |
+| `tts_instructions` | how the character speaks, in words; 600 characters at most. **See §2** |
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
@@ -182,7 +182,7 @@ npm run verify && npm run test:db
 
 A persona is a migration plus a database test, so `npm test` alone proves
 nothing about the row — the unit run has no database and cannot see it. The db
-suite is where the roster, the voice allocation and the banned-phrase lists are
+suite is where the roster, the voice casting and the banned-phrase lists are
 actually checked.
 
 ## What this skill does not cover
@@ -204,7 +204,10 @@ been evaluated for drift — it has not.
 - `docs/adr/0005-llm-safety.md` §1 — why a column is fenced, not concatenated
 - `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
   pair, and the closest model to copy. Its insert predates `sample_line`,
-  `tts_voice` and `tts_instructions`; add all three
+  `tts_voice` and `tts_instructions`; add all three, and leave out its
+  `tts_voice_id` and `tts_voice_variant`, which nothing reads
+- `supabase/migrations/20260911140100_persona_voice_direction.sql` — the five
+  voices and directions, and the model for casting a new coach
 - `supabase/migrations/20260911130000_persona_sample_line.sql` — the preview
   line, and the rules it is held to
 - `supabase/migrations/20260901154757_shipped_personas.sql` — the original three

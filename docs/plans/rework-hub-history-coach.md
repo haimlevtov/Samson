@@ -431,7 +431,7 @@ have failed. ADR 0025's closing section records the correction.
   **One model and no fallback model**: a voice name belongs to one model.
 - **This PR voices the preview only**, the coach's own sample line looked up by
   slug, **from a shared row only** — a user can write their own persona row,
-  and reading one would let them make the server speak anything. **Reading a delivered plan aloud is the next PR**: the delivery has to be
+  and reading one would let them make the server speak anything. **Reading a delivered plan aloud is a later PR, not yet planned**: the delivery has to be
   stored server-side first, because the server never speaks text the browser
   sends.
 - **No mismatched fallback, and device voices leave the coach entirely.**
@@ -661,9 +661,11 @@ Each PR: `npm run verify`, `npm run build`, and the browser at 375×812 in both
 themes for anything with a surface. `npm run test:db` where a migration is
 involved.
 
-**Docker exactly once, in PR 6**, for the one column that forces a
-`src/db/types.ts` regeneration. Announced before it starts and stopped in the
-same turn — `supabase stop && wsl --shutdown`.
+**Docker once per column change**, for the `src/db/types.ts` regeneration
+CLAUDE.md requires: PR 6, PR 6b, and the migration after 6b's deploy that drops
+the device-voice columns. Announced before it starts and stopped in the same
+turn — `supabase stop && wsl --shutdown`. _This said "exactly once, in PR 6",
+written before 6b existed._
 
 | Change           | The check that matters                                                       |
 | ---------------- | ---------------------------------------------------------------------------- |
@@ -672,6 +674,7 @@ same turn — `supabase stop && wsl --shutdown`.
 | Graphs           | No label overlaps another at 320px                                           |
 | Seed furnishings | A seeded template starts a session; the empty-Profile list is named          |
 | Persona preview  | Five voices, and a text fallback where speech is unavailable                 |
+| Coach voices     | Each line in its coach's voice; no key, text and no button; a row per call   |
 | Plan → template  | RLS on the insert, and the duplicate case decided                            |
 | One box          | Every guarantee from ADR 0015, 0023 and 0024 still has its test              |
 | Plan generation  | Every state renders; the key gap is stated, not implied                      |
@@ -686,11 +689,12 @@ catches.
 
 This plan's PRs have not had it on their signed-in pages either. PR 4 came
 closest — its graph was rendered and measured as a component at four widths in
-both themes, which is not the page — and PR 6's preview is on `/coach`.
+both themes, which is not the page — and the Voice card PRs 6 and 6b built is on
+`/coach`.
 
-**Seven of the eight PRs above have something to look at in a browser** — every
+**Eight of the nine PRs above have something to look at in a browser** — every
 one except this plan, and PR 5 explicitly requires opening each seeded Profile.
-Five of them change markup. If the pass stays unrun the same class of defect will
+Six of them change markup. If the pass stays unrun the same class of defect will
 keep shipping, so it is worth clearing before PR 7 — which adds a button to
 `/coach` — rather than after PR 8.
 

@@ -58,7 +58,7 @@ stored in its row, through the gateway.**
    own persona row, line and direction included, so reading one would let them
    make the server speak whatever they typed, bounded only by the budget.
    Reading a delivered plan aloud needs the delivery stored server-side first,
-   and is the next PR.
+   and is a later PR, not yet planned.
 5. **No mismatched fallback.** No key, no budget left, or a failed call: the
    coach shows its line as text. It never falls back to a device voice. Device
    speech survives only for persona-less cues — the rest timer's "Rest over."
@@ -68,7 +68,8 @@ stored in its row, through the gateway.**
    as columns that describe nothing. **In two steps:** this PR removes every
    reader, and the first migration after it is deployed drops the columns.
    Dropping them in the same push would break the running app, which still
-   selects them, for as long as the deploy takes.
+   selects them, for as long as the deploy takes. The drop regenerates
+   `src/db/types.ts`, so it needs a local stack once more.
 
 ### How the direction reaches the model
 
@@ -118,7 +119,7 @@ already fetched. Automated tests cost nothing — they run against a scripted
 gateway with no key, as every stage's do.
 
 **The flat charge is sized for a sample line and no longer.** A delivered plan
-read aloud, the next PR, is a minute or more; that PR has to replace the flat
+read aloud, in a later PR, is a minute or more; that PR has to replace the flat
 figure with one that scales with what is spoken.
 
 ## What this does not decide, and where it is going
@@ -165,3 +166,44 @@ through the gateway, no mismatched fallback — did not change.
 The first version also said the per-character price would be "estimated in code"
 without saying where the estimate goes. It goes in the budget gate, never in a
 row, for the reason `TIMEOUT_ASSUMED_COST_USD` gives.
+
+## Addendum after the code, 2026-09-11 — what review of #49 found
+
+Recorded after the code, at the reviewers' prompting. The first two points were
+decided in the code commit and belonged here before it.
+
+- **The speech stage is exempt from ADR 0005 §3 and §4.** `callSpeech` sends no
+  `SAFETY_PREAMBLE`, because a speech model would read it aloud, and runs no
+  `scanOutput`, because what comes back is audio rather than a completion. What
+  stands in for both is decision 4: only stored text from a shared row is
+  spoken, and `tests/db/personas.test.ts` holds every shipped line to
+  `scanOutput`, to no numeral and to none of its coach's banned phrases. The
+  later PR that speaks a delivered plan changes that — its transcript is
+  model-written from the user's own notes, so untrusted (CLAUDE.md #11) — and
+  must strip audio tags and this script's own labels before speaking it.
+- **Two assertions throw before a call exists, and write no `llm_calls` row**:
+  an input over `SPEECH_MAX_INPUT_CHARS` (1,200; the column limits allow 1,104
+  at the most) and no speech model configured. Both come before the budget
+  gate, so nothing is sent or charged; CLAUDE.md #3's "every call" begins there.
+- **Retries are shorter than a text stage's**: two attempts of twenty seconds,
+  where text gets three of sixty. A preview is a button press.
+- **Only `audio/mpeg` is audio.** A 200 carrying anything else — an error body,
+  another format — or no bytes at all is recorded `schema_invalid`, is not
+  retried, and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a
+  200 and may have been billed, so one charge per press rather than none, and
+  never two. The first version accepted any `audio/` type, and a model ignoring
+  `response_format` would have cached an unplayable clip for every coach.
+- **What the gate charges, completely.** A spoken attempt $0.02; a timed-out one
+  `TIMEOUT_ASSUMED_COST_USD`, $0.05, as for every stage, so a press that times
+  out twice counts $0.10; a failed one nothing. A negative `cost_credits` counts
+  as zero. The token columns are null as well as the cost. And the gate reads
+  the spend before the call and the row lands after it, so presses sent at once
+  all pass — the unreserved gap ADR 0015 §5 and ADR 0024 already name.
+- **The budget has holes older than this ADR**, found by the security review and
+  not closed here: a user can raise their own `llm_weekly_budget_usd` (the
+  `authenticated` role has table-wide UPDATE on `users`), can insert a
+  negative-cost `llm_calls` row of their own, and an account with no profile row
+  is charged against the default budget while its ledger inserts fail — after
+  the paid call. The budget is the one thing bounding speech, so these close in
+  their own PR **before `OPENROUTER_API_KEY` goes on Vercel**. The clamp in
+  `chargedFor` is the part that landed here.
