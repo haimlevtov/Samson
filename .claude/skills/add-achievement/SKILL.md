@@ -50,9 +50,9 @@ coin toss both times — [ADR 0021](../../../docs/adr/0021-training-order-is-loc
 
 A predicate that joins ANY table a user can own rows in — `workouts`,
 `exercises`, anything with a `user_id` — must filter that table as well, not
-just the sets it starts from. `s.user_id = $1` on the sets is not enough:
-`evaluate_achievements` is `security definer`, so the join sees every user's
-rows. It has happened twice: `workouts` (migration `20260908140000`) and
+just the table it starts from, `sets` or `workouts`. `user_id = $1` on that
+first table is not enough: `evaluate_achievements` is `security definer`, so
+the join sees every user's rows. It has happened twice: `workouts` (migration `20260908140000`) and
 `exercises` (`20260911100000`, the `five-patterns` predicate). For a table that
 also holds shared catalogue rows the filter is
 `(e.user_id is null or e.user_id = $1)`.
@@ -87,8 +87,9 @@ Every achievement ships with a test in the same commit asserting:
    LOCKED, and present for the holder once earned. Both halves — ADR 0017
    narrowed the criterion, and a test for only the first half would pass on a
    version that never showed the badge to anyone.
-6. If the predicate joins a table a user can own rows in: a set pointing at
-   ANOTHER user's row does not count, and one pointing at their own does.
+6. If the predicate joins a table a user can own rows in: a row of theirs
+   pointing at ANOTHER user's row does not count, and one pointing at their
+   own does.
    Write the cross-user row with the admin client — the write policies refuse
    it now, which is the point, so it stands for a row written before they did.
    The `five-patterns` case in `tests/db/achievements.test.ts` is the pattern.

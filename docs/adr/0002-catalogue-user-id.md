@@ -47,7 +47,9 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
   makes the rows invisible; forgetting the write policy makes them writable by
   the wrong user. `tests/db/schema-invariants.test.ts` catches a table with no
   policy at all, but it cannot catch a wrong one, so this is called out in an
-  `AI-NOTE` at the top of the catalogue migration.
+  `AI-NOTE` at the top of the catalogue migration. _Not quite: the 2026-09-08
+  amendment below drops the write half where no feature needs it, and the
+  2026-09-11 one adds a check it must carry on a table with a foreign key._
 
   **Amended 2026-09-08 — the write half needs a feature behind it.** The reason
   given for it above is that "user-authored custom exercises work later with no
