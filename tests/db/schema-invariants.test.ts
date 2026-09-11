@@ -388,3 +388,124 @@ describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', ()
     expect(stray).toEqual([]);
   });
 });
+
+/**
+ * ADR 0003, amended 2026-09-11 — a foreign key is a gate RLS does not guard.
+ *
+ * Postgres checks a foreign key as the REFERENCED table's owner, not under RLS,
+ * so a write policy that only checks `user_id = auth.uid()` lets a user point a
+ * row at somebody else's workout, template or custom exercise. It has happened
+ * twice (`sets.workout_id`, then both `template_id` columns), each time with a
+ * comment somewhere claiming RLS refused it.
+ *
+ * This reads every such foreign key from the live catalogue rather than from a
+ * list, so a new table cannot arrive without an answer.
+ */
+describe('ADR 0003 — a write policy checks the rows its foreign keys point at', () => {
+  interface ForeignKey {
+    tbl: string;
+    col: string;
+    ref: string;
+    writable: boolean;
+    checked: boolean;
+  }
+
+  /*
+   * Plain substring matching, deliberately not a regex. The first probe for
+   * this test used a word-boundary pattern, the backslash was lost on the way
+   * into node, `\b` became a BACKSPACE character, and every column read as
+   * unchecked — including the one fix that already existed. A substring has no
+   * escapes to lose.
+   *
+   * "Checked" means a write policy on the table mentions both the foreign-key
+   * column and the table it references. That is a proxy — it proves the author
+   * wrote a clause about that row, not that the clause is correct — so the two
+   * behavioural halves live in tests/db/rls.test.ts, where alice actually tries.
+   */
+  const FOREIGN_KEYS = `
+    with fks as (
+      select con.conrelid::regclass::text as tbl,
+             att.attname as col,
+             con.confrelid::regclass::text as ref
+      from pg_constraint con
+      join pg_attribute att
+        on att.attrelid = con.conrelid and att.attnum = any (con.conkey)
+      where con.contype = 'f'
+        and con.connamespace = 'public'::regnamespace
+        and att.attname <> 'user_id'
+        and exists (
+          select 1 from information_schema.columns c
+          where c.table_schema = 'public'
+            and c.table_name = con.confrelid::regclass::text
+            and c.column_name = 'user_id'
+        )
+    )
+    select fks.tbl, fks.col, fks.ref,
+           exists (
+             select 1 from pg_policies p
+             where p.schemaname = 'public' and p.tablename = fks.tbl
+               and p.cmd in ('ALL', 'INSERT', 'UPDATE')
+           ) as writable,
+           exists (
+             select 1 from pg_policies p
+             where p.schemaname = 'public' and p.tablename = fks.tbl
+               and p.cmd in ('ALL', 'INSERT', 'UPDATE')
+               and position(fks.col in coalesce(p.with_check, '')) > 0
+               and position(fks.ref in coalesce(p.with_check, '')) > 0
+           ) as checked
+    from fks
+    order by 1, 2`;
+
+  const foreignKeys = async (): Promise<ForeignKey[]> =>
+    (await db().query<ForeignKey>(FOREIGN_KEYS)).rows;
+
+  it('recognises the one fix that predates this test', async () => {
+    /*
+     * The calibration. `sets_own` has checked `workout_id` since migration
+     * 20260908140000; if this reports it unchecked, the matcher is broken and
+     * every other verdict below means nothing — which is exactly what the
+     * backspace did to the first probe.
+     */
+    const sets = (await foreignKeys()).find((fk) => fk.tbl === 'sets' && fk.col === 'workout_id');
+
+    expect(sets, 'sets.workout_id is no longer a foreign key?').toBeDefined();
+    expect(sets!.checked).toBe(true);
+  });
+
+  it('checks both template_id columns', async () => {
+    // Migration 20260911090000. The two cases rls.test.ts proves by trying.
+    const byColumn = new Map((await foreignKeys()).map((fk) => [`${fk.tbl}.${fk.col}`, fk]));
+
+    expect(byColumn.get('workouts.template_id')?.checked).toBe(true);
+    expect(byColumn.get('workout_template_items.template_id')?.checked).toBe(true);
+  });
+
+  it('leaves exactly the known unchecked columns, so a new one fails', async () => {
+    /*
+     * The five the rule found and this PR did not fix. Every one points at a
+     * table that holds shared catalogue rows as well as user-owned ones, so the
+     * right check is "yours, or a null user_id" — the same existence-oracle
+     * class, and no cross-user READ today.
+     *
+     * Pinned rather than tolerated. Fixing one removes it from this list on
+     * purpose; an unchecked column that is not listed here — the next table
+     * with a foreign key and a `user_id = auth.uid()` policy — fails CI.
+     *
+     * Tables with no user write policy at all (achievement_events, xp_events,
+     * progression_nodes since 20260908120100) are written only by definer
+     * functions or not at all, so there is no policy to check and they are
+     * excluded by `writable`.
+     */
+    const unchecked = (await foreignKeys())
+      .filter((fk) => fk.writable && !fk.checked)
+      .map((fk) => `${fk.tbl}.${fk.col} -> ${fk.ref}`);
+
+    expect(unchecked).toEqual([
+      'exercise_equipment.equipment_tag_id -> equipment_tags',
+      'exercise_equipment.exercise_id -> exercises',
+      'sets.exercise_id -> exercises',
+      'user_equipment.equipment_tag_id -> equipment_tags',
+      'workout_template_items.exercise_id -> exercises',
+    ]);
+  });
+});

@@ -134,12 +134,11 @@ describe('the Workout tab for each demo user', () => {
      * through the same user-scoped client.
      *
      * WHAT THIS DOES NOT PROVE: that another user's template would be refused.
-     * FOUND IN REVIEW, this comment said "RLS rejects a template id belonging to
-     * anyone else", and it does not — `workouts_own` checks only `user_id`, and
-     * a foreign key is not subject to RLS. What proves this user owns the
-     * template is `listTemplates` having returned it through RLS at all. The
-     * policy gap is its own piece of work, and app/workout/actions.ts makes the
-     * same false claim until it lands.
+     * That is tests/db/rls.test.ts, where alice tries it. FOUND IN REVIEW, this
+     * comment once claimed RLS refused it when `workouts_own` checked only
+     * `user_id` — a foreign key is not subject to RLS (ADR 0003). Migration
+     * 20260911090000 made it true. Here, what proves the user owns the template
+     * is `listTemplates` having returned it through RLS at all.
      *
      * The row is deleted afterwards and the delete is CHECKED. Against the
      * hosted project a stray in-progress session would become that demo user's
