@@ -30,13 +30,26 @@ import type { TemplateFormState } from './form-state';
  *            sets appear when the user does the work.
  */
 
-/** Zod says what is wrong in a sentence; anything else gets a plain fallback. */
+/**
+ * Zod says what is wrong in a sentence; anything else gets a plain fallback.
+ *
+ * WHY not `Error.message`, which this returned until review of PR 7: every
+ * other error these actions can throw is a database one — `listing templates:
+ * …`, `creating template items: …` — and passing it on handed the browser table
+ * and column names. PR 7 made one of them reachable from /coach as well. The
+ * name and a bounded message go to the server log instead, as the coach's
+ * actions do; see `sendChatMessage` for why never the whole object.
+ */
 function explain(cause: unknown, fallback: string): string {
   if (cause instanceof z.ZodError) {
     const issue = cause.issues[0];
     return issue ? `${issue.path.join('.') || 'form'}: ${issue.message}` : fallback;
   }
-  return cause instanceof Error ? cause.message : fallback;
+  console.error(
+    'template action failed',
+    cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+  );
+  return fallback;
 }
 
 /** Build one by hand: the items come from the browser as JSON and are re-parsed. */

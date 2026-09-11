@@ -82,7 +82,7 @@ export default async function CoachPage() {
 
           {/*
            * The plan is revealed, not served — the user's own request, and the
-           * right default regardless: a twelve-week block unrolled on load is
+           * right default regardless: an eight-week block unrolled on load is
            * most of a screen nobody asked for.
            *
            * A <details> rather than client state: it needs no JavaScript, it is
@@ -112,7 +112,7 @@ export default async function CoachPage() {
                * and the same action as /workout/new, so a session saved here is
                * the one saved there: copied verbatim from this block, and a
                * second copy gets a counter rather than a twin. Above the weeks,
-               * not below them: a twelve-week block would bury it.
+               * not below them: an eight-week block would bury it.
                */}
               <div className="card">
                 <PlanImportForm

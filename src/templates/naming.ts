@@ -2,10 +2,12 @@
  * Template names the app generates, kept apart from the ones a user has.
  *
  * Decided in the rework plan, PR 7, and written into docs/specs/workout-templates.md
- * §6: importing a session twice is ALLOWED — templates are editable, so a user
- * may keep the coach's version beside an edited copy, and a newer plan's session
- * can share week, day and focus with an older one — but the Workout tab lists
- * templates by name alone, so two identical names could not be told apart.
+ * §6: importing a session twice is ALLOWED — a newer plan's session can share
+ * week, day and focus with an older one, so a name says nothing about sameness —
+ * but two imports of one session match on everything the Workout tab shows
+ * (name, lifts and set count), so without a counter they could not be told
+ * apart. _This said templates are editable and that the tab lists them by name
+ * alone; neither is true. Corrected in review._
  *
  * AI-NOTE: only for names the APP generates — a plan import's, and a session
  *          import's default. A name the user types is theirs and is kept as
