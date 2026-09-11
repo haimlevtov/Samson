@@ -1,6 +1,6 @@
 ---
 name: add-persona
-description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or giving it a voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
+description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or giving it a voice. Covers the migration, the voice direction a coach speaks with, and the tests that must ship with it.
 ---
 
 # Adding a persona
