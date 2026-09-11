@@ -10,6 +10,7 @@ let alice: TestUser;
 let bob: TestUser;
 let bobWorkoutId: string;
 let bobTemplateId: string;
+let bobExerciseId: string;
 let systemExerciseId: string;
 let hiddenAchievementId: string;
 
@@ -65,6 +66,22 @@ beforeAll(async () => {
   if (bobTemplate.error) throw new Error(bobTemplate.error.message);
   bobTemplateId = bobTemplate.data.id;
 
+  // A custom exercise of bob's, for the two exercise_id cases below.
+  const bobExercise = await bob.client
+    .from('exercises')
+    .insert({
+      user_id: bob.id,
+      slug: `bob-lift-${Date.now()}`,
+      name: 'Bob lift',
+      primary_muscle: 'quadriceps',
+      movement_pattern: 'carry',
+      source: 'custom',
+    })
+    .select('id')
+    .single();
+  if (bobExercise.error) throw new Error(bobExercise.error.message);
+  bobExerciseId = bobExercise.data.id;
+
   await alice.client
     .from('workouts')
     .insert({ user_id: alice.id, local_date: '2026-08-24', status: 'completed' });
@@ -106,6 +123,21 @@ afterAll(async () => {
    * AI-NOTE: any fixture written with `user_id: null` outlives its test. If you
    *          add one, delete it here.
    */
+  /*
+   * Users FIRST, and alice before bob. Deleting a user cascades away every
+   * set, template item and custom exercise they wrote — including a row a test
+   * here left pointing at somebody else's, on a run where a gap is open.
+   * Alice's rows are the ones that point at bob's, so she goes first; after
+   * that nothing references bob's exercise or template, and nothing references
+   * the shared fixtures below, `on delete restrict` or otherwise.
+   *
+   * FOUND IN REVIEW of PR #43: in the other order every cross-user test's own
+   * cleanup was load-bearing for this block, and those cleanups ignored their
+   * errors.
+   */
+  await deleteTestUser(alice);
+  await deleteTestUser(bob);
+
   const admin = adminClient();
   const cleaned = await Promise.all([
     admin.from('achievements').delete().eq('id', hiddenAchievementId),
@@ -114,16 +146,15 @@ afterAll(async () => {
 
   /*
    * FOUND IN REVIEW: a discarded error here is the same bug again, silently.
-   * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`
-   * AND from `progression_nodes.exercise_id`, so a future test that logs a set
+   * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`,
+   * `workout_template_items.exercise_id` AND `progression_nodes.exercise_id`, so
+   * a future test that logs a set
    * against this fixture makes the delete fail — and swallowing that would
    * reintroduce the leak this block was added to stop, with nothing saying so.
    */
   for (const result of cleaned) {
     if (result.error) throw new Error(`cleaning up a system fixture: ${result.error.message}`);
   }
-
-  await Promise.all([deleteTestUser(alice), deleteTestUser(bob)]);
 });
 
 describe('cross-user isolation', () => {
@@ -209,26 +240,41 @@ describe('cross-user isolation', () => {
      * `template_id`, and the foreign key resolves bob's template without
      * consulting RLS. Two comments in the code claimed RLS refused this.
      *
-     * Cleans up after an unexpected success, because the gap being open is the
-     * very case in which this row gets written.
+     * No cleanup here or in the negative cases below, even on a run where the
+     * gap is open and the row gets written: afterAll deletes the users first,
+     * alice before bob, and that cascades away anything a test let through.
      */
-    const { data, error } = await alice.client
+    const { error } = await alice.client.from('workouts').insert({
+      user_id: alice.id,
+      local_date: '2026-08-24',
+      status: 'in_progress',
+      template_id: bobTemplateId,
+    });
+
+    expect(error, 'alice started a session from a template she does not own').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('stops alice moving one of her own sessions onto bob template', async () => {
+    /*
+     * The UPDATE half. Both policies are `for all`, so `with check` runs on the
+     * new row of an update as well — this test says so, rather than only the
+     * migration's comment.
+     */
+    const { data: own, error: ownError } = await alice.client
       .from('workouts')
-      .insert({
-        user_id: alice.id,
-        local_date: '2026-08-24',
-        status: 'in_progress',
-        template_id: bobTemplateId,
-      })
+      .insert({ user_id: alice.id, local_date: '2026-08-27', status: 'in_progress' })
       .select('id')
       .single();
+    expect(ownError).toBeNull();
 
-    try {
-      expect(error, 'alice started a session from a template she does not own').not.toBeNull();
-      expect(error!.message.toLowerCase()).toContain('row-level security');
-    } finally {
-      if (data) await alice.client.from('workouts').delete().eq('id', data.id);
-    }
+    const { error } = await alice.client
+      .from('workouts')
+      .update({ template_id: bobTemplateId })
+      .eq('id', own!.id);
+
+    expect(error, 'alice pointed her own session at a template she does not own').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
   });
 
   it('stops alice adding an item to one of bob templates', async () => {
@@ -236,86 +282,181 @@ describe('cross-user isolation', () => {
      * The same gap on `workout_template_items`. An item alice wrote there would
      * be invisible to bob, but the unique `(template_id, position)` constraint
      * would tell her which positions he had used.
-     *
-     * AI-NOTE: the cleanup is not optional. The item references the shared
-     *          exercise fixture `on delete restrict`, so a row left behind makes
-     *          afterAll's delete of that fixture fail — the leak afterAll exists
-     *          to stop, on exactly the run where the gap is open.
      */
-    const { data, error } = await alice.client
-      .from('workout_template_items')
+    const { error } = await alice.client.from('workout_template_items').insert({
+      user_id: alice.id,
+      template_id: bobTemplateId,
+      exercise_id: systemExerciseId,
+      position: 0,
+      set_count: 3,
+      reps: 5,
+    });
+
+    expect(error, 'alice wrote into a template she does not own').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('stops alice logging a set against one of bob custom exercises', async () => {
+    /*
+     * FOUND IN REVIEW of PR #43 — the column its own ADR first called harmless.
+     * `five-patterns` joins `exercises` inside the `security definer` evaluator
+     * with nothing scoping the exercise, so a set of alice's on bob's custom
+     * exercise let her read its movement pattern off whether the badge fired.
+     * Migration 20260911100000 refuses the set; tests/db/achievements.test.ts
+     * holds the predicate to the same line for a row written before it.
+     */
+    const { data: own, error: ownError } = await alice.client
+      .from('workouts')
+      .insert({ user_id: alice.id, local_date: '2026-08-28', status: 'completed' })
+      .select('id')
+      .single();
+    expect(ownError).toBeNull();
+
+    const { error } = await alice.client.from('sets').insert({
+      user_id: alice.id,
+      workout_id: own!.id,
+      exercise_id: bobExerciseId,
+      set_index: 0,
+      weight_kg: 60,
+      reps: 5,
+      is_warmup: false,
+    });
+
+    expect(error, 'alice logged a set on an exercise she cannot see').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('stops alice prescribing one of bob custom exercises in her own template', async () => {
+    const { data: own, error: ownError } = await alice.client
+      .from('workout_templates')
+      .insert({ user_id: alice.id, name: 'alice, borrowing' })
+      .select('id')
+      .single();
+    expect(ownError).toBeNull();
+
+    const { error } = await alice.client.from('workout_template_items').insert({
+      user_id: alice.id,
+      template_id: own!.id,
+      exercise_id: bobExerciseId,
+      position: 0,
+      set_count: 3,
+      reps: 5,
+    });
+
+    expect(error, 'alice prescribed an exercise she cannot see').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
+  it('still lets a user use her own template, her own exercise and the catalogue', async () => {
+    /*
+     * The positive half. A policy that refused everything would pass every
+     * negative case above, and the Workout tab and the session grid would stop
+     * working for every user.
+     *
+     * The cleanup at the end is checked, and deliberately not in `finally`: if
+     * an assertion fails first, afterAll's user-first delete removes these rows
+     * anyway, and a throwing `finally` would replace the real failure with a
+     * cleanup one.
+     */
+    const { data: mine, error: mineError } = await alice.client
+      .from('exercises')
       .insert({
         user_id: alice.id,
-        template_id: bobTemplateId,
-        exercise_id: systemExerciseId,
-        position: 0,
-        set_count: 3,
-        reps: 5,
+        slug: `alice-lift-${Date.now()}`,
+        name: 'Alice lift',
+        primary_muscle: 'quadriceps',
+        movement_pattern: 'squat',
+        source: 'custom',
       })
       .select('id')
       .single();
+    expect(mineError, 'her own custom exercise').toBeNull();
 
-    try {
-      expect(error, 'alice wrote into a template she does not own').not.toBeNull();
-      expect(error!.message.toLowerCase()).toContain('row-level security');
-    } finally {
-      if (data) await alice.client.from('workout_template_items').delete().eq('id', data.id);
-    }
-  });
-
-  it('still lets a user start from, and add to, a template of her own', async () => {
-    /*
-     * The positive half. A policy that refused everything would pass both tests
-     * above, and the Workout tab would stop working for every user.
-     *
-     * Everything it writes is removed in `finally`. The template goes last and
-     * takes its items with it by cascade — which also releases the shared
-     * exercise fixture's `on delete restrict` before afterAll needs it.
-     */
-    const own = await alice.client
+    const { data: template, error: templateError } = await alice.client
       .from('workout_templates')
       .insert({ user_id: alice.id, name: 'alice only' })
       .select('id')
       .single();
-    expect(own.error).toBeNull();
+    expect(templateError).toBeNull();
 
-    const sessionIds: string[] = [];
-    try {
-      const item = await alice.client.from('workout_template_items').insert({
+    const items = await alice.client.from('workout_template_items').insert([
+      {
         user_id: alice.id,
-        template_id: own.data!.id,
+        template_id: template!.id,
         exercise_id: systemExerciseId,
         position: 0,
         set_count: 3,
         reps: 5,
-      });
-      expect(item.error, 'an item in her own template').toBeNull();
+      },
+      {
+        user_id: alice.id,
+        template_id: template!.id,
+        exercise_id: mine!.id,
+        position: 1,
+        set_count: 3,
+        reps: 5,
+      },
+    ]);
+    expect(items.error, 'items on the catalogue and on her own exercise').toBeNull();
 
-      const fromTemplate = await alice.client
-        .from('workouts')
-        .insert({
-          user_id: alice.id,
-          local_date: '2026-08-25',
-          status: 'in_progress',
-          template_id: own.data!.id,
-        })
-        .select('id')
-        .single();
-      expect(fromTemplate.error, 'a session from her own template').toBeNull();
-      if (fromTemplate.data) sessionIds.push(fromTemplate.data.id);
+    const { data: session, error: sessionError } = await alice.client
+      .from('workouts')
+      .insert({
+        user_id: alice.id,
+        local_date: '2026-08-25',
+        status: 'in_progress',
+        template_id: template!.id,
+      })
+      .select('id')
+      .single();
+    expect(sessionError, 'a session from her own template').toBeNull();
 
-      // A null template_id — every session started without one — must still pass.
-      const plain = await alice.client
-        .from('workouts')
-        .insert({ user_id: alice.id, local_date: '2026-08-26', status: 'completed' })
-        .select('id')
-        .single();
-      expect(plain.error, 'a session with no template at all').toBeNull();
-      if (plain.data) sessionIds.push(plain.data.id);
-    } finally {
-      if (sessionIds.length > 0) await alice.client.from('workouts').delete().in('id', sessionIds);
-      if (own.data) await alice.client.from('workout_templates').delete().eq('id', own.data.id);
-    }
+    const sets = await alice.client.from('sets').insert([
+      {
+        user_id: alice.id,
+        workout_id: session!.id,
+        exercise_id: systemExerciseId,
+        set_index: 0,
+        weight_kg: 60,
+        reps: 5,
+        is_warmup: false,
+      },
+      {
+        user_id: alice.id,
+        workout_id: session!.id,
+        exercise_id: mine!.id,
+        set_index: 0,
+        weight_kg: 40,
+        reps: 8,
+        is_warmup: false,
+      },
+    ]);
+    expect(sets.error, 'sets on the catalogue and on her own exercise').toBeNull();
+
+    // Finishing re-runs `with check` against the updated row.
+    const finished = await alice.client
+      .from('workouts')
+      .update({ status: 'completed' })
+      .eq('id', session!.id);
+    expect(finished.error, 'finishing a session started from her own template').toBeNull();
+
+    // A null template_id — every session started without one — must still pass.
+    const { error: plainError } = await alice.client
+      .from('workouts')
+      .insert({ user_id: alice.id, local_date: '2026-08-26', status: 'completed' });
+    expect(plainError, 'a session with no template at all').toBeNull();
+
+    // Checked cleanup, in dependency order: the session takes its sets, the
+    // template takes its items, and then nothing references her exercise.
+    const removedSession = await alice.client.from('workouts').delete().eq('id', session!.id);
+    expect(removedSession.error, 'removing her session').toBeNull();
+    const removedTemplate = await alice.client
+      .from('workout_templates')
+      .delete()
+      .eq('id', template!.id);
+    expect(removedTemplate.error, 'removing her template').toBeNull();
+    const removedExercise = await alice.client.from('exercises').delete().eq('id', mine!.id);
+    expect(removedExercise.error, 'removing her exercise').toBeNull();
   });
 
   it('stops a user erasing their own spend to reset the budget', async () => {

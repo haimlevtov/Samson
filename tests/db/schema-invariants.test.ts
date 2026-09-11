@@ -395,8 +395,9 @@ describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', ()
  * Postgres checks a foreign key as the REFERENCED table's owner, not under RLS,
  * so a write policy that only checks `user_id = auth.uid()` lets a user point a
  * row at somebody else's workout, template or custom exercise. It has happened
- * twice (`sets.workout_id`, then both `template_id` columns), each time with a
- * comment somewhere claiming RLS refused it.
+ * three times — `sets.workout_id`, both `template_id` columns, then
+ * `sets.exercise_id` — each time with a comment or a doc somewhere calling it
+ * safe.
  *
  * This reads every such foreign key from the live catalogue rather than from a
  * list, so a new table cannot arrive without an answer.
@@ -417,10 +418,16 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
    * unchecked — including the one fix that already existed. A substring has no
    * escapes to lose.
    *
-   * "Checked" means a write policy on the table mentions both the foreign-key
-   * column and the table it references. That is a proxy — it proves the author
-   * wrote a clause about that row, not that the clause is correct — so the two
-   * behavioural halves live in tests/db/rls.test.ts, where alice actually tries.
+   * "Checked" means EVERY permissive write policy on the table, for the roles a
+   * signed-in user holds, mentions both the foreign-key column and the table it
+   * references — or a restrictive one does. FOUND IN REVIEW: the first version
+   * accepted ANY one policy, and permissive policies are ORed, so a second one
+   * without the clause would reopen the gap while this stayed green. Where a
+   * policy has no `with check`, Postgres reuses `using`, and so does this.
+   *
+   * It is a proxy — it proves the author wrote a clause about that row, not that
+   * the clause is correct — so the behavioural halves live in
+   * tests/db/rls.test.ts, where alice actually tries.
    */
   const FOREIGN_KEYS = `
     with fks as (
@@ -439,19 +446,39 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
             and c.table_name = con.confrelid::regclass::text
             and c.column_name = 'user_id'
         )
+    ),
+    writes as (
+      select p.tablename,
+             p.permissive,
+             coalesce(p.with_check, p.qual, '') as check_text
+      from pg_policies p
+      where p.schemaname = 'public'
+        and p.cmd in ('ALL', 'INSERT', 'UPDATE')
+        and p.roles && array['authenticated', 'public']::name[]
     )
     select fks.tbl, fks.col, fks.ref,
-           exists (
-             select 1 from pg_policies p
-             where p.schemaname = 'public' and p.tablename = fks.tbl
-               and p.cmd in ('ALL', 'INSERT', 'UPDATE')
-           ) as writable,
-           exists (
-             select 1 from pg_policies p
-             where p.schemaname = 'public' and p.tablename = fks.tbl
-               and p.cmd in ('ALL', 'INSERT', 'UPDATE')
-               and position(fks.col in coalesce(p.with_check, '')) > 0
-               and position(fks.ref in coalesce(p.with_check, '')) > 0
+           exists (select 1 from writes w where w.tablename = fks.tbl) as writable,
+           (
+             exists (
+               select 1 from writes w
+               where w.tablename = fks.tbl and w.permissive = 'RESTRICTIVE'
+                 and position(fks.col in w.check_text) > 0
+                 and position(fks.ref in w.check_text) > 0
+             )
+             or (
+               exists (
+                 select 1 from writes w
+                 where w.tablename = fks.tbl and w.permissive = 'PERMISSIVE'
+               )
+               and not exists (
+                 select 1 from writes w
+                 where w.tablename = fks.tbl and w.permissive = 'PERMISSIVE'
+                   and not (
+                     position(fks.col in w.check_text) > 0
+                     and position(fks.ref in w.check_text) > 0
+                   )
+               )
+             )
            ) as checked
     from fks
     order by 1, 2`;
@@ -472,20 +499,37 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
     expect(sets!.checked).toBe(true);
   });
 
-  it('checks both template_id columns', async () => {
-    // Migration 20260911090000. The two cases rls.test.ts proves by trying.
+  it('checks both template_id columns and both exercise_id columns', async () => {
+    // Migrations 20260911090000 and 20260911100000 — the cases rls.test.ts
+    // proves by trying.
     const byColumn = new Map((await foreignKeys()).map((fk) => [`${fk.tbl}.${fk.col}`, fk]));
 
-    expect(byColumn.get('workouts.template_id')?.checked).toBe(true);
-    expect(byColumn.get('workout_template_items.template_id')?.checked).toBe(true);
+    for (const column of [
+      'workouts.template_id',
+      'workout_template_items.template_id',
+      'sets.exercise_id',
+      'workout_template_items.exercise_id',
+    ]) {
+      expect(byColumn.get(column)?.checked, column).toBe(true);
+    }
   });
 
   it('leaves exactly the known unchecked columns, so a new one fails', async () => {
     /*
-     * The five the rule found and this PR did not fix. Every one points at a
-     * table that holds shared catalogue rows as well as user-owned ones, so the
-     * right check is "yours, or a null user_id" — the same existence-oracle
-     * class, and no cross-user READ today.
+     * The three the rule found and PR #43 did not fix — ADR 0003, amended.
+     *
+     *   - `exercise_equipment.exercise_id` and `.equipment_tag_id`: the table's
+     *     primary key is (exercise_id, equipment_tag_id) with no user_id, so one
+     *     user's link occupies that pair for everybody and the duplicate-key
+     *     error says so. The fix is a key change, not a policy.
+     *   - `user_equipment.equipment_tag_id`: user_id is in its key, which leaves
+     *     only the existence oracle.
+     *
+     * FOUND IN REVIEW: this list first held five, and this comment called all
+     * five "the same existence-oracle class, and no cross-user READ today".
+     * `sets.exercise_id` was a read, through `five-patterns` inside the
+     * `security definer` evaluator. It is closed now, with
+     * `workout_template_items.exercise_id`.
      *
      * Pinned rather than tolerated. Fixing one removes it from this list on
      * purpose; an unchecked column that is not listed here — the next table
@@ -503,9 +547,7 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
     expect(unchecked).toEqual([
       'exercise_equipment.equipment_tag_id -> equipment_tags',
       'exercise_equipment.exercise_id -> exercises',
-      'sets.exercise_id -> exercises',
       'user_equipment.equipment_tag_id -> equipment_tags',
-      'workout_template_items.exercise_id -> exercises',
     ]);
   });
 });

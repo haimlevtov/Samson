@@ -374,14 +374,14 @@ control there, against the block already on screen, and reuse
 
 ### What is genuinely open, and both are small
 
-- **`tests/db` has no coverage of the template INSERT under RLS.** _This read
-  "no `workout_template*` coverage at all"; PR 5 added reads, in
-  `tests/db/seeded-templates.test.ts`._ The insert side is still unasserted,
-  and PR 5's security review showed the gap is real rather than hypothetical:
-  `workouts_own` and `workout_template_items_own` never check that a
-  `template_id` belongs to the user, and a foreign key is not subject to RLS.
-  The policy fix is split out as its own migration; the insert tests still
-  belong here, because this PR adds a second caller.
+- **Template ownership under RLS is asserted now — on the policy side.** _This
+  first read "no `workout_template*` coverage at all", then "the insert side is
+  still unasserted"; both are history._ PR #43 (migrations `20260911090000` and
+  `20260911100000`) made `workouts_own` and `workout_template_items_own` refuse
+  another user's template or custom exercise, on insert and on update, and
+  `tests/db/rls.test.ts` tries each case. **Still open here:** nothing inserts a
+  `workout_templates` row under another user's `user_id`. The owner-only policy
+  covers it, but no test has tried, and this PR adds a second caller.
 - **There is no unique constraint on template name**, so importing the same
   session twice produces two identical rows. Decide: an error, a rename, or
   allowed. Currently it is allowed by accident rather than by decision.

@@ -30,12 +30,21 @@
 -- the next `security definer` function would read them. That is how the sets
 -- bug happened.
 --
+-- AUDITED on hosted before this was applied there, read-only: no session and no
+-- template item points at another user's template, so the tighter check strands
+-- nothing. Checked rather than assumed: a row that had crossed would still be
+-- visible and deletable, but no longer finishable, since finishing re-runs
+-- `with check`.
+--
 -- THE FIX: the write half only, as in 20260908140000.
 --   * `with check` now requires the template to be the writer's own. A null
 --     `template_id` — every session started without one — still passes.
 --   * `using` is untouched. It is the read/visibility half, and adding the
 --     clause there would hide a row already written across the boundary instead
 --     of leaving it visible to the owner who has to clean it up.
+--   * Every column reference is qualified with its table — `workouts.template_id`,
+--     not `template_id` — so a column added to `workout_templates` later cannot
+--     capture the name. FOUND IN REVIEW; 20260911100000 does the same.
 --   * Policy only: no DDL, so src/db/types.ts does not change and no local stack
 --     is needed to regenerate it.
 --
@@ -60,7 +69,7 @@ alter policy workouts_own on public.workouts
       or exists (
         select 1
         from public.workout_templates t
-        where t.id = template_id
+        where t.id = workouts.template_id
           and t.user_id = auth.uid()
       )
     )
@@ -73,7 +82,7 @@ alter policy workout_template_items_own on public.workout_template_items
     and exists (
       select 1
       from public.workout_templates t
-      where t.id = template_id
+      where t.id = workout_template_items.template_id
         and t.user_id = auth.uid()
     )
   );

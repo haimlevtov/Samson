@@ -194,11 +194,12 @@ export async function startFromTemplate(formData: FormData): Promise<void> {
       local_date: localDate,
       status: 'in_progress',
       started_at: new Date().toISOString(),
-      // RLS rejects a template id belonging to anyone else, so this cannot
-      // borrow another user's prescription — `workouts_own` checks it since
-      // migration 20260911090000. Before that the foreign key resolved another
-      // user's template, because a foreign key is not subject to RLS (ADR
-      // 0003), and this comment was false; tests/db/rls.test.ts now tries it.
+      // INVARIANT: RLS rejects a template id belonging to anyone else, so this
+      //            cannot borrow another user's prescription — CLAUDE.md #10.
+      //            `workouts_own` checks it since migration 20260911090000
+      //            (ADR 0003). Before that a foreign key resolved another user's
+      //            template without consulting RLS, and this comment claimed
+      //            otherwise; tests/db/rls.test.ts now tries it.
       template_id: templateId,
     })
     .select('id')
