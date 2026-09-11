@@ -52,7 +52,7 @@ whether the feature exists.
 | [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
 | [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
 | [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
-| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 5 of 8 shipped               |
+| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 6 of 8 shipped               |
 
 ## Phase 5 is three documents, and here is why
 

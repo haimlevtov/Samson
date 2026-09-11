@@ -186,6 +186,12 @@ a slug → exercise id map built from the catalogue.
   and names the missing slugs. It is not silently dropped: a pressing day
   missing its press is worse than an error message.
 - The name is `Week N · Day M — <focus>`, truncated to the 80-character bound.
+- **A name the user already has gets a counter**: `… (2)`, then `(3)`, the
+  base truncated so the whole stays inside the bound. Importing a session
+  twice is allowed — a user may keep the coach's version beside an edited one —
+  but the Workout tab lists templates by name, so the copies must be told
+  apart. The same applies to §5's default name, `Session of <date>`. A name
+  the user types is kept as typed. Decided in the rework plan, PR 7.
 
 The block being imported has already passed `rules.ts` and the safety critic.
 This step calls no model and makes no judgement; it is a copy.

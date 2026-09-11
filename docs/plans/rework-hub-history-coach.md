@@ -10,16 +10,16 @@ because several of them touch the same surface.
 
 ## Status
 
-| PR  | What                                                                                      | Branch                 | State                                                                |
-| --- | ----------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
-| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                        |
-| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)   |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | in review, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)   |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
+| PR  | What                                                                                      | Branch                 | State                                                                  |
+| --- | ----------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                          |
+| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)   |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)            |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | in progress                                                            |
+| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                                |
 
 PR 8 carries two of the requested changes because they are the same surface and
 would conflict as separate branches.
@@ -435,6 +435,36 @@ control there, against the block already on screen, and reuse
   through the same action `/workout/new` uses.
 - `tests/db` covers the insert under RLS: a user can only write their own.
 - The duplicate case is decided and stated, not left to accident.
+
+### What looking found, and the decisions — 2026-09-11, before the code
+
+- **The control is `PlanImportForm`, unchanged but for its label,** inside the
+  plan disclosure on `/coach`, under "The plan itself". It reads "Save as a
+  template" there, and still "Import from plan" on `/workout/new`. Same
+  action, `createTemplateFromPlan`; a success lands on the new template's page,
+  where Start is — the payoff the acceptance asks for, already built.
+- **The session list is built once.** `/workout/new` builds its options inline;
+  `/coach` would be a second copy. `planSessionOptions` in
+  `src/templates/plan.ts` builds them for both, with the same
+  `plannedSessionName` the import stores.
+- **A second import is allowed, and renamed with a counter** —
+  "Week 1 · Day 1 — Upper (2)". Not refused: templates are editable, so a user
+  can reasonably keep the coach's version beside an edited copy, and a newer
+  plan's session can share week, day and focus with an older one, so a name
+  says nothing about sameness. Not silent either: the Workout tab lists
+  templates by name alone, so two identical names cannot be told apart.
+- **Only names the app generates are renamed** — a plan import's, and a
+  session import's default `Session of <date>`. A name the user types is
+  kept as typed; it is theirs.
+- **No constraint in the database.** A name is not an identity, so there is
+  nothing to make unique. Two submissions at the same instant could still
+  produce two equal names — harmless, the case this rule exists to make rare,
+  and the button is disabled while a save is in flight, so a double tap in one
+  tab cannot.
+- **RLS**: a `tests/db` case in which one user tries to insert a
+  `workout_templates` row under another's `user_id`. The owner-only policy
+  refuses it today; this PR adds a second caller, so it is asserted rather
+  than assumed.
 
 ---
 
