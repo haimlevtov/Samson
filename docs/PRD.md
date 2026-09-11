@@ -179,9 +179,10 @@ rate and word choice rather than timbre.
 
 **A coach can be heard before it is chosen (2026-09-11).** Each row also
 carries a sample line, which the Voice card on Coach speaks in that coach's
-voice — or shows as text on a device that cannot speak — so picking a coach is
-not a blind choice. It is written, not generated: a stored line needs no API
-key.
+voice — or shows as text when the voice is unavailable — so picking a coach is
+not a blind choice. It is written, not generated. _Amended the same day by
+ADR 0025: the line is still stored, but speaking it in character now needs the
+key, and without it the line is shown rather than spoken._
 
 Personas may not alter any number in the plan they receive, asserted by test. A
 tone override forces a gentler register when an injury or a run of missed

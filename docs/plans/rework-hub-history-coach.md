@@ -412,9 +412,14 @@ three British coaches would have collapsed onto one. **Closed unmerged.**
 **The claim that no browser voice could sound like a samurai master was wrong in
 the way that mattered.** It is true of `speechSynthesis`; products with character
 voices do not use it. And OpenRouter now serves text-to-speech
-(`/api/v1/audio/speech`), where `openai/gpt-4o-mini-tts` takes written
-instructions for tone, pace and accent. The key and the gateway this project
-already has can speak in character.
+(`/api/v1/audio/speech`), where `google/gemini-3.1-flash-tts-preview` takes a
+written direction for tone, pace and character. The key and the gateway this
+project already has can speak in character.
+
+**Corrected before the code:** this first named `openai/gpt-4o-mini-tts`, from
+OpenRouter's own speech example. It is not in OpenRouter's catalogue — checked
+against `/api/v1/models?output_modalities=speech` — so the first call would
+have failed. ADR 0025's closing section records the correction.
 
 ### The decisions
 
@@ -423,8 +428,10 @@ already has can speak in character.
 - **A `speech` stage through the gateway**: `callSpeech` beside `callLLM`, with
   the budget gate, retries and an `llm_calls` row per attempt. The stage needs
   the `llm_calls.stage` migration the add-pipeline-stage skill warns about.
+  **One model and no fallback model**: a voice name belongs to one model.
 - **This PR voices the preview only**, the coach's own sample line looked up by
-  slug. **Reading a delivered plan aloud is the next PR**: the delivery has to be
+  slug, **from a shared row only** — a user can write their own persona row,
+  and reading one would let them make the server speak anything. **Reading a delivered plan aloud is the next PR**: the delivery has to be
   stored server-side first, because the server never speaks text the browser
   sends.
 - **No mismatched fallback, and device voices leave the coach entirely.**
@@ -433,16 +440,19 @@ already has can speak in character.
   rest timer keeps its neutral "Rest over."
 - **The characters**, as directions, from the personas' own descriptions:
 
-  | Coach          | Voice   | Direction, in short                                  |
-  | -------------- | ------- | ---------------------------------------------------- |
-  | The Old Master | `onyx`  | an old samurai sword master: deep, grave, unhurried  |
-  | The Sergeant   | `ash`   | a drill sergeant on the parade ground: loud, clipped |
-  | The Rival      | `verse` | a cocky training partner: dry, quick, a smirk in it  |
-  | The Analyst    | `sage`  | a sports scientist: calm, precise, no hype           |
-  | The Physio     | `coral` | an experienced physio: warm, gentle, unhurried       |
+  | Coach          | Voice     | Direction, in short                                  |
+  | -------------- | --------- | ---------------------------------------------------- |
+  | The Old Master | `Algenib` | an old samurai sword master: deep, grave, unhurried  |
+  | The Sergeant   | `Alnilam` | a drill sergeant on the parade ground: loud, clipped |
+  | The Rival      | `Puck`    | a cocky training partner: dry, quick, a smirk in it  |
+  | The Analyst    | `Erinome` | a sports scientist: calm, precise, no hype           |
+  | The Physio     | `Sulafat` | an experienced physio: warm, gentle, unhurried       |
 
-- **Cost**: about $0.002 a preview, about $0.03 for a plan read aloud later,
-  inside the gateway's $0.50 per user per week. Automated tests spend nothing.
+- **Cost**: about $0.005 to $0.01 a preview, at about $0.03 a minute of speech.
+  OpenRouter reports no price for a speech call, so the row records none and
+  the budget gate charges each spoken preview a flat, pessimistic $0.02 —
+  twenty-five previews in the gateway's $0.50 per user per week. A replay in the
+  same visit is free. Automated tests spend nothing.
 - **Where it is going**: a coach that talks to the user live, mid-workout. Not
   built here — real-time work is out of scope today — but the direction in the
   row is written so that session can use it.

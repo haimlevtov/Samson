@@ -22,7 +22,7 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `slug` | stable, lowercase, never reused |
 | `name` | what the chip says — "The Rival" |
 | `system_prompt` | a description of a **character**, see below |
-| `tts_voice` | the TTS provider's voice name, e.g. `onyx`. **See §2** |
+| `tts_voice` | the speech model's voice name, e.g. `Algenib`. **See §2** |
 | `tts_instructions` | how the character speaks, in words. **See §2** |
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
@@ -54,27 +54,36 @@ the character's description and will not take effect the way you expect.
 
 ## 2. The voice — a direction, not a device
 
-A coach speaks in a synthesised voice (ADR 0025): `tts_voice` names the TTS
-provider's voice, and `tts_instructions` says, in words, how the character
-speaks. Both go to OpenRouter's text-to-speech through the gateway's `speech`
-stage.
+A coach speaks in a synthesised voice (ADR 0025): `tts_voice` names one of the
+speech model's voices, and `tts_instructions` says, in words, how the character
+speaks. Both go to `google/gemini-3.1-flash-tts-preview`, through the gateway's
+`speech` stage.
+
+**`tts_voice` must be one the model has.** `SPEECH_VOICES` in
+`src/speech/script.ts` lists them — Google gives each a word, `Algenib`
+"gravelly", `Sulafat` "warm" — and `tests/db/personas.test.ts` fails on a
+shipped coach whose voice is not in it, or that shares a voice with another.
+There is no fallback model, because a voice name belongs to one model.
 
 **Write the direction for a person, not for a model**, the same rule as
 `system_prompt`: who is speaking, and how — pace, weight, what they never do.
 
 > Good: "An old samurai sword master: deep, grave, unhurried; short deliberate
 > phrases with long pauses; never raises his voice."
-> Bad: "Use voice onyx at 0.7 speed and sound old."
+> Bad: "Use voice Algenib at 0.7 speed and sound old."
+
+The direction is read, not spoken: the model is told to perform only the text
+under `TRANSCRIPT`. Keep the notes about the speaker, not about the line.
 
 Current voices:
 
 | Slug         | `tts_voice` | Direction, in short                                  |
 | ------------ | ----------- | ---------------------------------------------------- |
-| `old-master` | `onyx`      | an old samurai sword master: deep, grave, unhurried  |
-| `sergeant`   | `ash`       | a drill sergeant on the parade ground: loud, clipped |
-| `rival`      | `verse`     | a cocky training partner: dry, quick, a smirk in it  |
-| `analyst`    | `sage`      | a sports scientist: calm, precise, no hype           |
-| `physio`     | `coral`     | an experienced physio: warm, gentle, unhurried       |
+| `old-master` | `Algenib`   | an old samurai sword master: deep, grave, unhurried  |
+| `sergeant`   | `Alnilam`   | a drill sergeant on the parade ground: loud, clipped |
+| `rival`      | `Puck`      | a cocky training partner: dry, quick, a smirk in it  |
+| `analyst`    | `Erinome`   | a sports scientist: calm, precise, no hype           |
+| `physio`     | `Sulafat`   | an experienced physio: warm, gentle, unhurried       |
 
 **A voice that does not fit the coach is worse than none** — the user's rule, and
 why there is no device-voice fallback: without the key or the budget, the coach's

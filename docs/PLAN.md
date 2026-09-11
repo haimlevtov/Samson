@@ -195,7 +195,10 @@ analysis is measuring.
 - Persona layer: receives a finished plan, changes only delivery. Personas are
   config rows — system prompt, language hint and voice variant, intensity, humor
   tier, banned phrases. There is no TTS provider; delivery is the browser's own
-  speechSynthesis — ADR 0006, corrected 2026-09-07
+  speechSynthesis — ADR 0006, corrected 2026-09-07. _Superseded for coaches on
+  2026-09-11 by ADR 0025: each row carries a voice and a written direction,
+  spoken through the gateway's speech stage, and the language hint and variant
+  are gone._
 - Ship three personas: the Rival, the Analyst, and one of the Sergeant or the
   Old Master. _The Old Master was picked; the Sergeant shipped in phase 5's
   content fill, along with a fifth, the Physio._
