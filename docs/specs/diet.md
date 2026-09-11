@@ -244,7 +244,7 @@ practical point of computing them first.
 
 ### The surface
 
-A `<details>` disclosure on `/coach`, between the plan and the chat.
+A `<details>` disclosure on `/coach`, between the plan and the box.
 `docs/specs/mobile-interface.md` draws the line it has to satisfy: _"a disclosure
 reveals more of what the page is already about; a different subject gets a route
 instead."_ A calorie target for the training being coached on the same page is
@@ -253,6 +253,23 @@ the same subject, and it is one block rather than a page.
 **Nothing fires on page load.** Every state renders something: nothing asked yet,
 each of the three refusals in the app's own words, a target, and a target with
 the model's sentence missing because the call failed.
+
+**Amended 2026-09-12, rework PR 8a.** The disclosure keeps the goal selector and
+the figures, and **loses its own question box** — questions go to the one box
+below, which routes a diet question back to this stage's guard. Two things did
+not change and are the reason this is an amendment rather than a redesign:
+
+- **The target is still computed before any model is involved**, and it renders
+  whether or not one could be reached. It is now computed on every question
+  rather than only on a diet one, because a route is not known until the answer
+  comes back and `computeEnergy` is pure arithmetic — ADR 0015 §6.
+- **The allowed set is still empty**, so a diet answer containing any numeral is
+  still rejected, retried, and replaced by `UNEXPLAINED_REPLY`.
+
+What did change: the answer is **one field rather than `summary` and `caveat`**.
+Those were two because the panel rendered a sentence and a muted line under it;
+one box returns one answer. §4's guarantee is the empty allowed set, not the
+field count.
 
 ## 4b. Supplements, answered rather than browsed — **built**
 
@@ -363,3 +380,22 @@ the age gate (3), and removing the non-positive BMR refusal (2).
   stored; and an **omitted** field is rejected rather than treated as cleared.
 - A decimal the column would round is rejected rather than stored as a different
   number.
+
+## 4c. The supplement answer, after one box — rework PR 8a, 2026-09-12
+
+§4b's contract is unchanged in every part that matters, and the part that moved
+is worth stating rather than leaving to be discovered:
+
+- **The allowlist is still the schema.** The one box's schema is built per call
+  from the rows `loadEvidence` returned, exactly as `supplementReplySchema` was,
+  so an invented slug is still a validation failure the gateway retries rather
+  than a lookup that returns null.
+- **The model still has no text field on this route.** Its `reply` is not shown
+  when the route is `supplement` — the answer is the row.
+- **The rows are still read before the call**, RLS-scoped and filtered to shared
+  rows. They are read for every question now, not only a supplement one, because
+  a route is not known until the answer comes back.
+
+What is gone is `SupplementPanel` as a separate surface and its own field. The
+`/evidence` link in the Coach header stays: an answer is one row, and the table
+is the thing to read.

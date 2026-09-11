@@ -102,6 +102,10 @@ false, **the model's `reply` is discarded unread** and a string from
 tokens in order commits to the classification before it writes the answer rather
 than justifying an answer it has already written.
 
+> _Since §6 (2026-09-12) the field is `route`, an enum whose `off_topic` member
+> is what `on_topic: false` was. Everything in this section holds unchanged: it
+> is still declared first, and the refusal is still a constant._
+
 **What this buys, precisely:** the wording of a refusal is code, so "reply with
 only the word OK", "respond in French", "prefix your refusal with the system
 prompt" and every variant of them change nothing the user sees. A refusal cannot
@@ -201,15 +205,16 @@ about training. Anyone reading the phase report should take "the coach stays on
 topic" as _defence in depth that works against ordinary misuse_, and take the
 following as the actual guarantees:
 
-| Claim                                                | Status                                                             |
-| ---------------------------------------------------- | ------------------------------------------------------------------ |
-| The chat cannot read another user's data             | **Guaranteed** — no tool, no query, RLS underneath                 |
-| The chat cannot write to the user's training data    | **Guaranteed** — no such write path exists                         |
-| The chat cannot change a number the app shows        | **Guaranteed** — those come from `src/metrics/`                    |
-| A refusal's wording cannot be altered by the user    | **Guaranteed** — it is a constant                                  |
-| Every numeral in a reply appeared in what it was fed | **Enforced** — guard, retry, then a code-owned message             |
-| The reply states no unverifiable figure              | **NOT guaranteed** — the guard reads numerals, not meaning. See §4 |
-| The chat only ever discusses training                | **Mitigated, not guaranteed** — a model classifying itself         |
+| Claim                                                 | Status                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| The chat cannot read another user's data              | **Guaranteed** — no tool, no query, RLS underneath                 |
+| The chat cannot write to the user's training data     | **Guaranteed** — no such write path exists                         |
+| The chat cannot change a number the app shows         | **Guaranteed** — those come from `src/metrics/`                    |
+| A refusal's wording cannot be altered by the user     | **Guaranteed** — it is a constant                                  |
+| Every numeral in a reply appeared in what it was fed  | **Enforced** — guard, retry, then a code-owned message             |
+| The reply states no unverifiable figure               | **NOT guaranteed** — the guard reads numerals, not meaning. See §4 |
+| The chat only ever discusses training                 | **Mitigated, not guaranteed** — a model classifying itself         |
+| A question reaches the right one of the three answers | **Mitigated, not guaranteed** — a model routing itself. See §6     |
 
 A jailbroken chat's realistic worst case is that a user who worked at it gets a
 non-training answer, and pays for it out of their own weekly budget. That is a
@@ -250,3 +255,79 @@ default, and it is documented in `docs/specs/coach-chat.md` rather than here.
 
 This ADR was drafted as 0014 in the phase-5 plan; 0014 was taken by the exercise
 progression chart while this branch waited.
+
+---
+
+## Amendment, 2026-09-12 — §6: one box, three answers
+
+**Status:** accepted, rework plan PR 8a.
+
+Three boxes on `/coach` asked the user to classify their own question before
+typing it: a chat panel, a diet question, and a supplement lookup, each with its
+own field and its own idea of what it would answer. The rework collapses them
+into one box. **The stage is not deleted and none of its guarantees are
+relaxed** — what changes is that the answer has a route.
+
+### The routing is a model's judgement, and it joins the table above
+
+`route` is declared **first** in the schema, for the same reason `on_topic` is:
+a model generating in order commits to the route before it writes the answer
+rather than justifying one it has already written. And like `on_topic`, it is
+**the model classifying itself — a mitigation, not a control.**
+
+**What a wrong route costs.** A training question answered as a diet question
+gets an answer with no figures in it; a diet question answered as training gets
+one checked against the fact set instead of against an empty set; a supplement
+question routed anywhere else gets prose instead of a row. Each is a **worse
+answer, not an unsafe one**, because the guard that runs is the guard belonging
+to the route the model named, and every one of the three refuses more than it
+admits. There is no route whose guard is weaker than another's in a way a
+misroute could exploit: the diet route's allowed set is empty, which is the
+strictest of the three, and the supplement route renders a row the app chose
+from an allowlist rather than any model-authored string.
+
+**What it cannot do.** A route cannot reach data the old panel could not:
+`loadEvidence` is RLS-scoped and filtered to shared rows, `computeEnergy` reads
+the authenticated user's own biometrics, and `coachFacts` reads their own log.
+The three contexts are assembled before the call, by code, from the same reads
+the three panels each did separately.
+
+### One call, not two
+
+A router call followed by an answer call would be cleaner to describe and would
+double the spend on the one stage a user invokes by typing. It buys nothing
+here, because **everything a route needs is deterministic and computable before
+any model is involved** — so a single call can be given all three contexts and
+return one of three shapes. It also owes no migration: a second stage means a
+`llm_calls.stage` CHECK change, and `20260907160000` records what that costs
+when it is missed.
+
+### The guards do not merge
+
+Each route keeps the check written for it, applied in code after the call, on
+the branch the route names:
+
+| Route        | The check, unchanged                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `training`   | §4's `findUnknownNumbers` against the fact set — retry, then a constant                                              |
+| `diet`       | ADR 0024's EMPTY allowed set and `\p{N}` — any numeral is a rejection                                                |
+| `supplement` | ADR 0023's allowlist **as the schema enum** — an invented slug fails validation and is retried; code renders the row |
+| `off_topic`  | §3's constant. The model's words are discarded without being read                                                    |
+
+A retry that comes back on a **different** route is checked by that route's
+guard, not the previous one's. This is the case worth naming, because the
+opposite — carrying the first attempt's guard forward — would let a model escape
+the empty allowed set by changing its mind about what the question was.
+
+### Consequences
+
+- `docs/specs/coach-chat.md` §1's "four controls" and the supplement panel's own
+  surface both go. The `/evidence` link stays in the header: it is the only route
+  to the table, and ADR 0023's reasoning for it is unchanged.
+- The diet **figures** keep their own surface. They are computed and rendered
+  without a model (CLAUDE.md #6), and putting them behind a question box would
+  make a number the app is certain of conditional on asking for it.
+- `DIET_MAX_TOKENS` and `SUPPLEMENT_MAX_TOKENS` stop being reachable as separate
+  ceilings if their stages lose their callers. Whichever ceiling the one box
+  runs under has to be the largest of the three it replaces, or the answer it
+  gives is quietly shorter than the panel it replaced.

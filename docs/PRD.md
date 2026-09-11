@@ -301,6 +301,16 @@ entire output is a **slug from an allowlist built out of the rows it was shown**
 caution and clickable citation, and there is no paraphrase to soften a D-graded
 row. `specs/diet.md` §4b.
 
+**Changed (rework PR 8a, 2026-09-12).** The three question boxes on Coach — the
+chat, the diet question and the supplement lookup — are **one box**, which routes
+a question to one of those three answers. Every guarantee above is unchanged:
+the supplement answer is still a row chosen from an allowlist, the diet answer
+still may contain no numeral, and the calorie target is still computed and
+rendered by code. What changed is that the user no longer has to classify their
+own question to be answered. The routing is a model's judgement and is recorded
+as a mitigation rather than a control —
+[ADR 0015 §6](adr/0015-coach-chat.md#amendment-2026-09-12--6-one-box-three-answers).
+
 ### 5.8 Import — **Deferred** (phase 6)
 
 `.fit`, `.tcx`, `.gpx` and Apple Health XML. File import is the primary path and

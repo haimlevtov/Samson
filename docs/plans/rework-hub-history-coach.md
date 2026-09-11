@@ -22,10 +22,12 @@ because several of them touch the same surface.
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | shipped 09-12, [↓](#pr-6c--the-budget-cannot-be-moved-by-its-owner-2026-09-12) |
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                                      |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                        |
+| 8a  | [One box on Coach](#pr-8--one-box-and-a-plan-you-can-ask-for)                              | `coach-one-box`        | in progress                                                                    |
+| 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | planned, after 8a                                                              |
 
-PR 8 carries two of the requested changes because they are the same surface and
-would conflict as separate branches.
+PR 8 was written as one item because both changes land on one surface. It ships
+as two: 8a rearranges that surface and 8b fills the state 8a leaves — the
+reasoning, and what did not change with it, is in its section.
 
 ## Two things decided before planning, and who decided them
 
@@ -609,6 +611,32 @@ review to return a plain error rather than the database's.
 **Branch `coach-one-box`.** The largest change, and the one carrying two
 stakeholder decisions.
 
+> **Split into 8a and 8b, 2026-09-12, before any of it was built.** This section
+> stays whole because it is the brief both halves are written from; what changed
+> is that they ship as two PRs.
+>
+> |        | What it does                                                  | Branch                 |
+> | ------ | ------------------------------------------------------------- | ---------------------- |
+> | **8a** | One box: routing, the three answers, the two surfaces removed | `coach-one-box`        |
+> | **8b** | A plan you can ask for: the questionnaire and the generation  | `coach-ask-for-a-plan` |
+>
+> **Why split:** they share a tab and nothing else. The box replaces three
+> surfaces with one and its risk is the routing; generation adds a control that
+> can exceed the function ceiling and its risk is the timeout. Reviewed together
+> they are one diff touching the chat stage, the diet stage, the supplement
+> stage, the planner loop, the page, a spec, an ADR and the PRD — and the
+> standing workflow puts reviewers on every PR, which works on a diff a reviewer
+> can hold.
+>
+> **Why 8a first:** 8b's questionnaire renders where the plan is absent, which is
+> the state 8a rearranges. The reverse order would build the questionnaire into a
+> layout 8a then moves.
+>
+> **What does not move:** the decisions below are the stakeholder's and are
+> unchanged by the split — one box answering three question types, the panels
+> that go, and building generation with its limits named rather than not
+> building it.
+
 ### The Coach tab, after
 
 ```
@@ -651,6 +679,33 @@ one. Whether it is one call that returns a route plus an answer, or a router
 call and then an answer call, is a cost/latency decision to make in the PR — one
 call is cheaper and lets the model justify a route it has already committed to;
 two is cleaner and doubles the spend.
+
+**Decided in 8a: one call.** Three reasons, in order of weight.
+
+- **Everything a route needs is deterministic and computable before the call.**
+  The diet target comes from `computeEnergy`, which is pure code and never sees a
+  model; the supplement allowlist is one RLS-scoped `loadEvidence`; the training
+  figures are `coachFacts`. So one call can be handed all three contexts, and
+  nothing about routing has to be known before the answer is written. A router
+  call would spend a model to learn something the app can prepare for
+  unconditionally.
+- **It doubles the spend on the highest-frequency surface.** `CHAT_MAX_TOKENS` is
+  the smallest ceiling in `config.ts` precisely because this is the one stage a
+  user invokes by typing, and the key is funded in single dollars.
+- **It owes no migration.** A second stage is a `llm_calls.stage` CHECK change,
+  which the unit suite cannot catch — `20260907160000` is the record of that
+  exact trap.
+
+**What one call costs, stated:** the prompt carries the supplement allowlist and
+the diet categories on every question, including the ones that need neither.
+Input at these models' rates is far below a second call's output, and the
+allowlist is slugs rather than prose.
+
+**The guards do not merge.** Each route keeps the check written for it —
+`findUnknownNumbers` against the fact set for training, ADR 0024's empty allowed
+set and `\p{N}` for diet, allowlist membership for a supplement slug — applied in
+code after the call, on the branch the route names. A retry that comes back on a
+different route is checked by that route's guard, not the previous one's.
 
 ### Generate a plan, when there is not one
 
