@@ -116,7 +116,12 @@ describe('CLAUDE.md #2 — all LLM calls go through the gateway', () => {
      * exported call path has to be added here on purpose.
      */
     const gateway = readFileSync(join(ROOT, 'src', 'llm', 'gateway.ts'), 'utf8');
-    const entryPoints = [...gateway.matchAll(/export async function (\w+)/g)].map((m) => m[1]);
+    // Any exported `call*`, however it is declared — an async function, a plain
+    // function returning a promise, or a const. FOUND IN REVIEW: the first
+    // version matched `export async function` only.
+    const entryPoints = [
+      ...gateway.matchAll(/export\s+(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+)(call\w*)/g),
+    ].map((m) => m[1]);
     expect(entryPoints.sort()).toEqual(['callLLM', 'callSpeech']);
   });
 });

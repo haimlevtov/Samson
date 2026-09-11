@@ -8,7 +8,16 @@
  */
 import { SPEECH_ASSUMED_COST_USD, TIMEOUT_ASSUMED_COST_USD } from '../llm/config';
 import type { Db } from './client';
-import type { LedgerClient, LlmCallInsert } from '../llm/types';
+import type { LedgerClient, LlmCallInsert, LlmCallStatus, LlmStage } from '../llm/types';
+
+/** Typed, so a misspelt stage fails to compile instead of charging nothing. */
+const SPEECH: LlmStage = 'speech';
+
+/**
+ * Speech rows that reached a 200: `ok`, and `schema_invalid` for a 200 that was
+ * not the mp3 asked for. Either may have been billed, so both are charged.
+ */
+const SPOKEN: ReadonlySet<LlmCallStatus> = new Set<LlmCallStatus>(['ok', 'schema_invalid']);
 
 /**
  * What one ledger row counts against the weekly budget.
@@ -21,17 +30,25 @@ import type { LedgerClient, LlmCallInsert } from '../llm/types';
  * carries no price — ADR 0025. The ledger stays truthful and this gate stays
  * conservative; the estimates live here and never in a row.
  *
- * AI-NOTE: a speech row that failed (`http_error`) is charged nothing, like
- *          any failed call: no audio came back to be billed for.
+ * WHY a failed speech row (`http_error`) is charged nothing: like any failed
+ * call, no 200 came back, so nothing was generated to be billed for.
+ *
+ * WHY a negative cost counts as zero: `llm_calls_insert_own` lets a user insert
+ * their own rows, and nothing in the table stops a negative `cost_credits` —
+ * one such row would otherwise cancel a week of spend. FOUND IN REVIEW of #49;
+ * the table-side check is the budget-integrity follow-up, and this gate does
+ * not wait for it.
  */
 export function chargedFor(row: {
   cost_credits: number | null;
   status: string;
   stage: string;
 }): number {
-  if (row.cost_credits !== null) return row.cost_credits;
+  if (row.cost_credits !== null) return Math.max(0, row.cost_credits);
   if (row.status === 'timeout') return TIMEOUT_ASSUMED_COST_USD;
-  if (row.stage === 'speech' && row.status === 'ok') return SPEECH_ASSUMED_COST_USD;
+  if (row.stage === SPEECH && SPOKEN.has(row.status as LlmCallStatus)) {
+    return SPEECH_ASSUMED_COST_USD;
+  }
   return 0;
 }
 

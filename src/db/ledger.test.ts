@@ -31,6 +31,21 @@ describe('chargedFor', () => {
     expect(chargedFor(row({ stage: 'speech', status: 'timeout' }))).toBe(TIMEOUT_ASSUMED_COST_USD);
   });
 
+  it('charges a speech 200 that was the wrong shape, since it may have been billed', () => {
+    // The gateway records it `schema_invalid` and does not retry it, so one
+    // charge per press rather than none.
+    expect(chargedFor(row({ stage: 'speech', status: 'schema_invalid' }))).toBe(
+      SPEECH_ASSUMED_COST_USD
+    );
+  });
+
+  it('counts a negative cost as nothing, so one planted row cannot cancel a week', () => {
+    // FOUND IN REVIEW: `llm_calls_insert_own` lets a user insert their own
+    // rows, and nothing in the table stops a negative cost.
+    expect(chargedFor(row({ cost_credits: -9999 }))).toBe(0);
+    expect(chargedFor(row({ stage: 'speech', cost_credits: -1 }))).toBe(0);
+  });
+
   it('charges nothing for a failure that returned nothing, or a refusal', () => {
     expect(chargedFor(row({ stage: 'speech', status: 'http_error' }))).toBe(0);
     expect(chargedFor(row({ stage: 'speech', status: 'budget_denied' }))).toBe(0);

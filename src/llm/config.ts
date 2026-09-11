@@ -143,10 +143,12 @@ export const TIMEOUT_ASSUMED_COST_USD = 0.05;
  *
  * WHY a ceiling on characters: a speech model has no `max_tokens`, and what it
  * is billed on is what it says. The input is src/speech/script.ts's preamble
- * and labels, a direction of at most 600 characters and a line of at most 280
- * (both column limits), which comes to about 1,050.
+ * (184) and labels (40), a direction of at most 600 characters and a line of at
+ * most 280 (both column limits): 1,104 at the most, which src/speech/script.test.ts
+ * holds under this.
  *
- * INVARIANT: always enforced — CLAUDE.md #2. There is no unbounded call path.
+ * INVARIANT: `callSpeech` refuses any input longer than this, so there is no
+ *            unbounded speech call — CLAUDE.md #2.
  */
 export const SPEECH_MAX_INPUT_CHARS = 1_200;
 

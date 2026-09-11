@@ -19,8 +19,13 @@
  *          a different model has different voices — changing the model means
  *          changing this file and recasting every persona row.
  * AI-NOTE: square brackets in a transcript are audio tags to this model —
- *          "[whispers]" is performed, not said. Shipped lines have none. The
- *          PR that speaks model-written prose must strip them first.
+ *          "[whispers]" is performed, not said. Shipped lines have none
+ *          (tests/db/personas.test.ts). The later PR that speaks model-written
+ *          prose — a delivered plan, shaped by the user's own notes — makes the
+ *          transcript untrusted (CLAUDE.md #11) and must strip the brackets AND
+ *          this file's own label text (`### DIRECTOR'S NOTES`, `### TRANSCRIPT`)
+ *          first, and stop logging upstream error bodies, which can echo the
+ *          input back. Found in the security review of #49.
  */
 
 /**

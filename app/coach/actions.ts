@@ -8,7 +8,8 @@ import { coachVoice, latestAcceptedPlan, listPersonas } from '@/src/db/personas'
 import { listWorkouts, loadHistory } from '@/src/db/training';
 import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
 import { speechScript } from '@/src/speech/script';
-import type { VoiceResult } from './voice-state';
+import { refusalFor } from '@/src/speech/refusal';
+import type { VoiceResult } from '@/src/speech/player';
 import {
   MAX_CHAT_MESSAGE_CHARS,
   MAX_DIET_QUESTION_CHARS,
@@ -472,23 +473,20 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
       createGatewayDeps(createSupabaseLedger(db))
     );
 
-    return {
-      ok: true,
-      audio: Buffer.from(spoken.audio).toString('base64'),
-      contentType: spoken.contentType,
-    };
+    return { ok: true, audio: spoken.audio, contentType: spoken.contentType };
   } catch (cause) {
     // Refusals the card can explain are named; everything else is generic,
-    // for the reason `sendChatMessage` gives.
-    if (cause instanceof MissingApiKeyError) return { ok: false, reason: 'no-key' };
-    if (cause instanceof BudgetExceededError) return { ok: false, reason: 'budget' };
+    // for the reason `sendChatMessage` gives — src/speech/refusal.ts.
+    const reason = refusalFor(cause);
 
-    // Name and bounded message only — `LlmCallFailedError` carries every
-    // ledger row, and every row carries the user's id. See `sendChatMessage`.
-    console.error(
-      'coach voice failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
-    return { ok: false, reason: 'failed' };
+    if (reason === 'failed') {
+      // Name and bounded message only — `LlmCallFailedError` carries every
+      // ledger row, and every row carries the user's id. See `sendChatMessage`.
+      console.error(
+        'coach voice failed',
+        cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+      );
+    }
+    return { ok: false, reason };
   }
 }

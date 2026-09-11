@@ -413,9 +413,10 @@ describe('callSpeech', () => {
     expect(rows[0]!.status).toBe('http_error');
   });
 
-  it('never hands on a 200 that carries an error instead of audio', async () => {
+  it('never hands on a 200 that carries an error instead of audio, and does not pay twice', async () => {
     // Some failures arrive inside a 200. Played as audio, that is a broken
-    // clip; recorded as a success, it is spend the ledger calls a preview.
+    // clip; recorded as a success, it is spend the ledger calls a preview. One
+    // row, `schema_invalid`, which the budget charges — so no retry.
     const { deps, rows } = makeDeps(
       async () =>
         new Response('{"error":{"message":"voice not found"}}', {
@@ -425,16 +426,49 @@ describe('callSpeech', () => {
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
-    expect(rows.map((r) => r.status)).toEqual(['http_error', 'http_error']);
-    expect(rows[0]!.error).toContain('expected audio, got application/json');
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toContain('expected audio/mpeg, got application/json');
     expect(rows[0]!.error).toContain('voice not found');
   });
 
-  it('treats an audio response with no bytes as a failure, not a silent clip', async () => {
+  it('refuses audio in a format other than the mp3 it asked for', async () => {
+    // FOUND IN REVIEW: any audio/* was accepted, so a model ignoring
+    // response_format could fill the cache with clips no browser plays.
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(MP3, { 'content-type': 'audio/pcm' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({ status: 'schema_invalid', stage: 'speech' });
+  });
+
+  it('accepts audio/mpeg with parameters on the content type', async () => {
+    const { deps } = makeDeps(async () =>
+      audioResponse(MP3, { 'content-type': 'audio/mpeg; charset=binary' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).resolves.toMatchObject({ attempts: 1 });
+  });
+
+  it('treats an audio response with no bytes as the wrong shape, not a silent clip', async () => {
     const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array()));
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
-    expect(rows.every((r) => r.status === 'http_error')).toBe(true);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+  });
+
+  it('ignores LLM_MODELS, which swaps text models and would recast every coach', async () => {
+    // ADR 0025 §3: the override is for eval runs of the text stages. A speech
+    // call that honoured it would speak in a voice nobody cast.
+    vi.stubEnv('LLM_MODELS', 'openai/gpt-4o,google/gemini-2.5-flash');
+    try {
+      const { deps, calls } = makeDeps(async () => audioResponse());
+      await callSpeech(speechOptions, deps);
+      expect(JSON.parse(String(calls[0]!.body)).model).toBe(STAGE_MODELS.speech[0]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('records a timeout as its own status, which the budget charges', async () => {

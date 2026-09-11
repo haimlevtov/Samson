@@ -142,7 +142,8 @@ export interface SpeechOptions {
 }
 
 export interface SpeechResult {
-  audio: Uint8Array;
+  /** Over a plain ArrayBuffer — what `response.arrayBuffer()` gives — so a Blob takes it as it is. */
+  audio: Uint8Array<ArrayBuffer>;
   /** As the response declared it, e.g. `audio/mpeg`. Always an `audio/` type. */
   contentType: string;
   attempts: number;

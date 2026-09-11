@@ -262,6 +262,14 @@ describe('the voice each coach is cast in', () => {
     expect(JSON.stringify(rival)).not.toContain('PLANTED');
 
     expect(await coachVoice(user.client, 'my-own-coach')).toBeNull();
+
+    // And the picker agrees: no Hear button on a row that cannot be heard,
+    // one on every shipped coach — `voiced` restates coachVoice's conditions.
+    const listed = await roster();
+    const planted_ = listed.filter((p) => p.name === 'Not the Rival' || p.name === 'Mine');
+    expect(planted_.map((p) => p.voiced)).toEqual([false, false]);
+    const shippedListed = listed.filter((p) => !planted_.includes(p));
+    expect(shippedListed.every((p) => p.voiced)).toBe(true);
   });
 });
 

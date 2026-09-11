@@ -2,7 +2,11 @@
  * The single door to OpenRouter.
  *
  * INVARIANT: all LLM calls go through this file — CLAUDE.md #2
- * INVARIANT: every call writes a row to llm_calls, failures included — CLAUDE.md #3
+ * INVARIANT: every call writes a row to llm_calls, failures included — CLAUDE.md #3.
+ *            A call begins at the budget gate. Two assertions in `callSpeech`
+ *            throw before it — an input over its ceiling, no speech model
+ *            configured — and those are a caller's or a config's bug that
+ *            nothing is sent or charged for, recorded in ADR 0025's addendum.
  * INVARIANT: the model never computes a number the user sees — CLAUDE.md #1.
  *            This module moves tokens; arithmetic lives in the metrics engine.
  *
@@ -157,10 +161,12 @@ export async function callLLM<T>(
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   /*
-   * INVARIANT: every stage carries the conduct and injection preamble — ADR 0005
-   *            §3. Prepended here rather than at call sites so that a new stage
-   *            cannot omit it, and first in the string so it sits inside the
-   *            cached prefix and costs almost nothing after the first call.
+   * INVARIANT: every TEXT stage carries the conduct and injection preamble —
+   *            ADR 0005 §3. Prepended here rather than at call sites so that a
+   *            new text stage cannot omit it, and first in the string so it
+   *            sits inside the cached prefix and costs almost nothing after the
+   *            first call. The speech stage has none, because a speech model
+   *            would read it aloud — ADR 0025's addendum, and `callSpeech`.
    */
   const system = SAFETY_PREAMBLE + options.system;
   // Hashed AFTER prepending: the hash identifies the prompt actually sent, so
@@ -364,15 +370,17 @@ export async function callLLM<T>(
  * `scanOutput`, because what comes back is audio; the words were checked
  * before they were ever stored (tests/db/personas.test.ts holds every shipped
  * line to `scanOutput`). What IS shared is what CLAUDE.md #2 and #3 exist for:
- * one place that holds the key, the budget and the ledger.
+ * one place that holds the key, the budget and the ledger. ADR 0025's addendum
+ * records the exemption from ADR 0005 §3 and §4, and what stands in for it.
  *
  * INVARIANT: the input is known text — ADR 0025 §4. Callers build it with
  *            src/speech/script.ts from a shared persona row.
  */
 export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Promise<SpeechResult> {
   if (options.input.length > SPEECH_MAX_INPUT_CHARS) {
-    // A caller's bug, refused before anything is sent or charged: there is no
-    // call yet, so there is nothing for the ledger to record.
+    // A caller's bug, refused before the budget gate, so before anything is
+    // sent or charged — see the INVARIANT at the top of this file. The column
+    // limits make it unreachable: the longest script they allow is 1,104.
     throw new RangeError(
       `speech input is ${options.input.length} characters; the ceiling is ${SPEECH_MAX_INPUT_CHARS}`
     );
@@ -424,7 +432,7 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startedAt = deps.now().getTime();
     const row = blankRow(attempt);
-    let spoken: { audio: Uint8Array; contentType: string } | undefined;
+    let spoken: { audio: Uint8Array<ArrayBuffer>; contentType: string } | undefined;
     let retryable = false;
 
     try {
@@ -452,18 +460,29 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
         row.status = 'http_error';
         row.error = `HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`;
         retryable = isRetryableHttp(response.status);
-      } else if (!contentType.startsWith('audio/')) {
-        // Some failures arrive inside a 200, as they do for chat completions:
-        // an error body where the audio should be. Never handed on as audio.
-        row.status = 'http_error';
-        row.error = `expected audio, got ${contentType || 'no content type'}: ${(await response.text()).slice(0, 500)}`;
-        retryable = true;
+      } else if (contentType.split(';')[0]?.trim().toLowerCase() !== 'audio/mpeg') {
+        /*
+         * A 200 that is not the mp3 asked for: an error body where the audio
+         * should be, as chat completions sometimes send, or another format that
+         * the Voice card could cache and never play. FOUND IN REVIEW — this
+         * accepted any `audio/` type, so a model ignoring `response_format`
+         * would have filled every coach's cache with an unplayable success.
+         *
+         * `schema_invalid`, the status for a 200 whose body is the wrong shape,
+         * and NOT retried: the same request gets the same format, and a speech
+         * row that reached a 200 may have been billed — src/db/ledger.ts
+         * charges it the assumption, so a retry would be charged twice.
+         */
+        row.status = 'schema_invalid';
+        row.error = `expected audio/mpeg, got ${contentType || 'no content type'}: ${(await response.text()).slice(0, 500)}`;
+        retryable = false;
       } else {
         const audio = new Uint8Array(await response.arrayBuffer());
         if (audio.byteLength === 0) {
-          row.status = 'http_error';
-          row.error = 'the response declared audio and carried none';
-          retryable = true;
+          // Same as above: a 200, the wrong shape, charged, not retried.
+          row.status = 'schema_invalid';
+          row.error = 'the response declared audio/mpeg and carried none';
+          retryable = false;
         } else {
           row.status = 'ok';
           // Measured in the sense that matters: one model was requested and no

@@ -3,17 +3,26 @@
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { deliverForPersona, hearCoach } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
-import { VOICE_REFUSAL_TEXT, type VoiceRefusal } from './voice-state';
+import {
+  IDLE,
+  createCoachPlayer,
+  type CoachPlayer,
+  type PlayerState,
+  type ShownReason,
+} from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
 
-/** Why the chosen coach's line is on screen instead of in the speaker. */
-type Shown = { slug: string; reason: VoiceRefusal | 'blocked' };
-
-/** The server's base64 audio as something an <audio> element can play. */
-function clipUrl(audio: string, contentType: string): string {
-  const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
-  return URL.createObjectURL(new Blob([bytes], { type: contentType }));
-}
+/**
+ * What the card says beside a coach's line when it is shown instead of heard —
+ * every state renders something (docs/specs/mobile-interface.md §4).
+ */
+const SHOWN_TEXT: Record<ShownReason, string> = {
+  'no-key': 'The coach voices are not set up here.',
+  budget: "This week's coaching budget is spent, so the coach cannot speak until it resets.",
+  'no-voice': 'This coach has no voice yet.',
+  failed: 'The voice did not come through. Try again in a moment.',
+  blocked: 'This browser held the sound back. Tap again to play.',
+};
 
 /**
  * The plan and the voice, side by side.
@@ -25,14 +34,15 @@ function clipUrl(audio: string, contentType: string): string {
  * the thing invariant #1 exists to prevent.
  *
  * The voice is ADR 0025's: each coach's line in a voice cast for it, made by
- * the gateway's speech stage. There is no device-voice fallback — a voice that
- * does not fit the coach is worse than none — so every path that cannot play
- * shows the line as text and says why (docs/specs/mobile-interface.md §4).
+ * the gateway's speech stage and played by src/speech/player.ts, which owns
+ * the fetching, the cache and the in-flight presses. There is no device-voice
+ * fallback — a voice that does not fit the coach is worse than none — so every
+ * path that cannot play shows the line as text and says why.
  *
  * AI-NOTE: the delivered plan is not read aloud. That was device speech, and it
  *          went with it; reading it in the coach's voice needs the delivery
  *          stored server-side first, because the server never speaks text the
- *          browser sends — ADR 0025 §4, the next PR.
+ *          browser sends — ADR 0025 §4. A later PR, not yet planned.
  */
 export function CoachConsole({
   personas,
@@ -46,34 +56,25 @@ export function CoachConsole({
   voiceAvailable: boolean;
 }) {
   const [selected, setSelected] = useState(personas[0]?.slug ?? '');
-  const [fetching, setFetching] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
-  const [shown, setShown] = useState<Shown | null>(null);
+  const [voice, setVoice] = useState<PlayerState>(IDLE);
+  const player = useRef<CoachPlayer | null>(null);
 
-  /*
-   * One element for every clip, kept across renders.
-   *
-   * WHY one: a second press, a chip change and unmount all have to stop what is
-   * playing, and one element is one thing to stop.
-   */
-  const audio = useRef<HTMLAudioElement | null>(null);
-
-  /*
-   * Clips already fetched, by slug, for this visit.
-   *
-   * WHY: each fetch is a paid call against the user's weekly budget — ADR 0025,
-   * Cost — and a replay of the same line should not be a second one. It is
-   * also what makes "Tap again to play" work where a browser blocks playback
-   * after a network wait: the second tap plays from here, inside the tap.
-   */
-  const clips = useRef(new Map<string, string>());
-
-  /*
-   * Which press is current. A press that resolves after the user has moved to
-   * another coach keeps its clip for later and plays nothing — otherwise one
-   * coach's voice arrives under another coach's chip.
-   */
-  const request = useRef(0);
+  // One player per mount, made in the browser and disposed on unmount: it
+  // stops the audio, supersedes any press in flight and revokes every URL.
+  useEffect(() => {
+    const created = createCoachPlayer({
+      audio: new Audio(),
+      fetchClip: hearCoach,
+      toUrl: (audio, contentType) => URL.createObjectURL(new Blob([audio], { type: contentType })),
+      revoke: (url) => URL.revokeObjectURL(url),
+      onChange: setVoice,
+    });
+    player.current = created;
+    return () => {
+      created.dispose();
+      player.current = null;
+    };
+  }, []);
 
   const chosen = personas.find((p) => p.slug === selected) ?? null;
   const line = chosen?.sampleLine?.trim() ?? '';
@@ -82,91 +83,20 @@ export function CoachConsole({
     EMPTY_DELIVERY
   );
 
-  const stop = () => {
-    audio.current?.pause();
-    setPlaying(null);
-  };
-
-  // Made on mount, in the browser, and torn down on unmount: audio outlives the
-  // component otherwise, and object URLs outlive the page's need for them until
-  // the tab closes.
-  useEffect(() => {
-    const element = new Audio();
-    const cache = clips.current;
-    audio.current = element;
-    return () => {
-      element.pause();
-      element.removeAttribute('src');
-      audio.current = null;
-      for (const url of cache.values()) URL.revokeObjectURL(url);
-      cache.clear();
-    };
-  }, []);
-
-  const play = (slug: string, url: string) => {
-    const element = audio.current;
-    if (element === null) return;
-    element.pause();
-    element.src = url;
-    element.onplaying = () => setPlaying(slug);
-    element.onended = () => setPlaying(null);
-    element.onerror = () => {
-      setPlaying(null);
-      setShown({ slug, reason: 'failed' });
-    };
-    element.play().catch((cause: unknown) => {
-      // AbortError is this code replacing the clip or stopping it — not a
-      // failure, the same distinction src/ui/speak.ts draws for utterances.
-      if (cause instanceof DOMException && cause.name === 'AbortError') return;
-      setPlaying(null);
-      setShown({
-        slug,
-        reason:
-          cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'blocked' : 'failed',
-      });
-    });
-  };
-
-  const hear = async (slug: string) => {
-    setShown(null);
-    const cached = clips.current.get(slug);
-    if (cached) {
-      play(slug, cached);
-      return;
-    }
-
-    const mine = ++request.current;
-    setFetching(slug);
-    try {
-      const result = await hearCoach(slug);
-      if (result.ok) {
-        const url = clipUrl(result.audio, result.contentType);
-        clips.current.set(slug, url);
-        if (request.current === mine) play(slug, url);
-      } else if (request.current === mine) {
-        setShown({ slug, reason: result.reason });
-      }
-    } catch {
-      if (request.current === mine) setShown({ slug, reason: 'failed' });
-    } finally {
-      if (request.current === mine) setFetching(null);
-    }
-  };
-
   const choose = (slug: string) => {
-    /*
-     * The chip is the user's answer to "who do I want to hear now", so the last
-     * coach stops talking and any press still in flight is superseded.
-     */
-    request.current += 1;
-    stop();
-    setFetching(null);
-    setShown(null);
+    // The lit chip changes nothing, so it supersedes nothing either.
+    if (slug === selected) return;
+    player.current?.select();
     setSelected(slug);
   };
 
-  const reason =
-    shown !== null && chosen !== null && shown.slug === chosen.slug ? shown.reason : null;
+  const canHear = voiceAvailable && chosen?.voiced === true;
+  const refused = chosen !== null && voice.shown?.slug === chosen.slug ? voice.shown.reason : null;
+  // Why the line is on screen as text: the last press's refusal, or that there
+  // is no voice to ask for.
+  const why: ShownReason | null =
+    refused ?? (!voiceAvailable ? 'no-key' : chosen !== null && !chosen.voiced ? 'no-voice' : null);
+  const fetching = chosen !== null && voice.fetching === chosen.slug;
 
   return (
     <>
@@ -191,36 +121,41 @@ export function CoachConsole({
         </div>
 
         {/*
-         * The preview — rework plan PRs 6 and 6b. Every state renders something:
-         * with no key there is no button and the line is text; a refusal or a
-         * blocked play shows the line and says why.
+         * The preview — rework plan PRs 6 and 6b. A Hear button only where a
+         * voice exists; otherwise, or after a refusal or a blocked play, the
+         * line as text with the reason.
+         *
+         * WHY the button stays enabled while fetching: disabling the focused
+         * button drops keyboard focus, and a second press is harmless — the
+         * player joins the call already in flight rather than paying twice.
          */}
         {chosen && line !== '' ? (
           <>
-            {voiceAvailable ? (
+            {canHear ? (
               <div className="row">
-                {playing === chosen.slug ? (
-                  <button type="button" className="secondary" onClick={stop}>
+                {voice.playing === chosen.slug ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => player.current?.stop()}
+                  >
                     Stop
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="secondary"
-                    disabled={fetching === chosen.slug}
-                    onClick={() => void hear(chosen.slug)}
+                    aria-busy={fetching}
+                    onClick={() => void player.current?.hear(chosen.slug)}
                   >
-                    {fetching === chosen.slug
-                      ? `Finding ${chosen.name}’s voice…`
-                      : `Hear ${chosen.name}`}
+                    {fetching ? `Finding ${chosen.name}’s voice…` : `Hear ${chosen.name}`}
                   </button>
                 )}
               </div>
             ) : null}
-            {!voiceAvailable || reason !== null ? (
+            {why !== null ? (
               <p className="muted small" role="status">
-                {reason !== null ? `${VOICE_REFUSAL_TEXT[reason]} ` : null}
-                {chosen.name}: “{line}”
+                {SHOWN_TEXT[why]} {chosen.name}: “{line}”
               </p>
             ) : null}
           </>

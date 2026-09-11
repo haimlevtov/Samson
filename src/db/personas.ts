@@ -22,6 +22,15 @@ import { trainingBlockSchema } from '../planner/schema';
 export interface ListedPersona extends Persona {
   /** Null for a row with none — the column is nullable, migration 20260911130000. */
   sampleLine: string | null;
+  /**
+   * Whether `coachVoice` would speak this coach: a shared row with a voice, a
+   * direction and a line. The Voice card offers Hear only when this is true —
+   * a button that cannot speak is not shown (docs/specs/mobile-interface.md §4).
+   *
+   * AI-NOTE: the same three conditions and the same `user_id is null` as
+   *          `coachVoice` below. If one changes, change both.
+   */
+  voiced: boolean;
 }
 
 /**
@@ -31,7 +40,9 @@ export interface ListedPersona extends Persona {
 export async function listPersonas(db: Db): Promise<ListedPersona[]> {
   const { data, error } = await db
     .from('personas')
-    .select('slug, name, system_prompt, intensity, humor_level, banned_phrases, sample_line')
+    .select(
+      'slug, name, system_prompt, intensity, humor_level, banned_phrases, sample_line, user_id, tts_voice, tts_instructions'
+    )
     .eq('is_active', true)
     .order('name');
 
@@ -45,6 +56,11 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
     humorLevel: row.humor_level as HumorLevel,
     bannedPhrases: row.banned_phrases ?? [],
     sampleLine: row.sample_line,
+    voiced:
+      row.user_id === null &&
+      Boolean(row.tts_voice) &&
+      Boolean(row.tts_instructions) &&
+      Boolean(row.sample_line),
   }));
 }
 
@@ -67,6 +83,9 @@ export interface CoachVoice {
  *            them their own rows, so without the `user_id is null` filter a
  *            user could make the server speak anything they typed. The filter
  *            is the control; RLS is not.
+ *
+ * AI-NOTE: `ListedPersona.voiced` above restates these conditions for the
+ *          picker. If one changes, change both.
  */
 export async function coachVoice(db: Db, slug: string): Promise<CoachVoice | null> {
   const { data, error } = await db

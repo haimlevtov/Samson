@@ -5,9 +5,10 @@
  *      phase 2 measures cost per model tried and needs to swap them without
  *      touching pipeline code.
  *
- * AI-NOTE: every slug here was checked against the OpenRouter /models endpoint
- *          on 2026-08-24 and filtered to those advertising `structured_outputs`
- *          in supported_parameters. If you add one, check it the same way —
+ * AI-NOTE: every TEXT-stage slug here was checked against the OpenRouter
+ *          /models endpoint on 2026-08-24 and filtered to those advertising
+ *          `structured_outputs` in supported_parameters — the speech entry is
+ *          the exception, and says why. If you add a text one, check it the same way —
  *          a model without structured output support fails every call in the
  *          stage, and `provider.require_parameters` turns that into a routing
  *          error rather than a silent plain-text response.
@@ -68,8 +69,8 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
  * "escalate rather than repeat".
  *
  * WHY this is the planner array with the fallback removed rather than a higher
- * tier: every slug in this file was verified against OpenRouter /models for
- * structured-output support, and inventing an unverified one here would fail
+ * tier: every text-stage slug in this file was verified against OpenRouter
+ * /models for structured-output support, and inventing an unverified one here would fail
  * every escalated call at routing time — the worst possible moment, since
  * escalation only happens on a run that is already struggling.
  *
