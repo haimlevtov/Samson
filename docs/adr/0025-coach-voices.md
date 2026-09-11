@@ -1,6 +1,7 @@
 # ADR 0025 — A coach speaks in a synthesised character voice, through the gateway
 
 **Status:** accepted, rework plan PR 6b — with an [addendum after the code](#addendum-after-the-code-2026-09-11--what-two-rounds-of-review-of-49-found)
+and a [correction after the first live calls](#corrected-after-the-first-live-calls-2026-09-11)
 **Date:** 2026-09-11
 **Supersedes:** [ADR 0006](0006-persona-boundary.md)'s "there is no TTS provider"
 and its device-voice allocation, for coaches. ADR 0006 still governs what a
@@ -195,7 +196,9 @@ and written here before their code.
   where a text stage gets three of sixty by default. A preview is a button
   press. And `LLM_MODELS`, which swaps text models for an eval run, never
   reaches a speech call — it would recast every coach.
-- **Only mp3 is audio, and nothing after a 200 is retried.** A 200 labelled
+- **Only mp3 is audio, and nothing after a 200 is retried.** _Corrected after
+  the first live calls: the model answers only in PCM, so read "the format asked
+  for" wherever this says mp3 — see the last section._ A 200 labelled
   anything but `audio/mpeg` (or its alias `audio/mp3`), a 200 with no bytes, or
   a 200 whose body fails mid-read is recorded `schema_invalid`, is not retried,
   and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a 200 and
@@ -246,3 +249,34 @@ and written here before their code.
   `maxDuration`: 300 on a Hobby project without Fluid fails the deploy, and 60
   would cut the chat off. If Fluid is ever off, a function killed mid-call writes
   no row for a call that may have been billed.
+
+## Corrected after the first live calls, 2026-09-11
+
+The first presses of Hear on the merged code failed twice over, and the ledger
+said why each time — the design's own claim, that every attempt leaves a row
+with its reason, is how both were found in minutes and for nothing:
+
+1. **HTTP 402, "Insufficient credits."** The OpenRouter account had never held
+   credit; no stage had ever made a live call. The owner added some.
+2. **HTTP 400, "Gemini TTS only supports response_format=pcm. Got mp3."**
+   OpenRouter's page for the model lists mp3 and pcm; the model accepts pcm only.
+   Every mp3 request was refused before generation, so nothing was billed.
+
+**The correction.** The gateway asks for `pcm` and wraps what comes back in a WAV
+header — the same samples behind 44 bytes, so no encoder and no dependency — and
+hands the browser `audio/wav`. The samples are 16-bit little-endian mono at
+24 kHz, Google's documented output for this model; a `rate=` parameter on the
+response's content type overrides the rate if the provider sends one. A 200
+labelled anything but raw PCM (`audio/pcm`, or `audio/l16`, its registered
+name) is still `schema_invalid`, charged and not retried. The addendum's "Only
+mp3 is audio" was true of the request this code made and false of the model;
+read it as "only the format asked for is audio".
+
+**The cost of WAV:** 48 KB a second, so a ten- to fifteen-second line is 0.5 to
+0.7 MB across the server action, the longest line about 1.4 MB. Fine for a
+preview; the later PR that reads a whole plan aloud should reconsider it.
+
+**Still open, and the owner noticed it:** the card said "The voice did not come
+through. Try again in a moment." for both failures, and retrying fixes neither.
+A refusal from the provider — no credit, a rejected request — deserves its own
+line. Not built here.

@@ -18,7 +18,7 @@ because several of them touch the same surface.
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                      | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)     | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
-| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | in review, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)      |
+| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | planned — the key stays off Vercel until it ships                      |
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | in review, paused for 6b                                               |
@@ -1110,6 +1110,13 @@ device-voice columns stay until 6d.
 553xx, the db suite 249 of 249, then `supabase stop`, `wsl --shutdown` and Docker
 Desktop quit.
 
-**Not verified:** a browser pass on `/coach`, which needs a session; and **no
-voice has been synthesised** — the key has not been spent on it, so whether each
-coach sounds like its direction is unheard.
+**Not verified at merge:** a browser pass on `/coach`, which needs a session; and
+**no voice had been synthesised** — the key had not been spent on it.
+
+**The first live presses failed, and the ledger said why for free.** HTTP 402:
+the OpenRouter account had never held credit, and the owner added some. Then HTTP
+400: Gemini TTS through OpenRouter answers only in `pcm`, though its model page
+lists mp3 too, and the gateway asked for mp3. Fixed on branch `speech-pcm`: the
+gateway asks for PCM and wraps it in a WAV header for the browser — ADR 0025,
+"Corrected after the first live calls". Whether each coach sounds like its
+direction is still for the owner's ear.
