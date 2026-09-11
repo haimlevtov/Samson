@@ -21,9 +21,9 @@ import { z } from 'zod';
 
 import { acwr, acwrBand } from '../metrics/acwr';
 import { adherence, currentStreak } from '../metrics/adherence';
-import { addDays, compareDates, daysBetween, startOfWeek } from '../metrics/dates';
+import { addDays, compareDates, daysBetween } from '../metrics/dates';
 import { exerciseBests } from '../metrics/pr';
-import { tonnageByWeek } from '../metrics/tonnage';
+import { tonnageForWeekOf } from '../metrics/tonnage';
 import type { LocalDate, SetRecord, WorkoutRecord } from '../metrics/types';
 import { levelProgress } from '../gamification/level';
 
@@ -115,10 +115,6 @@ export function coachFacts(input: CoachFactsInput): CoachFacts {
     end: today,
   }).rate;
 
-  const weeks = tonnageByWeek(sets);
-  const thisWeek = startOfWeek(today);
-  const lastWeek = startOfWeek(addDays(thisWeek, -1));
-
   const load = acwr(sets, today);
   const level = levelProgress(lifetimeXp);
 
@@ -151,8 +147,10 @@ export function coachFacts(input: CoachFactsInput): CoachFacts {
     // daysBetween is positive when the FIRST argument is the later date, so
     // today leads. Reversed, this reports a negative age for every session.
     days_since_last_session: last === undefined ? null : daysBetween(today, last.localDate),
-    tonnage_this_week_kg: roundKg(weeks.get(thisWeek) ?? 0),
-    tonnage_last_week_kg: roundKg(weeks.get(lastWeek) ?? 0),
+    // The function Profile's "This week" tile reads, so the coach and the tile
+    // cannot disagree about a week — including one with nothing lifted yet.
+    tonnage_this_week_kg: roundKg(tonnageForWeekOf(sets, today)),
+    tonnage_last_week_kg: roundKg(tonnageForWeekOf(sets, addDays(today, -7))),
     // Two decimals: the ratio is read against bands at 0.8 and 1.5, and a third
     // decimal is precision the underlying estimate does not have.
     acwr: load.ratio === null ? null : Number(load.ratio.toFixed(2)),

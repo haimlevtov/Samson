@@ -295,6 +295,8 @@ section exists to prevent.
 | **User owns no equipment**    | Explains that no equipment is recorded and what fixes it. Never an empty picker with no explanation.                                    |
 | **Row ticked while empty**    | "Fill in reps first." on the row. Nothing is written; a zero-rep set is not a set.                                                      |
 | **Metric not yet computable** | An em dash plus what is missing — "12/28 days of history". A blank is honest; a zero is a claim.                                        |
+| **Nothing lifted this week**  | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                      |
+| **No loaded sets yet**        | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.               |
 | **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                     |
 | **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                               |
 

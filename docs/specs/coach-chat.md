@@ -95,7 +95,7 @@ nothing reads a prompt to decide what goes in it — ADR 0015 §1.
 | `adherence_28d_percent`                         | `adherence`                                                      |
 | `current_streak_days`                           | `currentStreak`                                                  |
 | `days_since_last_session`                       | `daysBetween`, null when nothing is logged                       |
-| `tonnage_this_week_kg`, `tonnage_last_week_kg`  | `tonnageByWeek`                                                  |
+| `tonnage_this_week_kg`, `tonnage_last_week_kg`  | `tonnageForWeekOf`, 0 for a week with nothing lifted             |
 | `acwr`, `acwr_band`                             | `acwr`, `acwrBand`. Null when history is too short               |
 | `level`, `lifetime_xp`, `xp_to_next_level`      | `levelProgress`                                                  |
 | `top_lifts`                                     | `exerciseBests`, up to 5 by heaviest working set: name, kg, date |

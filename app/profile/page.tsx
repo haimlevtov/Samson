@@ -303,11 +303,12 @@ export default async function ProfilePage() {
             </FieldHint>
           </div>
           {/*
-           * WHY 0 kg and never an em dash: on this page the dash means no figure
-           * exists — the ratio before 28 days of history, adherence with nothing
-           * due. A week with nothing lifted yet has a figure, and it is zero; the
-           * all-time line below prints 0 kg for a new user on the same reasoning,
-           * and the coach is told 0 for the same week (src/chat/facts.ts).
+           * WHY 0 kg and never an em dash — mobile-interface.md §4: the dash is
+           * for a metric not yet computable, like the ratio before 28 days of
+           * history. A week with nothing lifted yet has a figure, and it is zero;
+           * the all-time line below prints 0 kg for a new user on the same
+           * reasoning, and the coach is told 0 for the same week through the same
+           * function (src/chat/facts.ts).
            */}
           <div className="value">{kg(thisWeek)}</div>
           <div className="muted small">{kg(allTime)} all time</div>
@@ -340,8 +341,15 @@ export default async function ProfilePage() {
           shows the shape of your training rather than an absolute amount.
         </FieldHint>
       </h2>
+      {/*
+       * Not "no sets logged": a bodyweight-only lifter has logged plenty, and
+       * this branch is reached whenever no set carries external load.
+       */}
       {weekly.length === 0 ? (
-        <p className="card muted">No sets logged yet.</p>
+        <p className="card muted">
+          Nothing to chart yet — tonnage needs a loaded working set, so warm-ups and bodyweight work
+          count as zero.
+        </p>
       ) : (
         <div className="card tonnage">
           {weekly.slice(-12).map(([week, value]) => (

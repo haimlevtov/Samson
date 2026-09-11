@@ -61,7 +61,11 @@ export function tonnageByDate(
   return new Map([...byDate].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
-/** Keyed by the Monday starting each ISO week. */
+/**
+ * Keyed by the Monday starting each ISO week. Weeks with no load are absent, not
+ * zero, so the last entry is not necessarily the current week — for one week,
+ * use `tonnageForWeekOf`.
+ */
 export function tonnageByWeek(
   sets: readonly SetRecord[],
   options: TonnageOptions = {}
@@ -92,10 +96,9 @@ export function tonnageByWeek(
  * on the same page draws from that map, so the tile and the chart's row for this
  * week cannot disagree about what the week weighed.
  *
- * AI-NOTE: `src/chat/facts.ts` hands the coach the same figure as
- *          `tonnageByWeek(...).get(startOfWeek(today)) ?? 0`. Change what an empty
- *          week reads as here and change it there, or the coach and the tile
- *          disagree about the same week.
+ * AI-NOTE: `src/chat/facts.ts` reads the coach's this-week and last-week tonnage
+ *          through this function too. A change here changes what the coach is
+ *          told, and quotes, as well as what the tile prints.
  */
 export function tonnageForWeekOf(
   sets: readonly SetRecord[],
