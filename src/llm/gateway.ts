@@ -24,7 +24,9 @@ import {
   OPENROUTER_BASE_URL,
   RETRY_BASE_DELAY_MS,
   SPEECH_MAX_ATTEMPTS,
+  SPEECH_MAX_AUDIO_BYTES,
   SPEECH_MAX_INPUT_CHARS,
+  SPEECH_MIN_AUDIO_SECONDS,
   SPEECH_TIMEOUT_MS,
   attributionHeaders,
   modelOverrideFromEnv,
@@ -32,6 +34,7 @@ import {
   type Env,
 } from './config';
 import { SPEECH_MODEL, modelsForStage } from './models';
+import { pcmBytesPerSecond, pcmRate, pcmToWav } from './wav';
 import {
   buildRequestBody,
   normalizeUsage,
@@ -112,11 +115,16 @@ function isRetryableHttp(status: number): boolean {
 }
 
 /**
- * What `response_format: 'mp3'` may come back labelled. `audio/mpeg` is the
- * registered type and the provider's documented one; `audio/mp3` is the common
- * alias, and every browser plays both.
+ * What `response_format: 'pcm'` may come back labelled, compared lowercased:
+ * `audio/pcm`, the provider's documented type, or `audio/l16`.
+ *
+ * WHY `audio/l16` is read as little-endian: RFC 2586 registers L16 as
+ * big-endian, but Google labels this model's little-endian output
+ * `audio/L16`, and `pcmToWav` writes the samples as they arrive. A provider
+ * sending true big-endian L16 would play as noise — ADR 0025, "Corrected
+ * after the first live calls".
  */
-const MP3_TYPES: ReadonlySet<string> = new Set(['audio/mpeg', 'audio/mp3']);
+const PCM_TYPES: ReadonlySet<string> = new Set(['audio/pcm', 'audio/l16']);
 
 /** A body worth quoting in the ledger — an error message, not bytes. */
 function isTextual(mediaType: string): boolean {
@@ -513,8 +521,14 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
           model,
           input: options.input,
           voice: options.voice,
-          // Plays in every browser's <audio>; the default, raw PCM, plays in none.
-          response_format: 'mp3',
+          /*
+           * The only format this model accepts. FOUND ON THE FIRST LIVE CALL:
+           * `mp3` — which OpenRouter's page for the model lists — is refused
+           * with HTTP 400, "Gemini TTS only supports response_format=pcm". No
+           * browser plays raw PCM, so it is wrapped in a WAV header below —
+           * ADR 0025, "Corrected after the first live calls".
+           */
+          response_format: 'pcm',
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -527,12 +541,12 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
         row.status = 'http_error';
         row.error = `HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`;
         retryable = isRetryableHttp(response.status);
-      } else if (!MP3_TYPES.has(mediaType)) {
+      } else if (!PCM_TYPES.has(mediaType)) {
         reached200 = true;
         /*
-         * A 200 that is not the mp3 asked for: an error body where the audio
+         * A 200 that is not the PCM asked for: an error body where the audio
          * should be, as chat completions sometimes send, or another format that
-         * the Voice card could cache and never play. FOUND IN REVIEW — this
+         * the wrapper below would turn into noise. FOUND IN REVIEW — this once
          * accepted any `audio/` type, so a model ignoring `response_format`
          * would have filled every coach's cache with an unplayable success.
          *
@@ -547,7 +561,7 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
          */
         row.status = 'schema_invalid';
         const size = response.headers.get('content-length');
-        const got = `expected audio/mpeg, got ${contentType || 'no content type'}`;
+        const got = `expected audio/pcm, got ${contentType || 'no content type'}`;
         if (isTextual(mediaType)) {
           row.error = `${got}: ${(await response.text()).slice(0, 500)}`;
         } else {
@@ -557,18 +571,39 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
         retryable = false;
       } else {
         reached200 = true;
-        const audio = new Uint8Array(await response.arrayBuffer());
-        if (audio.byteLength === 0) {
-          // Same as above: a 200, the wrong shape, charged, not retried.
+        /*
+         * At least a quarter second of samples and at most a fixed byte
+         * ceiling — the bounds and why are at SPEECH_MIN_AUDIO_SECONDS. Outside
+         * them is the same as above: a 200, the wrong shape, charged, not
+         * retried. A declared length past the ceiling is refused before the
+         * body is read.
+         */
+        const rate = pcmRate(contentType);
+        const minBytes = Math.ceil(SPEECH_MIN_AUDIO_SECONDS * pcmBytesPerSecond(rate));
+        const maxBytes = SPEECH_MAX_AUDIO_BYTES;
+        const declared = Number(response.headers.get('content-length') ?? Number.NaN);
+
+        if (declared > maxBytes) {
+          await response.body?.cancel();
           row.status = 'schema_invalid';
-          row.error = 'the response declared mp3 and carried none';
+          row.error = `the clip declares ${declared} bytes; the most is ${maxBytes}`;
           retryable = false;
         } else {
-          row.status = 'ok';
-          // Measured in the sense that matters: one model was requested and no
-          // fallback array was sent, so the model that answered is this one.
-          row.model_used = model;
-          spoken = audio;
+          const pcm = new Uint8Array(await response.arrayBuffer());
+          if (pcm.byteLength < minBytes || pcm.byteLength > maxBytes) {
+            row.status = 'schema_invalid';
+            row.error = `the clip is ${pcm.byteLength} bytes of PCM; it must be ${minBytes} to ${maxBytes}`;
+            retryable = false;
+          } else {
+            // Wrapped first, so `ok` and `model_used` are set only once there
+            // is a clip to hand on.
+            const wav = pcmToWav(pcm, rate);
+            row.status = 'ok';
+            // Measured in the sense that matters: one model was requested and
+            // no fallback array was sent, so the model that answered is this one.
+            row.model_used = model;
+            spoken = wav;
+          }
         }
       }
     } catch (cause) {
@@ -587,10 +622,10 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
       await record(row);
     }
 
-    // The type is the constant, not the header: the header is only ever one of
-    // MP3_TYPES here, and the browser plays both as the same thing.
+    // The type is what the gateway made, not the provider's header: the PCM it
+    // received is inside a WAV file now.
     if (spoken !== undefined) {
-      return { audio: spoken, contentType: 'audio/mpeg', attempts: attempt, ledger };
+      return { audio: spoken, contentType: 'audio/wav', attempts: attempt, ledger };
     }
 
     if (!retryable || attempt === maxAttempts) break;

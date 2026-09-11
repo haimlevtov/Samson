@@ -51,8 +51,8 @@ class FakeAudio implements AudioLike {
 
 const OK: VoiceResult = {
   ok: true,
-  audio: new Uint8Array([0xff, 0xf3]),
-  contentType: 'audio/mpeg',
+  audio: new Uint8Array([0, 0]),
+  contentType: 'audio/wav',
 };
 
 const named = (name: string) => Object.assign(new Error(name), { name });

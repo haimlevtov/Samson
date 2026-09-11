@@ -326,13 +326,17 @@ const speechOptions = {
   voice: 'Algenib',
 };
 
-const MP3 = new Uint8Array([0xff, 0xf3, 0x44, 0xc4]);
+/** Half a second of raw 24 kHz PCM, as the model sends it — past the quarter-second floor. */
+const PCM = new Uint8Array(24_000).map((_, i) => i % 251);
 
-const audioResponse = (body: BodyInit = MP3, headers: Record<string, string> = {}) =>
+const audioResponse = (body: BodyInit = PCM, headers: Record<string, string> = {}) =>
   new Response(body, {
     status: 200,
-    headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-tts-1', ...headers },
+    headers: { 'content-type': 'audio/pcm', 'x-generation-id': 'gen-tts-1', ...headers },
   });
+
+/** The four ASCII bytes at `at` — a WAV header's chunk tags. */
+const tag = (bytes: Uint8Array, at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
 
 describe('callSpeech', () => {
   /*
@@ -341,7 +345,7 @@ describe('callSpeech', () => {
    * audio. Every case runs against a scripted fetch; nothing here can speak.
    */
 
-  it('posts the model, the voice and the input to the speech endpoint, and returns the audio', async () => {
+  it('asks the speech endpoint for PCM, and returns it as a WAV file', async () => {
     const urls: string[] = [];
     const { deps, calls } = makeDeps(async (url) => {
       urls.push(url);
@@ -355,13 +359,18 @@ describe('callSpeech', () => {
       model: STAGE_MODELS.speech[0],
       input: speechOptions.input,
       voice: 'Algenib',
-      response_format: 'mp3',
+      response_format: 'pcm',
     });
     expect((calls[0]!.headers as Record<string, string>).Authorization).toBe(
       'Bearer test-key-not-a-real-secret'
     );
-    expect([...result.audio]).toEqual([...MP3]);
-    expect(result.contentType).toBe('audio/mpeg');
+    // FOUND ON THE FIRST LIVE CALL: the model refuses mp3 with a 400, and a
+    // browser plays no raw PCM — so the samples come back behind a WAV header.
+    expect(result.contentType).toBe('audio/wav');
+    expect(tag(result.audio, 0)).toBe('RIFF');
+    expect(tag(result.audio, 8)).toBe('WAVE');
+    expect([...result.audio.subarray(44)]).toEqual([...PCM]);
+    expect(new DataView(result.audio.buffer).getUint32(24, true)).toBe(24_000);
     expect(result.attempts).toBe(1);
   });
 
@@ -443,15 +452,16 @@ describe('callSpeech', () => {
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
-    expect(rows[0]!.error).toContain('expected audio/mpeg, got application/json');
+    expect(rows[0]!.error).toContain('expected audio/pcm, got application/json');
     expect(rows[0]!.error).toContain('voice not found');
   });
 
-  it('refuses audio in a format other than the mp3 it asked for', async () => {
+  it('refuses audio in a format other than the PCM it asked for', async () => {
     // FOUND IN REVIEW: any audio/* was accepted, so a model ignoring
-    // response_format could fill the cache with clips no browser plays.
+    // response_format could fill the cache with clips no browser plays — and
+    // mp3 wrapped as if it were PCM would play as noise.
     const { deps, rows } = makeDeps(async () =>
-      audioResponse(MP3, { 'content-type': 'audio/pcm' })
+      audioResponse(PCM, { 'content-type': 'audio/mpeg' })
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
@@ -471,14 +481,17 @@ describe('callSpeech', () => {
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('schema_invalid');
-    expect(rows[0]!.error).toBe('expected audio/mpeg, got audio/wav, 10 bytes');
+    expect(rows[0]!.error).toBe('expected audio/pcm, got audio/wav, 10 bytes');
   });
 
-  it('takes audio/mp3 as mp3, and hands on the one type the browser is given', async () => {
-    const { deps } = makeDeps(async () => audioResponse(MP3, { 'content-type': 'audio/mp3' }));
+  it('takes audio/L16 as PCM, at the rate it names', async () => {
+    const { deps } = makeDeps(async () =>
+      audioResponse(PCM, { 'content-type': 'audio/L16;rate=16000' })
+    );
 
     const result = await callSpeech(speechOptions, deps);
-    expect(result.contentType).toBe('audio/mpeg');
+    expect(result.contentType).toBe('audio/wav');
+    expect(new DataView(result.audio.buffer).getUint32(24, true)).toBe(16_000);
   });
 
   it('records a timeout during the read after a 200 as a timeout, and does not retry it', async () => {
@@ -490,7 +503,7 @@ describe('callSpeech', () => {
       },
     });
     const { deps, rows } = makeDeps(
-      async () => new Response(slow, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+      async () => new Response(slow, { status: 200, headers: { 'content-type': 'audio/pcm' } })
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
@@ -506,16 +519,16 @@ describe('callSpeech', () => {
       },
     });
     const { deps, rows } = makeDeps(
-      async () => new Response(broken, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+      async () => new Response(broken, { status: 200, headers: { 'content-type': 'audio/pcm' } })
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
   });
 
-  it('accepts audio/mpeg with parameters on the content type', async () => {
+  it('accepts audio/pcm with parameters on the content type', async () => {
     const { deps } = makeDeps(async () =>
-      audioResponse(MP3, { 'content-type': 'audio/mpeg; charset=binary' })
+      audioResponse(PCM, { 'content-type': 'audio/pcm; codec=pcm' })
     );
 
     await expect(callSpeech(speechOptions, deps)).resolves.toMatchObject({ attempts: 1 });
@@ -526,6 +539,63 @@ describe('callSpeech', () => {
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+  });
+
+  it('refuses a clip under a quarter second, which the WAV header would make playable junk', async () => {
+    // FOUND IN REVIEW of #50: a few bytes of junk behind a valid header would
+    // be charged, cached and played as a click with no message.
+    const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array(1_000)));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip is 1000 bytes of PCM; it must be 12000 to 4320000');
+  });
+
+  it('refuses a clip that declares more than ninety seconds, and cancels it unread', async () => {
+    let cancelled = false;
+    const endless = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(1_024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(endless, {
+          status: 200,
+          headers: { 'content-type': 'audio/pcm', 'content-length': '99999999' },
+        })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip declares 99999999 bytes; the most is 4320000');
+    // Cancelled rather than read: an endless body would otherwise run until the
+    // timeout, holding every byte in memory.
+    expect(cancelled).toBe(true);
+  });
+
+  it('refuses a clip over the byte ceiling that did not declare its length, whatever its rate', async () => {
+    // At 48 kHz ninety seconds would be 8.64 MB; the ceiling is bytes, because
+    // bytes are what cannot cross a Vercel response. One sample over it.
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(new Uint8Array(4_320_002), { 'content-type': 'audio/pcm;rate=48000' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toBe('the clip is 4320002 bytes of PCM; it must be 24000 to 4320000');
+  });
+
+  it('takes a clip at exactly the floor and refuses one sample under it', async () => {
+    const at = makeDeps(async () => audioResponse(new Uint8Array(12_000)));
+    await expect(callSpeech(speechOptions, at.deps)).resolves.toMatchObject({ attempts: 1 });
+
+    const under = makeDeps(async () => audioResponse(new Uint8Array(11_998)));
+    await expect(callSpeech(speechOptions, under.deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(under.rows.map((r) => r.status)).toEqual(['schema_invalid']);
   });
 
   it('ignores LLM_MODELS, which swaps text models and would recast every coach', async () => {

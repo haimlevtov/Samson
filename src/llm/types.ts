@@ -142,13 +142,13 @@ export interface SpeechOptions {
 }
 
 export interface SpeechResult {
-  /** Over a plain ArrayBuffer — what `response.arrayBuffer()` gives — so a Blob takes it as it is. */
+  /** Over a plain ArrayBuffer — what `pcmToWav` allocates — so a Blob takes it as it is. */
   audio: Uint8Array<ArrayBuffer>;
   /**
-   * Always `audio/mpeg`: the gateway refuses any response that is not mp3 and
-   * returns the constant rather than the provider's header (ADR 0025 addendum).
+   * Always `audio/wav`: the gateway accepts only the raw PCM it asked for and
+   * wraps it in a WAV header — ADR 0025, "Corrected after the first live calls".
    */
-  contentType: 'audio/mpeg';
+  contentType: 'audio/wav';
   attempts: number;
   ledger: LlmCallInsert[];
 }

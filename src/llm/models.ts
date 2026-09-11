@@ -27,7 +27,10 @@ import type { LlmStage } from './types';
  *
  * AI-NOTE: its voices are SPEECH_VOICES in src/speech/script.ts, and every
  *          shipped coach is cast from them. Changing this slug means recasting
- *          every persona row in the same change.
+ *          every persona row in the same change — and confirming, with one live
+ *          call, the format it answers in: this one accepts only `pcm`
+ *          (`callSpeech`), at the rate, width and byte order src/llm/wav.ts
+ *          writes into the WAV header.
  */
 export const SPEECH_MODEL = 'google/gemini-3.1-flash-tts-preview';
 
