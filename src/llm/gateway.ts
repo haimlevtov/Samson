@@ -17,12 +17,15 @@ import {
   DEFAULT_WEEKLY_BUDGET_USD,
   OPENROUTER_BASE_URL,
   RETRY_BASE_DELAY_MS,
+  SPEECH_MAX_ATTEMPTS,
+  SPEECH_MAX_INPUT_CHARS,
+  SPEECH_TIMEOUT_MS,
   attributionHeaders,
   modelOverrideFromEnv,
   readApiKey,
   type Env,
 } from './config';
-import { modelsForStage } from './models';
+import { STAGE_MODELS, modelsForStage } from './models';
 import {
   buildRequestBody,
   normalizeUsage,
@@ -46,6 +49,8 @@ import {
   type LedgerClient,
   type LlmCallInsert,
   type LlmResult,
+  type SpeechOptions,
+  type SpeechResult,
 } from './types';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -100,6 +105,50 @@ function isRetryableHttp(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500;
 }
 
+/**
+ * The ledger for one call: every row it wrote, and the writer.
+ *
+ * WHY the insert is not swallowed: a dropped ledger row is data the token
+ * analysis can never recover, so the call fails loudly instead — CLAUDE.md #3.
+ */
+function openLedger(deps: GatewayDeps): {
+  ledger: LlmCallInsert[];
+  record: (row: LlmCallInsert) => Promise<void>;
+} {
+  const ledger: LlmCallInsert[] = [];
+  return {
+    ledger,
+    record: async (row) => {
+      ledger.push(row);
+      await deps.db.insertLlmCall(row);
+    },
+  };
+}
+
+/**
+ * The weekly budget gate, the same for every entry point.
+ *
+ * WHY: checked before the request, not after, because the failure mode being
+ *      defended against is a retry loop burning a free tier overnight.
+ * INVARIANT: a denied call is still a call and still writes a row — CLAUDE.md #3
+ */
+async function enforceBudget(
+  userId: string,
+  deps: GatewayDeps,
+  denied: LlmCallInsert,
+  record: (row: LlmCallInsert) => Promise<void>
+): Promise<void> {
+  const budget = (await deps.db.getWeeklyBudgetUsd(userId)) ?? DEFAULT_WEEKLY_BUDGET_USD;
+  const spent = await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS));
+
+  if (spent >= budget) {
+    denied.status = 'budget_denied';
+    denied.error = `spent ${spent} of ${budget} USD in the trailing 7 days`;
+    await record(denied);
+    throw new BudgetExceededError(spent, budget);
+  }
+}
+
 export async function callLLM<T>(
   options: CallOptions<T>,
   deps: GatewayDeps
@@ -117,14 +166,7 @@ export async function callLLM<T>(
   // Hashed AFTER prepending: the hash identifies the prompt actually sent, so
   // editing the preamble correctly starts a new cache lineage in the ledger.
   const promptPrefixHash = hashPrefix(system);
-  const ledger: LlmCallInsert[] = [];
-
-  const record = async (row: LlmCallInsert): Promise<void> => {
-    ledger.push(row);
-    // WHY: not swallowed. A dropped ledger row is data the token analysis can
-    //      never recover, so the call fails loudly instead — CLAUDE.md #3.
-    await deps.db.insertLlmCall(row);
-  };
+  const { ledger, record } = openLedger(deps);
 
   const blankRow = (attempt: number): LlmCallInsert => ({
     user_id: options.userId,
@@ -147,23 +189,7 @@ export async function callLLM<T>(
     error: null,
   });
 
-  // ---- Budget gate ------------------------------------------------------
-  // WHY: checked before the request, not after, because the failure mode being
-  //      defended against is a retry loop burning a free tier overnight.
-  const budget = (await deps.db.getWeeklyBudgetUsd(options.userId)) ?? DEFAULT_WEEKLY_BUDGET_USD;
-  const spent = await deps.db.sumSpendSince(
-    options.userId,
-    new Date(deps.now().getTime() - WEEK_MS)
-  );
-
-  if (spent >= budget) {
-    // INVARIANT: a denied call is still a call and still writes a row — CLAUDE.md #3
-    const denied = blankRow(1);
-    denied.status = 'budget_denied';
-    denied.error = `spent ${spent} of ${budget} USD in the trailing 7 days`;
-    await record(denied);
-    throw new BudgetExceededError(spent, budget);
-  }
+  await enforceBudget(options.userId, deps, blankRow(1), record);
 
   const jsonSchema = toStrictJsonSchema(z.toJSONSchema(options.schema) as Record<string, unknown>);
   const messages: ChatMessage[] = [...options.messages];
@@ -323,6 +349,148 @@ export async function callLLM<T>(
 
   throw new LlmCallFailedError(
     `${options.stage} call failed after ${ledger.length} attempt(s): ${last?.status ?? 'unknown'} - ${last?.error ?? 'no detail'}`,
+    ledger
+  );
+}
+
+/**
+ * A coach's line in its own voice — ADR 0025. The same door as `callLLM`: the
+ * key, the weekly budget gate, retries on transport failure, and an `llm_calls`
+ * row for every attempt, failures included.
+ *
+ * WHY a second entry point rather than a mode of `callLLM`: little else is
+ * shared. There is no system prompt, so no SAFETY_PREAMBLE — a speech model
+ * would read it aloud. There is no schema to validate and no completion for
+ * `scanOutput`, because what comes back is audio; the words were checked
+ * before they were ever stored (tests/db/personas.test.ts holds every shipped
+ * line to `scanOutput`). What IS shared is what CLAUDE.md #2 and #3 exist for:
+ * one place that holds the key, the budget and the ledger.
+ *
+ * INVARIANT: the input is known text — ADR 0025 §4. Callers build it with
+ *            src/speech/script.ts from a shared persona row.
+ */
+export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Promise<SpeechResult> {
+  if (options.input.length > SPEECH_MAX_INPUT_CHARS) {
+    // A caller's bug, refused before anything is sent or charged: there is no
+    // call yet, so there is nothing for the ledger to record.
+    throw new RangeError(
+      `speech input is ${options.input.length} characters; the ceiling is ${SPEECH_MAX_INPUT_CHARS}`
+    );
+  }
+
+  /*
+   * WHY the first model only, and no LLM_MODELS override: ADR 0025 §3. A voice
+   * name belongs to one model, so a fallback would speak in a voice nobody
+   * cast; and the override swaps TEXT models for an eval run, none of which
+   * can speak. A retry goes back to the same model.
+   */
+  const model = STAGE_MODELS.speech[0];
+  if (model === undefined) throw new Error('no speech model is configured');
+  const maxAttempts = options.maxAttempts ?? SPEECH_MAX_ATTEMPTS;
+  const timeoutMs = options.timeoutMs ?? SPEECH_TIMEOUT_MS;
+  const { ledger, record } = openLedger(deps);
+
+  const blankRow = (attempt: number): LlmCallInsert => ({
+    user_id: options.userId,
+    stage: 'speech',
+    attempt,
+    status: 'http_error',
+    models_requested: [model],
+    model_used: null,
+    openrouter_id: null,
+    prompt_tokens: null,
+    completion_tokens: null,
+    total_tokens: null,
+    cached_tokens: null,
+    cache_write_tokens: null,
+    reasoning_tokens: null,
+    /*
+     * INVARIANT: null, never an estimate. The response carries audio and a
+     * generation id and no price, and the ledger records only what was
+     * measured — the token analysis is graded. The budget gate charges
+     * SPEECH_ASSUMED_COST_USD for these rows instead (src/db/ledger.ts), and
+     * `openrouter_id` keeps what is needed to reconcile the real figure.
+     */
+    cost_credits: null,
+    upstream_cost: null,
+    latency_ms: 0,
+    // No prompt prefix to cache: the input is one short string per coach.
+    prompt_prefix_hash: null,
+    error: null,
+  });
+
+  await enforceBudget(options.userId, deps, blankRow(1), record);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const startedAt = deps.now().getTime();
+    const row = blankRow(attempt);
+    let spoken: { audio: Uint8Array; contentType: string } | undefined;
+    let retryable = false;
+
+    try {
+      const response = await deps.fetch(`${deps.baseUrl}/audio/speech`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${deps.apiKey}`,
+          'Content-Type': 'application/json',
+          ...deps.headers,
+        },
+        body: JSON.stringify({
+          model,
+          input: options.input,
+          voice: options.voice,
+          // Plays in every browser's <audio>; the default, raw PCM, plays in none.
+          response_format: 'mp3',
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      row.openrouter_id = response.headers.get('x-generation-id');
+      const contentType = response.headers.get('content-type') ?? '';
+
+      if (!response.ok) {
+        row.status = 'http_error';
+        row.error = `HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`;
+        retryable = isRetryableHttp(response.status);
+      } else if (!contentType.startsWith('audio/')) {
+        // Some failures arrive inside a 200, as they do for chat completions:
+        // an error body where the audio should be. Never handed on as audio.
+        row.status = 'http_error';
+        row.error = `expected audio, got ${contentType || 'no content type'}: ${(await response.text()).slice(0, 500)}`;
+        retryable = true;
+      } else {
+        const audio = new Uint8Array(await response.arrayBuffer());
+        if (audio.byteLength === 0) {
+          row.status = 'http_error';
+          row.error = 'the response declared audio and carried none';
+          retryable = true;
+        } else {
+          row.status = 'ok';
+          // Measured in the sense that matters: one model was requested and no
+          // fallback array was sent, so the model that answered is this one.
+          row.model_used = model;
+          spoken = { audio, contentType };
+        }
+      }
+    } catch (cause) {
+      const isTimeout = cause instanceof Error && cause.name === 'TimeoutError';
+      row.status = isTimeout ? 'timeout' : 'http_error';
+      row.error = cause instanceof Error ? cause.message : String(cause);
+      retryable = true;
+    } finally {
+      row.latency_ms = Math.max(0, deps.now().getTime() - startedAt);
+      await record(row);
+    }
+
+    if (spoken !== undefined) return { ...spoken, attempts: attempt, ledger };
+
+    if (!retryable || attempt === maxAttempts) break;
+    await deps.sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+  }
+
+  const last = ledger[ledger.length - 1];
+  throw new LlmCallFailedError(
+    `speech call failed after ${ledger.length} attempt(s): ${last?.status ?? 'unknown'} - ${last?.error ?? 'no detail'}`,
     ledger
   );
 }

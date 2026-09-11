@@ -31,9 +31,7 @@ export interface ListedPersona extends Persona {
 export async function listPersonas(db: Db): Promise<ListedPersona[]> {
   const { data, error } = await db
     .from('personas')
-    .select(
-      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant, sample_line'
-    )
+    .select('slug, name, system_prompt, intensity, humor_level, banned_phrases, sample_line')
     .eq('is_active', true)
     .order('name');
 
@@ -46,21 +44,45 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
     intensity: row.intensity,
     humorLevel: row.humor_level as HumorLevel,
     bannedPhrases: row.banned_phrases ?? [],
-    voiceVariant: row.tts_voice_variant,
     sampleLine: row.sample_line,
   }));
 }
 
-/** The BCP-47 hint for a persona, for src/ui/speak.ts. Null when unset. */
-export async function personaVoice(db: Db, slug: string): Promise<string | null> {
+/** What the speech stage needs to say a coach's line in its own voice. */
+export interface CoachVoice {
+  /** One of SPEECH_VOICES in src/speech/script.ts. */
+  voice: string;
+  /** How the character speaks — read by the model, never spoken. */
+  direction: string;
+  /** The row's `sample_line`: what is spoken. */
+  line: string;
+}
+
+/**
+ * A shipped coach's voice, direction and line — ADR 0025. Null when the slug
+ * names no shared coach, or one missing any of the three.
+ *
+ * INVARIANT: shared rows only — ADR 0025 §4. `personas_write` lets a user
+ *            write their own row, line and direction included, and RLS shows
+ *            them their own rows, so without the `user_id is null` filter a
+ *            user could make the server speak anything they typed. The filter
+ *            is the control; RLS is not.
+ */
+export async function coachVoice(db: Db, slug: string): Promise<CoachVoice | null> {
   const { data, error } = await db
     .from('personas')
-    .select('tts_voice_id')
+    .select('tts_voice, tts_instructions, sample_line')
     .eq('slug', slug)
+    .is('user_id', null)
+    .eq('is_active', true)
+    // One row at most: personas_slug_unique is `nulls not distinct`, so a
+    // shared slug is unique among shared rows.
     .maybeSingle();
 
-  if (error) throw new Error(`reading persona voice: ${error.message}`);
-  return data?.tts_voice_id ?? null;
+  if (error) throw new Error(`reading coach voice: ${error.message}`);
+  if (!data?.tts_voice || !data.tts_instructions || !data.sample_line) return null;
+
+  return { voice: data.tts_voice, direction: data.tts_instructions, line: data.sample_line };
 }
 
 export interface AcceptedPlan {

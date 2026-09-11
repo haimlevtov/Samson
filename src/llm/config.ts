@@ -138,6 +138,48 @@ export const PLANNER_TIMEOUT_MS = 120_000;
  */
 export const TIMEOUT_ASSUMED_COST_USD = 0.05;
 
+/**
+ * The longest input the speech stage sends — ADR 0025.
+ *
+ * WHY a ceiling on characters: a speech model has no `max_tokens`, and what it
+ * is billed on is what it says. The input is src/speech/script.ts's preamble
+ * and labels, a direction of at most 600 characters and a line of at most 280
+ * (both column limits), which comes to about 1,050.
+ *
+ * INVARIANT: always enforced — CLAUDE.md #2. There is no unbounded call path.
+ */
+export const SPEECH_MAX_INPUT_CHARS = 1_200;
+
+/**
+ * A preview is a button press, and a few seconds of audio takes a few seconds
+ * to make. Two attempts of twenty seconds bounds the wait at under a minute.
+ */
+export const SPEECH_TIMEOUT_MS = 20_000;
+export const SPEECH_MAX_ATTEMPTS = 2;
+
+/**
+ * Charged against the budget for each spoken attempt — ADR 0025, Cost.
+ *
+ * WHY this exists: the provider returns audio and no price, so a speech row
+ * records cost_credits null and the gate would otherwise count every preview
+ * as free. The same split TIMEOUT_ASSUMED_COST_USD makes — the ledger records
+ * only what was measured, and the estimate is applied by the budget gate alone
+ * (src/db/ledger.ts).
+ *
+ * Sized for the longest line the stage accepts: 280 characters spoken slowly
+ * is about thirty seconds, 750 audio tokens at 25 a second, $0.015 at $20 per
+ * million, plus the direction as input at $1 per million. About $0.016,
+ * rounded up. A typical line costs half of it, so this is pessimistic, which
+ * is the safe direction for a budget.
+ *
+ * AI-NOTE: sized for a sample line and nothing longer. The PR that reads a
+ *          delivered plan aloud — a minute or more — must replace this flat
+ *          figure with one that scales with what is spoken, before it ships.
+ *          And as with TIMEOUT_ASSUMED_COST_USD: if a real figure becomes
+ *          available, delete the assumption rather than tuning it.
+ */
+export const SPEECH_ASSUMED_COST_USD = 0.02;
+
 export class MissingApiKeyError extends Error {
   constructor() {
     // WHY: named error rather than a hang or a cryptic 401, because the phase 0
@@ -152,6 +194,18 @@ export function readApiKey(env: Env = process.env): string {
   const key = env['OPENROUTER_API_KEY'];
   if (!key || key.trim() === '') throw new MissingApiKeyError();
   return key;
+}
+
+/**
+ * Whether a key is set, without handing it to the caller.
+ *
+ * For a page deciding whether to offer something only a model can do — the
+ * Coach tab's voice, which shows a line as text rather than a button that
+ * cannot speak (docs/specs/mobile-interface.md §4).
+ */
+export function hasApiKey(env: Env = process.env): boolean {
+  const key = env['OPENROUTER_API_KEY'];
+  return key !== undefined && key.trim() !== '';
 }
 
 /** Optional attribution headers. Cosmetic; calls succeed without them. */

@@ -1,272 +1,40 @@
 /**
  * Tests for `src/ui/speak.ts`.
  *
- * The regression these exist for: voices were chosen by language alone, so the
- * two personas sharing `en-GB` resolved to the same voice object, and on a
- * device with no en-GB voice installed the `en-US` persona fell back to that
- * same voice as well. All three coaches spoke identically under a control
- * labelled "Voice", and nothing in the suite noticed because this module had no
- * tests.
+ * What is left to test, now that ADR 0025 has taken the coaches off device
+ * speech, is the module's promise to its one caller, the rest timer: it never
+ * throws, and it says when nothing started, so the beep fires instead.
  *
- * Only the pure functions are covered. `speak()` itself needs a real
- * `window.speechSynthesis`, which the node test environment does not have — and
- * mocking the whole speech stack would assert the shape of the mock rather than
- * anything about the browser.
+ * The node environment has no `speechSynthesis`, which is exactly the condition
+ * that promise is about. The asynchronous failure — queued, then `not-allowed`
+ * on iOS Safari — needs a real speech engine, and a hand-built fake of one
+ * would assert the fake.
+ *
+ * The voice-selection tests that lived here went with the functions they
+ * tested: `pickVoice`, `voiceSettings`, `previewSpeech` and `personaSpeech`
+ * chose and shaped a device voice for a coach, which nothing does any more.
  */
-import { describe, expect, it } from 'vitest';
-import {
-  personaSpeech,
-  pickVoice,
-  previewSpeech,
-  spokenIntensity,
-  voiceSettings,
-  type VoiceLike,
-} from './speak';
-import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
-import type { Persona } from '../persona/schema';
+import { describe, expect, it, vi } from 'vitest';
+import { speak } from './speak';
 
-const voice = (name: string, lang: string): VoiceLike => ({ name, lang });
-
-/** A typical Windows machine: US English only, no en-GB installed. */
-const US_ONLY = [
-  voice('Microsoft David - English (United States)', 'en-US'),
-  voice('Microsoft Mark - English (United States)', 'en-US'),
-  voice('Microsoft Zira - English (United States)', 'en-US'),
-];
-
-/** A machine with both, plus an unrelated language to be ignored. */
-const MIXED = [
-  voice('Google UK English Female', 'en-GB'),
-  voice('Google UK English Male', 'en-GB'),
-  voice('Microsoft David - English (United States)', 'en-US'),
-  voice('Google Deutsch', 'de-DE'),
-];
-
-describe('pickVoice', () => {
-  it('prefers an exact language match over a prefix one', () => {
-    const picked = pickVoice(MIXED, 'en-GB');
-    expect(picked?.lang).toBe('en-GB');
+describe('speak, where the device cannot speak', () => {
+  it('reports that nothing started, so the caller can fall back', () => {
+    expect(speak('Rest over.')).toBe(false);
   });
 
-  it('falls back to the language prefix rather than falling silent', () => {
-    // Asking for en-GB on a US-only machine should speak American English, not
-    // nothing. This fallback is correct, and is also what used to collapse
-    // every persona onto one voice.
-    expect(pickVoice(US_ONLY, 'en-GB')?.lang).toBe('en-US');
-  });
-
-  it('never crosses into an unrelated language', () => {
-    expect(pickVoice([voice('Google Deutsch', 'de-DE')], 'en-GB')).toBeNull();
-  });
-
-  it('treats an underscore locale as equivalent', () => {
-    expect(pickVoice([voice('Some Voice', 'en_GB')], 'en-GB')?.name).toBe('Some Voice');
-  });
-
-  /*
-   * The regression itself: several coaches, two languages, and a machine that
-   * has no en-GB voice at all, so every one of them resolves through the prefix
-   * fallback into the same pool.
-   *
-   * The variants below are the ARGUMENT SHAPE, not the seeded values — this
-   * file tests `pickVoice`, which never sees a persona row. The live allocation
-   * is en-GB 0/1/2 and en-US 0/1 (migrations 20260901154757 and
-   * 20260908110000), maintained in .claude/skills/add-persona/SKILL.md §2 and
-   * checked against the rows by tests/db/personas.test.ts.
-   *
-   * FOUND IN REVIEW: this used to claim these WERE "the three shipped personas
-   * as seeded", which was wrong on the count once two more shipped and had
-   * never matched the seeded variants anyway.
-   */
-  it('gives three personas three different voices on a single-language device', () => {
-    const picked = [
-      pickVoice(US_ONLY, 'en-US', 0),
-      pickVoice(US_ONLY, 'en-GB', 1),
-      pickVoice(US_ONLY, 'en-GB', 2),
-    ];
-
-    expect(picked.every((v) => v !== null)).toBe(true);
-    expect(new Set(picked.map((v) => v!.name)).size, 'three coaches, three voices').toBe(3);
-  });
-
-  it('keeps two personas apart even when they share a language exactly', () => {
-    const first = pickVoice(MIXED, 'en-GB', 1);
-    const second = pickVoice(MIXED, 'en-GB', 2);
-
-    expect(first?.lang).toBe('en-GB');
-    expect(second?.lang).toBe('en-GB');
-    expect(first?.name).not.toBe(second?.name);
-  });
-
-  it('is stable: the same variant always lands on the same voice', () => {
-    expect(pickVoice(MIXED, 'en-GB', 1)?.name).toBe(pickVoice(MIXED, 'en-GB', 1)?.name);
-  });
-
-  it('does not depend on the order getVoices happened to return', () => {
-    // getVoices() order is unspecified and differs between engines, so without
-    // a stable sort a persona would change voice depending on which loaded
-    // first.
-    const shuffled = [...MIXED].reverse();
-    expect(pickVoice(shuffled, 'en-GB', 1)?.name).toBe(pickVoice(MIXED, 'en-GB', 1)?.name);
-  });
-
-  it('wraps rather than falling off the end of a short list', () => {
-    const single = [voice('Only One', 'en-GB')];
-    expect(pickVoice(single, 'en-GB', 7)?.name).toBe('Only One');
-  });
-
-  it('returns null when there is nothing to choose from', () => {
-    expect(pickVoice([], 'en-GB')).toBeNull();
-    // No hint means no persona, so the system default is the right answer.
-    expect(pickVoice(MIXED, null)).toBeNull();
-  });
-});
-
-describe('voiceSettings', () => {
-  it('maps the shipped intensities to the documented rate and pitch', () => {
-    // toBeCloseTo, not toEqual: 0.9 + 0.05 is 0.9500000000000001 in binary
-    // floating point, and pinning the artefact would be pinning the wrong thing.
-    const cases: [number, number, number][] = [
-      [2, 0.975, 0.95],
-      [3, 1.05, 1.0],
-      [4, 1.125, 1.05],
-    ];
-
-    for (const [intensity, rate, pitch] of cases) {
-      expect(voiceSettings(intensity).rate, `rate at ${intensity}`).toBeCloseTo(rate, 10);
-      expect(voiceSettings(intensity).pitch, `pitch at ${intensity}`).toBeCloseTo(pitch, 10);
-    }
-  });
-
-  it('clamps out-of-range intensities rather than producing an unusable rate', () => {
-    expect(voiceSettings(0)).toEqual(voiceSettings(1));
-    expect(voiceSettings(99)).toEqual(voiceSettings(5));
-  });
-
-  it('is too narrow to identify a speaker on its own', () => {
-    // One step is a 7% rate change. Documenting the reason `variant` exists.
-    const { rate: a } = voiceSettings(3);
-    const { rate: b } = voiceSettings(4);
-    expect(Math.abs(b - a) / a).toBeLessThan(0.1);
-  });
-});
-
-describe('spokenIntensity', () => {
-  it('softens the speech on a week the app has judged gentle', () => {
-    // The banner says "not a week to push"; speaking it faster and higher than
-    // usual contradicted the words it was reading.
-    expect(spokenIntensity(4, true)).toBe(GENTLE_MAX_INTENSITY);
-    expect(voiceSettings(spokenIntensity(4, true)).rate).toBeLessThan(voiceSettings(4).rate);
-  });
-
-  it('leaves an ordinary week alone', () => {
-    expect(spokenIntensity(4, false)).toBe(4);
-  });
-
-  it('leaves a persona already at or below the gentle ceiling where it is', () => {
-    // This is the case the previous implementation got wrong. Subtracting two
-    // instead of clamping to two took the Analyst at 2 down to 1, so the words
-    // were written at 2 and read aloud at 1.
-    expect(spokenIntensity(2, true)).toBe(2);
-    expect(spokenIntensity(1, true)).toBe(1);
-  });
-
-  /*
-   * The property that matters, rather than three examples of it: the voice and
-   * the words must be softened by the SAME rule. `resolveTone` decides the
-   * intensity the persona writes at; `spokenIntensity` decides the intensity it
-   * is read at. Two definitions of "gentle" is one too many, and the drift is
-   * invisible — nothing crashes, the coach just sounds unlike its own text.
-   */
-  it('agrees with resolveTone at every point on the scale', () => {
-    const persona = (intensity: number): Persona => ({
-      slug: 'fixture',
-      name: 'Fixture',
-      systemPrompt: 'x',
-      intensity,
-      humorLevel: 'clean',
-      bannedPhrases: [],
-      voiceVariant: 0,
-    });
-
-    for (const intensity of [1, 2, 3, 4, 5]) {
-      for (const gentle of [true, false]) {
-        const tone = resolveTone(
-          persona(intensity),
-          'clean',
-          gentle
-            ? { notes: ['tweaked my knee'], adherenceRate: 1 }
-            : { notes: [], adherenceRate: 1 }
-        );
-
-        expect(tone.gentle, `gentle flag for intensity ${intensity}`).toBe(gentle);
-        expect(spokenIntensity(intensity, gentle), `intensity ${intensity}, gentle ${gentle}`).toBe(
-          tone.intensity
-        );
-      }
-    }
-  });
-});
-
-describe('previewSpeech', () => {
-  const rival = {
-    sampleLine: 'Your move.',
-    voice: 'en-GB',
-    intensity: 4,
-    voiceVariant: 1,
-  };
-
-  it('speaks the line in the voice a delivery from the same coach would use', () => {
+  it('leaves the fallback to the caller rather than sounding it twice', () => {
     /*
-     * The preview answers "what does this coach sound like", so it must be the
-     * coach the user is about to choose: the row's language, its variant, and
-     * the intensity an ordinary — not gentle — delivery is read at.
+     * The rest timer beeps when this returns false AND hands in the beep as
+     * onFailure. Calling onFailure on this path as well would beep twice for
+     * one rest — onFailure is for a failure after a successful start.
      */
-    expect(previewSpeech(rival)).toEqual({
-      text: 'Your move.',
-      options: { lang: 'en-GB', intensity: spokenIntensity(4, false), variant: 1 },
-    });
+    const onFailure = vi.fn();
+    expect(speak('Rest over.', { onFailure })).toBe(false);
+    expect(onFailure).not.toHaveBeenCalled();
   });
 
-  it('sounds exactly like an ordinary delivery from the same coach', () => {
-    // FOUND IN REVIEW: the preview's settings and the delivery's were built
-    // separately. Both come from personaSpeech now; this holds the preview to
-    // the delivery's own call, so they cannot drift apart again.
-    expect(previewSpeech(rival)!.options).toEqual(personaSpeech(rival, false));
-  });
-
-  it('never softens the preview, which has no training week to be gentle about', () => {
-    expect(previewSpeech({ ...rival, intensity: 5 })!.options.intensity).toBe(5);
-  });
-
-  it('offers nothing for a row with no line, rather than a button that says nothing', () => {
-    expect(previewSpeech({ ...rival, sampleLine: null })).toBeNull();
-    expect(previewSpeech({ ...rival, sampleLine: '   ' })).toBeNull();
-  });
-
-  it('trims the line it speaks', () => {
-    expect(previewSpeech({ ...rival, sampleLine: '  Your move.  ' })!.text).toBe('Your move.');
-  });
-});
-
-describe('personaSpeech', () => {
-  const analyst = { voice: 'en-US', intensity: 2, voiceVariant: 0 };
-
-  it("is the coach's language, variant and intensity", () => {
-    expect(personaSpeech({ ...analyst, intensity: 4 }, false)).toEqual({
-      lang: 'en-US',
-      intensity: 4,
-      variant: 0,
-    });
-  });
-
-  it('softens on a gentle week by the same clamp the words use', () => {
-    expect(personaSpeech({ ...analyst, intensity: 5 }, true).intensity).toBe(
-      spokenIntensity(5, true)
-    );
-  });
-
-  it('falls back to the defaults the delivery always used before a coach is known', () => {
-    expect(personaSpeech(null, false)).toEqual({ lang: null, intensity: 3, variant: 0 });
+  it('does not throw for a blank cue', () => {
+    expect(() => speak('   ')).not.toThrow();
+    expect(speak('   ')).toBe(false);
   });
 });

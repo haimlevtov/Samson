@@ -9,6 +9,8 @@ export type LlmStage =
   | 'challenge'
   /** The open chat — ADR 0015. The only stage whose input has no shape. */
   | 'chat'
+  /** A coach's line in its own voice — ADR 0025. Audio out, not text. */
+  | 'speech'
   | 'smoke';
 
 export type LlmCallStatus =
@@ -115,6 +117,36 @@ export interface CallOptions<T> {
    * you enable this, raise `maxTokens` in the same change.
    */
   reasoning?: boolean;
+}
+
+/**
+ * One text-to-speech call — ADR 0025.
+ *
+ * WHY there is no `system`, `schema` or `maxTokens`: a speech model takes one
+ * input and returns audio. There is no instruction channel to keep untrusted
+ * text out of, no completion to validate, and no tokens to cap — the gateway
+ * bounds the input's length instead, `SPEECH_MAX_INPUT_CHARS`.
+ *
+ * INVARIANT: the input is known text — ADR 0025 §4. It is built by
+ *            src/speech/script.ts from a shared persona row, never from what
+ *            the browser sent.
+ */
+export interface SpeechOptions {
+  userId: string;
+  /** The whole input, in the model's own format: director's notes, then the transcript. */
+  input: string;
+  /** One of the model's voices — `SPEECH_VOICES` in src/speech/script.ts. */
+  voice: string;
+  maxAttempts?: number;
+  timeoutMs?: number;
+}
+
+export interface SpeechResult {
+  audio: Uint8Array;
+  /** As the response declared it, e.g. `audio/mpeg`. Always an `audio/` type. */
+  contentType: string;
+  attempts: number;
+  ledger: LlmCallInsert[];
 }
 
 export interface LlmResult<T> {

@@ -129,6 +129,25 @@ ADR 0005 §5 requires it every phase, and the report records what **got
 through**, not only what was blocked — write those as passing tests that assert
 the hole.
 
+## A stage that does not return text
+
+The `speech` stage (ADR 0025) returns audio, and most of the list above does
+not apply to it: no schema, no system prompt, no `scanOutput` — there is no
+completion to scan — and no `max_tokens`. It goes through its own entry point,
+`callSpeech` in `src/llm/gateway.ts`, which shares what CLAUDE.md #2 and #3 are
+about: the key, the budget gate, retries and a ledger row per attempt.
+
+What still applies: **step 1** (`LlmStage`, `STAGE_MODELS`, a bound in
+`config.ts` — for speech an input ceiling, not a token one), **step 2** (the
+constraint migration, unchanged) and **step 6** (a scripted fetch, no key).
+Two things are new, and both cost something to forget:
+
+- **A provider that reports no price** leaves `cost_credits` null. Never put an
+  estimate in the row; add the stage to `chargedFor` in `src/db/ledger.ts` so
+  the budget gate charges an assumption, as it does for timeouts.
+- **`tests/unit/invariants.test.ts` names the gateway's entry points.** A new
+  exported `call*` function fails it until it is added there on purpose.
+
 ## Before you call it done
 
 ```bash
@@ -152,5 +171,7 @@ npx vitest run --config vitest.db.config.ts tests/db/schema-invariants.test.ts
 - `docs/adr/0001-llm-gateway.md` — why every call goes through one door
 - `docs/adr/0005-llm-safety.md` — the five layers, and which are code
 - `docs/adr/0008-correction-channel.md` — why corrections are not fenced
-- `docs/adr/0015-coach-chat.md` — the most recent stage, and a worked example
+- `docs/adr/0015-coach-chat.md` — the most recent TEXT stage, and a worked example
   of confining one whose input has no shape
+- `docs/adr/0025-coach-voices.md` — the stage that returns audio, and the
+  price the provider does not report

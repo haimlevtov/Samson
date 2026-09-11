@@ -1,25 +1,19 @@
 'use client';
 
-import { useActionState, useEffect, useState, useSyncExternalStore } from 'react';
-import { deliverForPersona } from './actions';
+import { useActionState, useEffect, useRef, useState } from 'react';
+import { deliverForPersona, hearCoach } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
-import {
-  canSpeak,
-  personaSpeech,
-  previewSpeech,
-  primeVoices,
-  speak,
-  stopSpeaking,
-} from '@/src/ui/speak';
+import { VOICE_REFUSAL_TEXT, type VoiceRefusal } from './voice-state';
 import type { ListedPersona } from '@/src/db/personas';
 
-export interface CoachPersona extends ListedPersona {
-  /** BCP-47 hint from the row. Best effort — see src/ui/speak.ts. */
-  voice: string | null;
-}
+/** Why the chosen coach's line is on screen instead of in the speaker. */
+type Shown = { slug: string; reason: VoiceRefusal | 'blocked' };
 
-/** Speech support does not change during a visit, so there is nothing to watch. */
-const noSubscription = () => () => {};
+/** The server's base64 audio as something an <audio> element can play. */
+function clipUrl(audio: string, contentType: string): string {
+  const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
+  return URL.createObjectURL(new Blob([bytes], { type: contentType }));
+}
 
 /**
  * The plan and the voice, side by side.
@@ -29,88 +23,150 @@ const noSubscription = () => () => {};
  * the critic approved and the words come from the model. Merging them into one
  * rendered paragraph would put a model between the user and a number, which is
  * the thing invariant #1 exists to prevent.
+ *
+ * The voice is ADR 0025's: each coach's line in a voice cast for it, made by
+ * the gateway's speech stage. There is no device-voice fallback — a voice that
+ * does not fit the coach is worse than none — so every path that cannot play
+ * shows the line as text and says why (docs/specs/mobile-interface.md §4).
+ *
+ * AI-NOTE: the delivered plan is not read aloud. That was device speech, and it
+ *          went with it; reading it in the coach's voice needs the delivery
+ *          stored server-side first, because the server never speaks text the
+ *          browser sends — ADR 0025 §4, the next PR.
  */
 export function CoachConsole({
   personas,
   weekLabels,
+  voiceAvailable,
 }: {
-  personas: CoachPersona[];
+  personas: ListedPersona[];
   /** One label per week of the block, so notes can be shown against them. */
   weekLabels: string[];
+  /** Whether the server can speak at all — false with no key configured. */
+  voiceAvailable: boolean;
 }) {
   const [selected, setSelected] = useState(personas[0]?.slug ?? '');
-  const [speechFailed, setSpeechFailed] = useState(false);
-  const [previewFailed, setPreviewFailed] = useState(false);
+  const [fetching, setFetching] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
 
   /*
-   * WHY not `canSpeak()` in render, as the delivery below uses it: that block
-   * only exists after a client-side action, but the preview is on first paint.
-   * The server has no `speechSynthesis`, so a render-time check would print the
-   * text version on the server and a button in the browser — a hydration
-   * mismatch. The server snapshot is false, and the client re-renders with the
-   * real answer.
+   * One element for every clip, kept across renders.
+   *
+   * WHY one: a second press, a chip change and unmount all have to stop what is
+   * playing, and one element is one thing to stop.
    */
-  const speakable = useSyncExternalStore(noSubscription, canSpeak, () => false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+
+  /*
+   * Clips already fetched, by slug, for this visit.
+   *
+   * WHY: each fetch is a paid call against the user's weekly budget — ADR 0025,
+   * Cost — and a replay of the same line should not be a second one. It is
+   * also what makes "Tap again to play" work where a browser blocks playback
+   * after a network wait: the second tap plays from here, inside the tap.
+   */
+  const clips = useRef(new Map<string, string>());
+
+  /*
+   * Which press is current. A press that resolves after the user has moved to
+   * another coach keeps its clip for later and plays nothing — otherwise one
+   * coach's voice arrives under another coach's chip.
+   */
+  const request = useRef(0);
+
   const chosen = personas.find((p) => p.slug === selected) ?? null;
-  const preview = chosen ? previewSpeech(chosen) : null;
+  const line = chosen?.sampleLine?.trim() ?? '';
   const [state, formAction, pending] = useActionState<DeliveryState, FormData>(
     deliverForPersona,
     EMPTY_DELIVERY
   );
 
-  /*
-   * The voice follows the DELIVERED persona, not the selected chip.
-   *
-   * WHY: selecting a chip does not re-deliver — `state.delivered` still holds
-   * whatever the last submission produced. Reading `selected` here meant that
-   * picking a different coach and pressing Read it aloud spoke the previous
-   * coach's words in the new coach's accent and rate, which is a genuinely
-   * mismatched voice rather than merely a surprising one.
-   */
-  const speaking = personas.find((p) => p.slug === state.personaSlug) ?? null;
+  const stop = () => {
+    audio.current?.pause();
+    setPlaying(null);
+  };
 
-  const spoken = state.delivered
-    ? [state.delivered.opening, ...state.delivered.week_notes, state.delivered.closing].join(' ')
-    : '';
-
-  // The list loads asynchronously and is empty on a first getVoices() call, so
-  // it is started here rather than at the moment the button is pressed.
+  // Made on mount, in the browser, and torn down on unmount: audio outlives the
+  // component otherwise, and object URLs outlive the page's need for them until
+  // the tab closes.
   useEffect(() => {
-    primeVoices();
-    // Speech outlives the component otherwise, and carries on over the next
-    // screen until it finishes the whole delivery.
-    return stopSpeaking;
+    const element = new Audio();
+    const cache = clips.current;
+    audio.current = element;
+    return () => {
+      element.pause();
+      element.removeAttribute('src');
+      audio.current = null;
+      for (const url of cache.values()) URL.revokeObjectURL(url);
+      cache.clear();
+    };
   }, []);
 
-  /*
-   * Stop talking whenever the delivery changes underneath us.
-   *
-   * WHY: `speechSynthesis` is a global queue that outlives this subtree, and
-   * the only other cancels are a new `speak()` call, the Stop button, a chip
-   * change (below), and unmount. Without this, delivering again while the
-   * previous read is still playing leaves the screen showing one coach while
-   * the audio reads another — the same mismatch this component's `speaking`
-   * lookup exists to prevent, moved from the click boundary to the delivery
-   * boundary. It also covers the failure case, where `state.delivered` goes
-   * null and the text disappears while the voice carries on.
-   */
-  useEffect(() => {
-    stopSpeaking();
-    setSpeechFailed(false);
-  }, [state.delivered, state.personaSlug]);
+  const play = (slug: string, url: string) => {
+    const element = audio.current;
+    if (element === null) return;
+    element.pause();
+    element.src = url;
+    element.onplaying = () => setPlaying(slug);
+    element.onended = () => setPlaying(null);
+    element.onerror = () => {
+      setPlaying(null);
+      setShown({ slug, reason: 'failed' });
+    };
+    element.play().catch((cause: unknown) => {
+      // AbortError is this code replacing the clip or stopping it — not a
+      // failure, the same distinction src/ui/speak.ts draws for utterances.
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      setPlaying(null);
+      setShown({
+        slug,
+        reason:
+          cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'blocked' : 'failed',
+      });
+    });
+  };
 
-  /*
-   * And whenever the chip changes — stopping WHATEVER is speaking, a preview or
-   * the delivered plan being read aloud, on purpose. The chip is the user's
-   * answer to "who do I want to hear now", so the last coach does not talk over
-   * it; without this, one coach's preview carries on in that coach's voice
-   * while another coach's chip is lit. `stopSpeaking` is global, so a narrower
-   * stop would need its own record of what is playing.
-   */
-  useEffect(() => {
-    stopSpeaking();
-    setPreviewFailed(false);
-  }, [selected]);
+  const hear = async (slug: string) => {
+    setShown(null);
+    const cached = clips.current.get(slug);
+    if (cached) {
+      play(slug, cached);
+      return;
+    }
+
+    const mine = ++request.current;
+    setFetching(slug);
+    try {
+      const result = await hearCoach(slug);
+      if (result.ok) {
+        const url = clipUrl(result.audio, result.contentType);
+        clips.current.set(slug, url);
+        if (request.current === mine) play(slug, url);
+      } else if (request.current === mine) {
+        setShown({ slug, reason: result.reason });
+      }
+    } catch {
+      if (request.current === mine) setShown({ slug, reason: 'failed' });
+    } finally {
+      if (request.current === mine) setFetching(null);
+    }
+  };
+
+  const choose = (slug: string) => {
+    /*
+     * The chip is the user's answer to "who do I want to hear now", so the last
+     * coach stops talking and any press still in flight is superseded.
+     */
+    request.current += 1;
+    stop();
+    setFetching(null);
+    setShown(null);
+    setSelected(slug);
+  };
+
+  const reason =
+    shown !== null && chosen !== null && shown.slug === chosen.slug ? shown.reason : null;
 
   return (
     <>
@@ -127,7 +183,7 @@ export function CoachConsole({
               key={p.slug}
               type="button"
               className={`chip ${p.slug === selected ? 'chip-on' : ''}`}
-              onClick={() => setSelected(p.slug)}
+              onClick={() => choose(p.slug)}
             >
               {p.name}
             </button>
@@ -135,35 +191,36 @@ export function CoachConsole({
         </div>
 
         {/*
-         * The preview — rework plan, PR 6. Every state renders something
-         * (docs/specs/mobile-interface.md §4): a device that cannot speak gets
-         * the line as text rather than a dead button, and one that starts and
-         * then dies gets the text with the same note "Read it aloud" uses.
+         * The preview — rework plan PRs 6 and 6b. Every state renders something:
+         * with no key there is no button and the line is text; a refusal or a
+         * blocked play shows the line and says why.
          */}
-        {preview && chosen ? (
+        {chosen && line !== '' ? (
           <>
-            {speakable ? (
+            {voiceAvailable ? (
               <div className="row">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setPreviewFailed(false);
-                    const started = speak(preview.text, {
-                      ...preview.options,
-                      onFailure: () => setPreviewFailed(true),
-                    });
-                    if (!started) setPreviewFailed(true);
-                  }}
-                >
-                  Hear {chosen.name}
-                </button>
+                {playing === chosen.slug ? (
+                  <button type="button" className="secondary" onClick={stop}>
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={fetching === chosen.slug}
+                    onClick={() => void hear(chosen.slug)}
+                  >
+                    {fetching === chosen.slug
+                      ? `Finding ${chosen.name}’s voice…`
+                      : `Hear ${chosen.name}`}
+                  </button>
+                )}
               </div>
             ) : null}
-            {!speakable || previewFailed ? (
-              <p className="muted small">
-                {previewFailed ? 'This device would not read it aloud. ' : null}
-                {chosen.name}: “{preview.text}”
+            {!voiceAvailable || reason !== null ? (
+              <p className="muted small" role="status">
+                {reason !== null ? `${VOICE_REFUSAL_TEXT[reason]} ` : null}
+                {chosen.name}: “{line}”
               </p>
             ) : null}
           </>
@@ -196,52 +253,6 @@ export function CoachConsole({
               </p>
             ))}
             <p>{state.delivered.closing}</p>
-
-            {/*
-             * WHY Stop can live in here, gated on the same state as the text:
-             * every path that clears `state.delivered` — including every error
-             * return in actions.ts — trips the cancel effect above, so the
-             * audio stops at the same moment this control disappears. Without
-             * that effect this gating would strand a running utterance with no
-             * way to stop it, which is what review found.
-             */}
-            {canSpeak() ? (
-              <>
-                <div className="row">
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      /*
-                       * Both failure paths are handled, because they are
-                       * different failures: `false` is "could not start", and
-                       * onFailure is "started and then died", which is what iOS
-                       * Safari does. docs/specs/mobile-interface.md §4 — every
-                       * state renders something, and "nothing happens" is the
-                       * failure that section exists to prevent. Here the speech
-                       * IS the action, so silence would be the only feedback.
-                       */
-                      setSpeechFailed(false);
-                      const started = speak(spoken, {
-                        ...personaSpeech(speaking, state.gentle),
-                        onFailure: () => setSpeechFailed(true),
-                      });
-                      if (!started) setSpeechFailed(true);
-                    }}
-                  >
-                    Read it aloud
-                  </button>
-                  <button type="button" className="secondary" onClick={stopSpeaking}>
-                    Stop
-                  </button>
-                </div>
-                {speechFailed ? (
-                  <p className="muted small">
-                    This device would not read it aloud. The plan above is the whole of it.
-                  </p>
-                ) : null}
-              </>
-            ) : null}
           </div>
         ) : null}
       </div>

@@ -155,7 +155,7 @@ your working `.env.local` so they cannot drift:
 | -------------------- | -------- | ------------------------------------------------ |
 | `SUPABASE_URL`       | yes      | Without it every page 500s                       |
 | `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                             |
-| `OPENROUTER_API_KEY` | yes      | The coach, planner, critic and chat all call one |
+| `OPENROUTER_API_KEY` | yes      | All model calls, and the coaches' voices as well |
 | `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard          |
 
 **WHY no `NEXT_PUBLIC_` prefix:** nothing client-side touches Supabase. The only

@@ -4,9 +4,11 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { loadXpSummary } from '@/src/db/gamification';
-import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
+import { coachVoice, latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import { listWorkouts, loadHistory } from '@/src/db/training';
-import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
+import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
+import { speechScript } from '@/src/speech/script';
+import type { VoiceResult } from './voice-state';
 import {
   MAX_CHAT_MESSAGE_CHARS,
   MAX_DIET_QUESTION_CHARS,
@@ -433,5 +435,60 @@ export async function deliverForPersona(
       personaSlug: slug,
       error: 'The coach could not deliver that plan. Try again in a moment.',
     };
+  }
+}
+
+/**
+ * A coach's sample line, in the voice cast for it — ADR 0025.
+ *
+ * INVARIANT: the slug is the only thing the browser sends, and it only chooses
+ *            among shared rows — `coachVoice` filters on `user_id is null`,
+ *            ADR 0025 §4. The words spoken and the direction they are spoken
+ *            with are the row's, so this cannot be used to speak anything else.
+ *
+ * INVARIANT: no write path but the ledger. The one insert underneath is the
+ *            `llm_calls` row per attempt that CLAUDE.md #3 requires.
+ */
+export async function hearCoach(slug: unknown): Promise<VoiceResult> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  // Called directly rather than through a form, so the argument is whatever
+  // the request carried — parsed, not trusted.
+  const parsed = z.string().min(1).max(64).safeParse(slug);
+  if (!parsed.success) return { ok: false, reason: 'no-voice' };
+
+  try {
+    const coach = await coachVoice(db, parsed.data);
+    if (!coach) return { ok: false, reason: 'no-voice' };
+
+    const spoken = await callSpeech(
+      {
+        userId: user.id,
+        input: speechScript(coach.direction, coach.line),
+        voice: coach.voice,
+      },
+      createGatewayDeps(createSupabaseLedger(db))
+    );
+
+    return {
+      ok: true,
+      audio: Buffer.from(spoken.audio).toString('base64'),
+      contentType: spoken.contentType,
+    };
+  } catch (cause) {
+    // Refusals the card can explain are named; everything else is generic,
+    // for the reason `sendChatMessage` gives.
+    if (cause instanceof MissingApiKeyError) return { ok: false, reason: 'no-key' };
+    if (cause instanceof BudgetExceededError) return { ok: false, reason: 'budget' };
+
+    // Name and bounded message only — `LlmCallFailedError` carries every
+    // ledger row, and every row carries the user's id. See `sendChatMessage`.
+    console.error(
+      'coach voice failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
+    return { ok: false, reason: 'failed' };
   }
 }

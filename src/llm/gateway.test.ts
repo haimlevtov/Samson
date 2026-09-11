@@ -8,9 +8,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { callLLM } from './gateway';
+import { callLLM, callSpeech } from './gateway';
 import { SAFETY_PREAMBLE } from './safety';
-import { MissingApiKeyError, readApiKey } from './config';
+import { STAGE_MODELS } from './models';
+import { MissingApiKeyError, SPEECH_MAX_INPUT_CHARS, hasApiKey, readApiKey } from './config';
 import { BudgetExceededError, LlmCallFailedError } from './types';
 import type { GatewayDeps, LedgerClient, LlmCallInsert } from './types';
 
@@ -301,5 +302,207 @@ describe('callLLM', () => {
     const [a, b, c] = await Promise.all([run('prefix one'), run('prefix one'), run('prefix two')]);
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+  });
+});
+
+describe('callSpeech', () => {
+  /*
+   * ADR 0025. The same door as callLLM — key, budget, retries, a ledger row per
+   * attempt — with none of the text machinery, because what comes back is
+   * audio. Every case runs against a scripted fetch; nothing here can speak.
+   */
+  const speechOptions = {
+    userId: '11111111-1111-1111-1111-111111111111',
+    input: 'NOTES: calm and even.\nTRANSCRIPT: Turn up on the Tuesday.',
+    voice: 'Algenib',
+  };
+
+  const MP3 = new Uint8Array([0xff, 0xf3, 0x44, 0xc4]);
+
+  const audioResponse = (body: BodyInit = MP3, headers: Record<string, string> = {}) =>
+    new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-tts-1', ...headers },
+    });
+
+  it('posts the model, the voice and the input to the speech endpoint, and returns the audio', async () => {
+    const urls: string[] = [];
+    const { deps, calls } = makeDeps(async (url) => {
+      urls.push(url);
+      return audioResponse();
+    });
+
+    const result = await callSpeech(speechOptions, deps);
+
+    expect(urls).toEqual(['https://example.invalid/api/v1/audio/speech']);
+    expect(JSON.parse(String(calls[0]!.body))).toEqual({
+      model: STAGE_MODELS.speech[0],
+      input: speechOptions.input,
+      voice: 'Algenib',
+      response_format: 'mp3',
+    });
+    expect((calls[0]!.headers as Record<string, string>).Authorization).toBe(
+      'Bearer test-key-not-a-real-secret'
+    );
+    expect([...result.audio]).toEqual([...MP3]);
+    expect(result.contentType).toBe('audio/mpeg');
+    expect(result.attempts).toBe(1);
+  });
+
+  it('sends the input as it is, with no safety preamble for the model to read aloud', async () => {
+    // The preamble is conduct rules for a TEXT model. A speech model given it
+    // would perform it, before the coach's line.
+    const { deps, calls } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    const body = JSON.parse(String(calls[0]!.body));
+    expect(body.input).toBe(speechOptions.input);
+    expect(body.input).not.toContain(SAFETY_PREAMBLE.slice(0, 40));
+  });
+
+  it('sends one model and no fallback array, because a voice belongs to one model', async () => {
+    // ADR 0025 §3: a fallback would speak in a voice nobody cast.
+    expect(STAGE_MODELS.speech).toHaveLength(1);
+
+    const { deps, calls } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    const body = JSON.parse(String(calls[0]!.body));
+    expect(body.models).toBeUndefined();
+    expect(body.model).toBe(STAGE_MODELS.speech[0]);
+  });
+
+  it('writes one speech row: the generation id, the model, and no cost it did not measure', async () => {
+    const { deps, rows } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.stage).toBe('speech');
+    expect(row.status).toBe('ok');
+    expect(row.attempt).toBe(1);
+    expect(row.openrouter_id).toBe('gen-tts-1');
+    expect(row.model_used).toBe(STAGE_MODELS.speech[0]);
+    expect(row.models_requested).toEqual([STAGE_MODELS.speech[0]]);
+    // INVARIANT: the ledger records only what was measured. The budget gate
+    //            charges the assumption instead — src/db/ledger.ts.
+    expect(row.cost_credits).toBeNull();
+    expect(row.upstream_cost).toBeNull();
+    expect(row.prompt_prefix_hash).toBeNull();
+    expect(row.error).toBeNull();
+  });
+
+  it('retries a transient failure and records both attempts', async () => {
+    let n = 0;
+    const { deps, rows } = makeDeps(async () =>
+      ++n === 1 ? new Response('upstream busy', { status: 503 }) : audioResponse()
+    );
+
+    const result = await callSpeech(speechOptions, deps);
+
+    expect(result.attempts).toBe(2);
+    expect(rows.map((r) => r.status)).toEqual(['http_error', 'ok']);
+    expect(rows[0]!.error).toContain('HTTP 503');
+  });
+
+  it('does not retry a request the provider rejected', async () => {
+    const { deps, rows } = makeDeps(async () => new Response('unknown voice', { status: 400 }));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('http_error');
+  });
+
+  it('never hands on a 200 that carries an error instead of audio', async () => {
+    // Some failures arrive inside a 200. Played as audio, that is a broken
+    // clip; recorded as a success, it is spend the ledger calls a preview.
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response('{"error":{"message":"voice not found"}}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['http_error', 'http_error']);
+    expect(rows[0]!.error).toContain('expected audio, got application/json');
+    expect(rows[0]!.error).toContain('voice not found');
+  });
+
+  it('treats an audio response with no bytes as a failure, not a silent clip', async () => {
+    const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array()));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.every((r) => r.status === 'http_error')).toBe(true);
+  });
+
+  it('records a timeout as its own status, which the budget charges', async () => {
+    const { deps, rows } = makeDeps(async () => {
+      const error = new Error('The operation was aborted due to timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    });
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.status === 'timeout' && r.stage === 'speech')).toBe(true);
+  });
+
+  it('denies an over-budget call with a row, and never reaches the network', async () => {
+    const ledger = fakeLedger({
+      sumSpendSince: async () => 0.5,
+      getWeeklyBudgetUsd: async () => 0.5,
+    });
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(async () => {
+      fetchSpy();
+      return audioResponse();
+    }, ledger);
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // INVARIANT: a denied call is still a call and still writes a row — CLAUDE.md #3
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({ stage: 'speech', status: 'budget_denied' });
+  });
+
+  it('refuses an input over the ceiling before charging or sending anything', async () => {
+    const budgetSpy = vi.fn(async () => 1);
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(
+      async () => {
+        fetchSpy();
+        return audioResponse();
+      },
+      fakeLedger({ getWeeklyBudgetUsd: budgetSpy })
+    );
+
+    await expect(
+      callSpeech({ ...speechOptions, input: 'x'.repeat(SPEECH_MAX_INPUT_CHARS + 1) }, deps)
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(budgetSpy).not.toHaveBeenCalled();
+    expect(rows).toEqual([]);
+  });
+
+  it('fails the call when the ledger write fails', async () => {
+    const ledger = fakeLedger({
+      insertLlmCall: async () => {
+        throw new Error('llm_calls insert failed: connection refused');
+      },
+    });
+    const { deps } = makeDeps(async () => audioResponse(), ledger);
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toThrow('llm_calls insert failed');
+  });
+});
+
+describe('hasApiKey', () => {
+  it('says whether a key is set, by the same test readApiKey applies', () => {
+    expect(hasApiKey({})).toBe(false);
+    expect(hasApiKey({ OPENROUTER_API_KEY: '   ' })).toBe(false);
+    expect(hasApiKey({ OPENROUTER_API_KEY: 'sk-test' })).toBe(true);
   });
 });

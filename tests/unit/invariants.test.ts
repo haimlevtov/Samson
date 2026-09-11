@@ -108,9 +108,16 @@ describe('CLAUDE.md #2 — all LLM calls go through the gateway', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('exposes exactly one call entry point', () => {
+  it('exposes exactly the call entry points it names', () => {
+    /*
+     * Two since ADR 0025: `callLLM` for text and `callSpeech` for a coach's
+     * voice. This used to assert only that callLLM existed, under a name that
+     * promised "exactly one" — a third door would have passed it. Now a new
+     * exported call path has to be added here on purpose.
+     */
     const gateway = readFileSync(join(ROOT, 'src', 'llm', 'gateway.ts'), 'utf8');
-    expect(gateway).toContain('export async function callLLM');
+    const entryPoints = [...gateway.matchAll(/export async function (\w+)/g)].map((m) => m[1]);
+    expect(entryPoints.sort()).toEqual(['callLLM', 'callSpeech']);
   });
 });
 

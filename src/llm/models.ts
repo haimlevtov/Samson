@@ -45,6 +45,21 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
    * for on every turn of every conversation.
    */
   chat: ['anthropic/claude-haiku-4.5', 'google/gemini-2.5-flash'],
+  /*
+   * ADR 0025. ONE model, and no fallback on purpose: a voice name belongs to a
+   * model — `Algenib` means nothing to any other — so a second model would
+   * speak in a voice nobody cast, the mismatch that ADR exists to end.
+   *
+   * The exception to the AI-NOTE at the top of this file: checked against
+   * /models?output_modalities=speech on 2026-09-11 rather than for
+   * `structured_outputs`, because it returns audio, not JSON. The ADR's first
+   * draft named openai/gpt-4o-mini-tts, which that list does not carry.
+   *
+   * AI-NOTE: its voices are SPEECH_VOICES in src/speech/script.ts, and every
+   *          shipped coach is cast from them. Changing this slug means
+   *          recasting every persona row in the same change.
+   */
+  speech: ['google/gemini-3.1-flash-tts-preview'],
   smoke: ['google/gemini-2.5-flash-lite'],
 } as const;
 

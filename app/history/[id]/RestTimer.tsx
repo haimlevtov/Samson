@@ -6,15 +6,17 @@ import { speak } from '@/src/ui/speak';
 /**
  * The only place the app signals that rest is over.
  *
- * Phase 3 made the swap this note was left for, though not the way PLAN.md
- * described: the voice is the browser's own speechSynthesis rather than a
- * precomputed persona clip, because the only key this project has is for text —
- * ADR 0006. The beep remains as the fallback, and it is not redundant: speech
- * is unavailable on plenty of devices and silently doing nothing would be worse
- * than a tone.
+ * The voice is the device's own, on purpose, even now that coaches speak in
+ * synthesised character voices (ADR 0025). "Rest over." is nobody's line, and
+ * it has to fire mid-set, offline and on time: a round trip to a speech model
+ * for a two-word cue would be slower than the timer it announces, and would
+ * spend the user's budget on every set. The beep remains as the fallback, and
+ * it is not redundant: speech is unavailable on plenty of devices and silently
+ * doing nothing would be worse than a tone.
  *
- * AI-NOTE: still the single call site. If a real TTS provider is ever added,
- *          this is the one function that changes.
+ * AI-NOTE: still the single call site. If rest is ever announced in the
+ *          coach's voice, it is a pre-rendered clip played here, not a speech
+ *          call per set — ADR 0025 leaves pre-rendered clips undecided.
  */
 function announceRestOver(): void {
   // INVARIANT: the beep is reachable on EVERY path where speech does not
