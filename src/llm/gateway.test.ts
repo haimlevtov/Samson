@@ -305,25 +305,26 @@ describe('callLLM', () => {
   });
 });
 
+const speechOptions = {
+  userId: '11111111-1111-1111-1111-111111111111',
+  input: 'NOTES: calm and even.\nTRANSCRIPT: Turn up on the Tuesday.',
+  voice: 'Algenib',
+};
+
+const MP3 = new Uint8Array([0xff, 0xf3, 0x44, 0xc4]);
+
+const audioResponse = (body: BodyInit = MP3, headers: Record<string, string> = {}) =>
+  new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-tts-1', ...headers },
+  });
+
 describe('callSpeech', () => {
   /*
    * ADR 0025. The same door as callLLM — key, budget, retries, a ledger row per
    * attempt — with none of the text machinery, because what comes back is
    * audio. Every case runs against a scripted fetch; nothing here can speak.
    */
-  const speechOptions = {
-    userId: '11111111-1111-1111-1111-111111111111',
-    input: 'NOTES: calm and even.\nTRANSCRIPT: Turn up on the Tuesday.',
-    voice: 'Algenib',
-  };
-
-  const MP3 = new Uint8Array([0xff, 0xf3, 0x44, 0xc4]);
-
-  const audioResponse = (body: BodyInit = MP3, headers: Record<string, string> = {}) =>
-    new Response(body, {
-      status: 200,
-      headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-tts-1', ...headers },
-    });
 
   it('posts the model, the voice and the input to the speech endpoint, and returns the audio', async () => {
     const urls: string[] = [];
@@ -443,6 +444,44 @@ describe('callSpeech', () => {
     expect(rows[0]!).toMatchObject({ status: 'schema_invalid', stage: 'speech' });
   });
 
+  it('records a wrong-format audio body without its bytes, so the row — the charge — lands', async () => {
+    // FOUND IN THE SECOND REVIEW: the body was read as text into `error`, and
+    // a WAV header carries NUL bytes, which Postgres refuses — no row, no
+    // charge, on exactly the path written to charge.
+    const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41]);
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(wav, { 'content-type': 'audio/wav', 'content-length': '10' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('schema_invalid');
+    expect(rows[0]!.error).toBe('expected audio/mpeg, got audio/wav, 10 bytes');
+  });
+
+  it('takes audio/mp3 as mp3, and hands on the one type the browser is given', async () => {
+    const { deps } = makeDeps(async () => audioResponse(MP3, { 'content-type': 'audio/mp3' }));
+
+    const result = await callSpeech(speechOptions, deps);
+    expect(result.contentType).toBe('audio/mpeg');
+  });
+
+  it('charges a 200 whose body fails mid-read, and does not retry it', async () => {
+    // FOUND IN THE SECOND REVIEW: it fell into the transport catch as an
+    // http_error — retried, and charged nothing — though a 200 may be billed.
+    const broken = new ReadableStream({
+      start(controller) {
+        controller.error(new Error('connection reset'));
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () => new Response(broken, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+  });
+
   it('accepts audio/mpeg with parameters on the content type', async () => {
     const { deps } = makeDeps(async () =>
       audioResponse(MP3, { 'content-type': 'audio/mpeg; charset=binary' })
@@ -530,6 +569,60 @@ describe('callSpeech', () => {
     const { deps } = makeDeps(async () => audioResponse(), ledger);
 
     await expect(callSpeech(speechOptions, deps)).rejects.toThrow('llm_calls insert failed');
+  });
+});
+
+describe('the ledger writer', () => {
+  /*
+   * Postgres refuses a NUL in `text`, and half a surrogate pair — which a
+   * `.slice()` can leave at the cut. A refused insert is a call with no row:
+   * CLAUDE.md #3. Cleaned at the one writer both entry points share, so these
+   * run through each.
+   */
+  it('strips NUL from an error body before the row is written, on the text path too', async () => {
+    const { deps, rows } = makeDeps(
+      async () => new Response(`bad${String.fromCharCode(0)}input`, { status: 400 })
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error).toBe('HTTP 400: badinput');
+  });
+
+  it('mends a surrogate pair the 500-character cut split in two', async () => {
+    // The emoji straddles the cut: character 500 is its high half alone.
+    const body = `${'x'.repeat(499)}😀 and more`;
+    const { deps, rows } = makeDeps(async () => new Response(body, { status: 503 }));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error).toBe(`HTTP 503: ${'x'.repeat(499)}${String.fromCodePoint(0xfffd)}`);
+  });
+});
+
+describe('the budget gate', () => {
+  it('denies a NaN spend, which `>=` would have let through', async () => {
+    // FOUND IN THE SECOND REVIEW: `numeric` accepts 'NaN', and every
+    // comparison with NaN is false.
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(
+      async () => {
+        fetchSpy();
+        return new Response('{}', { status: 200 });
+      },
+      fakeLedger({ sumSpendSince: async () => Number.NaN })
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(rows[0]!.status).toBe('budget_denied');
+  });
+
+  it('denies a NaN budget the same way', async () => {
+    const { deps } = makeDeps(
+      async () => audioResponse(),
+      fakeLedger({ getWeeklyBudgetUsd: async () => Number.NaN })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
   });
 });
 

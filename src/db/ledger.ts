@@ -38,13 +38,22 @@ const SPOKEN: ReadonlySet<LlmCallStatus> = new Set<LlmCallStatus>(['ok', 'schema
  * one such row would otherwise cancel a week of spend. FOUND IN REVIEW of #49;
  * the table-side check is the budget-integrity follow-up, and this gate does
  * not wait for it.
+ *
+ * WHY a cost that is not a finite number counts as unlimited: `numeric`
+ * accepts 'NaN', PostgREST returns it as the string "NaN", and a NaN in the
+ * sum made every comparison false — the gate never denied that account again.
+ * Only a planted row can hold one, and this blocks only the account that
+ * planted it. FOUND IN THE SECOND REVIEW of #49.
  */
 export function chargedFor(row: {
   cost_credits: number | null;
   status: string;
   stage: string;
 }): number {
-  if (row.cost_credits !== null) return Math.max(0, row.cost_credits);
+  if (row.cost_credits !== null) {
+    const cost = Number(row.cost_credits);
+    return Number.isFinite(cost) ? Math.max(0, cost) : Number.POSITIVE_INFINITY;
+  }
   if (row.status === 'timeout') return TIMEOUT_ASSUMED_COST_USD;
   if (row.stage === SPEECH && SPOKEN.has(row.status as LlmCallStatus)) {
     return SPEECH_ASSUMED_COST_USD;

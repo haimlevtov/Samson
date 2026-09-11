@@ -46,6 +46,18 @@ describe('chargedFor', () => {
     expect(chargedFor(row({ stage: 'speech', cost_credits: -1 }))).toBe(0);
   });
 
+  it('counts a cost that is not a number as unlimited, so a NaN cannot open the gate', () => {
+    // FOUND IN THE SECOND REVIEW: `numeric` accepts 'NaN', PostgREST returns it
+    // as the string "NaN", and a NaN sum made every comparison false.
+    expect(chargedFor(row({ cost_credits: Number.NaN }))).toBe(Number.POSITIVE_INFINITY);
+    expect(chargedFor(row({ cost_credits: 'NaN' as unknown as number }))).toBe(
+      Number.POSITIVE_INFINITY
+    );
+    expect(chargedFor(row({ cost_credits: Number.POSITIVE_INFINITY }))).toBe(
+      Number.POSITIVE_INFINITY
+    );
+  });
+
   it('charges nothing for a failure that returned nothing, or a refusal', () => {
     expect(chargedFor(row({ stage: 'speech', status: 'http_error' }))).toBe(0);
     expect(chargedFor(row({ stage: 'speech', status: 'budget_denied' }))).toBe(0);

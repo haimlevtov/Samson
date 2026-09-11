@@ -4,8 +4,9 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { deliverForPersona, hearCoach } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
 import {
-  IDLE,
+  EMPTY_PLAYER,
   createCoachPlayer,
+  whyShown,
   type CoachPlayer,
   type PlayerState,
   type ShownReason,
@@ -56,7 +57,7 @@ export function CoachConsole({
   voiceAvailable: boolean;
 }) {
   const [selected, setSelected] = useState(personas[0]?.slug ?? '');
-  const [voice, setVoice] = useState<PlayerState>(IDLE);
+  const [voice, setVoice] = useState<PlayerState>(EMPTY_PLAYER);
   const player = useRef<CoachPlayer | null>(null);
 
   // One player per mount, made in the browser and disposed on unmount: it
@@ -90,12 +91,8 @@ export function CoachConsole({
     setSelected(slug);
   };
 
-  const canHear = voiceAvailable && chosen?.voiced === true;
-  const refused = chosen !== null && voice.shown?.slug === chosen.slug ? voice.shown.reason : null;
-  // Why the line is on screen as text: the last press's refusal, or that there
-  // is no voice to ask for.
-  const why: ShownReason | null =
-    refused ?? (!voiceAvailable ? 'no-key' : chosen !== null && !chosen.voiced ? 'no-voice' : null);
+  const canHear = voiceAvailable && chosen?.voiced === true && line !== '';
+  const why = whyShown(voice, chosen, voiceAvailable);
   const fetching = chosen !== null && voice.fetching === chosen.slug;
 
   return (
@@ -129,7 +126,7 @@ export function CoachConsole({
          * button drops keyboard focus, and a second press is harmless — the
          * player joins the call already in flight rather than paying twice.
          */}
-        {chosen && line !== '' ? (
+        {chosen ? (
           <>
             {canHear ? (
               <div className="row">
@@ -154,8 +151,11 @@ export function CoachConsole({
               </div>
             ) : null}
             {why !== null ? (
+              // A coach with no line still says why it is silent — every
+              // state renders something, docs/specs/mobile-interface.md §4.
               <p className="muted small" role="status">
-                {SHOWN_TEXT[why]} {chosen.name}: “{line}”
+                {SHOWN_TEXT[why]}
+                {line !== '' ? ` ${chosen.name}: “${line}”` : null}
               </p>
             ) : null}
           </>

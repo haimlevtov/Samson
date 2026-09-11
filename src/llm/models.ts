@@ -15,6 +15,13 @@
  */
 import type { LlmStage } from './types';
 
+/**
+ * The one speech model — ADR 0025. A constant rather than `STAGE_MODELS.speech[0]`
+ * so `callSpeech` has a model by type, with no "none configured" branch to
+ * throw before a ledger row exists.
+ */
+export const SPEECH_MODEL = 'google/gemini-3.1-flash-tts-preview';
+
 /** Order is preference, not escalation: OpenRouter falls through only on error. */
 export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
   normalizer: ['google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash'],
@@ -60,7 +67,7 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
    *          shipped coach is cast from them. Changing this slug means
    *          recasting every persona row in the same change.
    */
-  speech: ['google/gemini-3.1-flash-tts-preview'],
+  speech: [SPEECH_MODEL],
   smoke: ['google/gemini-2.5-flash-lite'],
 } as const;
 

@@ -2,21 +2,24 @@
  * The Voice card's player: which coach is being fetched, which is playing, and
  * why a line is on screen instead of in the speaker — ADR 0025.
  *
- * WHY it is a plain module rather than logic inside the component: every bug
- * review found in the first version lived in the press, cache and in-flight
- * bookkeeping — a failed clip cached forever, a second press paying twice, a
- * clip arriving after unmount and leaking — and a component under vitest's node
+ * WHY it is a plain module rather than logic inside the component: the
+ * resilience bugs review found in the first version all lived in the press,
+ * cache and in-flight bookkeeping — a failed clip cached forever, a second
+ * press paying twice, a clip arriving after unmount and leaking, Stop left up
+ * after the OS paused the audio — and a component under vitest's node
  * environment cannot be tested. Here the audio element, the server action and
  * the blob URLs are injected, so src/speech/player.test.ts drives every one of
  * those sequences with fakes.
  *
- * INVARIANT: one paid call per coach per visit. A replay plays from the cache,
- *            and a press while that coach is already being fetched joins the
- *            call in flight rather than starting another — each fetch is
- *            charged against the user's weekly budget (ADR 0025, Cost).
+ * INVARIANT: no press pays for a clip already held or already coming — each
+ *            fetch is charged against the user's weekly budget (ADR 0025,
+ *            Cost). A replay plays from the cache, and a press while that
+ *            coach is being fetched joins the call in flight. The next press
+ *            pays again only after a clip fails to play or a fetch brings back
+ *            none.
  * INVARIANT: a clip is played only for the press that is still current. A chip
- *            change, a newer press or disposal supersedes it, so one coach's
- *            voice never arrives under another coach's chip.
+ *            change, any newer press — a cached replay included — or disposal
+ *            supersedes it, so one coach's voice never arrives over another's.
  */
 
 /** Why a coach's line is shown instead of heard. */
@@ -43,7 +46,28 @@ export interface PlayerState {
   shown: { slug: string; reason: ShownReason } | null;
 }
 
-export const IDLE: PlayerState = { fetching: null, playing: null, shown: null };
+export const EMPTY_PLAYER: PlayerState = { fetching: null, playing: null, shown: null };
+
+/**
+ * Why the chosen coach's line is on screen as text, or null when it is not:
+ * the last press's refusal first, then that there is no voice to ask for — no
+ * key on the server, or a coach `coachVoice` would refuse (`voiced` false).
+ *
+ * WHY it is here rather than inline in the component: it is what decides
+ * whether the card explains itself (docs/specs/mobile-interface.md §4), and
+ * logic in a component cannot be tested under node.
+ */
+export function whyShown(
+  state: PlayerState,
+  chosen: { slug: string; voiced: boolean } | null,
+  voiceAvailable: boolean
+): ShownReason | null {
+  if (chosen === null) return null;
+  if (state.shown?.slug === chosen.slug) return state.shown.reason;
+  if (!voiceAvailable) return 'no-key';
+  if (!chosen.voiced) return 'no-voice';
+  return null;
+}
 
 /**
  * The part of HTMLAudioElement the player drives. The handlers take the event
@@ -76,7 +100,7 @@ const named = (cause: unknown, name: string): boolean =>
 
 export function createCoachPlayer(deps: PlayerDeps) {
   const { audio } = deps;
-  let state: PlayerState = IDLE;
+  let state: PlayerState = EMPTY_PLAYER;
   let disposed = false;
 
   /** Clips fetched this visit, by slug. */
@@ -156,20 +180,21 @@ export function createCoachPlayer(deps: PlayerDeps) {
 
     const loading = deps
       .fetchClip(slug)
-      .then(
-        (result): Loaded => {
-          if (!result.ok) return { ok: false, reason: result.reason };
-          // Arrived after the card was torn down: make no URL, so there is
-          // nothing to leak. FOUND IN REVIEW.
-          if (disposed) return { ok: false, reason: 'failed' };
-          const existing = clips.get(slug);
-          if (existing) return { ok: true, url: existing };
-          const url = deps.toUrl(result.audio, result.contentType);
-          clips.set(slug, url);
-          return { ok: true, url };
-        },
-        (): Loaded => ({ ok: false, reason: 'failed' })
-      )
+      .then((result): Loaded => {
+        if (!result.ok) return { ok: false, reason: result.reason };
+        // Arrived after the card was torn down: make no URL, so there is
+        // nothing to leak. FOUND IN REVIEW.
+        if (disposed) return { ok: false, reason: 'failed' };
+        const existing = clips.get(slug);
+        if (existing) return { ok: true, url: existing };
+        const url = deps.toUrl(result.audio, result.contentType);
+        clips.set(slug, url);
+        return { ok: true, url };
+      })
+      // After the `then`, not as its second argument, so a throw INSIDE it —
+      // a URL that cannot be made — is a failure the card shows, not a press
+      // left on "Finding…" forever. FOUND IN THE SECOND REVIEW.
+      .catch((): Loaded => ({ ok: false, reason: 'failed' }))
       .finally(() => pending.delete(slug));
 
     pending.set(slug, loading);
@@ -187,6 +212,11 @@ export function createCoachPlayer(deps: PlayerDeps) {
 
       const cached = clips.get(slug);
       if (cached) {
+        // A newer press, even one served from the cache, supersedes a fetch
+        // still in flight — otherwise that clip arrives and cuts this one off.
+        // FOUND IN THE SECOND REVIEW.
+        press += 1;
+        set({ fetching: null });
         play(slug, cached);
         return;
       }

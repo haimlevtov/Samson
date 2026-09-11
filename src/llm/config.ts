@@ -160,7 +160,8 @@ export const SPEECH_TIMEOUT_MS = 20_000;
 export const SPEECH_MAX_ATTEMPTS = 2;
 
 /**
- * Charged against the budget for each spoken attempt — ADR 0025, Cost.
+ * Charged against the budget for each speech attempt that reached a 200 — a
+ * clip, or a 200 that was not one — ADR 0025, Cost and addendum.
  *
  * WHY this exists: the provider returns audio and no price, so a speech row
  * records cost_credits null and the gate would otherwise count every preview

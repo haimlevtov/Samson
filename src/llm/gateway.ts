@@ -3,10 +3,12 @@
  *
  * INVARIANT: all LLM calls go through this file — CLAUDE.md #2
  * INVARIANT: every call writes a row to llm_calls, failures included — CLAUDE.md #3.
- *            A call begins at the budget gate. Two assertions in `callSpeech`
- *            throw before it — an input over its ceiling, no speech model
- *            configured — and those are a caller's or a config's bug that
- *            nothing is sent or charged for, recorded in ADR 0025's addendum.
+ *            A call begins at the budget gate. One assertion in `callSpeech`
+ *            throws before it — an input over its ceiling, which the column
+ *            limits make unreachable — and nothing is sent or charged for it;
+ *            ADR 0025's addendum records the reading. And `openLedger` cleans
+ *            every row's text first, because a row Postgres refuses is a call
+ *            with no row.
  * INVARIANT: the model never computes a number the user sees — CLAUDE.md #1.
  *            This module moves tokens; arithmetic lives in the metrics engine.
  *
@@ -29,7 +31,7 @@ import {
   readApiKey,
   type Env,
 } from './config';
-import { STAGE_MODELS, modelsForStage } from './models';
+import { SPEECH_MODEL, modelsForStage } from './models';
 import {
   buildRequestBody,
   normalizeUsage,
@@ -110,10 +112,45 @@ function isRetryableHttp(status: number): boolean {
 }
 
 /**
+ * What `response_format: 'mp3'` may come back labelled. `audio/mpeg` is the
+ * registered type and the provider's documented one; `audio/mp3` is the common
+ * alias, and every browser plays both.
+ */
+const MP3_TYPES: ReadonlySet<string> = new Set(['audio/mpeg', 'audio/mp3']);
+
+/** A body worth quoting in the ledger — an error message, not bytes. */
+function isTextual(mediaType: string): boolean {
+  return mediaType.startsWith('text/') || mediaType.endsWith('json') || mediaType.endsWith('xml');
+}
+
+/**
+ * Text Postgres will store.
+ *
+ * WHY: Postgres refuses a NUL (U+0000) in `text` outright, and half of a
+ * surrogate pair — which `.slice()` of a longer message can leave at the cut —
+ * fails the insert too. A refused insert is a call with no row: unrecorded,
+ * and uncharged against the budget. FOUND IN REVIEW of #49: a 200 carrying
+ * audio in the wrong format was read as text into `error`, NULs and all.
+ */
+/** What stands in for half a surrogate pair: U+FFFD, the replacement character. */
+const REPLACEMENT = String.fromCodePoint(0xfffd);
+
+function storable(text: string): string {
+  // By code point, so a whole pair stays whole and a half on its own is caught.
+  return Array.from(text, (ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code === 0) return '';
+    return code >= 0xd800 && code <= 0xdfff ? REPLACEMENT : ch;
+  }).join('');
+}
+
+/**
  * The ledger for one call: every row it wrote, and the writer.
  *
  * WHY the insert is not swallowed: a dropped ledger row is data the token
  * analysis can never recover, so the call fails loudly instead — CLAUDE.md #3.
+ * WHY the text is cleaned here rather than where each message is built: this
+ * is the one writer both entry points share, so no path can miss it.
  */
 function openLedger(deps: GatewayDeps): {
   ledger: LlmCallInsert[];
@@ -123,8 +160,9 @@ function openLedger(deps: GatewayDeps): {
   return {
     ledger,
     record: async (row) => {
-      ledger.push(row);
-      await deps.db.insertLlmCall(row);
+      const clean = row.error === null ? row : { ...row, error: storable(row.error) };
+      ledger.push(clean);
+      await deps.db.insertLlmCall(clean);
     },
   };
 }
@@ -145,7 +183,10 @@ async function enforceBudget(
   const budget = (await deps.db.getWeeklyBudgetUsd(userId)) ?? DEFAULT_WEEKLY_BUDGET_USD;
   const spent = await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS));
 
-  if (spent >= budget) {
+  // WHY `!(spent < budget)` rather than `spent >= budget`: every comparison
+  // with NaN is false, so the second form ALLOWS a NaN spend or budget — and a
+  // `numeric` column accepts 'NaN'. This form denies it. FOUND IN REVIEW of #49.
+  if (!(spent < budget)) {
     denied.status = 'budget_denied';
     denied.error = `spent ${spent} of ${budget} USD in the trailing 7 days`;
     await record(denied);
@@ -367,9 +408,9 @@ export async function callLLM<T>(
  * WHY a second entry point rather than a mode of `callLLM`: little else is
  * shared. There is no system prompt, so no SAFETY_PREAMBLE — a speech model
  * would read it aloud. There is no schema to validate and no completion for
- * `scanOutput`, because what comes back is audio; the words were checked
- * before they were ever stored (tests/db/personas.test.ts holds every shipped
- * line to `scanOutput`). What IS shared is what CLAUDE.md #2 and #3 exist for:
+ * `scanOutput`, because what comes back is audio; instead a test holds every
+ * shipped line to `scanOutput` (tests/db/personas.test.ts), and only shipped
+ * lines are spoken. What IS shared is what CLAUDE.md #2 and #3 exist for:
  * one place that holds the key, the budget and the ledger. ADR 0025's addendum
  * records the exemption from ADR 0005 §3 and §4, and what stands in for it.
  *
@@ -387,13 +428,12 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
   }
 
   /*
-   * WHY the first model only, and no LLM_MODELS override: ADR 0025 §3. A voice
-   * name belongs to one model, so a fallback would speak in a voice nobody
-   * cast; and the override swaps TEXT models for an eval run, none of which
-   * can speak. A retry goes back to the same model.
+   * WHY one model and no LLM_MODELS override: ADR 0025 §3 and its addendum. A
+   * voice name belongs to one model, so a fallback would speak in a voice
+   * nobody cast; and the override swaps TEXT models for an eval run, none of
+   * which can speak. A retry goes back to the same model.
    */
-  const model = STAGE_MODELS.speech[0];
-  if (model === undefined) throw new Error('no speech model is configured');
+  const model = SPEECH_MODEL;
   const maxAttempts = options.maxAttempts ?? SPEECH_MAX_ATTEMPTS;
   const timeoutMs = options.timeoutMs ?? SPEECH_TIMEOUT_MS;
   const { ledger, record } = openLedger(deps);
@@ -432,8 +472,10 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startedAt = deps.now().getTime();
     const row = blankRow(attempt);
-    let spoken: { audio: Uint8Array<ArrayBuffer>; contentType: string } | undefined;
+    let spoken: Uint8Array<ArrayBuffer> | undefined;
     let retryable = false;
+    // Set once a 200 arrives: from then on the attempt may have been billed.
+    let reached200 = false;
 
     try {
       const response = await deps.fetch(`${deps.baseUrl}/audio/speech`, {
@@ -455,12 +497,14 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
 
       row.openrouter_id = response.headers.get('x-generation-id');
       const contentType = response.headers.get('content-type') ?? '';
+      const mediaType = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
 
       if (!response.ok) {
         row.status = 'http_error';
         row.error = `HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`;
         retryable = isRetryableHttp(response.status);
-      } else if (contentType.split(';')[0]?.trim().toLowerCase() !== 'audio/mpeg') {
+      } else if (!MP3_TYPES.has(mediaType)) {
+        reached200 = true;
         /*
          * A 200 that is not the mp3 asked for: an error body where the audio
          * should be, as chat completions sometimes send, or another format that
@@ -472,36 +516,58 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
          * and NOT retried: the same request gets the same format, and a speech
          * row that reached a 200 may have been billed — src/db/ledger.ts
          * charges it the assumption, so a retry would be charged twice.
+         *
+         * Only a TEXT body is quoted. FOUND IN REVIEW: audio in another format
+         * read as text carries NUL bytes, which Postgres refuses, so the row —
+         * the charge — never landed.
          */
         row.status = 'schema_invalid';
-        row.error = `expected audio/mpeg, got ${contentType || 'no content type'}: ${(await response.text()).slice(0, 500)}`;
+        const size = response.headers.get('content-length');
+        const got = `expected audio/mpeg, got ${contentType || 'no content type'}`;
+        if (isTextual(mediaType)) {
+          row.error = `${got}: ${(await response.text()).slice(0, 500)}`;
+        } else {
+          await response.body?.cancel();
+          row.error = size === null ? got : `${got}, ${size} bytes`;
+        }
         retryable = false;
       } else {
+        reached200 = true;
         const audio = new Uint8Array(await response.arrayBuffer());
         if (audio.byteLength === 0) {
           // Same as above: a 200, the wrong shape, charged, not retried.
           row.status = 'schema_invalid';
-          row.error = 'the response declared audio/mpeg and carried none';
+          row.error = 'the response declared mp3 and carried none';
           retryable = false;
         } else {
           row.status = 'ok';
           // Measured in the sense that matters: one model was requested and no
           // fallback array was sent, so the model that answered is this one.
           row.model_used = model;
-          spoken = { audio, contentType };
+          spoken = audio;
         }
       }
     } catch (cause) {
       const isTimeout = cause instanceof Error && cause.name === 'TimeoutError';
-      row.status = isTimeout ? 'timeout' : 'http_error';
+      /*
+       * After a 200 — the body failing mid-read — the generation may have been
+       * billed, so the attempt is charged and not retried, like any other 200
+       * that brought back no usable clip. FOUND IN REVIEW. A timeout keeps its
+       * own status, which the gate already charges more for.
+       */
+      row.status = isTimeout ? 'timeout' : reached200 ? 'schema_invalid' : 'http_error';
       row.error = cause instanceof Error ? cause.message : String(cause);
-      retryable = true;
+      retryable = !reached200;
     } finally {
       row.latency_ms = Math.max(0, deps.now().getTime() - startedAt);
       await record(row);
     }
 
-    if (spoken !== undefined) return { ...spoken, attempts: attempt, ledger };
+    // The type is the constant, not the header: the header is only ever one of
+    // MP3_TYPES here, and the browser plays both as the same thing.
+    if (spoken !== undefined) {
+      return { audio: spoken, contentType: 'audio/mpeg', attempts: attempt, ledger };
+    }
 
     if (!retryable || attempt === maxAttempts) break;
     await deps.sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));

@@ -144,8 +144,11 @@ export interface SpeechOptions {
 export interface SpeechResult {
   /** Over a plain ArrayBuffer — what `response.arrayBuffer()` gives — so a Blob takes it as it is. */
   audio: Uint8Array<ArrayBuffer>;
-  /** As the response declared it, e.g. `audio/mpeg`. Always an `audio/` type. */
-  contentType: string;
+  /**
+   * Always `audio/mpeg`: the gateway refuses any response that is not mp3 and
+   * returns the constant rather than the provider's header (ADR 0025 addendum).
+   */
+  contentType: 'audio/mpeg';
   attempts: number;
   ledger: LlmCallInsert[];
 }

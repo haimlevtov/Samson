@@ -116,13 +116,23 @@ describe('CLAUDE.md #2 — all LLM calls go through the gateway', () => {
      * exported call path has to be added here on purpose.
      */
     const gateway = readFileSync(join(ROOT, 'src', 'llm', 'gateway.ts'), 'utf8');
-    // Any exported `call*`, however it is declared — an async function, a plain
-    // function returning a promise, or a const. FOUND IN REVIEW: the first
-    // version matched `export async function` only.
-    const entryPoints = [
-      ...gateway.matchAll(/export\s+(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+)(call\w*)/g),
+    /*
+     * EVERY exported name, whatever it is called, so a new export of any kind
+     * is added here on purpose — an `export async function speak()` that
+     * skipped the budget gate would otherwise pass. FOUND IN REVIEW, twice: the
+     * first version matched `export async function` only, the second only
+     * names beginning `call`. Re-exports and default exports are refused
+     * outright, because a name list cannot see through them.
+     */
+    expect(gateway, 'a re-export or default export hides what the gateway exposes').not.toMatch(
+      /export\s*(?:\{|\*|default\b)/
+    );
+    const exported = [
+      ...gateway.matchAll(
+        /export\s+(?:declare\s+)?(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+|var\s+|class\s+)(\w+)/g
+      ),
     ].map((m) => m[1]);
-    expect(entryPoints.sort()).toEqual(['callLLM', 'callSpeech']);
+    expect(exported.sort()).toEqual(['callLLM', 'callSpeech', 'createGatewayDeps']);
   });
 });
 
