@@ -70,7 +70,11 @@ export interface LedgerClient {
   insertLlmCall(row: LlmCallInsert): Promise<void>;
   /** Total cost_credits for this user since the given instant. */
   sumSpendSince(userId: string, since: Date): Promise<number>;
-  /** users.llm_weekly_budget_usd, or null when the row is absent. */
+  /**
+   * users.llm_weekly_budget_usd, or null when the row is absent — which the
+   * gateway refuses outright (ADR 0026 §3), since a caller with no profile row
+   * cannot have a ledger row either.
+   */
   getWeeklyBudgetUsd(userId: string): Promise<number | null>;
 }
 
@@ -168,6 +172,21 @@ export class BudgetExceededError extends Error {
   ) {
     super(`Weekly LLM budget exhausted: spent ${spent.toFixed(4)} of ${budget.toFixed(4)} USD.`);
     this.name = 'BudgetExceededError';
+  }
+}
+
+/**
+ * A caller with no `public.users` row — ADR 0026 §3.
+ *
+ * WHY refused before any request, and with no ledger row: `llm_calls.user_id`
+ * references `public.users`, so the row could not be written; before this, the
+ * paid call went out and every ledger insert failed after it — spend nobody
+ * recorded and the budget never saw.
+ */
+export class NoProfileError extends Error {
+  constructor() {
+    super('This account has no profile, so it cannot be charged for a model call.');
+    this.name = 'NoProfileError';
   }
 }
 

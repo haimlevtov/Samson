@@ -152,8 +152,9 @@ it costs nothing.
 Two things are new, and both cost something to forget:
 
 - **A provider that reports no price** leaves `cost_credits` null. Never put an
-  estimate in the row; add the stage to `chargedFor` in `src/db/ledger.ts` so
-  the budget gate charges an assumption, as it does for timeouts — for every
+  estimate in the row; count its rows in `llm_spend_summary` (a migration) and
+  price them in `spendFrom` in `src/db/ledger.ts`, so the budget gate charges an
+  assumption, as it does for timeouts (ADR 0026) — for every
   status that reached a 200, not only `ok`, and never retry an attempt that
   reached a 200, or one press pays twice. (A timeout before any 200 is charged
   and retried, as for every stage.) #49 learned both in review.

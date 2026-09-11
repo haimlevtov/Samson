@@ -3,12 +3,13 @@
  *
  * INVARIANT: all LLM calls go through this file — CLAUDE.md #2
  * INVARIANT: every call writes a row to llm_calls, failures included — CLAUDE.md #3.
- *            A call begins at the budget gate. One assertion in `callSpeech`
- *            throws before it — an input over its ceiling, which the column
- *            limits make unreachable — and nothing is sent or charged for it;
- *            ADR 0025's addendum records the reading. And `openLedger` cleans
- *            every field the provider can fill before the insert, because a
- *            row Postgres refuses is a call with no row.
+ *            A call begins at the budget gate. Two refusals come before it and
+ *            write no row, and nothing is sent or charged for either: an input
+ *            over `callSpeech`'s ceiling, which the column limits make
+ *            unreachable (ADR 0025's addendum), and a caller with no profile
+ *            row, whose ledger row could not exist (ADR 0026 §3). And
+ *            `openLedger` cleans every field the provider can fill before the
+ *            insert, because a row Postgres refuses is a call with no row.
  * INVARIANT: the model never computes a number the user sees — CLAUDE.md #1.
  *            This module moves tokens; arithmetic lives in the metrics engine.
  *
@@ -20,7 +21,6 @@ import { z } from 'zod';
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_TIMEOUT_MS,
-  DEFAULT_WEEKLY_BUDGET_USD,
   OPENROUTER_BASE_URL,
   RETRY_BASE_DELAY_MS,
   SPEECH_MAX_ATTEMPTS,
@@ -52,6 +52,7 @@ import {
 import {
   BudgetExceededError,
   LlmCallFailedError,
+  NoProfileError,
   type CallOptions,
   type ChatMessage,
   type GatewayDeps,
@@ -207,10 +208,23 @@ async function enforceBudget(
   denied: LlmCallInsert,
   record: (row: LlmCallInsert) => Promise<void>
 ): Promise<void> {
-  // Number(): a `numeric` 'NaN' arrives from PostgREST as the STRING "NaN",
-  // which the comparison below would coerce but `BudgetExceededError`'s
-  // `toFixed` would throw on — a refusal turned into a generic failure.
-  const budget = Number((await deps.db.getWeeklyBudgetUsd(userId)) ?? DEFAULT_WEEKLY_BUDGET_USD);
+  const configured = await deps.db.getWeeklyBudgetUsd(userId);
+  /*
+   * No profile row, no call — ADR 0026 §3. This refusal writes no row because
+   * none can exist: `llm_calls.user_id` references `public.users`. It used to
+   * fall back to a default here, send the paid request, and fail every ledger
+   * insert after it. Like `callSpeech`'s input ceiling, it comes before the
+   * gate, so nothing is sent or charged.
+   */
+  if (configured === null) throw new NoProfileError();
+
+  // Number(): `LedgerClient` promises numbers and `src/db/ledger.ts` coerces
+  // both, so this is the second of two. It stays because the interface is where
+  // the promise is made and the gate is where breaking it costs money: a
+  // `numeric` reaches PostgREST as a string — 'NaN' included — and a string here
+  // would compare as a number below but throw in `BudgetExceededError`'s
+  // `toFixed`, turning a refusal into a generic failure.
+  const budget = Number(configured);
   const spent = Number(
     await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS))
   );

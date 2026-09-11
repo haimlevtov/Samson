@@ -114,8 +114,8 @@ be reconciled. `sumSpendSince` then charges each spoken attempt
 split `TIMEOUT_ASSUMED_COST_USD` already makes (ADR 0007): the ledger stays
 measured, the gate stays conservative.
 
-So the gateway's default budget of **$0.50 per user per week** allows **25
-previews**, and a user who spends it on previews has none left for a plan or the
+So the default budget of **$0.50 per user per week** — the column's, since ADR
+0026 — allows **25 previews**, and a user who spends it on previews has none left for a plan or the
 chat that week. A replay within one visit is free: the page keeps the audio it
 already fetched. Automated tests cost nothing — they run against a scripted
 gateway with no key, as every stage's do.
@@ -239,9 +239,11 @@ and written here before their code.
   sums in JavaScript what PostgREST returns, and PostgREST stops at 1,000; and an
   account with no profile row is charged against the default budget while its
   ledger inserts fail — after the paid call. The budget is the one thing bounding
-  speech, so these close in rework plan PR 6c, **before `OPENROUTER_API_KEY` goes
+  speech, so these close in rework plan PR 6c — [ADR 0026](0026-budget-integrity.md) —
+  **before `OPENROUTER_API_KEY` goes
   on Vercel — Production and Preview alike**, as the README's deploy table now
-  says. The clamps in `chargedFor` and the NaN-proof gate are what landed here.
+  says. The clamps in `chargedFor` and the NaN-proof gate are what landed here;
+  ADR 0026 has since made the clamps CHECKs and moved the sum into SQL.
 - **The function's time limit is assumed, not pinned.** A speech press takes at
   most about 41 seconds, and a chat turn on the same page about three minutes.
   Both fit Vercel's Fluid compute default of 300 seconds, which this project —

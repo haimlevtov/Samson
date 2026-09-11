@@ -132,7 +132,7 @@ Two things the table makes visible that the individual files do not:
 > repeated one day later — which is the argument for reading the Still-open
 > sections rather than remembering them.
 
-**Waiting on live model runs, not on work** — seven of the twenty open items
+**Waiting on live model runs, not on work** — seven of the nineteen open items
 below, and worth grouping. _This said "blocked on an OpenRouter key", closed by
 one `.env.local` line; a funded key exists since 2026-09-11 (rework PR 6b), so
 each now needs a run that spends it._
@@ -164,7 +164,6 @@ each now needs a run that spends it._
 | [rework-hub-history-coach.md](rework-hub-history-coach.md) | This plan's PRs have not had the browser pass on their signed-in pages either; PR 4's graph was rendered and measured as a component, not on its page. Each touches a signed-in surface, and this agent does not type passwords                                                                                                                                                                                                                                                                      |
 | [ADR 0003](../adr/0003-grants-and-rls.md)                  | Three foreign keys that no write policy checks: `exercise_equipment.exercise_id` and `.equipment_tag_id` — linking to another user's custom row would be closed by the same own-or-shared `with check` as `20260911100000`, a policy only, while one user's link occupying the pair for everybody needs a key change, since the primary key has no `user_id` — and `user_equipment.equipment_tag_id`, an existence oracle only. Pinned in `tests/db/schema-invariants.test.ts`, so a fourth fails CI |
 | [ADR 0025](../adr/0025-coach-voices.md)                    | The Voice card says "Try again in a moment" when the provider refuses — no credit, a rejected request — and retrying fixes neither. A provider refusal wants its own line                                                                                                                                                                                                                                                                                                                            |
-| [ADR 0025](../adr/0025-coach-voices.md)                    | **The weekly budget can be moved by its owner** — a raised ceiling, negative or NaN rows, a thousand planted rows, no profile row. Rework PR 6c, and the OpenRouter key stays off Vercel until it ships                                                                                                                                                                                                                                                                                              |
 | [ADR 0020](../adr/0020-progression-unlock-criteria.md)     | Two trees stall for a bodyweight-only user: pull cannot open its chin-up rung (it asks for band-assisted pull-ups, tagged `other`), and push cannot open its handstand rung (parallel-bar dips); the muscle-up asks for weighted pull-ups. Content decisions — a dip needs bars — pinned in `tests/db/progression.test.ts`, so a new one fails CI                                                                                                                                                    |
 
 **Not a gap, a property to keep stating accurately:** the chat's topical
@@ -201,7 +200,7 @@ to think of the case first. `phase-6.md`'s close-out has the table.
 
 - [`docs/PLAN.md`](../PLAN.md) — the phase brief and its acceptance criteria.
   The plans here say how a phase was executed; PLAN.md says what it owed.
-- [`docs/adr/`](../adr/) — the decisions. Twenty-five of them, and several
+- [`docs/adr/`](../adr/) — the decisions. Twenty-six of them, and several
   carry the honest note that they were written after their code at a reviewer's
   prompting rather than before it.
 - [`docs/specs/`](../specs/) — the written contracts tests are built from.

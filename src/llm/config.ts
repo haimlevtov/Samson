@@ -8,9 +8,6 @@ export type Env = Record<string, string | undefined>;
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
-/** Fallback when a user row carries no explicit budget. */
-export const DEFAULT_WEEKLY_BUDGET_USD = 0.5;
-
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const DEFAULT_TIMEOUT_MS = 60_000;
 

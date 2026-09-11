@@ -157,14 +157,14 @@ your working `.env.local` so they cannot drift:
 | -------------------- | -------- | --------------------------------------------- |
 | `SUPABASE_URL`       | yes      | Without it every page 500s                    |
 | `SUPABASE_ANON_KEY`  | yes      | Publishable/anon key                          |
-| `OPENROUTER_API_KEY` | not yet  | Not before the budget fix — ADR 0025 addendum |
+| `OPENROUTER_API_KEY` | yes      | With a credit limit set on the key — ADR 0026 |
 | `OPENROUTER_APP_URL` | optional | Attribution on the OpenRouter dashboard       |
 
-**`OPENROUTER_API_KEY` stays off Vercel — Production and Preview alike — until
-the budget-integrity PR lands** ([ADR 0025](docs/adr/0025-coach-voices.md)'s
-addendum). The weekly budget is what bounds a signed-in user's spend on the
-project's key, and today its owner can move it. Before the key goes on at all,
-set a credit limit on it in the OpenRouter dashboard.
+**Set a credit limit on `OPENROUTER_API_KEY` in the OpenRouter dashboard before
+it goes on Vercel** — Production and Preview alike. The weekly budget bounds each
+signed-in user's spend, and since [ADR 0026](docs/adr/0026-budget-integrity.md)
+its owner cannot move it; but requests sent at once all pass the budget before
+any of them is recorded, and only the key's own limit bounds a burst.
 
 **WHY no `NEXT_PUBLIC_` prefix:** nothing client-side touches Supabase. The only
 client component is the rest timer, and it has no database access — every query
