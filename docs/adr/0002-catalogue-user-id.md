@@ -42,7 +42,7 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
 
 - Invariant #10 stays checkable by a query rather than by reading a list.
 - User-authored custom exercises work later with no migration — the column and
-  the policies already handle them.
+  the policies already handle them. _Not quite: see the 2026-09-11 amendment._
 - Every new catalogue table must copy both policies. Forgetting the read policy
   makes the rows invisible; forgetting the write policy makes them writable by
   the wrong user. `tests/db/schema-invariants.test.ts` catches a table with no
@@ -99,4 +99,12 @@ rule a new catalogue table has to follow instead.
 
 The consequence above that the schema test "cannot catch a wrong one" is now
 half true: it still cannot judge a policy in general, but it does catch a write
-policy that leaves a foreign key unchecked.
+policy that never mentions a foreign key's column and the table it references.
+That is a text match, and so a proxy, as ADR 0003 says: a policy that names both
+without an ownership clause still passes, and `tests/db/rls.test.ts` is where
+the behaviour is tried.
+
+The consequence that custom exercises "work later with no migration" was wrong
+for the same reason. They needed `20260911100000`: until then `sets` and
+`workout_template_items` accepted a row pointing at another user's custom
+exercise, and the `five-patterns` badge read its movement pattern across users.

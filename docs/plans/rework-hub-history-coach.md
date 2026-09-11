@@ -378,7 +378,8 @@ control there, against the block already on screen, and reuse
   first read "no `workout_template*` coverage at all", then "the insert side is
   still unasserted"; both are history._ PR #43 (migrations `20260911090000` and
   `20260911100000`) made `workouts_own` and `workout_template_items_own` refuse
-  another user's template or custom exercise, on insert and on update, and
+  another user's template, and `sets_own` and `workout_template_items_own`
+  refuse another user's custom exercise, on insert and on update, and
   `tests/db/rls.test.ts` tries each case. **Still open here:** nothing inserts a
   `workout_templates` row under another user's `user_id`. The owner-only policy
   covers it, but no test has tried, and this PR adds a second caller.
@@ -807,11 +808,13 @@ did not.**
   the date sort changed nothing; a hand-built history now pins "the top set of
   the most recent session" and catches both.
 - **The db test repeated a false security claim**, found by two reviewers: "RLS
-  rejects a template id belonging to anyone else". It does not — `workouts_own`
-  checks only `user_id`, and a foreign key is not subject to RLS. The same claim
-  is in `app/workout/actions.ts`, and `workout_template_items` has the same gap.
-  The test now says what it proves. The policy fix is its own migration and PR,
-  because this project gives a cross-user boundary change its own review.
+  rejects a template id belonging to anyone else". It did not — `workouts_own`
+  checked only `user_id`, and a foreign key is not subject to RLS. The same
+  claim was in `app/workout/actions.ts`, and `workout_template_items` had the
+  same gap. The test now says what it proves. The policy fix got its own
+  migration and PR, because this project gives a cross-user boundary change its
+  own review: PR #43, `20260911090000`, whose review also found and closed the
+  `exercise_id` half in `20260911100000`.
 - **The test's cleanup ignored its own failure.** Against hosted, a stray
   in-progress session would become that demo user's active one and capture the
   next Start anybody pressed. The delete is checked, no session may be active

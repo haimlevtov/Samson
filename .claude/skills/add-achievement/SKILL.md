@@ -87,6 +87,11 @@ Every achievement ships with a test in the same commit asserting:
    LOCKED, and present for the holder once earned. Both halves — ADR 0017
    narrowed the criterion, and a test for only the first half would pass on a
    version that never showed the badge to anyone.
+6. If the predicate joins a table a user can own rows in: a set pointing at
+   ANOTHER user's row does not count, and one pointing at their own does.
+   Write the cross-user row with the admin client — the write policies refuse
+   it now, which is the point, so it stands for a row written before they did.
+   The `five-patterns` case in `tests/db/achievements.test.ts` is the pattern.
 
 Use the seeder's synthetic users where one fits; add a fixture only if none
 does.
