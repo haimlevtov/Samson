@@ -3,14 +3,16 @@
  *
  * The evaluator is unit-tested in `src/gamification/unlocks.test.ts` against
  * literals. What needs a database is the shape of the ROWS: `level` agrees with
- * `parent_id`, no cycles, a chain never changes tree, and every criterion names
- * an exercise the catalogue actually has.
+ * `parent_id`, no cycles, a chain never changes tree — and every criterion names
+ * a lift the app will actually let somebody log.
  *
- * That last one is not hypothetical — the catalogue has no `push-up`, no
- * `pistol-squat` and no `hollow-hold`, all obvious guesses, all wrong, and a
- * criterion naming one is a rung nobody can ever open.
+ * That last one used to read "an exercise the catalogue actually has", and ADR
+ * 0020's 2026-09-11 amendment is why it changed: the legs tree named slugs that
+ * all existed, and still had a root a bodyweight user could not log and a top
+ * rung nobody could open. So the cases at the end ask `availableExercises`, the
+ * picker itself, for real users with real equipment.
  *
- * The skill also asks for "every `exercise_id` resolves". That property is now
+ * The skill used to ask for "every `exercise_id` resolves". That property is
  * inverted, and the two cases below say why: a migration cannot depend on the
  * exercise catalogue, because the catalogue is seeded and the seed runs after
  * migrations. CI found it; hosted could not have.
@@ -285,11 +287,12 @@ describe('a user cannot author a node', () => {
 describe('every rung opens with a lift the app will offer', () => {
   /*
    * ADR 0020, amended 2026-09-11. A criterion is matched against logged sets,
-   * so one naming a lift the picker never offers is a rung nobody can open —
-   * and it looks exactly like a rung nobody has opened yet. The legs tree had
-   * two: its root's lift was a Smith-machine squat, and `split-squats` is filed
-   * under stretching, which the picker hides from everyone. 20260908120000
-   * checked that each slug EXISTED, and every one did.
+   * so one naming a lift the picker does not offer a user is a rung that user
+   * can never open — and it looks exactly like a rung nobody has opened yet. The
+   * legs tree had two: its root's lift was a Smith-machine squat, which the
+   * picker never offers a bodyweight user, and `split-squats` is filed under
+   * stretching, which it hides from everyone. 20260908120000 checked that each
+   * slug EXISTED, and every one did.
    *
    * Asked of `availableExercises` itself, for real users with real grants,
    * rather than re-derived from the category list and the equipment tags: the
@@ -299,7 +302,9 @@ describe('every rung opens with a lift the app will offer', () => {
   let floorOnly: TestUser;
 
   const grant = async (who: TestUser, slugs: string[] | 'all'): Promise<void> => {
-    let query = adminClient().from('equipment_tags').select('id').is('user_id', null);
+    // Through the user's own client, so RLS decides which tags they may link,
+    // rather than a service-role read the `user_id` filter alone would guard.
+    let query = who.client.from('equipment_tags').select('id').is('user_id', null);
     if (slugs !== 'all') query = query.in('slug', slugs);
     const { data: tags, error } = await query;
     if (error || !tags || tags.length === 0) {
@@ -312,10 +317,10 @@ describe('every rung opens with a lift the app will offer', () => {
   };
 
   beforeAll(async () => {
-    [everything, floorOnly] = await Promise.all([
-      createTestUser('tree-everything'),
-      createTestUser('tree-floor'),
-    ]);
+    // One at a time, not Promise.all: if the second create failed, the
+    // destructuring would never run and the first user would leak.
+    everything = await createTestUser('tree-everything');
+    floorOnly = await createTestUser('tree-floor');
     await Promise.all([grant(everything, 'all'), grant(floorOnly, ['bodyweight'])]);
   }, 60_000);
 
@@ -389,9 +394,10 @@ describe('the seeded home-gym lifter climbs what his equipment allows', () => {
      * ADR 0020's 2026-09-11 amendment changed the programme with the tree.
      * Home-gym logged `chair-squat`, a machine lift he does not own; he now logs
      * bodyweight squats at 3 × 21, one over the lunge rung's 3 × 20, because a
-     * later set drops a rep a quarter of the time. This is where that margin is
-     * held: the shipped reader and evaluator, over the seeded history, as the
-     * tree page would show it.
+     * later set drops a rep a quarter of the time. This holds the CLIMB: the
+     * shipped reader and evaluator, over the seeded history, as the tree page
+     * would show it. It cannot hold the margin — at 20 some sessions still clear
+     * the rung — so src/seed/archetypes.test.ts holds that, session by session.
      *
      * He logs walking lunges at 3 × 12, short of the step-up's 3 × 16, so the
      * climb stops at the lunge. Stated here so a change to either number is a

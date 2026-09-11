@@ -690,6 +690,32 @@ describe('the templates each archetype is seeded with', () => {
     );
   });
 
+  it('gives home-gym enough squats to clear the lunge rung in every session, not once', () => {
+    /*
+     * The legs tree's lunge rung opens on 3 × 20 bodyweight squats in one
+     * completed session — migration 20260911120000. Home-gym is prescribed 21
+     * because a later set drops a rep a quarter of the time, and this is where
+     * that margin is held. FOUND IN REVIEW: at 20, a third of his sessions still
+     * clear the rung, so the climb pinned in tests/db/progression.test.ts stays
+     * green and cannot see the margin go. This goes red at 20.
+     *
+     * Several seeds, because one seed can clear by luck what another does not.
+     */
+    for (const seed of [7, 42, 1234]) {
+      const squatting = generate(byKey('home-gym'), seed).filter(
+        (w) => w.status === 'completed' && w.sets.some((s) => s.exerciseSlug === 'bodyweight-squat')
+      );
+      expect(squatting.length, `seed ${seed}: no squat sessions at all`).toBeGreaterThan(0);
+
+      for (const workout of squatting) {
+        const clearing = workout.sets.filter(
+          (s) => s.exerciseSlug === 'bodyweight-squat' && !s.isWarmup && s.reps >= 20
+        );
+        expect(clearing.length, `seed ${seed}, ${workout.localDate}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
   it('copies each session’s lifts, sets and reps from the programme, never from the log', () => {
     /*
      * ADR 0010's case, and the reason templates come from the programme at all.

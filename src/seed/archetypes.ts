@@ -51,10 +51,10 @@ export interface ProgrammeEntry {
    * simply been re-rolled underneath the fixture.
    *
    * WHY a side stream rather than "make the entry deterministic": a set draws
-   * three times — rep drift, the RPE coin flip, and rest seconds. Suppressing
-   * all three would give every accessory set in twelve weeks the same RPE and
-   * the same rest, which is the "reads as fake on sight" failure `roundToPlate`
-   * exists to avoid. The side stream keeps the variety and spends it out of a
+   * up to three times — rep drift (not on the first set), the RPE coin flip,
+   * and rest seconds. Suppressing all three would give every accessory set in
+   * twelve weeks the same RPE and the same rest, which is the "reads as fake on
+   * sight" failure `roundToPlate` exists to avoid. The side stream keeps the variety and spends it out of a
    * different purse.
    *
    * AI-NOTE: set this on an entry ADDED after a golden baseline exists. An
@@ -273,8 +273,16 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
   // session. 21 because a later set drops a rep a quarter of the time. This was
   // `chair-squat` — a Smith-machine squat tagged `machine`, which this
   // archetype does not own — until ADR 0020's 2026-09-11 amendment. Same side
-  // stream, same number of draws: a zero load draws nothing and three sets
-  // draw three times each, so no other entry's numbers move.
+  // stream, same number of draws: a zero load draws nothing, and the count
+  // depends on `sets` alone, which did not change — so no other entry's
+  // numbers move.
+  //
+  // AI-NOTE: three numbers hold each other up. The lunge rung asks 3 × 20
+  //          (supabase/migrations/20260911120000_legs_tree_on_the_floor.sql);
+  //          this clears it every session, which src/seed/archetypes.test.ts
+  //          holds; and his walking lunges below, at 3 × 12, stop short of the
+  //          step-up's 3 × 16 on purpose — the climb tests/db/progression.test.ts
+  //          pins. Change one and check the other two.
   {
     exerciseSlug: 'bodyweight-squat',
     sets: 3,
@@ -805,9 +813,10 @@ export type EquipmentOf = ReadonlyMap<string, string>;
  * ADR 0020's 2026-09-11 amendment — the legs tree changed, and the programme
  * with it — so every archetype's list is empty now.
  *
- * AI-NOTE: `src/seed/archetypes.test.ts` pins every list at empty, so a NEW
- *          mismatch fails loudly; this function keeps a template from
- *          prescribing one meanwhile, rather than leaving it out in silence.
+ * AI-NOTE: this function keeps an out-of-grant lift out of a template, and
+ *          `src/seed/archetypes.test.ts` pins every list at empty — the pin is
+ *          what makes a NEW mismatch fail loudly instead of vanishing from a
+ *          template in silence.
  */
 export function outOfGrant(archetype: Archetype, equipmentOf: EquipmentOf): string[] {
   const granted = new Set(archetype.equipment.map((grant) => grant.slug));
