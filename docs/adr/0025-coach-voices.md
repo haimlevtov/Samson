@@ -242,7 +242,8 @@ and written here before their code.
   speech, so these close in rework plan PR 6c — [ADR 0026](0026-budget-integrity.md) —
   **before `OPENROUTER_API_KEY` goes
   on Vercel — Production and Preview alike**, as the README's deploy table now
-  says. The clamps in `chargedFor` and the NaN-proof gate are what landed here.
+  says. The clamps in `chargedFor` and the NaN-proof gate are what landed here;
+  ADR 0026 has since made the clamps CHECKs and moved the sum into SQL.
 - **The function's time limit is assumed, not pinned.** A speech press takes at
   most about 41 seconds, and a chat turn on the same page about three minutes.
   Both fit Vercel's Fluid compute default of 300 seconds, which this project —
