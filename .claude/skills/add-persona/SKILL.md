@@ -88,8 +88,9 @@ Current voices:
 **A voice that does not fit the coach is worse than none** — the user's rule, and
 why there is no device-voice fallback: without the key or the budget, the coach's
 words are shown and nothing speaks. The old device-voice columns
-(`tts_voice_id`, `tts_voice_variant`) are gone; so is the variant rule that
-went with them.
+(`tts_voice_id`, `tts_voice_variant`) are read by nothing and are dropped by the
+first migration after ADR 0025's code is deployed — do not set them. The variant
+rule that went with them is gone.
 
 ## 3. Banned phrases are a ban, not a preference
 

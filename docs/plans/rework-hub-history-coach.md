@@ -437,7 +437,10 @@ have failed. ADR 0025's closing section records the correction.
 - **No mismatched fallback, and device voices leave the coach entirely.**
   Without a key, budget or a working call, the line is shown as text. The
   device-voice columns and the picker had no other consumer and go with it; the
-  rest timer keeps its neutral "Rest over."
+  rest timer keeps its neutral "Rest over." **The columns go in two steps**:
+  nothing reads them after this PR, and the first migration after its deploy
+  drops them — dropping them in the same push breaks the running app, which
+  still selects them, until the deploy lands.
 - **The characters**, as directions, from the personas' own descriptions:
 
   | Coach          | Voice     | Direction, in short                                  |

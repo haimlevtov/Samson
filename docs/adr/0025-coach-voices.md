@@ -65,7 +65,10 @@ stored in its row, through the gateway.**
 6. **The device-voice machinery goes.** `tts_voice_id` and `tts_voice_variant`,
    the variant allocation and the voice picker served coaches only; with coaches
    off device speech they have no consumer, so they are removed rather than left
-   as columns that describe nothing.
+   as columns that describe nothing. **In two steps:** this PR removes every
+   reader, and the first migration after it is deployed drops the columns.
+   Dropping them in the same push would break the running app, which still
+   selects them, for as long as the deploy takes.
 
 ### How the direction reaches the model
 
