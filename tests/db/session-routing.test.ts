@@ -11,7 +11,7 @@
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 import { ACTIVE_SESSION_WINDOW_HOURS, activeWorkout, listWorkouts } from '../../src/db/training';
 
 let alice: TestUser;
@@ -62,8 +62,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await deleteTestUser(alice);
-  await deleteTestUser(bob);
+  await deleteTestUsers(alice, bob);
 });
 
 describe('activeWorkout — the recency window', () => {

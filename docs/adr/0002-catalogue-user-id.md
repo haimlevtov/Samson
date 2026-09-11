@@ -42,12 +42,14 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
 
 - Invariant #10 stays checkable by a query rather than by reading a list.
 - User-authored custom exercises work later with no migration — the column and
-  the policies already handle them.
+  the policies already handle them. _Not quite: see the 2026-09-11 amendment._
 - Every new catalogue table must copy both policies. Forgetting the read policy
   makes the rows invisible; forgetting the write policy makes them writable by
   the wrong user. `tests/db/schema-invariants.test.ts` catches a table with no
   policy at all, but it cannot catch a wrong one, so this is called out in an
-  `AI-NOTE` at the top of the catalogue migration.
+  `AI-NOTE` at the top of the catalogue migration. _Not quite: the 2026-09-08
+  amendment below drops the write half where no feature needs it, and the
+  2026-09-11 one adds a check it must carry on a table with a foreign key._
 
   **Amended 2026-09-08 — the write half needs a feature behind it.** The reason
   given for it above is that "user-authored custom exercises work later with no
@@ -85,3 +87,27 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
   unchanged; the exception is a single parameterless definer function rather
   than a relaxation of the rule, precisely so that this sentence keeps holding
   for everything else.
+
+## Amended 2026-09-11 — the write half is not enough on a table with a foreign key
+
+The `with check (user_id = auth.uid())` above says whose row it is. It says
+nothing about the rows that row points at, and a foreign key is checked as the
+referenced table's owner rather than under RLS. So on a catalogue table with a
+foreign key into another ownable table, copying the pair verbatim lets a user
+link their row to somebody else's. `exercise_equipment_write` is exactly that
+copy, and both of its foreign keys are on the pinned list in
+`tests/db/schema-invariants.test.ts`. ADR 0003's 2026-09-11 amendment states the
+rule a new catalogue table has to follow instead.
+
+The consequence above that the schema test "cannot catch a wrong one" is now
+half true: it still cannot judge a policy in general, but it does catch a write
+policy that never mentions a foreign key's column and the table it references.
+That is a text match, and so a proxy, as ADR 0003 says: a policy that names both
+without an ownership clause still passes, and `tests/db/rls.test.ts` is where
+the behaviour is tried.
+
+The consequence that custom exercises "work later with no migration" was wrong
+for the same reason. `sets` and `workout_template_items` needed
+`20260911100000`: until then both accepted a row pointing at another user's
+custom exercise, and the `five-patterns` badge read its movement pattern across
+users. `exercise_equipment` still accepts one, and is pinned as above.

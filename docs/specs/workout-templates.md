@@ -81,6 +81,16 @@ INVARIANT: `weight_kg` is kilograms and `rest_seconds` is seconds — CLAUDE.md
 INVARIANT: both tables carry `user_id`, have RLS on, and have an owner-only
 policy — CLAUDE.md #10.
 
+INVARIANT: a row may only point at the user's OWN template. Owner-only on
+`user_id` was not enough: a foreign key is checked as the referenced table's
+owner and not under RLS, so until migration 20260911090000 a user could start a
+session from, or write an item into, another user's template. `workouts_own`
+and `workout_template_items_own` now check `template_id` in `with check` —
+ADR 0003's 2026-09-11 amendment, tested by trying it in `tests/db/rls.test.ts`.
+An item's `exercise_id` likewise has to be the user's own exercise or a shared
+catalogue one (`user_id is null`), from migration `20260911100000` — the same
+line `exercises_read` draws, and the one `sets` now holds too.
+
 ## 3. Starting a session from a template
 
 ```

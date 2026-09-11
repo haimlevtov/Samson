@@ -29,7 +29,7 @@
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { createTestUser, deleteTestUsers, type TestUser } from './helpers';
 
 let user: TestUser;
 let other: TestUser;
@@ -39,7 +39,7 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
-  await Promise.all([deleteTestUser(user), deleteTestUser(other)]);
+  await deleteTestUsers(user, other);
 });
 
 /** One ledger row, as the gateway would write it for this stage. */

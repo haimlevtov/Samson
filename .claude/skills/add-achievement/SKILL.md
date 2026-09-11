@@ -48,10 +48,14 @@ constant across a user's whole history. `workout_id` is a random uuid and settle
 nothing either. `twenty-percent-up` got this wrong twice and awarded a badge on a
 coin toss both times — [ADR 0021](../../../docs/adr/0021-training-order-is-local-date.md).
 
-A predicate that reads `public.workouts` must also filter it by the evaluating
-user. `s.user_id = $1` on the sets alone is not enough: `evaluate_achievements`
-is `security definer`, so the join sees every user's rows — migration
-`20260908140000`.
+A predicate that joins ANY table a user can own rows in — `workouts`,
+`exercises`, anything with a `user_id` — must filter that table as well, not
+just the table it starts from, `sets` or `workouts`. `user_id = $1` on that
+first table is not enough: `evaluate_achievements` is `security definer`, so
+the join sees every user's rows. It has happened twice: `workouts` (migration `20260908140000`) and
+`exercises` (`20260911100000`, the `five-patterns` predicate). For a table that
+also holds shared catalogue rows the filter is
+`(e.user_id is null or e.user_id = $1)`.
 
 ```sql
 -- INVARIANT: calendar achievements use the user's local date — see CLAUDE.md #9
@@ -83,6 +87,12 @@ Every achievement ships with a test in the same commit asserting:
    LOCKED, and present for the holder once earned. Both halves — ADR 0017
    narrowed the criterion, and a test for only the first half would pass on a
    version that never showed the badge to anyone.
+6. If the predicate joins a table a user can own rows in: a row of theirs
+   pointing at ANOTHER user's row does not count, and one pointing at their
+   own does.
+   Write the cross-user row with the admin client — the write policies refuse
+   it now, which is the point, so it stands for a row written before they did.
+   The `five-patterns` case in `tests/db/achievements.test.ts` is the pattern.
 
 Use the seeder's synthetic users where one fits; add a fixture only if none
 does.

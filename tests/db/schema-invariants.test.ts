@@ -388,3 +388,301 @@ describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', ()
     expect(stray).toEqual([]);
   });
 });
+
+/**
+ * ADR 0003, amended 2026-09-11 — a foreign key is a gate RLS does not guard.
+ *
+ * Postgres checks a foreign key as the REFERENCED table's owner, not under RLS,
+ * so a write policy that only checks `user_id = auth.uid()` lets a user point a
+ * row at somebody else's workout, template or custom exercise. It has happened
+ * three times — `sets.workout_id`, both `template_id` columns, then
+ * `sets.exercise_id` — each time with a comment or a doc somewhere calling it
+ * safe.
+ *
+ * This reads every such foreign key from the live catalogue rather than from a
+ * list, so a new table cannot arrive without an answer.
+ */
+describe('ADR 0003 — a write policy checks the rows its foreign keys point at', () => {
+  interface ForeignKey {
+    tbl: string;
+    col: string;
+    ref: string;
+    writable: boolean;
+    checked: boolean;
+  }
+
+  /*
+   * Plain substring matching, deliberately not a regex. The first probe for
+   * this test used a word-boundary pattern, the backslash was lost on the way
+   * into node, `\b` became a BACKSPACE character, and every column read as
+   * unchecked — including the one fix that already existed. A substring has no
+   * escapes to lose.
+   *
+   * INSERT and UPDATE are judged separately, as Postgres applies them. A
+   * command is checked when EVERY permissive policy that applies to it mentions
+   * both the foreign-key column and the table it references — permissive
+   * policies are ORed, so one without the clause reopens the gap — or when ANY
+   * restrictive policy that applies to it does, restrictive policies being
+   * ANDed. A column is checked when both commands are. A command no permissive
+   * policy allows cannot be used at all, so it counts as checked; `writable`
+   * says whether the table can be written in the first place.
+   *
+   * "Applies" means `for all` or that command, granted to `public` or to a role
+   * whose privileges `authenticated` inherits — `pg_has_role(..., 'USAGE')`,
+   * the same test Postgres uses to decide a policy applies. Where a policy has
+   * no `with check`, Postgres reuses `using`, and so does this.
+   *
+   * FOUND IN REVIEW, three times. The first version accepted ANY one policy;
+   * the second accepted a restrictive policy whatever command it covered, so a
+   * `for insert` one could leave UPDATE open while this stayed green; the third
+   * asked for 'MEMBER', which also counts a membership that passes on no
+   * privileges. Supabase makes `authenticated` NOINHERIT, so a restrictive
+   * policy for a role granted to it would have read as a check Postgres never
+   * runs. None of the three changes today's answer. The first two cannot,
+   * because no table this judges has more than one write policy, which is why the
+   * verdict also runs over synthetic policies below. The third cannot because
+   * no policy is granted to a role `authenticated` belongs to, and it has no
+   * synthetic case: the cases create nothing, so there is no such role.
+   *
+   * It is a proxy — it proves the author wrote a clause about that row, not that
+   * the clause is correct — so the behavioural halves live in
+   * tests/db/rls.test.ts, where alice actually tries.
+   */
+  const verdict = (fks: string, policies: string): string => `
+    with fks as (${fks}),
+    policies as (${policies}),
+    writes as (
+      select p.tablename, p.permissive, p.cmd,
+             coalesce(p.with_check, p.qual, '') as check_text
+      from policies p
+      where p.cmd in ('ALL', 'INSERT', 'UPDATE')
+        and (
+          'public' = any (p.roles)
+          or exists (
+            select 1 from unnest(p.roles) as r (role)
+            -- WHY CASE, not AND: pg_has_role raises on public, which is not a
+            -- real role, and AND does not promise to test its left side first.
+            where case when r.role = 'public' then false
+                       else pg_has_role('authenticated', r.role, 'USAGE') end
+          )
+        )
+    )
+    select fks.tbl, fks.col, fks.ref,
+           exists (select 1 from writes w where w.tablename = fks.tbl) as writable,
+           not exists (
+             select 1 from (values ('INSERT'), ('UPDATE')) as c (cmd)
+             where not (
+               exists (
+                 select 1 from writes w
+                 where w.tablename = fks.tbl and w.cmd in ('ALL', c.cmd)
+                   and w.permissive = 'RESTRICTIVE'
+                   and position(fks.col in w.check_text) > 0
+                   and position(fks.ref in w.check_text) > 0
+               )
+               or not exists (
+                 select 1 from writes w
+                 where w.tablename = fks.tbl and w.cmd in ('ALL', c.cmd)
+                   and w.permissive = 'PERMISSIVE'
+                   and not (
+                     position(fks.col in w.check_text) > 0
+                     and position(fks.ref in w.check_text) > 0
+                   )
+               )
+             )
+           ) as checked
+    from fks
+    order by 1, 2`;
+
+  const LIVE = verdict(
+    `select con.conrelid::regclass::text as tbl,
+            att.attname::text as col,
+            con.confrelid::regclass::text as ref
+     from pg_constraint con
+     join pg_attribute att
+       on att.attrelid = con.conrelid and att.attnum = any (con.conkey)
+     where con.contype = 'f'
+       and con.connamespace = 'public'::regnamespace
+       and att.attname <> 'user_id'
+       and exists (
+         select 1 from information_schema.columns c
+         where c.table_schema = 'public'
+           and c.table_name = con.confrelid::regclass::text
+           and c.column_name = 'user_id'
+       )`,
+    `select p.tablename::text as tablename, p.permissive, p.cmd, p.roles, p.with_check, p.qual
+     from pg_policies p
+     where p.schemaname = 'public'`
+  );
+
+  /*
+   * One table, `probe`, with a foreign key `thing_id -> things`, and policies
+   * that exist only in the query's parameters: nothing is created, so this runs
+   * the same on a fresh stack and on hosted.
+   */
+  const SYNTHETIC = verdict(
+    `select 'probe'::text as tbl, 'thing_id'::text as col, 'things'::text as ref`,
+    `select 'probe'::text as tablename, x.permissive, x.cmd, x.roles::name[] as roles,
+            x.with_check, x.qual
+     from jsonb_to_recordset($1::jsonb)
+       as x (permissive text, cmd text, roles text[], with_check text, qual text)`
+  );
+
+  const foreignKeys = async (): Promise<ForeignKey[]> => (await db().query<ForeignKey>(LIVE)).rows;
+
+  it('recognises the one fix that predates this test', async () => {
+    /*
+     * The calibration. `sets_own` has checked `workout_id` since migration
+     * 20260908140000; if this reports it unchecked, the matcher is broken and
+     * every other verdict below means nothing — which is exactly what the
+     * backspace did to the first probe.
+     */
+    const sets = (await foreignKeys()).find((fk) => fk.tbl === 'sets' && fk.col === 'workout_id');
+
+    expect(sets, 'sets.workout_id is no longer a foreign key?').toBeDefined();
+    // Writable too: a command no policy allows counts as checked, so a role
+    // filter that dropped every policy would otherwise pass here.
+    expect(sets!.writable).toBe(true);
+    expect(sets!.checked).toBe(true);
+  });
+
+  interface SyntheticPolicy {
+    permissive: 'PERMISSIVE' | 'RESTRICTIVE';
+    cmd: 'ALL' | 'INSERT' | 'UPDATE' | 'SELECT';
+    roles: string[];
+    with_check: string | null;
+    qual: string | null;
+  }
+
+  // CLAUSE names the column and the table it references; BARE names neither.
+  const CLAUSE =
+    'exists (select 1 from public.things t where t.id = probe.thing_id and t.user_id = auth.uid())';
+  const BARE = '(user_id = auth.uid())';
+
+  const policy = (over: Partial<SyntheticPolicy> = {}): SyntheticPolicy => ({
+    permissive: 'PERMISSIVE',
+    cmd: 'ALL',
+    roles: ['authenticated'],
+    with_check: CLAUSE,
+    qual: null,
+    ...over,
+  });
+
+  const restrictive = (cmd: SyntheticPolicy['cmd']): SyntheticPolicy =>
+    policy({ permissive: 'RESTRICTIVE', cmd });
+
+  const readOnly = policy({ cmd: 'SELECT', with_check: null, qual: BARE });
+
+  /*
+   * The verdict itself, so the first two rules review rejected cannot quietly
+   * return. The second and fourth cases are those two: each reads checked
+   * under the weaker rule.
+   */
+  it.each<[string, SyntheticPolicy[], { writable: boolean; checked: boolean }]>([
+    ['one permissive policy with the clause', [policy()], { writable: true, checked: true }],
+    [
+      'two permissive policies, the clause on only one',
+      [policy(), policy({ with_check: BARE })],
+      { writable: true, checked: false },
+    ],
+    [
+      'a restrictive policy for all with the clause',
+      [policy({ with_check: BARE }), restrictive('ALL')],
+      { writable: true, checked: true },
+    ],
+    [
+      'a restrictive policy for INSERT alone, which leaves UPDATE open',
+      [policy({ with_check: BARE }), restrictive('INSERT')],
+      { writable: true, checked: false },
+    ],
+    [
+      'restrictive policies for INSERT and for UPDATE',
+      [policy({ with_check: BARE }), restrictive('INSERT'), restrictive('UPDATE')],
+      { writable: true, checked: true },
+    ],
+    [
+      'the clause in using only, under a narrower check',
+      [policy({ with_check: BARE, qual: CLAUSE })],
+      { writable: true, checked: false },
+    ],
+    [
+      'no with check, so Postgres reuses using',
+      [policy({ with_check: null, qual: CLAUSE })],
+      { writable: true, checked: true },
+    ],
+    [
+      'the unchecked policy granted to anon only',
+      [policy(), policy({ with_check: BARE, roles: ['anon'] })],
+      { writable: true, checked: true },
+    ],
+    [
+      'the unchecked policy granted to public, which is everybody',
+      [policy(), policy({ with_check: BARE, roles: ['public'], cmd: 'INSERT' })],
+      { writable: true, checked: false },
+    ],
+    [
+      'an INSERT policy and no UPDATE policy, so no update can happen',
+      [policy({ cmd: 'INSERT' }), readOnly],
+      { writable: true, checked: true },
+    ],
+    ['no write policy at all', [readOnly], { writable: false, checked: true }],
+  ])('judges %s', async (_label, policies, expected) => {
+    const { rows } = await db().query<ForeignKey>(SYNTHETIC, [JSON.stringify(policies)]);
+
+    expect(rows).toHaveLength(1);
+    expect({ writable: rows[0]!.writable, checked: rows[0]!.checked }).toEqual(expected);
+  });
+
+  it('checks both template_id columns and both exercise_id columns', async () => {
+    // Migrations 20260911090000 and 20260911100000 — the cases rls.test.ts
+    // proves by trying.
+    const byColumn = new Map((await foreignKeys()).map((fk) => [`${fk.tbl}.${fk.col}`, fk]));
+
+    for (const column of [
+      'workouts.template_id',
+      'workout_template_items.template_id',
+      'sets.exercise_id',
+      'workout_template_items.exercise_id',
+    ]) {
+      expect(byColumn.get(column)?.checked, column).toBe(true);
+    }
+  });
+
+  it('leaves exactly the known unchecked columns, so a new one fails', async () => {
+    /*
+     * The three the rule found and PR #43 did not fix — ADR 0003, amended.
+     *
+     *   - `exercise_equipment.exercise_id` and `.equipment_tag_id`: linking to
+     *     another user's custom exercise or tag — the cross-user half — closes
+     *     with the same own-or-shared check as 20260911100000, a policy. The
+     *     primary key is (exercise_id, equipment_tag_id) with no user_id, so
+     *     one user's link also occupies that pair for everybody and the
+     *     duplicate-key error says so; that half is a key change.
+     *   - `user_equipment.equipment_tag_id`: user_id is in its key and the key
+     *     cascades on delete, which leaves only the existence oracle.
+     *
+     * FOUND IN REVIEW: this list first held five, and this comment called all
+     * five "the same existence-oracle class, and no cross-user READ today".
+     * `sets.exercise_id` was a read, through `five-patterns` inside the
+     * `security definer` evaluator. It is closed now, with
+     * `workout_template_items.exercise_id`.
+     *
+     * Pinned rather than tolerated. Fixing one removes it from this list on
+     * purpose; an unchecked column that is not listed here — the next table
+     * with a foreign key and a `user_id = auth.uid()` policy — fails CI.
+     *
+     * Tables with no user write policy at all (achievement_events, xp_events,
+     * progression_nodes since 20260908120100) are written only by definer
+     * functions or not at all, so there is no policy to check and they are
+     * excluded by `writable`.
+     */
+    const unchecked = (await foreignKeys())
+      .filter((fk) => fk.writable && !fk.checked)
+      .map((fk) => `${fk.tbl}.${fk.col} -> ${fk.ref}`);
+
+    expect(unchecked).toEqual([
+      'exercise_equipment.equipment_tag_id -> equipment_tags',
+      'exercise_equipment.exercise_id -> exercises',
+      'user_equipment.equipment_tag_id -> equipment_tags',
+    ]);
+  });
+});

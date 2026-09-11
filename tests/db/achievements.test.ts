@@ -23,7 +23,7 @@
  *          which had been passing on data a different test had written.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 import { MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_WEIGHT_KG } from '../../src/gamification/plausibility';
 
 const admin = adminClient();
@@ -43,7 +43,7 @@ const TIERS = [
 const created: TestUser[] = [];
 
 afterAll(async () => {
-  await Promise.all(created.map(deleteTestUser));
+  await deleteTestUsers(...created);
 }, 120_000);
 
 async function newUser(label: string, timezone = 'UTC'): Promise<TestUser> {
@@ -689,5 +689,132 @@ describe('the boundary of each remaining tier', () => {
     await addSets(user, second, { exerciseId: exercises[4]!, weightKg: 25, reps: 10, count: 1 });
     expect(await awardFor(user, '2026-10-02')).toContain('five-patterns');
     await expectFiresOnce(user, 'five-patterns', '2026-10-03');
+  });
+
+  it("variety: another user's custom exercise does not count, and your own does", async () => {
+    /*
+     * FOUND IN REVIEW of PR #43. The join to `exercises` was unscoped, and this
+     * predicate runs inside the `security definer` evaluator — so a set logged
+     * against somebody else's custom exercise counted its movement pattern, and
+     * whether the badge fired said what that pattern was. Migration
+     * 20260911100000 scopes the join to `(e.user_id is null or e.user_id = $1)`.
+     *
+     * The cross-user set goes in with the service role, which is how a row
+     * written before that migration would already exist; `sets_own` refuses it
+     * now, and tests/db/rls.test.ts says so. The predicate has to hold the line
+     * either way — the two layers of 20260908140000.
+     *
+     * The near miss and the unlock use the same four shared patterns plus the
+     * same fifth pattern, once on a stranger's exercise and once on the user's
+     * own, so the only thing that differs between no badge and badge is whose
+     * exercise it is. The second half matters as much as the first: a filter
+     * that dropped the user's OWN custom exercises would pass the first alone.
+     */
+    const user = await newUser('ach-variety-own');
+    const stranger = await newUser('ach-variety-stranger');
+
+    const four = [...(await catalogue).entries()].slice(0, 4);
+    expect(four, 'the catalogue needs four movement patterns').toHaveLength(4);
+    const fifth = MOVEMENT_PATTERNS.find((p) => !four.some(([pattern]) => pattern === p))!;
+
+    const customExercise = async (owner: TestUser, label: string): Promise<string> => {
+      const { data, error } = await admin
+        .from('exercises')
+        .insert({
+          user_id: owner.id,
+          slug: `${label}-${Date.now()}`,
+          name: `${label} (custom)`,
+          primary_muscle: 'quadriceps',
+          movement_pattern: fifth,
+          source: 'custom',
+        })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`inserting ${label}: ${error?.message}`);
+      return data.id;
+    };
+    const theirs = await customExercise(stranger, 'stranger-lift');
+    const mine = await customExercise(user, 'own-lift');
+
+    const first = await addWorkout(user, { localDate: '2026-10-10' });
+    await addSetGroups(
+      user,
+      first,
+      four.map(([, exerciseId], index) => ({
+        exerciseId,
+        weightKg: 20 + index,
+        reps: 10,
+        count: 1,
+      }))
+    );
+    expect(await awardFor(user, '2026-10-10')).not.toContain('five-patterns');
+
+    /*
+     * Both custom-exercise sets are removed here rather than left to afterAll.
+     * That deletes users in creation order, so she goes before the stranger and
+     * her set on his exercise would cascade away before its `on delete
+     * restrict` could block him — but this test should not lean on the order
+     * of a hook written for the whole file, and removing the rows leaves
+     * nothing behind either way.
+     */
+    const pointing: string[] = [];
+    const logOn = async (workoutId: string, exerciseId: string): Promise<void> => {
+      const { data, error } = await admin
+        .from('sets')
+        .insert({
+          user_id: user.id,
+          workout_id: workoutId,
+          exercise_id: exerciseId,
+          set_index: 0,
+          weight_kg: 30,
+          reps: 10,
+          is_warmup: false,
+        })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`inserting a custom-exercise set: ${error?.message}`);
+      pointing.push(data.id);
+    };
+
+    let failed = false;
+    let failure: unknown;
+    try {
+      await logOn(await addWorkout(user, { localDate: '2026-10-11' }), theirs);
+      expect(
+        await awardFor(user, '2026-10-11'),
+        "a stranger's custom exercise counted toward five patterns"
+      ).not.toContain('five-patterns');
+
+      await logOn(await addWorkout(user, { localDate: '2026-10-12' }), mine);
+      expect(await awardFor(user, '2026-10-12'), 'her own custom exercise did not count').toContain(
+        'five-patterns'
+      );
+    } catch (error) {
+      failed = true;
+      failure = error;
+    }
+
+    /*
+     * The cleanup always runs, and the body's failure outranks it — without a
+     * `throw` inside `finally`, which lint forbids for exactly the masking this
+     * is avoiding. `failed` is its own flag because `throw undefined` is legal
+     * and would otherwise read as a pass. A cleanup failure behind a body
+     * failure rides along as its `cause` — beside any cause it already had —
+     * rather than vanishing.
+     */
+    let cleanup: Error | undefined;
+    if (pointing.length > 0) {
+      const { error } = await admin.from('sets').delete().in('id', pointing);
+      if (error) cleanup = new Error(`removing the custom-exercise sets: ${error.message}`);
+    }
+    if (failed) {
+      const error = failure instanceof Error ? failure : new Error(String(failure));
+      if (cleanup) {
+        error.cause =
+          error.cause === undefined ? cleanup : new AggregateError([error.cause, cleanup]);
+      }
+      throw error;
+    }
+    if (cleanup) throw cleanup;
   });
 });
