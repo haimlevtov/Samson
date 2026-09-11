@@ -439,7 +439,7 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
    * privileges. Supabase makes `authenticated` NOINHERIT, so a restrictive
    * policy for a role granted to it would have read as a check Postgres never
    * runs. None of the three changes today's answer. The first two cannot,
-   * because every table this judges has one write policy, which is why the
+   * because no table this judges has more than one write policy, which is why the
    * verdict also runs over synthetic policies below. The third cannot because
    * no policy is granted to a role `authenticated` belongs to, and it has no
    * synthetic case: the cases create nothing, so there is no such role.
