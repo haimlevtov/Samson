@@ -46,35 +46,19 @@ export const NORMALIZER_MAX_TOKENS = 800;
  */
 export const CHAT_MAX_TOKENS = 400;
 
-/**
- * One diet explanation — docs/specs/diet.md §4, ADR 0024 §1.
+/*
+ * `DIET_MAX_TOKENS` (300), `SUPPLEMENT_MAX_TOKENS` (60) and
+ * `MAX_DIET_QUESTION_CHARS` (400) were here until rework PR 8a, one per stage
+ * the coach box absorbed. They are gone rather than left unreferenced: a
+ * ceiling nothing reads is a ceiling nobody is held to, and the next editor
+ * would have had to work out which of the three the one box actually runs
+ * under.
  *
- * WHY it is smaller than the chat's 400: the schema caps this reply at 500
- * characters across two fields, and unlike the chat it may contain no numeral
- * at all — code renders every figure beside it. The model is writing two or
- * three sentences of plain prose about a number it was never shown.
+ * It runs under CHAT_MAX_TOKENS and MAX_CHAT_MESSAGE_CHARS, which were already
+ * the largest of each set — so no answer is shorter and no question is refused
+ * that was accepted before. ADR 0015 §6 records that as the requirement rather
+ * than a coincidence.
  */
-export const DIET_MAX_TOKENS = 300;
-
-/**
- * One supplement lookup — `src/diet/supplements.ts`.
- *
- * The smallest ceiling in the file, and it can be: the whole answer is one slug
- * from an allowlist. There is no text field in that schema, so there is nothing
- * for the model to be verbose in. Sixty leaves room for the JSON wrapper and a
- * long slug, and nothing else.
- */
-export const SUPPLEMENT_MAX_TOKENS = 60;
-
-/**
- * One optional question about a target, before fencing.
- *
- * Deliberately shorter than `MAX_CHAT_MESSAGE_CHARS`: this box asks about one
- * figure on one screen, not about a training history. Length is an attack, so
- * the bound is the smallest one the feature can work in — the same reasoning
- * ADR 0015 §5 gives for the chat's own cap.
- */
-export const MAX_DIET_QUESTION_CHARS = 400;
 
 /**
  * One chat message in, before fencing — ADR 0015 §5.

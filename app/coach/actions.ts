@@ -10,24 +10,15 @@ import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
 import { speechScript } from '@/src/speech/script';
 import { refusalFor } from '@/src/speech/refusal';
 import type { VoiceResult } from '@/src/speech/player';
-import {
-  MAX_CHAT_MESSAGE_CHARS,
-  MAX_DIET_QUESTION_CHARS,
-  MissingApiKeyError,
-} from '@/src/llm/config';
+import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
 import { z } from 'zod';
-import { explainTarget } from '@/src/diet/advice';
-import { DIET_GOALS, computeEnergy } from '@/src/diet/energy';
-import { dietQuestionSchema } from '@/src/diet/schema';
-import { lookUpSupplement } from '@/src/diet/supplements';
+import { DIET_GOALS, computeEnergy, dietFacts } from '@/src/diet/energy';
 import { loadEvidence } from '@/src/db/evidence';
-import { EMPTY_DIET, type DietState } from './diet-state';
-import { EMPTY_SUPPLEMENT, type SupplementState } from './supplement-state';
 import { BudgetExceededError } from '@/src/llm/types';
 import { coachFacts } from '@/src/chat/facts';
-import { askCoach } from '@/src/chat/reply';
+import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { MAX_TRANSCRIPT_TURNS, chatHistorySchema, type ChatTurn } from '@/src/chat/schema';
-import { EMPTY_CHAT, type ChatState } from './chat-state';
+import { EMPTY_COACH, type CoachState } from './coach-state';
 import { adherence } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { deliverPlan } from '@/src/persona/deliver';
@@ -39,31 +30,72 @@ const ADHERENCE_WINDOW_DAYS = 28;
 const RECENT_NOTES = 5;
 
 /**
- * One turn of the coach chat — ADR 0015, docs/specs/coach-chat.md.
+ * What every return that is NOT a fresh supplement answer carries.
+ *
+ * INVARIANT: `row` is set ONLY from an `askCoach` answer, and no return in this
+ *            file spreads `previous` — FOUND IN REVIEW, and it was the sharpest
+ *            finding on this PR.
+ *
+ * WHY, in two parts. `previous` is CLIENT-SUPPLIED: the same reasoning that
+ * makes the transcript untrusted (it is held by the browser because this stage
+ * stores nothing) makes every other field of it untrusted too. A crafted POST
+ * carrying a `row` of its own would have been handed straight back and rendered
+ * by `EvidenceBody` — the component `/evidence` uses — as a curated, grade-A
+ * health claim with a working DOI. Nothing in the old `askAboutSupplement` could
+ * do that, because it never read its previous state at all.
+ *
+ * And even honestly: the surface renders the row against the NEWEST turn, so a
+ * row carried forward past a failure would appear under the user's question
+ * rather than under an answer to it.
+ */
+const ANSWERLESS = { row: null, supplementMiss: false } as const;
+
+/**
+ * One turn of the coach box — ADR 0015 §6, docs/specs/coach-chat.md.
+ *
+ * Replaces `sendChatMessage`, `askDietAdvisor` and `askAboutSupplement`. One
+ * form, one action, one call: the route is the model's and the guard that runs
+ * is the one belonging to the route it named.
  *
  * INVARIANT: this action has no write path to the user's training data, and
  *            adding one would break the guarantees in ADR 0015's table. It
- *            reads the user's own rows, calls one stage, and returns prose.
- *            The one insert underneath it is the `llm_calls` ledger row the
- *            gateway writes per attempt, which invariant #3 requires and which
- *            no model chooses the shape of.
+ *            reads the user's own rows, calls one stage, and returns prose or a
+ *            shared row. The one insert underneath it is the `llm_calls` ledger
+ *            row the gateway writes per attempt, which invariant #3 requires
+ *            and which no model chooses the shape of.
  *
  * INVARIANT: the transcript arriving in `previous` is USER INPUT. It is held by
  *            the client precisely because nothing stores it, so it is parsed by
  *            `chatHistorySchema` before it is used and fenced turn by turn
  *            afterwards. A `coach` role in it is a claim, not a provenance.
+ *
+ * INVARIANT: the calorie target is computed, clamped and RENDERED by code —
+ *            CLAUDE.md #6. `computeEnergy` runs on EVERY submission, before any
+ *            model is involved and whatever the question turns out to be, and
+ *            the model is handed `dietFacts` — categories, no figures. There is
+ *            no path from its output to the number on the screen.
+ *
+ * INVARIANT: the biometrics are read from the authenticated user's own row
+ *            under RLS, never from a form field — CLAUDE.md #10. The form
+ *            carries a goal, a message and an intent, and nothing else.
  */
-export async function sendChatMessage(previous: ChatState, formData: FormData): Promise<ChatState> {
+export async function askTheCoach(previous: CoachState, formData: FormData): Promise<CoachState> {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  // One action drives the panel, so "clear" is an intent on the same form
-  // rather than a second action: useActionState owns the state, and a second
-  // action could not reach it.
-  if (formData.get('intent') === 'clear') return EMPTY_CHAT;
-
-  const message = String(formData.get('message') ?? '').trim();
+  /*
+   * FOUND IN REVIEW of the diet panel, and kept: this was a bare `String(...)`
+   * while the spec said the action validates with `z.enum`. The safety outcome
+   * survived — `normaliseGoal` falls to maintain for anything unrecognised — but
+   * the named mechanism did not exist, and the raw string was echoed back into
+   * the `<select>`, so a hand-posted `goal=banana` rendered a control with
+   * nothing selected.
+   *
+   * `.catch` rather than a rejection: an unrecognised goal is not worth an error
+   * message, and maintain is the safe direction.
+   */
+  const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
 
   // Parsed, not trusted — see the invariant above. A malformed transcript is
   // dropped rather than repaired: continuing from a conversation we cannot
@@ -76,15 +108,13 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
   const parsed = chatHistorySchema.safeParse((previous as { turns?: unknown } | null)?.turns);
   const turns: ChatTurn[] = parsed.success ? parsed.data : [];
 
-  if (message === '') return { turns, error: null };
-  if (message.length > MAX_CHAT_MESSAGE_CHARS) {
-    // Rejected rather than silently truncated: the user should know the coach
-    // did not read the second half of what they wrote.
-    return {
-      turns,
-      error: `That is longer than the ${MAX_CHAT_MESSAGE_CHARS} characters the coach reads at once.`,
-    };
-  }
+  // One action drives the panel, so "clear" is an intent on the same form
+  // rather than a second action: useActionState owns the state, and a second
+  // action could not reach it. The goal survives it — clearing a conversation
+  // is not a reason to forget which goal the figures below are for.
+  if (formData.get('intent') === 'clear') return { ...EMPTY_COACH, goal };
+
+  const message = String(formData.get('message') ?? '').trim();
 
   const today = localDateFor(user.timezone);
   const [history, xp] = await Promise.all([loadHistory(db), loadXpSummary(db, today)]);
@@ -99,20 +129,91 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
     lifetimeXp: xp.lifetime,
   });
 
+  /*
+   * INVARIANT: the figure exists before the model does — ADR 0024 §1. The
+   *            session count comes from `coachFacts`, which this action already
+   *            computes, so there is one definition of that number rather than
+   *            two (ADR 0024 §4).
+   */
+  const result = computeEnergy({
+    today,
+    bodyweightKg: user.bodyweightKg,
+    heightCm: user.heightCm,
+    birthDate: user.birthDate,
+    sex: user.sex,
+    sessionsLast28Days: facts.sessions_last_28_days,
+    goal,
+  });
+
+  /*
+   * A goal change with nothing typed. The figures are recomputed and no model is
+   * called, which is what makes the selector free to move: the old panel paid
+   * for a sentence on every change, and a user comparing three goals paid three
+   * times.
+   */
+  if (message === '') return { turns, result, goal, ...ANSWERLESS, error: null };
+
+  if (message.length > MAX_CHAT_MESSAGE_CHARS) {
+    // Rejected rather than silently truncated: the user should know the coach
+    // did not read the second half of what they wrote.
+    return {
+      turns,
+      result,
+      goal,
+      ...ANSWERLESS,
+      error: `That is longer than the ${MAX_CHAT_MESSAGE_CHARS} characters the coach reads at once.`,
+    };
+  }
+
   // Optimistic: the user's own turn is shown whatever happens next, so a failed
   // call does not swallow what they typed.
   const withUser: ChatTurn[] = [...turns, { role: 'user', text: message }];
   const trim = (all: ChatTurn[]): ChatTurn[] => all.slice(-MAX_TRANSCRIPT_TURNS);
 
   try {
+    /*
+     * Both contexts are read before the call and for every question, because a
+     * route is not known until the answer comes back — ADR 0015 §6. Neither is
+     * expensive: `dietFacts` is a projection of a value already computed above,
+     * and `loadEvidence` is one RLS-scoped read of shared rows.
+     *
+     * Inside the try, deliberately. `loadEvidence` throws with the raw Postgres
+     * message, and an escaped rejection would bypass the generic error state
+     * the rest of this action is careful to build.
+     */
+    const { rows } = await loadEvidence(db);
+
     const answer = await askCoach(
       user.id,
-      { facts, history: turns, message },
+      {
+        facts,
+        history: turns,
+        message,
+        // Null when the engine refused: there is no target to explain, so the
+        // panel renders the refusal in the app's own words instead.
+        diet: result.kind === 'ok' ? dietFacts(result) : null,
+        evidence: rows,
+      },
       { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
     );
 
+    /*
+     * The supplement route has no prose to show — the row is the answer — so
+     * the transcript carries the constant that names what happened and the row
+     * renders beside it. `answer.text` is null only on that route and only when
+     * a row was found, which is exactly when there is something else to render.
+     */
+    const spoken = answer.text ?? SUPPLEMENT_ANSWER_TURN;
+
     return {
-      turns: trim([...withUser, { role: 'coach', text: answer.text }]),
+      turns: trim([...withUser, { role: 'coach', text: spoken }]),
+      result,
+      goal,
+      row: answer.row,
+      // The route is known HERE and nowhere else. The surface renders the
+      // `/evidence` link from this rather than by recognising the constant's
+      // text, which a user could type themselves — see `coach-state.ts`.
+      supplementMiss: answer.route === 'supplement' && answer.row === null,
       error: null,
     };
   } catch (cause) {
@@ -129,234 +230,37 @@ export async function sendChatMessage(previous: ChatState, formData: FormData): 
      * \"llm_calls\" violates check constraint \"llm_calls_stage_check\"", which
      * hands a user table names, column semantics and constraint names for a
      * table they cannot read. Harmless on its own, and free reconnaissance in
-     * quantity. The chat is also the surface somebody pokes at repeatedly, so
+     * quantity. The box is also the surface somebody pokes at repeatedly, so
      * it is the one most likely to produce a variety of them.
-     */
-    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
-      return { turns: trim(withUser), error: cause.message };
-    }
-
-    /*
-     * The NAME and a bounded message, never the object — the same treatment
-     * `askDietAdvisor` gained in PR 4, applied here because the asymmetry was
-     * the finding. `LlmCallFailedError` declares `attempts: LlmCallInsert[]`,
-     * an enumerable own property Node prints after the stack, and every one of
-     * those rows carries `user_id`. Logging `cause` wrote the user's auth UUID
-     * into the server log up to three times per failure, plus up to 500
-     * characters of upstream body — which providers commonly fill with the
-     * request they rejected.
-     */
-    console.error(
-      'coach chat failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
-    return {
-      turns: trim(withUser),
-      error: 'The coach could not answer that one. Try again in a moment.',
-    };
-  }
-}
-
-/**
- * The diet advisor — ADR 0024, docs/specs/diet.md.
- *
- * INVARIANT: the target is computed, clamped and RENDERED by code —
- *            CLAUDE.md #6. The model is called after the number exists, is
- *            given `dietFacts()` (categories, no figures), and its words are
- *            printed beside a figure it never saw. There is no path from the
- *            model's output to `targetKcal`, on the variable or on the screen.
- *
- * INVARIANT: the biometrics are read from the authenticated user's own row
- *            under RLS, never from a form field — CLAUDE.md #10. The form
- *            carries a goal and an optional question, and nothing else.
- */
-export async function askDietAdvisor(_previous: DietState, formData: FormData): Promise<DietState> {
-  const db = await createServerDb();
-  const user = await currentUser(db);
-  if (!user) redirect('/sign-in');
-
-  /*
-   * FOUND IN REVIEW: this was a bare `String(...)`, while docs/specs/diet.md
-   * and ADR 0024 both said the action validates the goal with `z.enum`. The
-   * safety outcome survived — `normaliseGoal` in the engine falls to maintain
-   * for anything unrecognised, deliberately — but the named mechanism did not
-   * exist, and the raw string was echoed back into the `<select>`, so a
-   * hand-posted `goal=banana` rendered a control with nothing selected.
-   *
-   * `.catch` rather than a rejection: an unrecognised goal is not worth an
-   * error message, and maintain is the safe direction.
-   */
-  const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
-  const parsedQuestion = dietQuestionSchema.safeParse(formData.get('question') ?? '');
-  if (!parsedQuestion.success) {
-    return {
-      ...EMPTY_DIET,
-      goal,
-      error: `That question is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`,
-    };
-  }
-
-  const today = localDateFor(user.timezone);
-  const [history, xp] = await Promise.all([loadHistory(db), loadXpSummary(db, today)]);
-
-  /*
-   * The session count comes from `coachFacts`, which the chat on this same page
-   * already computes — ADR 0024 §4. A second count here would be a second
-   * definition of one number, and `src/chat/facts.ts` says why its window is 28
-   * days: it matches what the Profile tab reports, so the two cannot disagree.
-   */
-  const facts = coachFacts({
-    today,
-    workouts: history.workouts,
-    sets: history.sets,
-    exerciseNames: new Map([...history.exercises].map(([id, e]) => [id, e.name])),
-    lifetimeXp: xp.lifetime,
-  });
-
-  // INVARIANT: every figure is produced here, before a model is involved.
-  const result = computeEnergy({
-    today,
-    bodyweightKg: user.bodyweightKg,
-    heightCm: user.heightCm,
-    birthDate: user.birthDate,
-    sex: user.sex,
-    sessionsLast28Days: facts.sessions_last_28_days,
-    goal,
-  });
-
-  // A refusal is rendered by the panel in its own words. Nothing is sent to a
-  // model: there is no target to explain, and asking one to comment on a
-  // missing biometric would be paying for a sentence the app can write.
-  if (result.kind !== 'ok') return { ...EMPTY_DIET, goal, result };
-
-  try {
-    const explanation = await explainTarget(user.id, result, parsedQuestion.data, {
-      call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
-    });
-
-    return {
-      result,
-      summary: explanation.summary,
-      caveat: explanation.caveat,
-      goal,
-      error: null,
-    };
-  } catch (cause) {
-    /*
-     * The figures survive the failure, and that is the point of computing them
-     * first: the target renders whether or not a model could be reached.
      *
-     * The same two errors are worth showing verbatim as in `sendChatMessage`,
-     * and everything else is generic for the reason recorded there.
+     * The FIGURES SURVIVE every branch below, and that is the point of computing
+     * them first: the target renders whether or not a model could be reached.
      */
     if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
-      return { result, summary: null, caveat: null, goal, error: cause.message };
+      return { turns: trim(withUser), result, goal, ...ANSWERLESS, error: cause.message };
     }
 
     /*
      * The NAME and a bounded message, never the object.
      *
-     * FOUND IN REVIEW, and it is the same lens as the settings fix in PR 2 one
-     * hop out: `LlmCallFailedError` carries `attempts: LlmCallInsert[]`, and
-     * Node prints an Error's own enumerable properties after the stack — so
-     * logging `cause` wrote the user's auth UUID into the server log once per
-     * attempt. The message itself embeds the upstream body on an HTTP error,
-     * and providers commonly echo the request back, which here means the user's
-     * question — free text this feature's own adversarial list shows can be a
-     * health disclosure.
+     * FOUND IN REVIEW, at three sites in turn. `LlmCallFailedError` declares
+     * `attempts: LlmCallInsert[]`, an enumerable own property Node prints after
+     * the stack, and every one of those rows carries `user_id`. Logging `cause`
+     * wrote the user's auth UUID into the server log up to three times per
+     * failure, plus up to 500 characters of upstream body — which providers
+     * commonly fill with the request they rejected, and which here means free
+     * text this feature's own adversarial list shows can be a health disclosure.
      */
     console.error(
-      'diet advisor failed',
+      'coach box failed',
       cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
     );
     return {
+      turns: trim(withUser),
       result,
-      summary: null,
-      caveat: null,
       goal,
-      error: 'The coach could not put that into words. The figures above are still yours.',
-    };
-  }
-}
-
-/**
- * One supplement question, answered out of the evidence table — ADR 0023,
- * `docs/PRD.md` §5.7.
- *
- * INVARIANT: the answer is a ROW, never prose about a row. The model returns a
- *            slug from an allowlist built out of the rows it was shown; this
- *            action hands back the row object itself, and the panel renders its
- *            own columns. There is no model-authored string anywhere in the
- *            result.
- *
- * INVARIANT: the rows come from `loadEvidence`, which is RLS-scoped and
- *            filtered to shared rows — CLAUDE.md #10. Nothing is fetched by a
- *            string the model produced.
- */
-export async function askAboutSupplement(
-  _previous: SupplementState,
-  formData: FormData
-): Promise<SupplementState> {
-  const db = await createServerDb();
-  const user = await currentUser(db);
-  if (!user) redirect('/sign-in');
-
-  const raw = formData.get('question') ?? '';
-  const parsed = dietQuestionSchema.safeParse(raw);
-  if (!parsed.success) {
-    // Two failures, two sentences. A File or a repeated field fails on TYPE, and
-    // telling that user their question was too long is simply false.
-    return {
-      ...EMPTY_SUPPLEMENT,
-      error:
-        typeof raw === 'string'
-          ? `That is longer than the ${MAX_DIET_QUESTION_CHARS} characters this box reads.`
-          : 'That did not arrive as text. Type a question into the box.',
-    };
-  }
-
-  const question = parsed.data;
-  /*
-   * Nothing asked, nothing spent. The diet advisor has no equivalent because a
-   * bare submit there is still a meaningful request; here it is an empty string
-   * and a metered call would be paying for nothing.
-   */
-  if (question === null) return EMPTY_SUPPLEMENT;
-
-  try {
-    /*
-     * Inside the try, deliberately. `loadEvidence` throws with the raw Postgres
-     * message, and an escaped rejection bypasses the generic error state the
-     * rest of this action is careful to build — the class `sendChatMessage`'s
-     * own comment is about.
-     */
-    const { rows } = await loadEvidence(db);
-
-    const answer = await lookUpSupplement(user.id, rows, question, {
-      call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
-    });
-
-    return {
-      row: answer.row,
-      message: answer.message,
-      error: null,
-      asked: true,
-    };
-  } catch (cause) {
-    // The name and a bounded message, never the object — see `askDietAdvisor`
-    // for what an unbounded one puts in the log.
-    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
-      return { ...EMPTY_SUPPLEMENT, asked: true, error: cause.message };
-    }
-
-    console.error(
-      'supplement lookup failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
-    return {
-      ...EMPTY_SUPPLEMENT,
-      asked: true,
-      error: 'That lookup did not work. The Supplements page lists every row in the table.',
+      ...ANSWERLESS,
+      error: 'The coach could not answer that one. The figures above are still yours.',
     };
   }
 }
@@ -417,7 +321,7 @@ export async function deliverForPersona(
       error: null,
     };
   } catch (cause) {
-    // The same allowlist `sendChatMessage` uses, and for the same reason —
+    // The same allowlist `askTheCoach` uses, and for the same reason —
     // this one was returning `cause.message` verbatim, which reaches the
     // browser as a raw Postgres error, or as the first 500 characters of an
     // upstream provider response body. FOUND IN REVIEW, 2026-09-07.
@@ -425,7 +329,7 @@ export async function deliverForPersona(
       return { ...EMPTY_DELIVERY, personaSlug: slug, error: cause.message };
     }
 
-    // Name and bounded message only — see `sendChatMessage` for what the object
+    // Name and bounded message only — see `askTheCoach` for what the object
     // carries. This was the third site with the same leak.
     console.error(
       'persona delivery failed',
@@ -476,12 +380,12 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
     return { ok: true, audio: spoken.audio, contentType: spoken.contentType };
   } catch (cause) {
     // Refusals the card can explain are named; everything else is generic,
-    // for the reason `sendChatMessage` gives — src/speech/refusal.ts.
+    // for the reason `askTheCoach` gives — src/speech/refusal.ts.
     const reason = refusalFor(cause);
 
     if (reason === 'failed') {
       // Name and bounded message only — `LlmCallFailedError` carries every
-      // ledger row, and every row carries the user's id. See `sendChatMessage`.
+      // ledger row, and every row carries the user's id. See `askTheCoach`.
       console.error(
         'coach voice failed',
         cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'

@@ -337,9 +337,12 @@ Each is self-contained. Cut any of them without breaking anything above.
   and code renders every number. [ADR 0024](adr/0024-diet-advisor.md),
   [`specs/diet.md`](specs/diet.md), and the Outcome in
   [`plans/phase-6.md`](plans/phase-6.md). **Retrieval-only supplement answers
-  shipped with it**, as that file's PR 5: the model's whole output is a slug
-  from an allowlist built out of the rows it was shown, so the answer is the
-  row's own words and there is no paraphrase to soften a D-graded claim.
+  shipped with it**, as that file's PR 5: the model's output on that route is a
+  slug from an allowlist built out of the rows it was shown, so the answer is
+  the row's own words and there is no paraphrase to soften a D-graded claim.
+  _Since rework PR 8a the schema also has a `reply` field the other routes need,
+  discarded unread on this one — a procedural guarantee where it was structural,
+  recorded in [ADR 0023](adr/0023-evidence-rows.md)'s 2026-09-12 amendment._
 - ~~**Leaderboard**~~ — **built early, in phase 5.** Pulled forward because
   ADR 0013 gave Hub the job of being the tab about other people, and a tab that
   owns nothing is the fault ADR 0012 was written to fix. The conditions this
@@ -365,9 +368,12 @@ Each is self-contained. Cut any of them without breaking anything above.
   removed or done, and the point of writing this line is that it is neither._
 - Adversarial suite: no prompt, persona, or user framing moves the calorie
   floor. Every attempt blocked and logged. — **met**, phase 6 PR 4:
-  `src/diet/advice.test.ts` for blocked, `tests/db/diet-ledger.test.ts` for
+  `src/chat/routing.test.ts` for blocked, `tests/db/diet-ledger.test.ts` for
   logged. What it does not cover, including that no live model has ever been
   called, is recorded in [`plans/phase-6.md`](plans/phase-6.md)'s Outcome.
+  _The suite was `src/diet/advice.test.ts` until rework PR 8a merged the diet
+  stage into the coach box; its sixteen-case attack matrix moved with it, and
+  the stage every route now logs under is `chat`._
 - A query as user A against the leaderboard view returns user B's display name
   and XP and **nothing else** — no email, no user_id, no set history. The RLS
   coverage test in `tests/db` gains a case for the view, not an exemption. —

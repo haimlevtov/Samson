@@ -259,3 +259,80 @@ The constants introduced here — the 1,200 floor, the 6,000 ceiling, the −20%
 floor marked **load-bearing**. That table already carries the tonnage, e1RM and
 ACWR constants, and this is the same kind of choice: a number nobody was asked
 about, which the product now behaves as though somebody had chosen.
+
+---
+
+## Amendment, 2026-09-12 — the diet answer moved into the one box
+
+**Status:** accepted, rework plan PR 8a —
+[ADR 0015 §6](0015-coach-chat.md#amendment-2026-09-12--6-one-box-three-answers).
+
+`explainTarget` and `src/diet/advice.ts` are gone. A diet question is now one
+route of the coach box, answered by the same call that answers a training or a
+supplement question. **Three statements above are no longer true, and saying so
+is the point of this amendment** — ADR 0015 §6 claims no guarantee was relaxed,
+which is true of the guards and not of the payload.
+
+### What is unchanged, and is what the guarantees rested on
+
+- **The target is still computed, clamped and rendered by code.**
+  `computeEnergy` runs before any model, on every submission, and the model is
+  handed `dietFacts` — categories, no figures. CLAUDE.md #6 holds structurally.
+- **The allowed set on this route is still EMPTY**, and the check is still
+  `/\p{N}/u` rather than `findUnknownNumbers(new Set(), …)`. §2's note on why
+  those are not equivalent is load-bearing and moved with the code.
+- **No biometric crosses the wire.** `CoachFacts` carries no weight, height,
+  birth date or sex, and there is no path from Settings into this payload.
+
+### What changed, stated plainly
+
+1. **§1's "the payload carries no numbers at all. Four fields, and no fifth" is
+   now false.** A diet answer is generated from a payload that also carries
+   `factsBlock` — tonnage, heaviest lifts, adherence, ACWR, XP, dates — and the
+   supplement candidates, and up to eight fenced transcript turns. All three are
+   prepared before the route is known, which is what buys the single call.
+2. **§5's risk row must be re-read.** "The reply discloses no body metric —
+   guaranteed only while the payload carries no numbers… widening the payload
+   silently ends it." The payload was widened, so the correct statement now is:
+   **guaranteed while the payload carries no BIOMETRIC**, which it still does
+   not, and the empty allowed set is what remains structural. Word-form
+   disclosure of a TRAINING figure on the diet route is newly possible — "you
+   moved more than last week" — and that is a training fact the user can already
+   read on their own tabs.
+3. **There is a transcript now, and there was not before.** §4 said "this stage
+   answers one question about one figure and keeps nothing, so that channel does
+   not exist to be attacked". It exists. ADR 0015 §2's fencing applies to it —
+   every turn fenced, the coach's own included, no `assistant` role — which is
+   the mitigation that channel has always had on the chat.
+4. **The duplication this ADR called deliberate is gone.** It argued that
+   keeping the constants and the correction path separate from `src/chat/reply.ts`
+   put "the chat's user-echo rule one refactor away from the diet stage". They
+   are one file now. What replaces the separation is the **per-route guard
+   selection** in `askCoach`: the route names the guard, a retry that changes
+   route is checked by the new route's guard, and `routing.test.ts` asserts both
+   directions — including the dangerous one, a `training` answer re-routed to
+   `diet` having its fact-quoted figure refused.
+5. **The digit check reads one named field rather than every string field.**
+   §2's "derived from the parsed object so the schema is the only place the field
+   list exists" no longer describes it: the schema's other fields are an enum and
+   an allowlisted slug, so `reply` is the only prose there is. **AI-NOTE:** a
+   second prose field added to `coachReplySchema` would be unguarded, and adding
+   one means restoring the derived form.
+
+### The floor paragraph moved, and nearly did not
+
+`DIET_SYSTEM` carried "THE FLOOR is not negotiable and is not yours" and
+"INJURY, ILLNESS, PREGNANCY, DISORDERED EATING", and `CHAT_SYSTEM` carried only
+"INJURY AND PAIN". Merging the stages dropped both — **found in review, not by a
+test**, because §5's own residual ("eat a bit less than that" needs no digits)
+is exactly what neither the digit guard nor the schema can see. Both paragraphs
+are in `CHAT_SYSTEM` now, under the diet route, and `src/chat/prompts.test.ts`
+asserts them. They are a mitigation and not a control, as every sentence in a
+prompt is; the control is still that the printed figure is code's.
+
+### Evidence
+
+`docs/PLAN.md`'s phase 6 criterion — "no prompt, persona, or user framing moves
+the calorie floor" — was evidenced by `src/diet/advice.test.ts`. That file is
+deleted, and its sixteen-case attack matrix is ported onto the diet route in
+`src/chat/routing.test.ts`, with the payload property beside it.

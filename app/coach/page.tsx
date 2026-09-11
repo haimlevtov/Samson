@@ -8,9 +8,7 @@ import { FieldHint } from '@/src/ui/FieldHint';
 import { planSessionOptions } from '@/src/templates/plan';
 import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole } from './CoachConsole';
-import { ChatPanel } from './ChatPanel';
-import { DietPanel } from './DietPanel';
-import { SupplementPanel } from './SupplementPanel';
+import { CoachBox } from './CoachBox';
 
 export const dynamic = 'force-dynamic';
 
@@ -178,22 +176,19 @@ export default async function CoachPage() {
       )}
 
       {/*
-       * ADR 0024. Below the plan and above the chat: it is a figure like the
-       * plan is a figure, and the chat is the open-ended thing that belongs
-       * last. It renders whether or not a plan exists — the target is computed
-       * from Settings and the training log, not from a block.
+       * One box — rework PR 8a, ADR 0015 §6. It replaces the chat panel, the
+       * diet panel's question and the supplement card: the user asks, and the
+       * route decides which of the three answers they get.
+       *
+       * It renders whether or not a plan exists. The calorie target is computed
+       * from Settings and the training log rather than from a block, and a
+       * question about training is worth answering for somebody who has not been
+       * given a plan yet — arguably more so.
+       *
+       * ADR 0023's table is still linked from the header for anyone who would
+       * rather read it than ask.
        */}
-      <h2 className="section">Eating</h2>
-      <DietPanel />
-      {/*
-       * ADR 0023's table, asked rather than browsed — docs/PRD.md §5.7. Beside
-       * the calorie target because they are the same question from two sides,
-       * and the Supplements link in the header still goes to the whole table for
-       * anyone who would rather read it than ask.
-       */}
-      <SupplementPanel />
-
-      <ChatPanel />
+      <CoachBox />
     </>
   );
 }

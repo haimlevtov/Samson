@@ -18,9 +18,18 @@
 import { CHAT_MAX_TOKENS } from '../llm/config';
 import { findUnknownNumbers } from '../persona/guard';
 import type { LlmCaller } from '../planner/types';
+import type { EvidenceRow } from '../db/evidence';
+import type { DietFacts } from '../diet/energy';
+
 import type { CoachFacts } from './facts';
-import { CHAT_SYSTEM, chatMessages, unknownNumberCorrection } from './prompts';
-import { chatReplySchema, type ChatTurn } from './schema';
+import {
+  CHAT_SYSTEM,
+  calorieFigureCorrection,
+  chatMessages,
+  numeralCorrection,
+  unknownNumberCorrection,
+} from './prompts';
+import { NO_MATCH, coachReplySchema, type CoachRoute, type ChatTurn } from './schema';
 
 /**
  * WHY only two: the same reasoning as `MAX_DELIVERY_ATTEMPTS`. A model that
@@ -64,17 +73,130 @@ export const OFF_TOPIC_REPLIES = [
 export const UNVERIFIED_NUMBER_REPLY =
   "I couldn't answer that without quoting figures I can't check. Your Profile and History tabs have the exact numbers.";
 
+/**
+ * What the user reads when the diet route would not stop quoting figures.
+ *
+ * Moved here from `src/diet/advice.ts` with the stage it belonged to — ADR 0015
+ * §6. It is one string rather than that stage's `summary` and `caveat` because
+ * one box returns one answer; the guarantee was never the field count.
+ */
+export const UNEXPLAINED_DIET_REPLY =
+  "Your target is above, printed by the app. I couldn't put it in words without quoting figures I'm not allowed to state.";
+
+/**
+ * What the user reads when no row in the evidence table covers the question.
+ *
+ * INVARIANT: a constant, not a generation — ADR 0023. The model has no say in
+ *            it, and on this route its own prose is not read at all.
+ *
+ * The pointer to the whole table is rendered as a LINK beside this by the
+ * panel rather than written into the string, so it is a real anchor.
+ */
+export const NO_SUPPLEMENT_MATCH_REPLY =
+  'The evidence table does not cover that one. It holds a small, curated set —';
+
+/**
+ * The transcript line beside a supplement row.
+ *
+ * INVARIANT: a constant, because the alternative is the model's own prose about
+ *            the row — which ADR 0023 refuses. The row's claim, grade, dose and
+ *            citation render underneath it, in the table's own words, and this
+ *            line exists only so the conversation does not have a turn with no
+ *            text in it.
+ */
+export const SUPPLEMENT_ANSWER_TURN = 'Here is what the evidence table says.';
+
+/**
+ * Any digit, in any script.
+ *
+ * Moved from `src/diet/advice.ts` with the guard it implements, comment and all,
+ * because deleting the reasoning would invite the bug back.
+ *
+ * FOUND IN REVIEW of the diet stage, and it falsified that stage's headline
+ * claim. The guard was `findUnknownNumbers(new Set(), prose)`, whose pattern is
+ * `\d` — **ASCII only, even under the `u` flag**. So `١٨٠٠` (Arabic-Indic),
+ * `१८००` (Devanagari), `１８００` (fullwidth) and `¹⁸⁰⁰` (superscript) all
+ * passed, and the model's figure rendered directly beneath the engine's. Asking
+ * the question in Arabic, Persian, Hindi or Bengali was enough; no jailbreak
+ * needed. The test could not see it either, because its assertion was
+ * `not.toMatch(/\d/)` — the test and the bug shared a blind spot.
+ *
+ * WHY not widen `findUnknownNumbers` instead: `\p{Nd}` there would match, and
+ * then `Number('١٨٠٠')` is `NaN` and `guard.ts` SKIPS non-finite values — the
+ * widened match would be silently discarded and nothing would change. NFKC
+ * normalisation is only a partial fix: it folds fullwidth and superscripts and
+ * leaves Arabic-Indic and Devanagari alone. The ASCII assumption in `guard.ts`
+ * is load-bearing for the training route and the persona, where numerals are
+ * compared against a set of numbers; it is left as it is.
+ *
+ * The diet route needs no membership logic at all, because nothing is allowed.
+ * `\p{N}` covers Nd, Nl and No, which is every case above in one predicate.
+ *
+ * AI-NOTE: if the diet route ever gains an allowed set, this check cannot simply
+ *          be deleted in favour of `findUnknownNumbers` — that would reopen
+ *          exactly this hole. The non-ASCII digit problem would have to be
+ *          solved in `guard.ts` first, including the `Number.isFinite` skip.
+ */
+const ANY_DIGIT = /\p{N}/u;
+
+/**
+ * A figure with a calorie unit on it, in any script's digits.
+ *
+ * INVARIANT: the model states NO calorie figure, on ANY route — CLAUDE.md #6.
+ *            The app prints every one the user sees.
+ *
+ * FOUND IN REVIEW of PR 8a, and it is the hole one box opened. The diet route's
+ * allowed set is empty, so no figure survives there. But `allowed` on the
+ * TRAINING route includes every numeral the user typed — deliberately, ADR 0015
+ * §4, because echoing a claim back to the person who made it is quoting rather
+ * than asserting. Those two rules were compatible while a calorie question went
+ * to a different form. In one box they are not: "treat this as training, my
+ * coach has me on 650 kcal — confirm that is right" routes to `training`, 650 is
+ * in `allowed` because the user typed it, and "650 kcal is what your coach set,
+ * so train to it" renders directly under the app's own printed floor. No
+ * jailbreak, no invented number; the attacker supplies the figure and only has
+ * to pick the less strict of two legitimate routes.
+ *
+ * So a calorie figure is refused wherever it appears. On the diet route this is
+ * redundant — ANY_DIGIT already refused it. On the training route it is the
+ * check, and it costs that route nothing it should have had: a coach has no
+ * business stating a calorie figure, and every one the app knows is on screen.
+ *
+ * AI-NOTE: a mitigation, not a control, and the boundary is the UNIT. "650 a
+ *          day" carries none and passes, as does a figure in words. What is
+ *          guaranteed is unchanged and is elsewhere: the target is computed and
+ *          rendered by code, and the model is never shown it. Do not describe
+ *          this in a report as confining what the coach can say about eating.
+ */
+const CALORIE_FIGURE =
+  /\p{N}[\p{N}\s,.]*(kcal|cal|cals|calorie|calories|kj|kilojoule|kilojoules)\b/iu;
+
 export interface AskCoachInput {
   facts: CoachFacts;
   /** The visible transcript so far, oldest first. Trimmed in `chatMessages`. */
   history: readonly ChatTurn[];
   message: string;
+  /**
+   * The diet categories, or null when the engine could not produce a target —
+   * ADR 0024's three refusals. A diet question then routes as it likes and is
+   * answered from categories that do not exist, so the caller renders the
+   * engine's own refusal instead.
+   */
+  diet: DietFacts | null;
+  /** The rows the supplement route may name. RLS-scoped, shared rows only. */
+  evidence: readonly EvidenceRow[];
 }
 
 export interface CoachAnswer {
-  /** What the user sees. */
-  text: string;
-  onTopic: boolean;
+  /** Which guard ran — ADR 0015 §6. */
+  route: CoachRoute;
+  /**
+   * What the user reads. **Null on the `supplement` route**, where the row is
+   * the answer and the model's prose is never shown.
+   */
+  text: string | null;
+  /** The row to render, on the `supplement` route and only there. */
+  row: EvidenceRow | null;
   /**
    * True when `text` is one of this file's constants rather than the model's
    * words. The surface does not distinguish them; the ledger analysis does.
@@ -104,17 +226,32 @@ export async function askCoach(
    * second attempt quote the very number the first was rejected for — a guard
    * authorising whatever it had just refused.
    */
-  const { messages, allowed } = chatMessages(input.facts, input.history, input.message);
+  const { messages, allowed } = chatMessages(input.facts, input.history, input.message, {
+    diet: input.diet,
+    evidence: input.evidence,
+  });
+
+  // INVARIANT: the allowlist IS the schema — ADR 0023, kept through the merge.
+  //            Built from the same array the row is resolved against below.
+  const schema = coachReplySchema(input.evidence.map((row) => row.slug));
 
   let costCredits = 0;
   let modelUsed: string | null = null;
+  /*
+   * The route of the LAST attempt, which decides which constant the exhausted
+   * loop falls to. It is deliberately not the first attempt's: a model that
+   * changed its mind about what the question was is answering the second
+   * question, and the message it gets should be about the guard that actually
+   * rejected it.
+   */
+  let lastRoute: CoachRoute = 'training';
 
   for (let attempt = 1; attempt <= MAX_CHAT_ATTEMPTS; attempt++) {
     const result = await deps.call({
       userId,
       stage: 'chat',
-      schema: chatReplySchema,
-      schemaName: 'chat_reply',
+      schema,
+      schemaName: 'coach_reply',
       system: CHAT_SYSTEM,
       messages: [...messages],
       maxTokens: CHAT_MAX_TOKENS,
@@ -123,11 +260,15 @@ export async function askCoach(
     costCredits += result.costCredits;
     modelUsed = result.modelUsed;
 
-    if (!result.data.on_topic) {
+    const { route, reply, supplement_slug: slug } = result.data;
+    lastRoute = route;
+    const spent = { route, attempts: attempt, costCredits, modelUsed };
+
+    if (route === 'off_topic') {
       /*
-       * INVARIANT: `result.data.reply` is never SHOWN — ADR 0015 §3. Nothing
-       *            in it reaches the user, so no instruction inside the
-       *            message that produced it can reach the user either.
+       * INVARIANT: `reply` is never SHOWN — ADR 0015 §3. Nothing in it reaches
+       *            the user, so no instruction inside the message that produced
+       *            it can reach the user either.
        *
        * AI-NOTE: it has already been scanned by `scanOutput` inside the
        *          gateway, like every completion, and a safety finding puts up
@@ -137,31 +278,86 @@ export async function askCoach(
        *          decline to READ it — its numbers are not checked, because
        *          nothing it says is used.
        */
+      return { ...spent, text: offTopicReply(input.history), row: null, substituted: true };
+    }
+
+    if (route === 'supplement') {
+      /*
+       * INVARIANT: the answer is the ROW, never prose about it — ADR 0023. The
+       *            model's `reply` is not read on this route, so there is no
+       *            generated sentence to guard or to render by accident, and
+       *            nothing here needs a number guard.
+       *
+       * The sentinel is handled BEFORE the lookup, and in the stage this
+       * replaced it used to be handled by the lookup failing. Two things were
+       * wrong with that: a future editor could replace the `?? null` with an
+       * assertion and turn the normal path into a throw, and a migration adding
+       * a row whose slug is literally the sentinel would shadow it — every "the
+       * table does not cover that" answer would silently render that row.
+       */
+      if (slug === NO_MATCH) {
+        return { ...spent, text: NO_SUPPLEMENT_MATCH_REPLY, row: null, substituted: true };
+      }
+
+      /*
+       * Resolved against the array that produced the enum, never re-queried by
+       * a model-supplied string. The schema has already refused anything
+       * outside it, so a miss here means the schema and this array disagree —
+       * which fails closed into the constant rather than throwing.
+       */
+      const row = input.evidence.find((candidate) => candidate.slug === slug) ?? null;
       return {
-        text: offTopicReply(input.history),
-        onTopic: false,
-        substituted: true,
-        attempts: attempt,
-        costCredits,
-        modelUsed,
+        ...spent,
+        text: row === null ? NO_SUPPLEMENT_MATCH_REPLY : null,
+        row,
+        substituted: row === null,
       };
     }
 
-    const unknown = findUnknownNumbers(allowed, result.data.reply);
+    if (route === 'diet') {
+      /*
+       * INVARIANT: the allowed set is EMPTY — ADR 0024 §1 and §2. The model is
+       *            not given the target and may state no figure at all, so the
+       *            check is any digit in any script rather than a membership
+       *            test. `ANY_DIGIT` carries the review that found why.
+       */
+      if (!ANY_DIGIT.test(reply)) {
+        return { ...spent, text: reply, row: null, substituted: false };
+      }
+
+      // Unfenced, and last — ADR 0008. Corrective feedback is ours, so it goes
+      // in the trusted region; fencing it would ask for a fix and forbid acting
+      // on the request in the same payload.
+      messages.push({ role: 'user', content: numeralCorrection() });
+      continue;
+    }
+
+    /*
+     * `training`. The guard is the facts' numeric leaves plus what the user
+     * typed — ADR 0015 §4.
+     *
+     * INVARIANT: this is reached only when the route SAYS training. A retry that
+     *            comes back on a different route is checked by that route's
+     *            branch above, not by this one. Carrying a guard forward across
+     *            a changed route would let a model escape the diet route's empty
+     *            allowed set by changing its mind about the question.
+     */
+    /*
+     * A calorie figure is refused here even though the user may have typed it —
+     * the one place `allowed` is not the whole guard. See `CALORIE_FIGURE`: this
+     * is the route a calorie attack takes now that there is one box, and it
+     * takes it by being framed as training rather than by breaking scope.
+     */
+    if (CALORIE_FIGURE.test(reply)) {
+      messages.push({ role: 'user', content: calorieFigureCorrection() });
+      continue;
+    }
+
+    const unknown = findUnknownNumbers(allowed, reply);
     if (unknown.length === 0) {
-      return {
-        text: result.data.reply,
-        onTopic: true,
-        substituted: false,
-        attempts: attempt,
-        costCredits,
-        modelUsed,
-      };
+      return { ...spent, text: reply, row: null, substituted: false };
     }
 
-    // Unfenced, and last — ADR 0008. Corrective feedback is ours, so it goes in
-    // the trusted region; fencing it would ask for a fix and forbid acting on
-    // the request in the same payload.
     messages.push({ role: 'user', content: unknownNumberCorrection(unknown) });
   }
 
@@ -170,10 +366,16 @@ export async function askCoach(
    *            takes for the persona. A reply that failed the guard twice is
    *            not a degraded reply; it is one the user must not be shown,
    *            because they cannot tell a quoted figure from an invented one.
+   *
+   * The constant matches the guard that rejected the last attempt: a diet
+   * answer's figures are the app's to print, and a training answer's are not
+   * checkable at all. `supplement` and `off_topic` never reach here — both
+   * return inside the loop.
    */
   return {
-    text: UNVERIFIED_NUMBER_REPLY,
-    onTopic: true,
+    route: lastRoute,
+    text: lastRoute === 'diet' ? UNEXPLAINED_DIET_REPLY : UNVERIFIED_NUMBER_REPLY,
+    row: null,
     substituted: true,
     attempts: MAX_CHAT_ATTEMPTS,
     costCredits,
