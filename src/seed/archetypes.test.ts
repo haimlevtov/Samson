@@ -23,11 +23,16 @@ import {
 import {
   ARCHETYPES,
   generateHistory,
+  outOfGrant,
+  templatesFor,
+  toTemplateDraft,
   type Archetype,
+  type EquipmentOf,
   type GeneratedWorkout,
   type ProgrammeEntry,
 } from './archetypes';
 import { mulberry32 } from './rng';
+import { templateDraftSchema } from '../templates/schema';
 import { adherence } from '../metrics/adherence';
 import { bestE1rm } from '../metrics/e1rm';
 import { addDays, daysBetween, startOfWeek } from '../metrics/dates';
@@ -603,5 +608,266 @@ describe('inconsistent', () => {
     const sloppy = weeklyE1rm(toSets(generate(byKey('inconsistent'))), lift);
     const diligent = weeklyE1rm(toSets(generate(byKey('beginner'))), lift);
     expect(sloppy.at(-1)!.e1rm).toBeLessThan(diligent.at(-1)!.e1rm);
+  });
+});
+
+/**
+ * The Workout tab's templates — rework plan PR 5.
+ *
+ * The plan's acceptance names the equipment ceiling as the case that matters: a
+ * template is something the user taps Start on, so a prescription the home-gym
+ * lifter cannot load — or a lift his equipment cannot do — is a session that
+ * fails at the first set.
+ */
+describe('the templates each archetype is seeded with', () => {
+  const EQUIPMENT_OF: EquipmentOf = new Map(
+    (
+      JSON.parse(readFileSync(resolve(process.cwd(), 'data/exercises.snapshot.json'), 'utf8')) as {
+        exercises: { slug: string; equipment: string }[];
+      }
+    ).exercises.map((e) => [e.slug, e.equipment])
+  );
+
+  const build = (archetype: Archetype, history: GeneratedWorkout[] = generate(archetype)) =>
+    templatesFor(archetype, history, EQUIPMENT_OF);
+
+  /** The rotation day a template belongs to, from its name: "Day A" is 0. */
+  const dayOf = (name: string) => name.charCodeAt(name.length - 1) - 65;
+
+  it('gives every archetype one template per session of its rotation', () => {
+    for (const archetype of ARCHETYPES) {
+      expect(
+        build(archetype).map((t) => t.name),
+        archetype.key
+      ).toEqual(['Day A', 'Day B', 'Day C']);
+    }
+  });
+
+  it('prescribes only lifts the archetype’s equipment allows', () => {
+    /*
+     * The app's own rule — a lift is offered only if its catalogue equipment
+     * tag is one the user owns (`availableExercises`, CLAUDE.md #5).
+     *
+     * FOUND IN REVIEW: this test used to check "is in the programme", with a
+     * comment saying the history already respects the equipment. It does not:
+     * the home-gym programme carries a machine-tagged lift.
+     */
+    for (const archetype of ARCHETYPES) {
+      const granted = new Set(archetype.equipment.map((g) => g.slug));
+      for (const item of build(archetype).flatMap((t) => t.items)) {
+        const tag = EQUIPMENT_OF.get(item.exerciseSlug);
+        expect(granted, `${archetype.key}: ${item.exerciseSlug} needs ${tag}`).toContain(tag);
+      }
+    }
+  });
+
+  it('knows the one programme lift outside its grant, and leaves it out', () => {
+    /*
+     * Pinned rather than merely tolerated. Fixing `chair-squat` — the catalogue
+     * tag, the legs tree's root, or the programme — changes this expectation on
+     * purpose; a NEW mismatch fails here instead of vanishing from a template
+     * in silence.
+     */
+    expect(Object.fromEntries(ARCHETYPES.map((a) => [a.key, outOfGrant(a, EQUIPMENT_OF)]))).toEqual(
+      {
+        beginner: [],
+        plateaued: [],
+        returning: [],
+        'home-gym': ['chair-squat'],
+        inconsistent: [],
+      }
+    );
+    expect(
+      build(byKey('home-gym')).flatMap((t) => t.items.map((i) => i.exerciseSlug))
+    ).not.toContain('chair-squat');
+  });
+
+  it('copies each session’s lifts, sets and reps from the programme, never from the log', () => {
+    /*
+     * ADR 0010's case, and the reason templates come from the programme at all.
+     * FOUND IN REVIEW: swapping sets and reps, prescribing one set, and dropping
+     * a rep from every lift — the "1×5, 2×4" drift itself — all passed before
+     * this test existed.
+     */
+    for (const archetype of ARCHETYPES) {
+      const excluded = new Set(outOfGrant(archetype, EQUIPMENT_OF));
+      for (const template of build(archetype)) {
+        const day = dayOf(template.name);
+        expect(
+          template.items.map((i) => [i.exerciseSlug, i.setCount, i.reps]),
+          `${archetype.key} ${template.name}`
+        ).toEqual(
+          archetype.programme
+            .filter((e) => e.day === day && !excluded.has(e.exerciseSlug))
+            .map((e) => [e.exerciseSlug, e.sets, e.reps])
+        );
+      }
+    }
+  });
+
+  it('prescribes the heaviest set of the most recent session, not the heaviest ever', () => {
+    /*
+     * Hand-built so that the two differ: a 100 kg session, then a lighter week.
+     * FOUND IN REVIEW: "above the starting load and at most the heaviest ever"
+     * was a range, and "heaviest ever" sat inside it. The older, heavier session
+     * comes FIRST in the array, so dropping the date sort fails here too.
+     */
+    const squat = (weightKg: number, setIndex: number) => ({
+      exerciseSlug: 'barbell-full-squat',
+      weightKg,
+      reps: 5,
+      rpe: 8,
+      isWarmup: false,
+      restSeconds: 180,
+      setIndex,
+    });
+    const history: GeneratedWorkout[] = [
+      { localDate: '2026-08-06', status: 'completed', notes: null, sets: [squat(100, 0)] },
+      {
+        localDate: '2026-08-20',
+        status: 'completed',
+        notes: null,
+        sets: [squat(80, 0), squat(82.5, 1)],
+      },
+    ];
+    const prescribed = build(byKey('beginner'), history)
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'barbell-full-squat')!;
+
+    expect(prescribed.weightKg).toBe(82.5);
+  });
+
+  it('puts a generated lifter at their current load, above week one', () => {
+    // The same rule on real data: twelve weeks in, the beginner is past 60 kg.
+    const squat = build(byKey('beginner'))
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'barbell-full-squat')!;
+
+    expect(squat.weightKg).toBeGreaterThan(60);
+  });
+
+  it('never prescribes above the home-gym dumbbell ceiling', () => {
+    // THE case the plan names, on the seeded history. The clamp that makes it
+    // hold for any history is proved by the fallback test below.
+    const archetype = byKey('home-gym');
+    for (const item of build(archetype).flatMap((t) => t.items)) {
+      if (item.weightKg !== null) {
+        expect(item.weightKg, item.exerciseSlug).toBeLessThanOrEqual(archetype.loadCeilingKg!);
+      }
+    }
+  });
+
+  it('falls back to the programme load for a lift never logged, clamped to the ceiling', () => {
+    /*
+     * FOUND IN REVIEW: this branch was reached for most beginner lifts in the
+     * zero-load test and asserted for none of them, and the fallback was not
+     * capped at all.
+     */
+    const home = byKey('home-gym');
+    for (const item of build(home, []).flatMap((t) => t.items)) {
+      const entry = home.programme.find((e) => e.exerciseSlug === item.exerciseSlug)!;
+      expect(item.weightKg, item.exerciseSlug).toBe(entry.startingKg > 0 ? entry.startingKg : null);
+    }
+
+    // No shipped entry starts above the cap, so the clamp needs a synthetic one.
+    const heavier: Archetype = {
+      ...home,
+      programme: home.programme.map((e) =>
+        e.exerciseSlug === 'dumbbell-squat' ? { ...e, startingKg: 40 } : e
+      ),
+    };
+    const squat = build(heavier, [])
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'dumbbell-squat')!;
+    expect(squat.weightKg).toBe(30);
+  });
+
+  it('leaves every bodyweight lift without a load, rather than a load of zero', () => {
+    // Derived from the programme rather than listed, so a new bodyweight lift is
+    // covered without anyone adding its name here.
+    for (const archetype of ARCHETYPES) {
+      const bodyweight = new Set(
+        archetype.programme.filter((e) => e.startingKg === 0).map((e) => e.exerciseSlug)
+      );
+      for (const item of build(archetype).flatMap((t) => t.items)) {
+        if (bodyweight.has(item.exerciseSlug)) {
+          expect(item.weightKg, `${archetype.key}: ${item.exerciseSlug}`).toBeNull();
+        }
+      }
+    }
+  });
+
+  it('reads a logged load of zero as no load', () => {
+    /*
+     * FOUND BY BREAKING IT: the generator writes bodyweight sets as null, so
+     * dropping the zero filter changed nothing. Hand-built, since the generator
+     * never logs a 0. The authority is the templates migration's comment — a
+     * null weight "is not the same claim as a load of zero" — not the schema,
+     * which would accept 0.
+     */
+    const history: GeneratedWorkout[] = [
+      {
+        localDate: '2026-08-10',
+        status: 'completed',
+        notes: null,
+        sets: [
+          {
+            exerciseSlug: 'pullups',
+            weightKg: 0,
+            reps: 6,
+            rpe: 8,
+            isWarmup: false,
+            restSeconds: 90,
+            setIndex: 0,
+          },
+        ],
+      },
+    ];
+    const pullups = build(byKey('beginner'), history)
+      .flatMap((t) => t.items)
+      .find((i) => i.exerciseSlug === 'pullups')!;
+
+    expect(pullups.weightKg).toBeNull();
+  });
+
+  it('maps to a draft createTemplate accepts, through the mapping the seeder runs', () => {
+    /*
+     * `toTemplateDraft` is what scripts/seed.ts calls, so this parses the real
+     * mapping rather than a copy of it — FOUND IN REVIEW, the copy was all this
+     * test used to check.
+     */
+    const idOf = (slug: string) =>
+      `00000000-0000-4000-8000-${slug.length.toString(16).padStart(12, '0')}`;
+    for (const archetype of ARCHETYPES) {
+      for (const template of build(archetype)) {
+        expect(
+          () => templateDraftSchema.parse(toTemplateDraft(template, idOf)),
+          `${archetype.key} ${template.name}`
+        ).not.toThrow();
+      }
+    }
+
+    // And a slug the catalogue lacks fails loudly, rather than writing a hole.
+    const [first] = build(byKey('beginner'));
+    expect(() => templateDraftSchema.parse(toTemplateDraft(first!, () => undefined))).toThrow();
+  });
+
+  it('emits no template for a session its equipment leaves empty', () => {
+    /*
+     * FOUND BY BREAKING IT: dropping the empty-template filter turned nothing
+     * red, because no shipped rotation day loses every lift. createTemplate
+     * refuses an empty template, so without the filter the seed would fail at
+     * the write for an archetype whose whole session sits outside its grant.
+     */
+    const home = byKey('home-gym');
+    const machineOnlyDayC: Archetype = {
+      ...home,
+      programme: [
+        ...home.programme.filter((e) => e.day !== 2),
+        { exerciseSlug: 'chair-squat', sets: 3, reps: 12, startingKg: 0, incrementKg: 0, day: 2 },
+      ],
+    };
+
+    expect(build(machineOnlyDayC, []).map((t) => t.name)).toEqual(['Day A', 'Day B']);
   });
 });

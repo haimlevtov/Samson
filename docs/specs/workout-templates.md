@@ -25,14 +25,25 @@ is not duplicated here.
 A template has a **source**, and the value is a fact about provenance rather
 than a permission:
 
-| `source` | Written when                                                             |
-| -------- | ------------------------------------------------------------------------ |
-| `user`   | The trainee builds one by hand, or saves a session they have just logged |
-| `coach`  | A session from the newest accepted plan is imported                      |
+| `source` | Written when                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `user`   | The trainee builds one by hand, or saves a session they have just logged — or `npm run seed`, for the demo archetypes |
+| `coach`  | A session from the newest accepted plan is imported                                                                   |
 
 Both kinds are owned by the user, editable by the user, and deletable by the
 user. `source` exists so the UI can say where a template came from, and so
 "what did the coach actually give me" stays answerable after the user edits it.
+
+**The seeder writes `user` templates, and through the same door.** Each demo
+archetype gets one per session of its programme's rotation, built by
+`templatesFor` in `src/seed/archetypes.ts` and written by `createTemplate` as
+the signed-in archetype — so the Zod bounds in §2 and the compensating delete
+apply to demo data exactly as to a user's. They are `user` rather than `coach`
+because `coach` means imported from an accepted plan, and nothing seeded was.
+
+A programme lift the archetype's equipment does not allow is **left out** of its
+template (`outOfGrant`): the app's own equipment filter would never offer it, and
+a template is the thing a user taps Start on.
 
 ## 2. Data model
 

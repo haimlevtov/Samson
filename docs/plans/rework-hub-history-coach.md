@@ -16,7 +16,7 @@ because several of them touch the same surface.
 | 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
 | 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | planned                                                              |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)   |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | planned                                                              |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
@@ -247,6 +247,58 @@ breakpoint where they fit, and no labels below it — but start with three.
   open each seeded user's Profile and list what renders blank or as an em dash,
   then fill what should not be. This plan does not pre-judge the list.
 
+### What looking found, and what it decided — 2026-09-11
+
+**Profile shows nothing blank for any archetype.** Looked at by running the
+page's own metric functions — `adherence`, `currentStreak`, `acwr`,
+`tonnageByWeek`, `totalTonnage`, `exerciseBests` — over each archetype's
+generated history, on seven consecutive seed dates. Every tile populates. XP,
+level and badges come from the database rather than those functions, and CI's
+seed log has shown non-zero XP and badges for all five since phase 4. **This is
+not a browser pass**: `/profile` needs a session. It is the same data through
+the same code, which is the next best thing and is stated as exactly that.
+
+The biometrics are not on Profile at all — they are on `/settings` — and the
+seeder has filled them since phase 6 PR 2. So the premise that the profile
+"looks emptier than it is" does not survive measuring; what was empty for demo
+users is the **Workout tab**, which had no templates.
+
+**One real defect turned up and is not fixed here.** The "This week" tonnage
+tile reads `[...tonnageByWeek(...).entries()].at(-1)`, and `tonnageByWeek` only emits weeks
+that had sets — so for anyone who has not trained yet this week it prints last
+week's figure under this week's label. It never triggers on seeded data (zero
+of 35 archetype-days), which is why nobody has seen it; it bites real users. It
+is a metrics fix with its own test, not seed data, so it is its own task.
+
+**Templates are built from the programme, not from a logged session.** The app
+already has `templateFromSession()` — "save this as a template" — and reusing it
+would look like the one-definition choice. It is the wrong definition: it turns
+what was DONE into a template, and ADR 0010's load-bearing rule is that a
+prescription and a record are different things. `buildSets` drifts a rep off
+later sets, so a template saved from a session would prescribe "1×5, 2×4"
+because that is what happened. The programme is the archetype's prescription;
+a template is a prescription. Programme to template is the faithful mapping.
+
+- **One per rotation day, so three rather than "one or two".** The programme
+  rotates through three sessions, and a template per session is the literal
+  reading of "the barbell user gets its barbell days".
+- **Weight is the most recent working weight the archetype actually logged for
+  that lift.** A template prescribing `startingKg` would hand someone twelve
+  weeks in their week-one loads. Bodyweight lifts are `null`, which the schema
+  defines as no external load rather than zero.
+- **Rest is left unprescribed.** The programme never specifies one, and the
+  session grid falls back to its 120s default; inventing a figure the programme
+  does not contain is worse than defaulting.
+- **`source: 'user'`.** `coach` means imported from an accepted plan
+  (`docs/specs/workout-templates.md` §1), and nothing seeded was. _This first
+  said coach templates were "PR 7's surface" and seeding them "would pre-empt
+  the thing PR 7 builds" — wrong, found in review: PR 7's own section says the
+  import already ships, and PR 7 is one button._
+- **Written through `createTemplate` as the signed-in archetype**, the same
+  discipline as `award_session_xp` and `accept_challenge`: its Zod validation
+  and compensating delete are the app's, and a seeded row the app itself could
+  not have written is worth very little.
+
 ### Acceptance
 
 - `npm run seed` gives every archetype at least one template that starts a
@@ -322,9 +374,14 @@ control there, against the block already on screen, and reuse
 
 ### What is genuinely open, and both are small
 
-- **`tests/db` has no `workout_template*` coverage at all.** A grep over
-  `tests/db/*.ts` returns nothing. The insert's RLS has never been asserted, and
-  this PR is the natural place because it is the one adding a second caller.
+- **`tests/db` has no coverage of the template INSERT under RLS.** _This read
+  "no `workout_template*` coverage at all"; PR 5 added reads, in
+  `tests/db/seeded-templates.test.ts`._ The insert side is still unasserted,
+  and PR 5's security review showed the gap is real rather than hypothetical:
+  `workouts_own` and `workout_template_items_own` never check that a
+  `template_id` belongs to the user, and a foreign key is not subject to RLS.
+  The policy fix is split out as its own migration; the insert tests still
+  belong here, because this PR adds a second caller.
 - **There is no unique constraint on template name**, so importing the same
   session twice produces two identical rows. Decide: an error, a rename, or
   allowed. Currently it is allowed by accident rather than by decision.
@@ -713,3 +770,74 @@ bug the other misses — an axis reading the ends rather than the extremes. Kept
 **Not verified:** the chart on its real route. `/history/[id]` needs a session,
 so what was measured is the real component rendered to a page with the real
 stylesheet, not the page itself.
+
+### PR 5 — the demo users are furnished, 2026-09-11
+
+**Every demo user now opens a Workout tab with three templates**, one per
+session of their rotation. CI on the first push seeded them in 5s and ran
+`tests/db/seeded-templates.test.ts` green against the stored rows. That suite
+has not run locally, and against the hosted project it fails until hosted is
+re-seeded.
+
+**The Profile half turned out to be nothing**, measured rather than assumed: the
+page's own metric functions over every archetype on seven seed dates, all
+populated. Not a browser pass — `/profile` needs a session. One correction to
+the section above: `tonnageByWeek` leaves out weeks with zero tonnage, not only
+weeks with no sets, so a week of only bodyweight or warm-up sets reads as empty
+too. The "This week" defect is split out as its own task.
+
+**What review changed. Each of the three reviewers found something the other two
+did not.**
+
+- **A template prescribed a lift its user's equipment cannot do.** The home-gym
+  programme carries `chair-squat`, which the catalogue tags `machine`; home-gym
+  owns dumbbells, bands and a floor. The test checked "is in the programme"
+  under a comment claiming the history already respected the equipment. It did
+  not. `templatesFor` now leaves out-of-grant lifts out through `outOfGrant`,
+  and the test pins the list at exactly `home-gym: chair-squat`, so a new
+  mismatch fails loudly. **The programme itself is not fixed here:**
+  `chair-squat` is the root of the legs progression tree, so a bodyweight-only
+  user can never start that tree through the app — and the seeded home-gym
+  lifter progresses on a lift he could never log. Three candidate fixes, and a
+  content decision, so it is its own task.
+- **Nothing tested the decision the templates are built on.** Swapping sets and
+  reps, prescribing one set, and dropping a rep from every lift — the "1×5, 2×4"
+  drift itself — all stayed green. A contract test now holds lifts, sets and reps
+  to the programme. "Heaviest ever" sat inside a range assertion and removing
+  the date sort changed nothing; a hand-built history now pins "the top set of
+  the most recent session" and catches both.
+- **The db test repeated a false security claim**, found by two reviewers: "RLS
+  rejects a template id belonging to anyone else". It does not — `workouts_own`
+  checks only `user_id`, and a foreign key is not subject to RLS. The same claim
+  is in `app/workout/actions.ts`, and `workout_template_items` has the same gap.
+  The test now says what it proves. The policy fix is its own migration and PR,
+  because this project gives a cross-user boundary change its own review.
+- **The test's cleanup ignored its own failure.** Against hosted, a stray
+  in-progress session would become that demo user's active one and capture the
+  next Start anybody pressed. The delete is checked, no session may be active
+  before or after, and it runs for all five archetypes rather than one.
+- **The fallback for a lift never logged was uncapped and untested.** Clamped to
+  the ceiling on every path now; a synthetic archetype proves the clamp, because
+  no shipped entry starts above it.
+- **The seeder's mapping was never tested offline** — the test rebuilt the draft
+  by hand. One `toTemplateDraft` now, called by both.
+- **The reason given for `source: 'user'` was wrong**: PR 7 builds a button, not
+  the import. Corrected above, with the error kept.
+- Also: `SeedTemplateItem` derives from the Zod-inferred type; two comments that
+  contradicted each other on zero loads reconciled; the sort's stated reason
+  corrected; ADR 0010's "two places" amended; the spec's broken paragraph fixed;
+  bodyweight lifts derived from the programme instead of three hard-coded names;
+  the db ceiling test can no longer pass with zero checks.
+
+**Broken fourteen ways; all fourteen now go red.** Two stayed green on the first
+run, and only one of them was a gap. `reps: entry.reps` appears in the history
+generator as well as in `templatesFor`, so the rep-drift break patched the
+generator and tested nothing — re-run against an anchor that exists exactly
+once, and the harness now refuses an anchor that matches twice. The other was
+real: no shipped rotation day empties out, so the empty-template filter was
+never exercised, and without it the seed would fail at the write. It has a test.
+
+**Not verified:** a browser pass on `/profile` or `/workout`, which need a
+session. The equipment acceptance is now met against the catalogue tag — what the
+app itself checks — where the first version checked programme membership and
+called that equipment.
