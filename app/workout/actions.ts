@@ -33,12 +33,13 @@ import type { TemplateFormState } from './form-state';
 /**
  * Zod says what is wrong in a sentence; anything else gets a plain fallback.
  *
- * WHY not `Error.message`, which this returned until review of PR 7: every
- * other error these actions can throw is a database one — `listing templates:
- * …`, `creating template items: …` — and passing it on handed the browser table
- * and column names. PR 7 made one of them reachable from /coach as well. The
- * name and a bounded message go to the server log instead, as the coach's
- * actions do; see `sendChatMessage` for why never the whole object.
+ * WHY not `Error.message`, which this returned until review of PR 7: the other
+ * errors these actions can throw are database ones — `listing templates: …`,
+ * `creating template items: …` — or a malformed items payload's JSON error, and
+ * passing them on handed the browser table and column names. PR 7 made one of
+ * them reachable from /coach as well. The name and a bounded message go to the
+ * server log instead, as the coach's actions do; see `sendChatMessage` for why
+ * never the whole object.
  */
 function explain(cause: unknown, fallback: string): string {
   if (cause instanceof z.ZodError) {

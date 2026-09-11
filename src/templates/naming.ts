@@ -5,7 +5,7 @@
  * §6: importing a session twice is ALLOWED — a newer plan's session can share
  * week, day and focus with an older one, so a name says nothing about sameness —
  * but two imports of one session match on everything the Workout tab shows
- * (name, lifts and set count), so without a counter they could not be told
+ * (name, lifts and number of set groups), so without a counter they could not be told
  * apart. _This said templates are editable and that the tab lists them by name
  * alone; neither is true. Corrected in review._
  *

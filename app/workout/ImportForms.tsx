@@ -10,9 +10,6 @@ export interface SessionOption {
   label: string;
 }
 
-// Defined beside the builder that makes them — src/templates/plan.ts.
-export type { PlanSessionOption };
-
 /**
  * Save a session that already happened.
  *

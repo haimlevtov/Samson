@@ -12,7 +12,7 @@ describe('distinctName', () => {
   it('counts from two for the second copy, and on from there', () => {
     // The rework plan's PR 7 decision: a second import is allowed, and the
     // counter is what tells it apart on the Workout tab, where two imports of
-    // one session otherwise match on name, lifts and set count.
+    // one session otherwise match on name, lifts and number of set groups.
     expect(distinctName(base, [base])).toBe(`${base} (2)`);
     expect(distinctName(base, [base, `${base} (2)`])).toBe(`${base} (3)`);
   });

@@ -55,7 +55,8 @@ export default async function NewTemplatePage() {
       label: `${displayDate(w.localDate)} · ${w.setCount} set${w.setCount === 1 ? '' : 's'}`,
     }));
 
-  // The same builder /coach uses, labelled with the name the import stores.
+  // The same builder /coach uses, labelled with the name the import starts from;
+  // a second import of a session adds a counter to it.
   const planSessions = planSessionOptions(plan?.block);
 
   return (

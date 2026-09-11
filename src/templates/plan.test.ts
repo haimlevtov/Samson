@@ -150,7 +150,7 @@ describe('templateFromPlannedSession', () => {
 });
 
 describe('planSessionOptions', () => {
-  it('lists every session in order, labelled with the name the import stores', () => {
+  it('lists every session in order, labelled with the name the import starts from', () => {
     const upper: PlannedSession = { ...session, day_index: 0, focus: 'Upper body' };
     const block = {
       weeks: [

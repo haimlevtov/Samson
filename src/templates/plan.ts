@@ -34,7 +34,10 @@ export function plannedSessionName(weekNumber: number, session: PlannedSession):
 export interface PlanSessionOption {
   weekNumber: number;
   dayIndex: number;
-  /** The name the import will store — `plannedSessionName`. */
+  /**
+   * The name the import starts from — `plannedSessionName`. A second import of
+   * the same session stores it with a counter (`distinctName`).
+   */
   label: string;
 }
 
