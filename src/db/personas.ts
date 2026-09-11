@@ -7,22 +7,32 @@
  *            nothing more.
  */
 import type { Db } from './client';
-import type { HumorLevel, Persona } from '../persona/schema';
+import { VOICE_GENDERS, type HumorLevel, type Persona, type VoiceGender } from '../persona/schema';
 import type { TrainingBlock } from '../planner/schema';
 import { trainingBlockSchema } from '../planner/schema';
 
 /**
  * A persona as the picker lists it: what the delivery stage needs, plus the
- * line the Coach tab's preview speaks.
+ * line the Coach tab's preview speaks and how the coach should sound.
  *
- * WHY not a field on `Persona`: that type is "one row, as the delivery stage
- * needs it", and delivery never reads the line. Every persona literal in the
- * delivery tests would have to carry a field the code under test ignores.
+ * WHY not fields on `Persona`: that type is "one row, as the delivery stage
+ * needs it", and delivery never reads the line or the voice. Every persona
+ * literal in the delivery tests would have to carry fields the code under test
+ * ignores.
  */
 export interface ListedPersona extends Persona {
   /** Null for a row with none — the column is nullable, migration 20260911130000. */
   sampleLine: string | null;
+  /** The kind of device voice to take first — migration 20260911140000. */
+  voiceGender: VoiceGender | null;
+  /** The coach's own voice shape, 0.5–1.5 — migration 20260911140000. */
+  pitch: number;
+  rate: number;
 }
+
+/** A stored gender, or null for anything the column's check would not allow. */
+const asVoiceGender = (value: string | null): VoiceGender | null =>
+  VOICE_GENDERS.find((gender) => gender === value) ?? null;
 
 /**
  * Every persona this user can pick: the shared rows plus any of their own.
@@ -32,7 +42,7 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
   const { data, error } = await db
     .from('personas')
     .select(
-      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant, sample_line'
+      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant, sample_line, tts_voice_gender, tts_pitch, tts_rate'
     )
     .eq('is_active', true)
     .order('name');
@@ -48,6 +58,11 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
     bannedPhrases: row.banned_phrases ?? [],
     voiceVariant: row.tts_voice_variant,
     sampleLine: row.sample_line,
+    voiceGender: asVoiceGender(row.tts_voice_gender),
+    // PostgREST returns numeric as a number; Number() also covers a driver that
+    // hands it back as a string.
+    pitch: Number(row.tts_pitch),
+    rate: Number(row.tts_rate),
   }));
 }
 

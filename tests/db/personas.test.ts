@@ -120,6 +120,43 @@ describe('the shipped roster', () => {
   });
 });
 
+describe('how each coach sounds', () => {
+  /*
+   * Rework plan PR 6b, migration 20260911140000. The voice used to be the Nth
+   * device voice of a language, with pitch and rate from intensity, and the
+   * Sergeant spoke in a light female voice. Now each row names the kind of
+   * voice it takes and its own pitch and rate. Through the shipped reader.
+   */
+  it('names the kind of voice for every shipped coach', async () => {
+    const unnamed = (await roster()).filter((p) => p.voiceGender === null).map((p) => p.slug);
+    expect(unnamed).toEqual([]);
+  });
+
+  it('gives no two coaches the same pitch and rate', async () => {
+    // On a device with one voice of a kind — two male voices is common on
+    // Windows — the pair is all that tells two coaches apart.
+    const seen = new Map<string, string>();
+    const twins: string[] = [];
+    for (const p of await roster()) {
+      const shape = `${p.pitch}/${p.rate}`;
+      const earlier = seen.get(shape);
+      if (earlier) twins.push(`${p.slug} sounds like ${earlier} (${shape})`);
+      seen.set(shape, p.slug);
+    }
+    expect(twins).toEqual([]);
+  });
+
+  it('reads pitch and rate as numbers inside the range speech still sounds like speech', async () => {
+    for (const p of await roster()) {
+      expect(typeof p.pitch, p.slug).toBe('number');
+      expect(p.pitch, p.slug).toBeGreaterThanOrEqual(0.5);
+      expect(p.pitch, p.slug).toBeLessThanOrEqual(1.5);
+      expect(p.rate, p.slug).toBeGreaterThanOrEqual(0.5);
+      expect(p.rate, p.slug).toBeLessThanOrEqual(1.5);
+    }
+  });
+});
+
 describe('the line each coach is heard by before it is picked', () => {
   /*
    * Rework plan PR 6, and the add-persona skill: `sample_line` is what the Voice

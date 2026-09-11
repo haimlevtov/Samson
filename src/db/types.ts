@@ -387,6 +387,9 @@ export type Database = {
           sample_line: string | null
           slug: string
           system_prompt: string
+          tts_pitch: number
+          tts_rate: number
+          tts_voice_gender: string | null
           tts_voice_id: string | null
           tts_voice_variant: number
           user_id: string | null
@@ -402,6 +405,9 @@ export type Database = {
           sample_line?: string | null
           slug: string
           system_prompt: string
+          tts_pitch?: number
+          tts_rate?: number
+          tts_voice_gender?: string | null
           tts_voice_id?: string | null
           tts_voice_variant?: number
           user_id?: string | null
@@ -417,6 +423,9 @@ export type Database = {
           sample_line?: string | null
           slug?: string
           system_prompt?: string
+          tts_pitch?: number
+          tts_rate?: number
+          tts_voice_gender?: string | null
           tts_voice_id?: string | null
           tts_voice_variant?: number
           user_id?: string | null

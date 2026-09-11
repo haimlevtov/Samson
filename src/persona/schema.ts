@@ -63,6 +63,14 @@ export type HumorLevel = (typeof HUMOR_LEVELS)[number];
  */
 export const HUMOR_ORDER: readonly HumorLevel[] = HUMOR_LEVELS;
 
+/**
+ * The kind of device voice a coach takes first — `personas.tts_voice_gender`,
+ * rework plan PR 6b. The same two values the column's check allows.
+ */
+export const VOICE_GENDERS = ['male', 'female'] as const;
+
+export type VoiceGender = (typeof VOICE_GENDERS)[number];
+
 /** One persona row, as the delivery stage needs it. */
 export interface Persona {
   slug: string;

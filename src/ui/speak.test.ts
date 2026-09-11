@@ -15,15 +15,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  GENTLE_RATE_FACTOR,
   personaSpeech,
   pickVoice,
   previewSpeech,
-  spokenIntensity,
+  voiceGender,
   voiceSettings,
+  voiceTier,
   type VoiceLike,
 } from './speak';
-import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
-import type { Persona } from '../persona/schema';
 
 const voice = (name: string, lang: string): VoiceLike => ({ name, lang });
 
@@ -151,92 +151,129 @@ describe('voiceSettings', () => {
   });
 });
 
-describe('spokenIntensity', () => {
-  it('softens the speech on a week the app has judged gentle', () => {
-    // The banner says "not a week to push"; speaking it faster and higher than
-    // usual contradicted the words it was reading.
-    expect(spokenIntensity(4, true)).toBe(GENTLE_MAX_INTENSITY);
-    expect(voiceSettings(spokenIntensity(4, true)).rate).toBeLessThan(voiceSettings(4).rate);
+describe('voiceGender', () => {
+  it('reads the word Google puts in the name', () => {
+    expect(voiceGender(voice('Google UK English Female', 'en-GB'))).toBe('female');
+    expect(voiceGender(voice('Google UK English Male', 'en-GB'))).toBe('male');
   });
 
-  it('leaves an ordinary week alone', () => {
-    expect(spokenIntensity(4, false)).toBe(4);
+  it('reads the first name Microsoft puts in the name, desktop and neural alike', () => {
+    expect(voiceGender(voice('Microsoft Zira - English (United States)', 'en-US'))).toBe('female');
+    expect(voiceGender(voice('Microsoft David - English (United States)', 'en-US'))).toBe('male');
+    expect(
+      voiceGender(voice('Microsoft Guy Online (Natural) - English (United States)', 'en-US'))
+    ).toBe('male');
   });
 
-  it('leaves a persona already at or below the gentle ceiling where it is', () => {
-    // This is the case the previous implementation got wrong. Subtracting two
-    // instead of clamping to two took the Analyst at 2 down to 1, so the words
-    // were written at 2 and read aloud at 1.
-    expect(spokenIntensity(2, true)).toBe(2);
-    expect(spokenIntensity(1, true)).toBe(1);
+  it('does not read "male" inside "Female"', () => {
+    expect(voiceGender(voice('Female Voice 1', 'en-US'))).toBe('female');
   });
 
+  it('marks a name it does not know as unknown, not as either', () => {
+    expect(voiceGender(voice('Google US English', 'en-US'))).toBeNull();
+  });
+});
+
+describe('voiceTier', () => {
+  it('ranks neural above online above desktop', () => {
+    const natural = voice('Microsoft Ryan Online (Natural) - English (United Kingdom)', 'en-GB');
+    const google = voice('Google UK English Male', 'en-GB');
+    const desktop = voice('Microsoft David - English (United States)', 'en-US');
+
+    expect(voiceTier(natural)).toBeLessThan(voiceTier(google));
+    expect(voiceTier(google)).toBeLessThan(voiceTier(desktop));
+  });
+});
+
+describe('pickVoice, by kind', () => {
   /*
-   * The property that matters, rather than three examples of it: the voice and
-   * the words must be softened by the SAME rule. `resolveTone` decides the
-   * intensity the persona writes at; `spokenIntensity` decides the intensity it
-   * is read at. Two definitions of "gentle" is one too many, and the drift is
-   * invisible — nothing crashes, the coach just sounds unlike its own text.
+   * Rework plan PR 6b. This is the machine the user heard it on: David, Mark
+   * and Zira, and no British English at all. Picking the Nth voice by name gave
+   * the Sergeant — en-GB variant 2 — Zira.
    */
-  it('agrees with resolveTone at every point on the scale', () => {
-    const persona = (intensity: number): Persona => ({
-      slug: 'fixture',
-      name: 'Fixture',
-      systemPrompt: 'x',
-      intensity,
-      humorLevel: 'clean',
-      bannedPhrases: [],
-      voiceVariant: 0,
+  it('never hands a coach who asks for a male voice the female one', () => {
+    const picked = [0, 1, 2, 3].map((variant) => pickVoice(US_ONLY, 'en-GB', variant, 'male'));
+    expect(picked.map((v) => v?.name)).not.toContain('Microsoft Zira - English (United States)');
+  });
+
+  it('gives the kind asked for when the device has it', () => {
+    expect(pickVoice(US_ONLY, 'en-US', 0, 'female')?.name).toBe(
+      'Microsoft Zira - English (United States)'
+    );
+  });
+
+  it('falls back to the whole language when the device has none of that kind', () => {
+    const onlyMen = US_ONLY.filter((v) => voiceGender(v) === 'male');
+    expect(pickVoice(onlyMen, 'en-US', 0, 'female')?.lang).toBe('en-US');
+  });
+
+  it('takes the better voice first, where the browser offers one', () => {
+    const edge = [
+      voice('Microsoft David - English (United States)', 'en-US'),
+      voice('Microsoft Guy Online (Natural) - English (United States)', 'en-US'),
+    ];
+    expect(pickVoice(edge, 'en-US', 0, 'male')?.name).toContain('Natural');
+  });
+
+  it('keeps the old choice for a caller that names no kind', () => {
+    expect(pickVoice(MIXED, 'en-GB', 1)?.name).toBe(pickVoice(MIXED, 'en-GB', 1, null)?.name);
+  });
+});
+
+/** A coach's voice fields, as the reader returns them. */
+const sergeant = {
+  voice: 'en-GB',
+  voiceVariant: 1,
+  voiceGender: 'male' as const,
+  pitch: 0.8,
+  rate: 1.2,
+};
+
+describe('personaSpeech', () => {
+  it("speaks with the coach's own row — language, kind, variant, pitch and rate", () => {
+    expect(personaSpeech(sergeant, false)).toEqual({
+      lang: 'en-GB',
+      gender: 'male',
+      variant: 1,
+      pitch: 0.8,
+      rate: 1.2,
     });
+  });
 
-    for (const intensity of [1, 2, 3, 4, 5]) {
-      for (const gentle of [true, false]) {
-        const tone = resolveTone(
-          persona(intensity),
-          'clean',
-          gentle
-            ? { notes: ['tweaked my knee'], adherenceRate: 1 }
-            : { notes: [], adherenceRate: 1 }
-        );
+  it('slows a gentle week without changing who is speaking', () => {
+    // The words soften by resolveTone; the voice slows and keeps its pitch, its
+    // character. Lowering the pitch would make the coach someone else.
+    const gentle = personaSpeech(sergeant, true);
+    expect(gentle.rate).toBeCloseTo(1.2 * GENTLE_RATE_FACTOR, 10);
+    expect(gentle.pitch).toBe(0.8);
+    expect(gentle.gender).toBe('male');
+  });
 
-        expect(tone.gentle, `gentle flag for intensity ${intensity}`).toBe(gentle);
-        expect(spokenIntensity(intensity, gentle), `intensity ${intensity}, gentle ${gentle}`).toBe(
-          tone.intensity
-        );
-      }
-    }
+  it('takes a plain voice before any coach is known', () => {
+    expect(personaSpeech(null, false)).toEqual({
+      lang: null,
+      gender: null,
+      variant: 0,
+      pitch: 1,
+      rate: 1,
+    });
   });
 });
 
 describe('previewSpeech', () => {
-  const rival = {
-    sampleLine: 'Your move.',
-    voice: 'en-GB',
-    intensity: 4,
-    voiceVariant: 1,
-  };
+  const rival = { ...sergeant, sampleLine: 'Your move.', voiceVariant: 2, pitch: 1, rate: 1.1 };
 
-  it('speaks the line in the voice a delivery from the same coach would use', () => {
-    /*
-     * The preview answers "what does this coach sound like", so it must be the
-     * coach the user is about to choose: the row's language, its variant, and
-     * the intensity an ordinary — not gentle — delivery is read at.
-     */
+  it('sounds exactly like an ordinary delivery from the same coach', () => {
+    // FOUND IN REVIEW of PR #46: the preview's settings and the delivery's were
+    // built separately. Both come from personaSpeech; this holds them together.
     expect(previewSpeech(rival)).toEqual({
       text: 'Your move.',
-      options: { lang: 'en-GB', intensity: spokenIntensity(4, false), variant: 1 },
+      options: personaSpeech(rival, false),
     });
   });
 
-  it('sounds exactly like an ordinary delivery from the same coach', () => {
-    // FOUND IN REVIEW: the preview's settings and the delivery's were built
-    // separately. Both come from personaSpeech now; this holds the preview to
-    // the delivery's own call, so they cannot drift apart again.
-    expect(previewSpeech(rival)!.options).toEqual(personaSpeech(rival, false));
-  });
-
-  it('never softens the preview, which has no training week to be gentle about', () => {
-    expect(previewSpeech({ ...rival, intensity: 5 })!.options.intensity).toBe(5);
+  it('never slows the preview, which has no training week to be gentle about', () => {
+    expect(previewSpeech(rival)!.options.rate).toBe(1.1);
   });
 
   it('offers nothing for a row with no line, rather than a button that says nothing', () => {
@@ -246,27 +283,5 @@ describe('previewSpeech', () => {
 
   it('trims the line it speaks', () => {
     expect(previewSpeech({ ...rival, sampleLine: '  Your move.  ' })!.text).toBe('Your move.');
-  });
-});
-
-describe('personaSpeech', () => {
-  const analyst = { voice: 'en-US', intensity: 2, voiceVariant: 0 };
-
-  it("is the coach's language, variant and intensity", () => {
-    expect(personaSpeech({ ...analyst, intensity: 4 }, false)).toEqual({
-      lang: 'en-US',
-      intensity: 4,
-      variant: 0,
-    });
-  });
-
-  it('softens on a gentle week by the same clamp the words use', () => {
-    expect(personaSpeech({ ...analyst, intensity: 5 }, true).intensity).toBe(
-      spokenIntensity(5, true)
-    );
-  });
-
-  it('falls back to the defaults the delivery always used before a coach is known', () => {
-    expect(personaSpeech(null, false)).toEqual({ lang: null, intensity: 3, variant: 0 });
   });
 });
