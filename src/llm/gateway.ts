@@ -24,7 +24,7 @@ import {
   OPENROUTER_BASE_URL,
   RETRY_BASE_DELAY_MS,
   SPEECH_MAX_ATTEMPTS,
-  SPEECH_MAX_AUDIO_SECONDS,
+  SPEECH_MAX_AUDIO_BYTES,
   SPEECH_MAX_INPUT_CHARS,
   SPEECH_MIN_AUDIO_SECONDS,
   SPEECH_TIMEOUT_MS,
@@ -572,15 +572,15 @@ export async function callSpeech(options: SpeechOptions, deps: GatewayDeps): Pro
       } else {
         reached200 = true;
         /*
-         * Between a quarter second and ninety seconds of samples — the bounds
-         * and why are at SPEECH_MIN_AUDIO_SECONDS. Outside them is the same as
-         * above: a 200, the wrong shape, charged, not retried. A declared
-         * length past the ceiling is refused before the body is read.
+         * At least a quarter second of samples and at most a fixed byte
+         * ceiling — the bounds and why are at SPEECH_MIN_AUDIO_SECONDS. Outside
+         * them is the same as above: a 200, the wrong shape, charged, not
+         * retried. A declared length past the ceiling is refused before the
+         * body is read.
          */
         const rate = pcmRate(contentType);
-        const perSecond = pcmBytesPerSecond(rate);
-        const minBytes = Math.ceil(SPEECH_MIN_AUDIO_SECONDS * perSecond);
-        const maxBytes = SPEECH_MAX_AUDIO_SECONDS * perSecond;
+        const minBytes = Math.ceil(SPEECH_MIN_AUDIO_SECONDS * pcmBytesPerSecond(rate));
+        const maxBytes = SPEECH_MAX_AUDIO_BYTES;
         const declared = Number(response.headers.get('content-length') ?? Number.NaN);
 
         if (declared > maxBytes) {

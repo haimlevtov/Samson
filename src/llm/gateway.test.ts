@@ -577,15 +577,25 @@ describe('callSpeech', () => {
     expect(cancelled).toBe(true);
   });
 
-  it('refuses a clip longer than ninety seconds that did not declare its length', async () => {
-    // At 8 kHz ninety seconds is 1,440,000 bytes; two more is one sample over.
+  it('refuses a clip over the byte ceiling that did not declare its length, whatever its rate', async () => {
+    // At 48 kHz ninety seconds would be 8.64 MB; the ceiling is bytes, because
+    // bytes are what cannot cross a Vercel response. One sample over it.
     const { deps, rows } = makeDeps(async () =>
-      audioResponse(new Uint8Array(1_440_002), { 'content-type': 'audio/pcm;rate=8000' })
+      audioResponse(new Uint8Array(4_320_002), { 'content-type': 'audio/pcm;rate=48000' })
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
     expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
-    expect(rows[0]!.error).toBe('the clip is 1440002 bytes of PCM; it must be 4000 to 1440000');
+    expect(rows[0]!.error).toBe('the clip is 4320002 bytes of PCM; it must be 24000 to 4320000');
+  });
+
+  it('takes a clip at exactly the floor and refuses one sample under it', async () => {
+    const at = makeDeps(async () => audioResponse(new Uint8Array(12_000)));
+    await expect(callSpeech(speechOptions, at.deps)).resolves.toMatchObject({ attempts: 1 });
+
+    const under = makeDeps(async () => audioResponse(new Uint8Array(11_998)));
+    await expect(callSpeech(speechOptions, under.deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(under.rows.map((r) => r.status)).toEqual(['schema_invalid']);
   });
 
   it('ignores LLM_MODELS, which swaps text models and would recast every coach', async () => {

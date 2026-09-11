@@ -160,18 +160,19 @@ export const SPEECH_TIMEOUT_MS = 20_000;
 export const SPEECH_MAX_ATTEMPTS = 2;
 
 /**
- * The shortest and longest clip the speech stage accepts, in seconds of audio —
- * ADR 0025, "Corrected after the first live calls".
+ * The shortest and longest clip the speech stage accepts — ADR 0025,
+ * "Corrected after the first live calls".
  *
- * WHY a floor: the WAV header makes any bytes playable, so a 200 carrying a few
- * bytes of junk would be charged, cached and played as a click with no message.
- * A quarter second is shorter than any line a coach says.
- * WHY a ceiling: the longest line spoken slowly is about thirty seconds, and a
- * Vercel function may return about 4.5 MB — ninety seconds of 24 kHz PCM is
- * about 4.3 MB. Past it the clip could not reach the browser anyway.
+ * WHY a floor, in seconds: the WAV header makes any bytes playable, so a 200
+ * carrying a few bytes of junk would be charged, cached and played as a click
+ * with no message. A quarter second is shorter than any line a coach says.
+ * WHY a ceiling, in bytes: a Vercel function may return about 4.5 MB, and what
+ * cannot cross it is bytes, whatever rate a response names — a seconds-based
+ * ceiling at 48 kHz would have allowed twice this. 4,320,000 is ninety seconds
+ * of the model's 24 kHz PCM, three times the longest line spoken slowly.
  */
 export const SPEECH_MIN_AUDIO_SECONDS = 0.25;
-export const SPEECH_MAX_AUDIO_SECONDS = 90;
+export const SPEECH_MAX_AUDIO_BYTES = 4_320_000;
 
 /**
  * Charged against the budget for each speech attempt that reached a 200 and did
