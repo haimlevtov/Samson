@@ -98,8 +98,9 @@ export interface Persona {
  * any field a reader type gains later, out of delivery altogether.
  *
  * It does not make the fields it keeps trusted: `name`, `systemPrompt` and
- * `bannedPhrases` are writable on a user's own row as well, and
- * src/persona/prompts.ts fences and cleans them.
+ * `bannedPhrases` are writable on a user's own row as well. src/persona/prompts.ts
+ * fences `systemPrompt`, and cleans `name` (the fence label) and
+ * `bannedPhrases` (outside the fence).
  */
 export function asPersona(row: Persona): Persona {
   return {
