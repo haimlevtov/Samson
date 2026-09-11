@@ -1116,7 +1116,11 @@ Desktop quit.
 **The first live presses failed, and the ledger said why for free.** HTTP 402:
 the OpenRouter account had never held credit, and the owner added some. Then HTTP
 400: Gemini TTS through OpenRouter answers only in `pcm`, though its model page
-lists mp3 too, and the gateway asked for mp3. Fixed on branch `speech-pcm`: the
-gateway asks for PCM and wraps it in a WAV header for the browser — ADR 0025,
-"Corrected after the first live calls". Whether each coach sounds like its
-direction is still for the owner's ear.
+lists mp3 too, and the gateway asked for mp3. Fixed in #50 (`speech-pcm`), in
+the commits after this record: the gateway asks for PCM, keeps a clip between a
+quarter second and ninety seconds, and wraps it in a WAV header for the browser
+— ADR 0025, "Corrected after the first live calls". **Not verified live:** no
+call was made after the fix, at the owner's request. The first press after the
+deploy is the check, about $0.01; a wrong rate sounds too fast or slow, and a
+type other than PCM fails with the row naming it. Whether each coach sounds
+like its direction is still for the owner's ear.

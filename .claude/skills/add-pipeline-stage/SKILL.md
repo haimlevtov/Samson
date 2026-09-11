@@ -142,6 +142,13 @@ about: the key, the budget gate, retries and a ledger row per attempt.
 What still applies: **step 1** (`LlmStage`, `STAGE_MODELS`, a bound in
 `config.ts` — for speech an input ceiling, not a token one), **step 2** (the
 constraint migration, unchanged) and **step 6** (a scripted fetch, no key).
+
+**One live call before it is called done.** A scripted fetch cannot catch what
+the provider really accepts: the speech model's catalogue page listed mp3, and
+the model refused it with HTTP 400 on its first live call (ADR 0025, "Corrected
+after the first live calls"). Read the ledger's `error` for the reason first —
+it costs nothing.
+
 Two things are new, and both cost something to forget:
 
 - **A provider that reports no price** leaves `cost_credits` null. Never put an

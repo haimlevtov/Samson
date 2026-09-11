@@ -198,7 +198,8 @@ and written here before their code.
   reaches a speech call — it would recast every coach.
 - **Only mp3 is audio, and nothing after a 200 is retried.** _Corrected after
   the first live calls: the model answers only in PCM, so read "the format asked
-  for" wherever this says mp3 — see the last section._ A 200 labelled
+  for" wherever this says mp3, `audio/wav` for what the browser is handed, and
+  "under a quarter second" for "no bytes" — see the last section._ A 200 labelled
   anything but `audio/mpeg` (or its alias `audio/mp3`), a 200 with no bytes, or
   a 200 whose body fails mid-read is recorded `schema_invalid`, is not retried,
   and is charged `SPEECH_ASSUMED_COST_USD` like a success: it reached a 200 and
@@ -267,16 +268,34 @@ header — the same samples behind 44 bytes, so no encoder and no dependency —
 hands the browser `audio/wav`. The samples are 16-bit little-endian mono at
 24 kHz, Google's documented output for this model; a `rate=` parameter on the
 response's content type overrides the rate if the provider sends one. A 200
-labelled anything but raw PCM (`audio/pcm`, or `audio/l16`, its registered
-name) is still `schema_invalid`, charged and not retried. The addendum's "Only
-mp3 is audio" was true of the request this code made and false of the model;
-read it as "only the format asked for is audio".
+labelled anything but raw PCM (`audio/pcm`, or `audio/l16`) is still
+`schema_invalid`, charged and not retried. `audio/l16` is taken as
+little-endian on purpose: RFC 2586 registers L16 as big-endian, but Google
+labels this model's little-endian output `audio/L16`, and the samples are
+written into the WAV as they arrive. The addendum's "Only mp3 is audio" was
+true of the request this code made and false of the model; read it as "only
+the format asked for is audio".
+
+**A clip must be between a quarter second and ninety seconds of samples.**
+Found in review of the fix: the WAV header makes any bytes playable, so a 200
+carrying a few bytes of junk would be charged, cached and played as a click,
+with no message — a quarter second is shorter than any line a coach says.
+Ninety seconds is far past the longest line and under what a Vercel function
+may return; a declared `content-length` over it is refused before the body is
+read. Outside the bounds is `schema_invalid`, charged and not retried.
 
 **The cost of WAV:** 48 KB a second, so a ten- to fifteen-second line is 0.5 to
-0.7 MB across the server action, the longest line about 1.4 MB. Fine for a
+0.7 MB across the server action, and the longest line — about thirty-two seconds
+at the pace the Cost section assumes — about 1.5 MB. Fine for a
 preview; the later PR that reads a whole plan aloud should reconsider it.
 
 **Still open, and the owner noticed it:** the card said "The voice did not come
 through. Try again in a moment." for both failures, and retrying fixes neither.
 A refusal from the provider — no credit, a rejected request — deserves its own
 line. Not built here.
+
+**Not verified live.** The fix was built and reviewed without a live call, at
+the owner's request to keep test spend down. The first press after it deploys
+is the check, about $0.01: a wrong rate sounds too fast or too slow, and a
+content type other than `audio/pcm` or `audio/l16` fails as `schema_invalid`
+with the row naming the type it got.
