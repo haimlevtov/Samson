@@ -30,9 +30,17 @@ export interface SpendSummary {
  * ledger records only what was measured — the token analysis is graded. The
  * database counts which rows need one; config says what each costs.
  *
- * WHY a sum that is not a finite number counts as unlimited: the table's CHECKs
- * refuse a NaN or negative cost since ADR 0026, but a gate that trusted them
- * would reopen if they were ever dropped. Denying is the safe failure.
+ * WHY a sum that is not a finite number, or is below zero, counts as unlimited:
+ * the table's CHECKs refuse a NaN or negative cost since ADR 0026, but a gate
+ * that trusted them would reopen if they were ever dropped. Neither value can
+ * arise from real rows — the two counts are `count(*)` and the prices are
+ * positive — so either one means the ledger has been tampered with, and denying
+ * is the safe failure.
+ *
+ * WHY not `Math.max(0, total)`: a negative sum is not a small sum. It is ADR
+ * 0026's second hole — rows planted to cancel spend — arriving after its CHECK
+ * was dropped. Clamping to zero hands that attacker a fresh week; denying hands
+ * them nothing.
  *
  * AI-NOTE: the categories are counted in `llm_spend_summary`. A new kind of
  *          unpriced row needs a count there and a price here, in one change.
@@ -42,7 +50,8 @@ export function spendFrom(summary: SpendSummary): number {
     summary.measured +
     summary.timeouts * TIMEOUT_ASSUMED_COST_USD +
     summary.unpricedSpeech * SPEECH_ASSUMED_COST_USD;
-  return Number.isFinite(total) ? total : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(total) || total < 0) return Number.POSITIVE_INFINITY;
+  return total;
 }
 
 export function createSupabaseLedger(db: Db): LedgerClient {
@@ -71,12 +80,19 @@ export function createSupabaseLedger(db: Db): LedgerClient {
       if (error) throw new Error(`llm_calls spend query failed: ${error.message}`);
 
       const row = data?.[0];
+      // WHY thrown rather than defaulted: an aggregate with no GROUP BY always
+      // returns one row, so no row means the function is not the one this code
+      // was written against. Reading that as zero spend would open the gate on
+      // the strength of a query that did not answer — the failure this whole
+      // ADR is about. A caller sees the same refusal as any ledger failure.
+      if (!row) throw new Error('llm_spend_summary returned no row');
+
       // Number(): `numeric` arrives as a number or a numeric string, `bigint`
       // counts as numbers; either way the arithmetic below wants numbers.
       return spendFrom({
-        measured: Number(row?.measured ?? 0),
-        timeouts: Number(row?.timeouts ?? 0),
-        unpricedSpeech: Number(row?.unpriced_speech ?? 0),
+        measured: Number(row.measured),
+        timeouts: Number(row.timeouts),
+        unpricedSpeech: Number(row.unpriced_speech),
       });
     },
 

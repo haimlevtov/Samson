@@ -39,6 +39,17 @@ describe('spendFrom', () => {
     );
   });
 
+  it('counts a sum below zero as unlimited too, rather than clamping it to zero', () => {
+    // No real ledger produces one — the counts are `count(*)` and the prices are
+    // positive — so a negative sum is ADR 0026's planted-row hole arriving after
+    // its CHECK was dropped. Clamped to zero it would buy the writer a fresh
+    // week; denied it buys them nothing.
+    expect(spendFrom({ ...none, measured: -9999 })).toBe(Number.POSITIVE_INFINITY);
+    expect(spendFrom({ measured: -1, timeouts: 1, unpricedSpeech: 0 })).toBe(
+      Number.POSITIVE_INFINITY
+    );
+  });
+
   it('charges an empty week nothing', () => {
     expect(spendFrom(none)).toBe(0);
   });

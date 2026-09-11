@@ -218,9 +218,12 @@ async function enforceBudget(
    */
   if (configured === null) throw new NoProfileError();
 
-  // Number(): a `numeric` 'NaN' arrives from PostgREST as the STRING "NaN",
-  // which the comparison below would coerce but `BudgetExceededError`'s
-  // `toFixed` would throw on — a refusal turned into a generic failure.
+  // Number(): `LedgerClient` promises numbers and `src/db/ledger.ts` coerces
+  // both, so this is the second of two. It stays because the interface is where
+  // the promise is made and the gate is where breaking it costs money: a
+  // `numeric` reaches PostgREST as a string — 'NaN' included — and a string here
+  // would compare as a number below but throw in `BudgetExceededError`'s
+  // `toFixed`, turning a refusal into a generic failure.
   const budget = Number(configured);
   const spent = Number(
     await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS))

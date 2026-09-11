@@ -134,6 +134,10 @@ describe('the ceiling', () => {
       .update({ llm_weekly_budget_usd: 'NaN' as unknown as number })
       .eq('user_id', other.id);
     expect(error, 'NaN became a budget').not.toBeNull();
+    // Named, not merely "an error": the row is also watched by a trigger and by
+    // `>= 0`, and a test that accepted any failure would pass if the CHECK this
+    // migration adds were dropped.
+    expect(error!.message).toContain('users_llm_budget_not_nan');
   });
 });
 
@@ -143,13 +147,27 @@ describe('the ledger', () => {
       .from('llm_calls')
       .insert(ledgerRow(user, { cost_credits: -9999 }) as never);
     expect(error, 'a negative cost was recorded').not.toBeNull();
+    // The constraint by name. RLS, the stage CHECK and a not-null all guard this
+    // insert too, and "some error happened" would pass with this one gone.
+    expect(error!.message).toContain('llm_calls_cost_credits_spent');
   });
 
   it('refuses a NaN cost, which would poison the sum', async () => {
     const { error } = await user.client
       .from('llm_calls')
-      .insert(ledgerRow(user, { cost_credits: 'NaN', upstream_cost: 'NaN' }) as never);
+      .insert(ledgerRow(user, { cost_credits: 'NaN' }) as never);
     expect(error, 'a NaN cost was recorded').not.toBeNull();
+    expect(error!.message).toContain('llm_calls_cost_credits_spent');
+  });
+
+  it('refuses a NaN upstream cost too — the other priced column', async () => {
+    // Asserted separately because one insert carrying both would stop at the
+    // first constraint and say nothing about the second.
+    const { error } = await user.client
+      .from('llm_calls')
+      .insert(ledgerRow(user, { upstream_cost: 'NaN' }) as never);
+    expect(error, 'a NaN upstream cost was recorded').not.toBeNull();
+    expect(error!.message).toContain('llm_calls_upstream_cost_spent');
   });
 
   it('dates a row by the database, not by its writer', async () => {
