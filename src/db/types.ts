@@ -384,6 +384,7 @@ export type Database = {
           intensity: number
           is_active: boolean
           name: string
+          sample_line: string | null
           slug: string
           system_prompt: string
           tts_voice_id: string | null
@@ -398,6 +399,7 @@ export type Database = {
           intensity?: number
           is_active?: boolean
           name: string
+          sample_line?: string | null
           slug: string
           system_prompt: string
           tts_voice_id?: string | null
@@ -412,6 +414,7 @@ export type Database = {
           intensity?: number
           is_active?: boolean
           name?: string
+          sample_line?: string | null
           slug?: string
           system_prompt?: string
           tts_voice_id?: string | null

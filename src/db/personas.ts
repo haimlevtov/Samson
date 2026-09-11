@@ -12,14 +12,27 @@ import type { TrainingBlock } from '../planner/schema';
 import { trainingBlockSchema } from '../planner/schema';
 
 /**
+ * A persona as the picker lists it: what the delivery stage needs, plus the
+ * line the Coach tab's preview speaks.
+ *
+ * WHY not a field on `Persona`: that type is "one row, as the delivery stage
+ * needs it", and delivery never reads the line. Every persona literal in the
+ * delivery tests would have to carry a field the code under test ignores.
+ */
+export interface ListedPersona extends Persona {
+  /** Null for a row with none — the column is nullable, migration 20260911130000. */
+  sampleLine: string | null;
+}
+
+/**
  * Every persona this user can pick: the shared rows plus any of their own.
  * `personas_read` already scopes it; there is no user_id filter to forget.
  */
-export async function listPersonas(db: Db): Promise<Persona[]> {
+export async function listPersonas(db: Db): Promise<ListedPersona[]> {
   const { data, error } = await db
     .from('personas')
     .select(
-      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant'
+      'slug, name, system_prompt, intensity, humor_level, banned_phrases, tts_voice_id, tts_voice_variant, sample_line'
     )
     .eq('is_active', true)
     .order('name');
@@ -34,6 +47,7 @@ export async function listPersonas(db: Db): Promise<Persona[]> {
     humorLevel: row.humor_level as HumorLevel,
     bannedPhrases: row.banned_phrases ?? [],
     voiceVariant: row.tts_voice_variant,
+    sampleLine: row.sample_line,
   }));
 }
 

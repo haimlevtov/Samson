@@ -14,7 +14,7 @@
  * anything about the browser.
  */
 import { describe, expect, it } from 'vitest';
-import { pickVoice, spokenIntensity, voiceSettings, type VoiceLike } from './speak';
+import { pickVoice, previewSpeech, spokenIntensity, voiceSettings, type VoiceLike } from './speak';
 import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
 import type { Persona } from '../persona/schema';
 
@@ -198,5 +198,44 @@ describe('spokenIntensity', () => {
         );
       }
     }
+  });
+});
+
+describe('previewSpeech', () => {
+  const rival = {
+    sampleLine: 'Your move.',
+    voice: 'en-GB',
+    intensity: 4,
+    voiceVariant: 1,
+  };
+
+  it('speaks the line in the voice a delivery from the same coach would use', () => {
+    /*
+     * The preview answers "what does this coach sound like", so it must be the
+     * coach the user is about to choose: the row's language, its variant, and
+     * the intensity an ordinary — not gentle — delivery is read at.
+     */
+    expect(previewSpeech(rival)).toEqual({
+      text: 'Your move.',
+      options: { lang: 'en-GB', intensity: spokenIntensity(4, false), variant: 1 },
+    });
+  });
+
+  it('keeps coaches of one language apart by their variant', () => {
+    const master = { ...rival, intensity: 3, voiceVariant: 0 };
+    expect(previewSpeech(master)!.options.variant).not.toBe(previewSpeech(rival)!.options.variant);
+  });
+
+  it('never softens the preview, which has no training week to be gentle about', () => {
+    expect(previewSpeech({ ...rival, intensity: 5 })!.options.intensity).toBe(5);
+  });
+
+  it('offers nothing for a row with no line, rather than a button that says nothing', () => {
+    expect(previewSpeech({ ...rival, sampleLine: null })).toBeNull();
+    expect(previewSpeech({ ...rival, sampleLine: '   ' })).toBeNull();
+  });
+
+  it('trims the line it speaks', () => {
+    expect(previewSpeech({ ...rival, sampleLine: '  Your move.  ' })!.text).toBe('Your move.');
   });
 });

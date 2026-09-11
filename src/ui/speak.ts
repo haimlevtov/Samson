@@ -226,6 +226,39 @@ export function spokenIntensity(intensity: number, gentle: boolean): number {
   return gentle ? Math.min(intensity, GENTLE_MAX_INTENSITY) : intensity;
 }
 
+/** The fields of a persona row a preview needs. */
+export interface PreviewablePersona {
+  sampleLine: string | null;
+  /** BCP-47 hint from `personas.tts_voice_id`. */
+  voice: string | null;
+  intensity: number;
+  voiceVariant: number;
+}
+
+/**
+ * What a coach's preview says, and the settings to say it with. Null when the
+ * row has no line, so the caller renders nothing rather than a silent button.
+ *
+ * WHY the delivery's own settings rather than defaults: the preview answers
+ * "what does this coach sound like", so it has to be the coach the user is about
+ * to choose — same language, same variant, same intensity. Never gentle: the
+ * gentle flag comes from a training log, and a preview has none to read.
+ */
+export function previewSpeech(
+  persona: PreviewablePersona
+): { text: string; options: Omit<SpeakOptions, 'onFailure'> } | null {
+  const text = persona.sampleLine?.trim() ?? '';
+  if (text === '') return null;
+  return {
+    text,
+    options: {
+      lang: persona.voice,
+      intensity: spokenIntensity(persona.intensity, false),
+      variant: persona.voiceVariant,
+    },
+  };
+}
+
 /** Stops anything currently being spoken. Safe when speech is unavailable. */
 export function stopSpeaking(): void {
   synth()?.cancel();
