@@ -165,26 +165,46 @@ begin
 end $$;
 ```
 
-### Check every slug before you write it
+### Check every slug before you write it — three things, not one
 
 The catalogue has **no** `push-up`, `pistol-squat`, `hollow-hold`,
 `diamond-push-up` or `dragon-flag` — every obvious guess. It has `pushups`,
-`chair-squat`, `plank`, `hanging-pike`, `inverted-row`, `chin-up`, `pullups`,
-`muscle-up`. Query for the slug first; a miss writes a null and says nothing.
+`plank`, `hanging-pike`, `inverted-row`, `chin-up`, `pullups`, `muscle-up`.
+Query for the slug first; a miss writes a null and says nothing.
+
+Existing is not enough. A criterion's lift has to be one the app will let a
+user LOG, or the rung above it can never open:
+
+1. **Read its instructions, not its name.** `chair-squat` is a Smith-machine
+   squat, `split-squats` is a jumping split, and `smith-machine-pistol-squat`
+   is not a pistol. All three were rungs of the legs tree, chosen by name —
+   ADR 0020's 2026-09-11 amendment.
+2. **Its category must be in `PROGRAMMABLE_CATEGORIES`** (`src/db/exercises.ts`).
+   The picker hides every other category, `stretching` included, from every
+   user.
+3. **Its equipment decides who can open the rung.** The rung above a root must
+   open with `bodyweight` alone. Higher up, gear is allowed, but as a decision:
+   the test below names every rung a bodyweight-only user cannot open.
 
 ## Tests
 
 A `tests/db/` case, because everything worth checking here is a property of the
 rows:
 
-- every node's `exercise_id` resolves — a null one means the slug lookup missed
-  and the insert silently wrote nothing useful
+- every node's `exercise_id` is null — the opposite of what this said first. A
+  migration cannot depend on the seeded catalogue (`20260908120200`), so a
+  node names its lift only through the criterion of the rung above it
+- every criterion names a lift `availableExercises` offers somebody, and the
+  rung above every root opens with bodyweight alone — asked of the app's own
+  picker for real users, so a lift chosen by name fails CI instead of shipping
+  a rung nobody can open
 - `level` equals the parent's `level + 1`, and a root has level 0
 - no cycles: walking `parent_id` from any node terminates
 - `tree` is consistent down a chain — a `push` node's parent is not `pull`
 
 The lookup-missed case is the one that bites: `select` with no match inserts a
-null rather than failing, so a typo'd slug produces a node pointing at nothing.
+null rather than failing, so a typo'd PARENT slug produces an orphan. Count the
+rows the migration meant to write, and raise if they are not all there.
 
 ## Related
 

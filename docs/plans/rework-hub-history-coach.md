@@ -804,7 +804,10 @@ did not.**
   `chair-squat` is the root of the legs progression tree, so a bodyweight-only
   user can never start that tree through the app — and the seeded home-gym
   lifter progresses on a lift he could never log. Three candidate fixes, and a
-  content decision, so it is its own task.
+  content decision, so it is its own task. _Decided 2026-09-11: the tree
+  changed, not the tag — ADR 0020's amendment. Two more legs rungs turned out
+  to be unreachable for everyone, and the tree now starts on a bodyweight
+  squat._
 - **Nothing tested the decision the templates are built on.** Swapping sets and
   reps, prescribing one set, and dropping a rep from every lift — the "1×5, 2×4"
   drift itself — all stayed green. A contract test now holds lifts, sets and reps
