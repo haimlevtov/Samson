@@ -10,19 +10,19 @@ because several of them touch the same surface.
 
 ## Status
 
-| PR  | What                                                                                       | Branch                 | State                                                                  |
-| --- | ------------------------------------------------------------------------------------------ | ---------------------- | ---------------------------------------------------------------------- |
-| 1   | [This plan](#pr-1--this-plan)                                                              | `rework-plan`          | shipped 09-09                                                          |
-| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                    | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)   |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                    | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)            |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                      | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)     | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
-| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)  |
-| 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | in progress, [ADR 0026](../adr/0026-budget-integrity.md)               |
-| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                              |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)        |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                |
+| PR  | What                                                                                       | Branch                 | State                                                                          |
+| --- | ------------------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------ |
+| 1   | [This plan](#pr-1--this-plan)                                                              | `rework-plan`          | shipped 09-09                                                                  |
+| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                    | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)           |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                    | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)                    |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                      | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)            |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)     | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)             |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)         |
+| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)          |
+| 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | shipped 09-12, [↓](#pr-6c--the-budget-cannot-be-moved-by-its-owner-2026-09-12) |
+| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                                      |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
+| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)  | `coach-one-box`        | planned                                                                        |
 
 PR 8 carries two of the requested changes because they are the same surface and
 would conflict as separate branches.
@@ -751,7 +751,7 @@ involved.
 
 **Docker once per column change**, for the `src/db/types.ts` regeneration
 CLAUDE.md requires: PR 6, PR 6b, the migration after 6b's deploy that drops the
-device-voice columns (6d), and 6c if its spend sum becomes an RPC. Announced before it starts and stopped in the same
+device-voice columns (6d), and 6c, whose spend sum did become an RPC. Announced before it starts and stopped in the same
 turn — `supabase stop && wsl --shutdown`. _This said "exactly once, in PR 6",
 written before 6b existed._
 
@@ -1211,3 +1211,66 @@ shipped and been heard.
 before PR 7 added a button there — it still needs a session. The
 `personas.test.ts` change this branch carried from #46's review went with the
 variant test itself, which 6b removed.
+
+### PR 6c — the budget cannot be moved by its owner, 2026-09-12
+
+Shipped as decided in [ADR 0026](../adr/0026-budget-integrity.md), committed
+first. All four holes the security review of #49 found are closed or documented:
+
+- **The ceiling is the database's.** `guard_llm_budget`, before insert and
+  update on `public.users`: an `authenticated` insert is given the default
+  whatever it asked for, and an `authenticated` change to the column is refused
+  with `insufficient_privilege`. The service role still sets it. A CHECK adds
+  "and not NaN" — `>= 0` admitted it, because Postgres sorts NaN above every
+  number.
+- **The ledger cannot cancel spend.** CHECKs on `cost_credits` and
+  `upstream_cost` (null, or at least zero and not NaN), and `date_llm_call`
+  forcing `created_at` to `now()` on insert, **for every writer including the
+  service role**.
+- **The sum moved into SQL.** `llm_spend_summary` returns the measured spend and
+  the counts the gate prices, so the thousand-planted-row flood that pushed real
+  spend past PostgREST's 1,000-row cut adds nothing. `spendFrom` applies
+  `TIMEOUT_ASSUMED_COST_USD` and `SPEECH_ASSUMED_COST_USD` — the estimates stay
+  in config, the ledger stays measured.
+- **No profile, no call.** `NoProfileError`, before any request, so nothing is
+  sent or charged where the ledger insert would have failed its foreign key.
+- **Parallel spend is documented, not reserved** — a reservation is out of
+  proportion here, and the OpenRouter key's own credit limit is what bounds a
+  burst.
+
+**What review found**, across three non-blocking reviews:
+
+- **A claim in the ADR that was false.** It said a test needing old spend writes
+  it with the service role. It cannot: `date_llm_call` has no role exemption, so
+  the service role is re-dated too. The guard stays — a date the project can
+  forge is one an operator can be talked into forging — and the ADR now says how
+  it is actually done: insert, then UPDATE, which a `before insert` trigger never
+  sees.
+- **`spendFrom` did not clamp a negative sum** while its comment claimed defence
+  in depth. The suggested `Math.max(0, total)` was rejected for something
+  stronger: no real ledger produces a negative sum, so one means the CHECK is
+  gone, and clamping to zero would hand that writer a fresh week. It denies.
+- **An empty RPC response read as zero spend** — fail-open on a query that did
+  not answer. It throws.
+- **Two database tests asserted "an error occurred"**, which RLS and three other
+  checks on the same insert would have satisfied with the new constraint gone.
+  They name the constraint now, and `upstream_cost` has its own case.
+- **Smaller:** the trigger restates the literal `0.50` rather than reading the
+  column default (a BEFORE INSERT trigger runs after the default is substituted,
+  so it cannot tell "asked for 0.50" from "asked for nothing") — said in the ADR,
+  the migration and FRAMING's assumption row, which now names both places; ADR
+  0007's description of where the timeout charge is applied; a gateway comment
+  describing a coercion the value no longer needs there.
+
+**Deploy order.** Both migrations are additive and the merged code calls
+`llm_spend_summary`, so they went to hosted before the merge (2026-09-12), after
+checking the live rows would satisfy every new constraint: no negative or NaN
+cost, no moved budget, no profile-less auth user. Verified after the push — two
+triggers, three CHECKs, and the function answering.
+
+**Not verified:** no browser pass. Nothing here has a surface; the guards are
+exercised by `tests/db/budget.test.ts` against Postgres in CI.
+
+**The owner's, not the app's:** a credit limit on the OpenRouter key before it
+goes on Vercel, and whether sign-up is open on the hosted project — with it off,
+the profile-less path guards something nobody can reach.
