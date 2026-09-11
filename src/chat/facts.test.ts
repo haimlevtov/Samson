@@ -92,6 +92,15 @@ describe('coachFacts — load', () => {
     expect(facts.tonnage_last_week_kg).toBe(475);
   });
 
+  it('reports this week as zero on a Monday with nothing lifted yet, not as last week', () => {
+    // Profile's "This week" tile once printed last week's figure here; the coach
+    // reads the same function, so it is pinned from this side too.
+    const facts = coachFacts(input({ today: '2026-09-14' }));
+    expect(facts.tonnage_this_week_kg).toBe(0);
+    // The week of Monday 09-07: 100x5 + 80x5.
+    expect(facts.tonnage_last_week_kg).toBe(900);
+  });
+
   it('rounds tonnage to whole kilograms', () => {
     // Plate maths produces long decimals, and every spurious digit is another
     // numeral the reply would be allowed to quote.
