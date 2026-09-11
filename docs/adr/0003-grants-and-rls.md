@@ -98,8 +98,8 @@ against.
 > `sets.workout_id`, which it must report as checked, and its verdict is also run
 > over synthetic policies — two permissive ones with the clause on only one, a
 > restrictive one covering INSERT alone — so neither of the first two rules
-> review rejected can quietly return while every table the guard judges has a
-> single write policy and the answer would not change. The third, counting a
+> review rejected can quietly return while no table the guard judges has more
+> than one write policy and the answer would not change. The third, counting a
 > role `authenticated` belongs to without inheriting from, has no synthetic
 > case: the cases create nothing, so they have no such role to grant.
 >
