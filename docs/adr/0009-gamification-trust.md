@@ -110,6 +110,15 @@ Enforced three ways, because a comment is not a control:
 3. The predicate is executed against a **single-row subquery scoped to the
    evaluating user**, so even a system predicate cannot read across users.
 
+   _Amended 2026-09-11: false twice, for the same reason both times._ The
+   subquery scopes the evaluating user's own SETS, but a predicate that joins
+   onward — to `workouts` (fixed in `20260908140000`), to `exercises` (fixed
+   in `20260911100000`, the `five-patterns` predicate) — reads the joined table
+   with RLS off, because `evaluate_achievements` is `security definer`. Scoping
+   the first table is not scoping the join. Both are filtered now, and ADR
+   0003's 2026-09-11 amendment makes the write policies refuse the cross-user
+   row in the first place.
+
 ### 4. Challenge payout is settled by a batch job, not by a request
 
 Added 2026-09-02. Challenges were generated, validated, assigned and rendered,

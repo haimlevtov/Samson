@@ -79,17 +79,36 @@ against.
 > already written across the boundary instead of leaving it visible to the user
 > who has to clean it up.
 >
-> **Held by a test rather than by memory.** `tests/db/schema-invariants.test.ts`
-> reads every foreign key from the catalogue and fails on one whose table has a
-> user write policy that never mentions it — calibrated against
-> `sets.workout_id`, which it must report as checked. Five were unchecked when it
-> was written: `sets.exercise_id`, `workout_template_items.exercise_id`,
-> `exercise_equipment.exercise_id` and `.equipment_tag_id`, and
-> `user_equipment.equipment_tag_id`. All five point at tables that hold shared
-> catalogue rows as well as user-owned ones — the same existence-oracle class,
-> with no cross-user read today. They are pinned in the test as a known list
-> rather than fixed here, so a sixth fails CI and fixing one changes the list on
-> purpose.
+> **Held by a test rather than by memory — and what the test is.**
+> `tests/db/schema-invariants.test.ts` reads every foreign key into a table with
+> a `user_id` column from the live catalogue. A column counts as checked only when
+> EVERY permissive write policy on its table, for the roles a signed-in user
+> holds, mentions both the column and the table it references — permissive
+> policies are ORed, so one without the clause reopens the gap whatever the
+> others say. That is a text match, deliberately, and so a proxy: it proves
+> somebody wrote a clause about the row, not that the clause is right. The
+> behavioural half is `tests/db/rls.test.ts`, where one user actually tries. The
+> guard is calibrated against `sets.workout_id`, which it must report as checked.
+>
+> **Five columns were unchecked when the guard was first written, and the first
+> version of this paragraph called all five "the same existence-oracle class,
+> with no cross-user read today". That was false, and two reviewers found it
+> independently.** `sets.exercise_id` fed a cross-user READ: the `five-patterns`
+> predicate joins `public.exercises` with nothing scoping the exercise, inside
+> `evaluate_achievements`, which is `security definer`. A user who logged a set
+> against another user's custom exercise could learn its movement pattern from
+> whether the badge fired — the mechanism of `sets.workout_id`, one column along.
+> Both `exercise_id` columns also let one user block another's deletes, being
+> `on delete restrict`.
+>
+> So migration `20260911100000` closes both `exercise_id` columns — own or
+> shared, mirroring `exercises_read` — and filters the predicate as defence in
+> depth. **Three remain, pinned in the guard.** The two on `exercise_equipment`
+> sit under a primary key with no `user_id` at all, so one user's link occupies
+> that pair for everybody and the duplicate-key error says so; the fix is a key
+> change, not a policy. `user_equipment.equipment_tag_id` has `user_id` in its
+> key, which leaves only the existence oracle. All three are tracked in
+> `docs/plans/README.md`.
 
 ## Consequences
 

@@ -85,3 +85,18 @@ in `tests/db/schema-invariants.test.ts` needs no exemptions at all.
   unchanged; the exception is a single parameterless definer function rather
   than a relaxation of the rule, precisely so that this sentence keeps holding
   for everything else.
+
+## Amended 2026-09-11 — the write half is not enough on a table with a foreign key
+
+The `with check (user_id = auth.uid())` above says whose row it is. It says
+nothing about the rows that row points at, and a foreign key is checked as the
+referenced table's owner rather than under RLS. So on a catalogue table with a
+foreign key into another ownable table, copying the pair verbatim lets a user
+link their row to somebody else's. `exercise_equipment_write` is exactly that
+copy, and both of its foreign keys are on the pinned list in
+`tests/db/schema-invariants.test.ts`. ADR 0003's 2026-09-11 amendment states the
+rule a new catalogue table has to follow instead.
+
+The consequence above that the schema test "cannot catch a wrong one" is now
+half true: it still cannot judge a policy in general, but it does catch a write
+policy that leaves a foreign key unchecked.
