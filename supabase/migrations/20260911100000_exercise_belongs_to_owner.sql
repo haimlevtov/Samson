@@ -40,7 +40,9 @@
 --
 -- AUDITED on hosted before writing this, read-only: no custom exercise exists
 -- there at all, so no set or template item points across the boundary and
--- nothing is stranded by the tighter check.
+-- nothing is stranded by the tighter check. Neither this nor 20260911090000 had
+-- reached hosted when written or when review revised them; both go by
+-- `supabase db push` after the PR merges.
 --
 -- THE FIX, in two layers, as in 20260908140000.
 --

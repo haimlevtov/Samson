@@ -4,7 +4,7 @@
  * INVARIANT: RLS is on for every table — CLAUDE.md #10
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { adminClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 
 let alice: TestUser;
 let bob: TestUser;
@@ -112,16 +112,11 @@ afterAll(async () => {
    * the system-row delete below, which is the one that leaks.
    */
   const failures: string[] = [];
-  const attempt = async (step: string, run: () => Promise<void>): Promise<void> => {
-    try {
-      await run();
-    } catch (error) {
-      failures.push(`${step}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
-  await attempt('deleting alice', () => deleteTestUser(alice));
-  await attempt('deleting bob', () => deleteTestUser(bob));
+  try {
+    await deleteTestUsers(alice, bob);
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  }
 
   /*
    * The two SYSTEM rows have to be deleted by hand. Deleting the fixture users
@@ -158,10 +153,12 @@ afterAll(async () => {
    * FOUND IN REVIEW: a discarded error here is the same bug again, silently.
    * `exercises.id` is referenced `on delete restrict` from `sets.exercise_id`,
    * `workout_template_items.exercise_id` AND `progression_nodes.exercise_id`.
-   * The users are gone by now, and with them every set and item this file
-   * wrote, so what can still block this delete is a row nobody here deletes —
-   * a progression node pointing at the fixture, say. Swallowing that would
-   * reintroduce the leak this block was added to stop, with nothing saying so.
+   * If both user deletes succeeded, every set and item this file wrote has
+   * gone with them, and what can still block this is a row nobody here deletes
+   * — a progression node pointing at the fixture, say. If one failed, that
+   * user's rows can block it too, and both failures are reported below.
+   * Swallowing either would reintroduce the leak this block was added to stop,
+   * with nothing saying so.
    */
   if (achievement.error) {
     failures.push(`cleaning up the hidden achievement: ${achievement.error.message}`);
@@ -370,10 +367,11 @@ describe('cross-user isolation', () => {
   it('stops alice moving her own set or template item onto bob rows', async () => {
     /*
      * The UPDATE path of `sets_own` and `workout_template_items_own`, one move
-     * per column the fixes added. The policies are `for all`, so `with check`
-     * runs on an update's new row — tried here rather than argued. Her rows
-     * start valid, on her own session and template and the catalogue, and each
-     * move breaks exactly one clause.
+     * per column the fixes added, plus `sets.workout_id` from 20260908140000,
+     * whose update half nothing tried either. The policies are `for all`, so
+     * `with check` runs on an update's new row — tried here rather than argued.
+     * Her rows start valid, on her own session and template and the catalogue,
+     * and each move breaks exactly one clause.
      */
     const { data: session, error: sessionError } = await alice.client
       .from('workouts')
@@ -422,6 +420,10 @@ describe('cross-user isolation', () => {
       [
         'her set onto bob exercise',
         () => alice.client.from('sets').update({ exercise_id: bobExerciseId }).eq('id', set!.id),
+      ],
+      [
+        'her set into bob workout',
+        () => alice.client.from('sets').update({ workout_id: bobWorkoutId }).eq('id', set!.id),
       ],
       [
         'her item onto bob exercise',

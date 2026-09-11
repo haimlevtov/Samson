@@ -6,20 +6,24 @@
 -- WHY: catalogue rows are shared content, so user_id is nullable and NULL means
 --      "system content, readable by everyone". The invariant stays literally
 --      true, and user-authored custom exercises need no new column — though
---      they did need 20260911100000 before the tables that point at them were
---      safe. See docs/adr/0002-catalogue-user-id.md.
--- AI-NOTE: every catalogue table repeats this policy pair. If you add one, copy
---          both policies or the rows become invisible, or writable by the wrong
---          user. And if the table has a foreign key into another user-ownable
---          table, the write policy must ALSO check the referenced row is the
---          writer's own or shared: copied verbatim, it lets a user link to
---          somebody else's row. `exercise_equipment_write` below is exactly
---          that copy, pinned in tests/db/schema-invariants.test.ts — ADR
---          0003's 2026-09-11 amendment.
+--      `sets` and `workout_template_items` needed 20260911100000 before they
+--      were safe to point at one, and `exercise_equipment` still is not. See
+--      docs/adr/0002-catalogue-user-id.md.
+-- AI-NOTE: a new catalogue table needs the READ policy below. Add a write
+--          policy only when a named feature needs one — ADR 0002's 2026-09-08
+--          amendment — with a test that a user cannot write a null-user_id
+--          row; progression_nodes (20260908120100), tonnage_comparisons
+--          (20260908100100) and supplement_evidence have none. And a write
+--          policy on a table with a foreign key into another user-ownable
+--          table must ALSO check the referenced row is the writer's own or
+--          shared: `exercise_equipment_write` below does not, and is pinned in
+--          tests/db/schema-invariants.test.ts — ADR 0003's 2026-09-11
+--          amendment.
 --
---          Amended in place 2026-09-11, in review of PR #43. A comment outside
---          a function body is not stored, so no database's copy of this
---          migration changes — 20260908090400 set the precedent.
+-- FOUND IN REVIEW of PR #43, 2026-09-11: the note above used to say "copy both
+-- policies". Amended in place, as 20260908090400 did for its own: a comment
+-- outside a function body is not stored in any schema object, so no database
+-- changes.
 
 create table public.equipment_tags (
   id uuid primary key default gen_random_uuid(),

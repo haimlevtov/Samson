@@ -23,7 +23,7 @@
  *          which had been passing on data a different test had written.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 import { MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_WEIGHT_KG } from '../../src/gamification/plausibility';
 
 const admin = adminClient();
@@ -43,7 +43,7 @@ const TIERS = [
 const created: TestUser[] = [];
 
 afterAll(async () => {
-  await Promise.all(created.map(deleteTestUser));
+  await deleteTestUsers(...created);
 }, 120_000);
 
 async function newUser(label: string, timezone = 'UTC'): Promise<TestUser> {
@@ -797,8 +797,9 @@ describe('the boundary of each remaining tier', () => {
      * The cleanup always runs, and the body's failure outranks it — without a
      * `throw` inside `finally`, which lint forbids for exactly the masking this
      * is avoiding. `failed` is its own flag because `throw undefined` is legal
-     * and would otherwise read as a pass; a cleanup failure behind a body
-     * failure rides along as its `cause` rather than vanishing.
+     * and would otherwise read as a pass. A cleanup failure behind a body
+     * failure rides along as its `cause` — beside any cause it already had —
+     * rather than vanishing.
      */
     let cleanup: Error | undefined;
     if (pointing.length > 0) {
@@ -807,7 +808,10 @@ describe('the boundary of each remaining tier', () => {
     }
     if (failed) {
       const error = failure instanceof Error ? failure : new Error(String(failure));
-      if (cleanup && error.cause === undefined) error.cause = cleanup;
+      if (cleanup) {
+        error.cause =
+          error.cause === undefined ? cleanup : new AggregateError([error.cause, cleanup]);
+      }
       throw error;
     }
     if (cleanup) throw cleanup;

@@ -20,7 +20,7 @@
  * user-scoped client, the same split as tests/db/rls.test.ts.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { adminClient, anonClient, createTestUser, deleteTestUser, type TestUser } from './helpers';
+import { adminClient, anonClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 import { levelForXp } from '../../src/gamification/level';
 import { loadLeaderboard } from '../../src/db/leaderboard';
 
@@ -55,8 +55,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await deleteTestUser(alice);
-  await deleteTestUser(bob);
+  await deleteTestUsers(alice, bob);
 });
 
 /** Each test decides who is on the board, so none inherits another's cohort. */

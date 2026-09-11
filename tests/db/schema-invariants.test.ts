@@ -428,14 +428,19 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
    * says whether the table can be written in the first place.
    *
    * "Applies" means `for all` or that command, granted to `public` or to a role
-   * `authenticated` is a member of. Where a policy has no `with check`,
-   * Postgres reuses `using`, and so does this.
+   * whose privileges `authenticated` inherits — `pg_has_role(..., 'USAGE')`,
+   * the same test Postgres uses to decide a policy applies. Where a policy has
+   * no `with check`, Postgres reuses `using`, and so does this.
    *
-   * FOUND IN REVIEW, twice. The first version accepted ANY one policy; the
-   * second accepted a restrictive policy whatever command it covered, so a
-   * `for insert` one could leave UPDATE open while this stayed green. Neither
-   * weakening changes today's answer — every real table has one write policy —
-   * which is why the verdict also runs over synthetic policies below.
+   * FOUND IN REVIEW, three times. The first version accepted ANY one policy;
+   * the second accepted a restrictive policy whatever command it covered, so a
+   * `for insert` one could leave UPDATE open while this stayed green; the third
+   * asked for 'MEMBER', which also counts a membership that passes on no
+   * privileges. Supabase makes `authenticated` NOINHERIT, so a restrictive
+   * policy for a role granted to it would have read as a check Postgres never
+   * runs. None of these weakenings changes today's answer — every real table
+   * has one write policy — which is why the verdict also runs over synthetic
+   * policies below.
    *
    * It is a proxy — it proves the author wrote a clause about that row, not that
    * the clause is correct — so the behavioural halves live in
@@ -453,10 +458,10 @@ describe('ADR 0003 — a write policy checks the rows its foreign keys point at'
           'public' = any (p.roles)
           or exists (
             select 1 from unnest(p.roles) as r (role)
-            -- CASE, not AND: pg_has_role raises on public, which is not a real
-            -- role, and AND does not promise to test its left side first.
+            -- WHY CASE, not AND: pg_has_role raises on public, which is not a
+            -- real role, and AND does not promise to test its left side first.
             where case when r.role = 'public' then false
-                       else pg_has_role('authenticated', r.role, 'MEMBER') end
+                       else pg_has_role('authenticated', r.role, 'USAGE') end
           )
         )
     )

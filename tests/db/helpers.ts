@@ -213,11 +213,41 @@ export async function signInAsArchetype(email: string): Promise<TestUser> {
   return { id: data.session.user.id, email, client };
 }
 
+/**
+ * Deletes one test user, and throws if that fails.
+ *
+ * FOUND IN REVIEW of PR #43: this discarded the error, so a delete blocked by
+ * `on delete restrict` failed silently and leaked the user and everything they
+ * owned.
+ *
+ * AI-NOTE: because it throws, call it where a failure cannot hide another one.
+ *          Inside a test, register it with `onTestFinished(() => ...)`, which
+ *          reports its error beside the test's own; an awaited call in
+ *          `finally` REPLACES the test's error with the cleanup's. For more
+ *          than one user use `deleteTestUsers`, which attempts every delete.
+ */
 export async function deleteTestUser(user: TestUser): Promise<void> {
-  // FOUND IN REVIEW of PR #43: this discarded the error, so a delete blocked by
-  // `on delete restrict` failed silently and leaked the user and everything
-  // they owned. rls.test.ts's cleanup now depends on it succeeding, so it says
-  // when it does not.
   const { error } = await adminClient().auth.admin.deleteUser(user.id);
   if (error) throw new Error(`deleting test user ${user.email}: ${error.message}`);
+}
+
+/**
+ * Deletes each user in the order given, attempts every one even when an earlier
+ * delete fails, and throws once at the end naming every failure.
+ *
+ * WHY the caller's order and not in parallel: a user whose rows point at another
+ * user's — a set on someone else's custom exercise, on a run where a gap is open
+ * — has to go first, or `on delete restrict` blocks the other. And `Promise.all`
+ * reports only the first rejection.
+ */
+export async function deleteTestUsers(...users: TestUser[]): Promise<void> {
+  const failures: string[] = [];
+  for (const user of users) {
+    try {
+      await deleteTestUser(user);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (failures.length > 0) throw new Error(failures.join('; '));
 }

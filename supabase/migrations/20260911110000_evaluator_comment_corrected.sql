@@ -9,10 +9,11 @@
 -- WHY a migration for a comment: a comment inside a function body is part of
 -- the stored source, so every database that ran 20260908090200 holds the
 -- claim, and the stored source is exactly where the next author of a predicate
--- would read it. Editing 20260908090200 in place would change nothing any
--- database holds, and leave the repo describing source no database runs. A
--- comment OUTSIDE a function body is not stored, which is why
--- 20260824150203's AI-NOTE was amended in place in the same change.
+-- would read it. Editing 20260908090200 in place would change nothing in a
+-- database that has already run it, and leave the repo describing source those
+-- databases do not hold. A comment OUTSIDE a function body is not stored in any
+-- schema object, which is why 20260824150203's AI-NOTE was amended in place in
+-- the same change.
 --
 -- The body is 20260908090200's, character for character, apart from that
 -- comment — checked by comparing the two with each comment removed when this
@@ -46,11 +47,12 @@ begin
     order by a.slug
   loop
     begin
-      -- The user id is bound as $1, and that scopes nothing by itself: this
-      -- function is `security definer`, so a predicate reads every table with
-      -- RLS off. Each predicate must filter every user-ownable table it
-      -- touches to $1 — the sets it starts from AND anything it joins. ADR
-      -- 0009 §3, amended 2026-09-11; .claude/skills/add-achievement.
+      -- AI-NOTE: the user id is bound as $1, and that scopes nothing by
+      --          itself. This function is `security definer`, so a predicate
+      --          reads every table with RLS off: each one must filter every
+      --          user-ownable table it touches to $1 — the table it starts
+      --          from, `sets` or `workouts`, AND anything it joins. ADR 0009
+      --          §3, amended 2026-09-11; .claude/skills/add-achievement.
       execute format('select (%s)', row_achievement.predicate)
         into unlocked
         using p_user_id;
