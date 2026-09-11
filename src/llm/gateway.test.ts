@@ -17,10 +17,25 @@ import type { GatewayDeps, LedgerClient, LlmCallInsert } from './types';
 
 const planSchema = z.object({ summary: z.string(), sessions: z.number().int() });
 
+/** What Postgres refuses in a `text` value: a NUL, or half of a surrogate pair. */
+function unstorable(value: string): boolean {
+  return Array.from(value).some((ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    return code === 0 || (code >= 0xd800 && code <= 0xdfff);
+  });
+}
+
 function fakeLedger(overrides: Partial<LedgerClient> = {}) {
   const rows: LlmCallInsert[] = [];
   const client: LedgerClient = {
     insertLlmCall: async (row) => {
+      // Refuses what Postgres refuses, so a test that a row lands means it —
+      // the NUL that review found would otherwise pass here and fail there.
+      for (const [field, value] of Object.entries(row)) {
+        if (typeof value === 'string' && unstorable(value)) {
+          throw new Error(`llm_calls insert failed: ${field} is not storable text`);
+        }
+      }
       rows.push(row);
     },
     sumSpendSince: async () => 0,
@@ -466,6 +481,22 @@ describe('callSpeech', () => {
     expect(result.contentType).toBe('audio/mpeg');
   });
 
+  it('records a timeout during the read after a 200 as a timeout, and does not retry it', async () => {
+    // Charged TIMEOUT_ASSUMED_COST_USD, and a 200 may have been billed, so a
+    // retry would pay twice. FOUND IN THE THIRD REVIEW: nothing pinned this.
+    const slow = new ReadableStream({
+      start(controller) {
+        controller.error(Object.assign(new Error('timed out reading'), { name: 'TimeoutError' }));
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () => new Response(slow, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['timeout']);
+  });
+
   it('charges a 200 whose body fails mid-read, and does not retry it', async () => {
     // FOUND IN THE SECOND REVIEW: it fell into the transport catch as an
     // http_error — retried, and charged nothing — though a 200 may be billed.
@@ -588,7 +619,37 @@ describe('the ledger writer', () => {
     expect(rows[0]!.error).toBe('HTTP 400: badinput');
   });
 
-  it('mends a surrogate pair the 500-character cut split in two', async () => {
+  it('cleans the fields a provider fills from its JSON, not only the error', async () => {
+    // FOUND IN THE THIRD REVIEW: `model_used` and `openrouter_id` come straight
+    // from the envelope, and a NUL there refused the row of a paid call.
+    const nul = String.fromCharCode(0);
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(
+          okBody({ summary: 'ok', sessions: 3 }, { model: `gemini${nul}`, id: `gen${nul}1` }),
+          { status: 200 }
+        )
+    );
+
+    await callLLM(baseOptions, deps);
+    expect(rows[0]!.model_used).toBe('gemini');
+    expect(rows[0]!.openrouter_id).toBe('gen1');
+  });
+
+  it('caps an unbounded error message', async () => {
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(
+          JSON.stringify({ id: 'gen-x', model: 'm', error: { message: 'e'.repeat(10_000) } }),
+          { status: 200 }
+        )
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error!.length).toBe(2_000);
+  });
+
+  it('replaces the half of a surrogate pair the 500-character cut leaves', async () => {
     // The emoji straddles the cut: character 500 is its high half alone.
     const body = `${'x'.repeat(499)}😀 and more`;
     const { deps, rows } = makeDeps(async () => new Response(body, { status: 503 }));
@@ -620,6 +681,17 @@ describe('the budget gate', () => {
     const { deps } = makeDeps(
       async () => audioResponse(),
       fakeLedger({ getWeeklyBudgetUsd: async () => Number.NaN })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  it('denies the budget as PostgREST returns a NaN — the string "NaN" — with the budget refusal', async () => {
+    // FOUND IN THE THIRD REVIEW: the gate denied it, then BudgetExceededError's
+    // toFixed threw on the string, and the user got a generic failure.
+    const { deps } = makeDeps(
+      async () => audioResponse(),
+      fakeLedger({ getWeeklyBudgetUsd: async () => 'NaN' as unknown as number })
     );
 
     await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);

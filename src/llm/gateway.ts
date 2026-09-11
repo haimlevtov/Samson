@@ -7,8 +7,8 @@
  *            throws before it — an input over its ceiling, which the column
  *            limits make unreachable — and nothing is sent or charged for it;
  *            ADR 0025's addendum records the reading. And `openLedger` cleans
- *            every row's text first, because a row Postgres refuses is a call
- *            with no row.
+ *            every field the provider can fill before the insert, because a
+ *            row Postgres refuses is a call with no row.
  * INVARIANT: the model never computes a number the user sees — CLAUDE.md #1.
  *            This module moves tokens; arithmetic lives in the metrics engine.
  *
@@ -123,8 +123,17 @@ function isTextual(mediaType: string): boolean {
   return mediaType.startsWith('text/') || mediaType.endsWith('json') || mediaType.endsWith('xml');
 }
 
+/** What stands in for half a surrogate pair: U+FFFD, the replacement character. */
+const REPLACEMENT = String.fromCodePoint(0xfffd);
+
 /**
- * Text Postgres will store.
+ * The most of any one field a ledger row keeps. An upstream error message and
+ * a thrown `cause.message` are otherwise unbounded, and the row is for reading.
+ */
+const LEDGER_TEXT_MAX = 2_000;
+
+/**
+ * Text Postgres will store, at most `LEDGER_TEXT_MAX` characters.
  *
  * WHY: Postgres refuses a NUL (U+0000) in `text` outright, and half of a
  * surrogate pair — which `.slice()` of a longer message can leave at the cut —
@@ -132,17 +141,20 @@ function isTextual(mediaType: string): boolean {
  * and uncharged against the budget. FOUND IN REVIEW of #49: a 200 carrying
  * audio in the wrong format was read as text into `error`, NULs and all.
  */
-/** What stands in for half a surrogate pair: U+FFFD, the replacement character. */
-const REPLACEMENT = String.fromCodePoint(0xfffd);
-
 function storable(text: string): string {
   // By code point, so a whole pair stays whole and a half on its own is caught.
-  return Array.from(text, (ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    if (code === 0) return '';
-    return code >= 0xd800 && code <= 0xdfff ? REPLACEMENT : ch;
-  }).join('');
+  return Array.from(text)
+    .slice(0, LEDGER_TEXT_MAX)
+    .map((ch) => {
+      const code = ch.codePointAt(0) ?? 0;
+      if (code === 0) return '';
+      return code >= 0xd800 && code <= 0xdfff ? REPLACEMENT : ch;
+    })
+    .join('');
 }
+
+const storableOrNull = (text: string | null): string | null =>
+  text === null ? null : storable(text);
 
 /**
  * The ledger for one call: every row it wrote, and the writer.
@@ -150,7 +162,9 @@ function storable(text: string): string {
  * WHY the insert is not swallowed: a dropped ledger row is data the token
  * analysis can never recover, so the call fails loudly instead — CLAUDE.md #3.
  * WHY the text is cleaned here rather than where each message is built: this
- * is the one writer both entry points share, so no path can miss it.
+ * is the one writer both entry points share, so no path can miss it. Every
+ * field the provider can fill is cleaned — `error`, and `model_used` and
+ * `openrouter_id` from its JSON — not only the one review first found.
  */
 function openLedger(deps: GatewayDeps): {
   ledger: LlmCallInsert[];
@@ -160,7 +174,12 @@ function openLedger(deps: GatewayDeps): {
   return {
     ledger,
     record: async (row) => {
-      const clean = row.error === null ? row : { ...row, error: storable(row.error) };
+      const clean: LlmCallInsert = {
+        ...row,
+        error: storableOrNull(row.error),
+        model_used: storableOrNull(row.model_used),
+        openrouter_id: storableOrNull(row.openrouter_id),
+      };
       ledger.push(clean);
       await deps.db.insertLlmCall(clean);
     },
@@ -180,8 +199,13 @@ async function enforceBudget(
   denied: LlmCallInsert,
   record: (row: LlmCallInsert) => Promise<void>
 ): Promise<void> {
-  const budget = (await deps.db.getWeeklyBudgetUsd(userId)) ?? DEFAULT_WEEKLY_BUDGET_USD;
-  const spent = await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS));
+  // Number(): a `numeric` 'NaN' arrives from PostgREST as the STRING "NaN",
+  // which the comparison below would coerce but `BudgetExceededError`'s
+  // `toFixed` would throw on — a refusal turned into a generic failure.
+  const budget = Number((await deps.db.getWeeklyBudgetUsd(userId)) ?? DEFAULT_WEEKLY_BUDGET_USD);
+  const spent = Number(
+    await deps.db.sumSpendSince(userId, new Date(deps.now().getTime() - WEEK_MS))
+  );
 
   // WHY `!(spent < budget)` rather than `spent >= budget`: every comparison
   // with NaN is false, so the second form ALLOWS a NaN spend or budget — and a

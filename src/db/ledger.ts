@@ -14,8 +14,10 @@ import type { LedgerClient, LlmCallInsert, LlmCallStatus, LlmStage } from '../ll
 const SPEECH: LlmStage = 'speech';
 
 /**
- * Speech rows that reached a 200: `ok`, and `schema_invalid` for a 200 that was
- * not the mp3 asked for. Either may have been billed, so both are charged.
+ * Speech rows that reached a 200: `ok`, and `schema_invalid` for a 200 with no
+ * usable mp3 — the wrong type, no bytes, or a body that failed mid-read. Either
+ * may have been billed, so both are charged. (A timeout during that read keeps
+ * its own status and is charged `TIMEOUT_ASSUMED_COST_USD`.)
  */
 const SPOKEN: ReadonlySet<LlmCallStatus> = new Set<LlmCallStatus>(['ok', 'schema_invalid']);
 
@@ -92,7 +94,10 @@ export function createSupabaseLedger(db: Db): LedgerClient {
         .maybeSingle();
 
       if (error) throw new Error(`budget lookup failed: ${error.message}`);
-      return data?.llm_weekly_budget_usd ?? null;
+      // Number(): `numeric` 'NaN' comes back as the string "NaN". The gate
+      // denies it either way; this keeps the declared type honest.
+      const budget = data?.llm_weekly_budget_usd;
+      return budget === null || budget === undefined ? null : Number(budget);
     },
   };
 }

@@ -19,6 +19,15 @@ import type { LlmStage } from './types';
  * The one speech model — ADR 0025. A constant rather than `STAGE_MODELS.speech[0]`
  * so `callSpeech` has a model by type, with no "none configured" branch to
  * throw before a ledger row exists.
+ *
+ * Checked against /models?output_modalities=speech on 2026-09-11 rather than
+ * for `structured_outputs` — the exception to the AI-NOTE below — because it
+ * returns audio, not JSON. The ADR's first draft named openai/gpt-4o-mini-tts,
+ * which that list does not carry.
+ *
+ * AI-NOTE: its voices are SPEECH_VOICES in src/speech/script.ts, and every
+ *          shipped coach is cast from them. Changing this slug means recasting
+ *          every persona row in the same change.
  */
 export const SPEECH_MODEL = 'google/gemini-3.1-flash-tts-preview';
 
@@ -56,16 +65,8 @@ export const STAGE_MODELS: Record<LlmStage, readonly string[]> = {
   /*
    * ADR 0025. ONE model, and no fallback on purpose: a voice name belongs to a
    * model — `Algenib` means nothing to any other — so a second model would
-   * speak in a voice nobody cast, the mismatch that ADR exists to end.
-   *
-   * The exception to the AI-NOTE at the top of this file: checked against
-   * /models?output_modalities=speech on 2026-09-11 rather than for
-   * `structured_outputs`, because it returns audio, not JSON. The ADR's first
-   * draft named openai/gpt-4o-mini-tts, which that list does not carry.
-   *
-   * AI-NOTE: its voices are SPEECH_VOICES in src/speech/script.ts, and every
-   *          shipped coach is cast from them. Changing this slug means
-   *          recasting every persona row in the same change.
+   * speak in a voice nobody cast, the mismatch that ADR exists to end. How it
+   * was checked, and what changing it costs: `SPEECH_MODEL` above.
    */
   speech: [SPEECH_MODEL],
   smoke: ['google/gemini-2.5-flash-lite'],
