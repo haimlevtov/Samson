@@ -1,6 +1,6 @@
 # ADR 0003 — Table grants are a second gate, and Supabase does not set them
 
-**Status:** accepted, phase 0
+**Status:** accepted, phase 0 — amended 2026-09-08 and 2026-09-11
 **Date:** 2026-08-24
 
 ## Context
@@ -58,6 +58,38 @@ against.
 > that makes it apply to tables added later — the pairing migration 0011 had to
 > learn. The test now asserts over **every** privilege type, so the next verb
 > added to Supabase's defaults cannot arrive unnoticed.
+
+> **Amended 2026-09-11 — a foreign key is a gate RLS does not guard.** A write
+> policy's `with check` sees the row being written. The foreign keys on that row
+> are checked by Postgres as the **referenced table's owner, not under RLS**, so
+> they resolve another user's row without complaint. Twice now a write policy
+> has checked `user_id = auth.uid()` and nothing about the row a foreign key
+> points at:
+>
+> - `sets.workout_id` — a set hung off another user's workout (migration
+>   `20260908140000`).
+> - `workouts.template_id` and `workout_template_items.template_id` — a session
+>   started from, or an item written into, another user's template. Two comments
+>   in the code said RLS refused this. It did not.
+>
+> **The rule.** A write policy on a table with a foreign key into a user-ownable
+> table checks, in `with check`, that the referenced row is one the writer may
+> use: their own, or a shared catalogue row whose `user_id` is null. `using` is
+> left alone, as the first fix argued — adding the clause there would hide a row
+> already written across the boundary instead of leaving it visible to the user
+> who has to clean it up.
+>
+> **Held by a test rather than by memory.** `tests/db/schema-invariants.test.ts`
+> reads every foreign key from the catalogue and fails on one whose table has a
+> user write policy that never mentions it — calibrated against
+> `sets.workout_id`, which it must report as checked. Five were unchecked when it
+> was written: `sets.exercise_id`, `workout_template_items.exercise_id`,
+> `exercise_equipment.exercise_id` and `.equipment_tag_id`, and
+> `user_equipment.equipment_tag_id`. All five point at tables that hold shared
+> catalogue rows as well as user-owned ones — the same existence-oracle class,
+> with no cross-user read today. They are pinned in the test as a known list
+> rather than fixed here, so a sixth fails CI and fixing one changes the list on
+> purpose.
 
 ## Consequences
 
