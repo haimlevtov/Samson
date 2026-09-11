@@ -4,6 +4,8 @@ import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas, personaVoice } from '@/src/db/personas';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { planSessionOptions } from '@/src/templates/plan';
+import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole, type CoachPersona } from './CoachConsole';
 import { ChatPanel } from './ChatPanel';
 import { DietPanel } from './DietPanel';
@@ -101,6 +103,20 @@ export default async function CoachPage() {
                   number in it, and a number it states that is not here is rejected automatically.
                 </FieldHint>
               </h2>
+
+              {/*
+               * A plan becomes a template — rework plan, PR 7. The same control
+               * and the same action as /workout/new, so a session saved here is
+               * the one saved there: copied verbatim from this block, and a
+               * second copy gets a counter rather than a twin. Above the weeks,
+               * not below them: a twelve-week block would bury it.
+               */}
+              <div className="card">
+                <PlanImportForm
+                  sessions={planSessionOptions(plan.block)}
+                  submitLabel="Save as a template"
+                />
+              </div>
 
               {plan.block.weeks.map((week) => (
                 <div key={week.week_number} className="card week-card">

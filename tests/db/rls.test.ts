@@ -250,6 +250,21 @@ describe('cross-user isolation', () => {
     expect(error!.message.toLowerCase()).toContain('row-level security');
   });
 
+  it('stops alice creating a template in bob name', async () => {
+    /*
+     * Rework plan PR 7. `workout_templates_own` refuses a row whose `user_id`
+     * is not the writer's, and nothing had tried: every template test wrote
+     * the user's own. PR 7 adds a second caller of `createTemplate` — the
+     * coach's plan — so the policy is asserted rather than assumed.
+     */
+    const { error } = await alice.client
+      .from('workout_templates')
+      .insert({ user_id: bob.id, name: 'planted in bob list' });
+
+    expect(error, 'alice created a template owned by bob').not.toBeNull();
+    expect(error!.message.toLowerCase()).toContain('row-level security');
+  });
+
   it('stops alice starting a session from one of bob templates', async () => {
     /*
      * FOUND IN REVIEW of PR #42, 2026-09-11 — the set case above, one table

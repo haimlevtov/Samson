@@ -71,8 +71,17 @@ describe('the shipped roster', () => {
 
     expect(error).toBeNull();
 
-    const pairs = (data ?? []).map((p) => `${p.tts_voice_id}:${p.tts_voice_variant}`);
-    expect(pairs).toHaveLength(new Set(pairs).size);
+    // The slug of every persona whose language and variant an earlier one
+    // already took, not a length comparison: vitest truncates long values in a
+    // failure, so lengths alone would name nobody. FOUND IN REVIEW of PR #46.
+    const seen = new Set<string>();
+    const collides: string[] = [];
+    for (const p of data ?? []) {
+      const pair = `${p.tts_voice_id}:${p.tts_voice_variant}`;
+      if (seen.has(pair)) collides.push(`${p.slug} (${pair})`);
+      seen.add(pair);
+    }
+    expect(collides, 'personas that would speak in a voice already taken').toEqual([]);
   });
 
   it('carries a banned-phrase list on every persona, including the two universals', async () => {

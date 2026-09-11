@@ -26,6 +26,33 @@ export function plannedSessionName(weekNumber: number, session: PlannedSession):
   return `${name.slice(0, TEMPLATE_NAME_MAX - 1).trimEnd()}…`;
 }
 
+/** One session of a plan, as the import control lists it. */
+export interface PlanSessionOption {
+  weekNumber: number;
+  dayIndex: number;
+  /** The name the import will store — `plannedSessionName`. */
+  label: string;
+}
+
+/**
+ * Every session of a block, in order, as the import control lists them.
+ *
+ * WHY one builder: `/workout/new` built this inline, and `/coach` would have been
+ * a second copy — one that could label a session differently from the name it
+ * saves. Rework plan, PR 7.
+ */
+export function planSessionOptions(
+  block: { weeks: { week_number: number; sessions: PlannedSession[] }[] } | null | undefined
+): PlanSessionOption[] {
+  return (block?.weeks ?? []).flatMap((week) =>
+    week.sessions.map((session) => ({
+      weekNumber: week.week_number,
+      dayIndex: session.day_index,
+      label: plannedSessionName(week.week_number, session),
+    }))
+  );
+}
+
 /**
  * WHY an unresolvable slug fails the whole import rather than skipping the
  * exercise: a pressing day that silently arrives without its press looks like a
