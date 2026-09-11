@@ -12,7 +12,7 @@ import { callLLM, callSpeech } from './gateway';
 import { SAFETY_PREAMBLE } from './safety';
 import { STAGE_MODELS } from './models';
 import { MissingApiKeyError, SPEECH_MAX_INPUT_CHARS, hasApiKey, readApiKey } from './config';
-import { BudgetExceededError, LlmCallFailedError } from './types';
+import { BudgetExceededError, LlmCallFailedError, NoProfileError } from './types';
 import type { GatewayDeps, LedgerClient, LlmCallInsert } from './types';
 
 const planSchema = z.object({ summary: z.string(), sessions: z.number().int() });
@@ -276,17 +276,27 @@ describe('callLLM', () => {
     expect(rows[0]!.error).toContain('0.75');
   });
 
-  it('falls back to the default budget when the user row has none', async () => {
+  it('refuses a caller with no profile row, before any request, and writes no row', async () => {
+    /*
+     * ADR 0026 §3. This fell back to a default budget: the paid call went out,
+     * and every ledger insert failed its foreign key afterwards — spend nobody
+     * recorded and the gate never saw. A row cannot exist without a profile, so
+     * the refusal writes none.
+     */
+    const fetchSpy = vi.fn();
     const ledger = fakeLedger({
-      sumSpendSince: async () => 0.49,
+      sumSpendSince: async () => 0,
       getWeeklyBudgetUsd: async () => null,
     });
-    const { deps } = makeDeps(
-      async () => new Response(okBody({ summary: 'ok', sessions: 3 }), { status: 200 }),
-      ledger
-    );
+    const { deps, rows } = makeDeps(async () => {
+      fetchSpy();
+      return new Response(okBody({ summary: 'ok', sessions: 3 }), { status: 200 });
+    }, ledger);
 
-    await expect(callLLM(baseOptions, deps)).resolves.toMatchObject({ attempts: 1 });
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(NoProfileError);
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(NoProfileError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(rows).toEqual([]);
   });
 
   it('fails the call when the ledger write fails', async () => {

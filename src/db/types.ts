@@ -1013,6 +1013,14 @@ export type Database = {
       accept_challenge: { Args: { p_challenge_id: string }; Returns: boolean }
       award_session_xp: { Args: { p_workout_id: string }; Returns: Json }
       evaluate_achievements: { Args: { p_user_id: string }; Returns: string[] }
+      llm_spend_summary: {
+        Args: { p_since: string; p_user_id: string }
+        Returns: {
+          measured: number
+          timeouts: number
+          unpriced_speech: number
+        }[]
+      }
       unlocked_achievements: {
         Args: never
         Returns: {
