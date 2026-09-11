@@ -8,9 +8,9 @@
 --            Record<string, string> beside the component that speaks it.
 --
 -- WHY a stored line rather than one generated through the persona stage: a
--- generated line would be in character and would need an API key, which makes a
--- preview button that cannot preview. A stored line works offline, and a demo
--- runs offline.
+-- generated line would sound right, and would need an API key — which makes a
+-- preview button that cannot preview. A stored line needs no key, and none is
+-- configured; ADR 0006's 2026-09-11 amendment.
 --
 -- WHY nullable: `personas_write` still lets a user own a persona row, and
 -- nothing in the app authors one. A required column that no form asks for would
@@ -21,11 +21,12 @@
 -- The lines obey what every word a persona says obeys, checked for each shipped
 -- row by tests/db/personas.test.ts: no numeral (a coach states no figure it was
 -- not given — invariant #1), none of the row's own banned phrases, and a clean
--- pass through `scanOutput` (src/llm/safety.ts). 280 characters is a few seconds
--- spoken, and a preview is a taste rather than a speech.
+-- pass through `scanOutput` (src/llm/safety.ts). 280 characters is about fifty
+-- words — fifteen to twenty seconds at the app's speech rates — and a preview
+-- is a taste rather than a speech.
 --
--- AI-NOTE: adding a column means regenerating src/db/types.ts from a LOCAL stack
---          with the pinned CLI — CLAUDE.md. It was, in the same commit.
+-- AI-NOTE: a new persona row must set `sample_line` — add-persona §1 — and
+--          tests/db/personas.test.ts fails a shipped row without one.
 
 alter table public.personas
   add column sample_line text
@@ -33,7 +34,7 @@ alter table public.personas
       check (sample_line is null or char_length(sample_line) between 1 and 280);
 
 comment on column public.personas.sample_line is
-  'What the Coach tab previews before a plan exists, in the coach''s own voice. No numerals, none of the row''s banned phrases — migration 20260911130000.';
+  'What the Voice card on Coach speaks when a coach is previewed, before it delivers the plan, in the coach''s own voice. No numerals, none of the row''s banned phrases — migration 20260911130000.';
 
 update public.personas
 set sample_line = 'I''ve trained already today. Your move. Match last week and we''re level. Beat it and I''ll have to start taking you seriously.'

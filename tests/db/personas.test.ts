@@ -122,8 +122,9 @@ describe('the shipped roster', () => {
 
 describe('the line each coach is heard by before it is picked', () => {
   /*
-   * Rework plan PR 6, and the add-persona skill: `sample_line` is spoken before
-   * a plan exists, so it obeys what every word a persona says obeys. Checked
+   * Rework plan PR 6, and the add-persona skill: `sample_line` is what the Voice
+   * card speaks when a coach is previewed, before it delivers the plan, so it
+   * obeys what every word a persona says obeys. Checked
    * per row through the shipped reader and the shipped checks — a copy of any
    * of them here would measure the copy.
    *
@@ -141,12 +142,16 @@ describe('the line each coach is heard by before it is picked', () => {
   it('gives each coach its own line', async () => {
     // The acceptance is "something recognisably its own". Distinct is the part
     // a test can hold; the voice of each line is content, read in review.
+    // toHaveLength against the Set, as the voice-variant case above does, so a
+    // failure prints the lines themselves and names the duplicate.
     const said = (await lines()).map(({ line }) => line);
-    expect(new Set(said).size).toBe(said.length);
+    expect(said).toHaveLength(new Set(said).size);
   });
 
-  it('states no figure, because a coach says no number it was not given', async () => {
-    // Invariant #1, through the numeral pattern the persona guard uses.
+  it('states no numeral, because a coach says no number it was not given', async () => {
+    // Invariant #1, through the numeral pattern the persona guard uses. That
+    // pattern reads DIGITS — "add ten kilos" passes it, the known gap in
+    // src/persona/guard.ts — so this holds numerals, not every number word.
     for (const { persona, line } of await lines()) {
       expect([...numbersIn(line)], persona.slug).toEqual([]);
     }

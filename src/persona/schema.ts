@@ -85,3 +85,27 @@ export interface Persona {
    */
   voiceVariant: number;
 }
+
+/**
+ * Exactly the fields the delivery stage reads, from any wider row.
+ *
+ * WHY a pick and not the row passed through: the picker's `ListedPersona`
+ * carries `sampleLine`, which a user can write on their own persona row, and
+ * delivery never reads it. Passing the row through was safe only while the
+ * prompt builder names fields one at a time; a later edit that spread the
+ * persona into a message would put user text outside the fence — CLAUDE.md
+ * #11, ADR 0006's 2026-09-11 amendment. Picking makes that impossible rather
+ * than merely absent, and a field added to a reader type later cannot leak
+ * either.
+ */
+export function asPersona(row: Persona): Persona {
+  return {
+    slug: row.slug,
+    name: row.name,
+    systemPrompt: row.systemPrompt,
+    intensity: row.intensity,
+    humorLevel: row.humorLevel,
+    bannedPhrases: row.bannedPhrases,
+    voiceVariant: row.voiceVariant,
+  };
+}

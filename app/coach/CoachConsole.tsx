@@ -5,10 +5,10 @@ import { deliverForPersona } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
 import {
   canSpeak,
+  personaSpeech,
   previewSpeech,
   primeVoices,
   speak,
-  spokenIntensity,
   stopSpeaking,
 } from '@/src/ui/speak';
 import type { ListedPersona } from '@/src/db/personas';
@@ -86,10 +86,10 @@ export function CoachConsole({
    * Stop talking whenever the delivery changes underneath us.
    *
    * WHY: `speechSynthesis` is a global queue that outlives this subtree, and
-   * the only other cancels are a new `speak()` call, the Stop button, and
-   * unmount. Without this, delivering again while the previous read is still
-   * playing leaves the screen showing one coach while the audio reads another
-   * — the same mismatch this component's `speaking` lookup exists to prevent,
+   * the only other cancels are a new `speak()` call, the Stop button, a chip
+   * change (below), and unmount. Without this, delivering again while the
+   * previous read is still playing leaves the screen showing one coach while
+   * the audio reads another — the same mismatch this component's `speaking` lookup exists to prevent,
    * moved from the click boundary to the delivery boundary. It also covers the
    * failure case, where `state.delivered` goes null and the text disappears
    * while the voice carries on.
@@ -100,9 +100,12 @@ export function CoachConsole({
   }, [state.delivered, state.personaSlug]);
 
   /*
-   * And whenever the chip changes. The same mismatch one boundary over: without
-   * this, one coach's preview carries on in that coach's voice while another
-   * coach's chip is lit.
+   * And whenever the chip changes — stopping WHATEVER is speaking, a preview or
+   * the delivered plan being read aloud, on purpose. The chip is the user's
+   * answer to "who do I want to hear now", so the last coach does not talk over
+   * it; without this, one coach's preview carries on in that coach's voice
+   * while another coach's chip is lit. `stopSpeaking` is global, so a narrower
+   * stop would need its own record of what is playing.
    */
   useEffect(() => {
     stopSpeaking();
@@ -220,9 +223,7 @@ export function CoachConsole({
                        */
                       setSpeechFailed(false);
                       const started = speak(spoken, {
-                        lang: speaking?.voice ?? null,
-                        intensity: spokenIntensity(speaking?.intensity ?? 3, state.gentle),
-                        variant: speaking?.voiceVariant ?? 0,
+                        ...personaSpeech(speaking, state.gentle),
                         onFailure: () => setSpeechFailed(true),
                       });
                       if (!started) setSpeechFailed(true);

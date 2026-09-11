@@ -14,7 +14,14 @@
  * anything about the browser.
  */
 import { describe, expect, it } from 'vitest';
-import { pickVoice, previewSpeech, spokenIntensity, voiceSettings, type VoiceLike } from './speak';
+import {
+  personaSpeech,
+  pickVoice,
+  previewSpeech,
+  spokenIntensity,
+  voiceSettings,
+  type VoiceLike,
+} from './speak';
 import { GENTLE_MAX_INTENSITY, resolveTone } from '../persona/tone';
 import type { Persona } from '../persona/schema';
 
@@ -221,9 +228,11 @@ describe('previewSpeech', () => {
     });
   });
 
-  it('keeps coaches of one language apart by their variant', () => {
-    const master = { ...rival, intensity: 3, voiceVariant: 0 };
-    expect(previewSpeech(master)!.options.variant).not.toBe(previewSpeech(rival)!.options.variant);
+  it('sounds exactly like an ordinary delivery from the same coach', () => {
+    // FOUND IN REVIEW: the preview's settings and the delivery's were built
+    // separately. Both come from personaSpeech now; this holds the preview to
+    // the delivery's own call, so they cannot drift apart again.
+    expect(previewSpeech(rival)!.options).toEqual(personaSpeech(rival, false));
   });
 
   it('never softens the preview, which has no training week to be gentle about', () => {
@@ -237,5 +246,27 @@ describe('previewSpeech', () => {
 
   it('trims the line it speaks', () => {
     expect(previewSpeech({ ...rival, sampleLine: '  Your move.  ' })!.text).toBe('Your move.');
+  });
+});
+
+describe('personaSpeech', () => {
+  const analyst = { voice: 'en-US', intensity: 2, voiceVariant: 0 };
+
+  it("is the coach's language, variant and intensity", () => {
+    expect(personaSpeech({ ...analyst, intensity: 4 }, false)).toEqual({
+      lang: 'en-US',
+      intensity: 4,
+      variant: 0,
+    });
+  });
+
+  it('softens on a gentle week by the same clamp the words use', () => {
+    expect(personaSpeech({ ...analyst, intensity: 5 }, true).intensity).toBe(
+      spokenIntensity(5, true)
+    );
+  });
+
+  it('falls back to the defaults the delivery always used before a coach is known', () => {
+    expect(personaSpeech(null, false)).toEqual({ lang: null, intensity: 3, variant: 0 });
   });
 });

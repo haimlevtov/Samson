@@ -236,27 +236,40 @@ export interface PreviewablePersona {
 }
 
 /**
+ * How a persona sounds: the settings every utterance in its voice is spoken
+ * with. Null — no coach known yet — takes the defaults.
+ *
+ * AI-NOTE: the ONE definition of a coach's voice settings. The delivery's "Read
+ *          it aloud" and the preview both call it, so what a user hears in the
+ *          preview is what they get from that coach afterwards. FOUND IN REVIEW:
+ *          the two were built separately, and nothing kept them in step.
+ */
+export function personaSpeech(
+  persona: Omit<PreviewablePersona, 'sampleLine'> | null,
+  gentle: boolean
+): Omit<SpeakOptions, 'onFailure'> {
+  return {
+    lang: persona?.voice ?? null,
+    intensity: spokenIntensity(persona?.intensity ?? 3, gentle),
+    variant: persona?.voiceVariant ?? 0,
+  };
+}
+
+/**
  * What a coach's preview says, and the settings to say it with. Null when the
  * row has no line, so the caller renders nothing rather than a silent button.
  *
- * WHY the delivery's own settings rather than defaults: the preview answers
- * "what does this coach sound like", so it has to be the coach the user is about
- * to choose — same language, same variant, same intensity. Never gentle: the
- * gentle flag comes from a training log, and a preview has none to read.
+ * WHY `personaSpeech` rather than defaults: the preview answers "what does this
+ * coach sound like", so it has to be the coach the user is about to choose.
+ * Never gentle: the gentle flag comes from a training log, and a preview has
+ * none to read.
  */
 export function previewSpeech(
   persona: PreviewablePersona
 ): { text: string; options: Omit<SpeakOptions, 'onFailure'> } | null {
   const text = persona.sampleLine?.trim() ?? '';
   if (text === '') return null;
-  return {
-    text,
-    options: {
-      lang: persona.voice,
-      intensity: spokenIntensity(persona.intensity, false),
-      variant: persona.voiceVariant,
-    },
-  };
+  return { text, options: personaSpeech(persona, false) };
 }
 
 /** Stops anything currently being spoken. Safe when speech is unavailable. */
