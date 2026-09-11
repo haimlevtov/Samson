@@ -45,8 +45,9 @@
 -- AI-NOTE: the lunge rung's 3 x 20 is what the home-gym programme clears with
 --          bodyweight squats at 3 x 21 (src/seed/archetypes.ts), and his
 --          walking lunges at 3 x 12 fall short of the step-up's 3 x 16 on
---          purpose. Change a number here and check both, and the climb pinned
---          in tests/db/progression.test.ts.
+--          purpose. Change a number here and check both, the margin test that
+--          restates 3 x 20 in src/seed/archetypes.test.ts, and the climb
+--          pinned in tests/db/progression.test.ts.
 
 do $$
 begin

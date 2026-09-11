@@ -54,8 +54,8 @@ export interface ProgrammeEntry {
    * up to three times — rep drift (not on the first set), the RPE coin flip,
    * and rest seconds. Suppressing all three would give every accessory set in
    * twelve weeks the same RPE and the same rest, which is the "reads as fake on
-   * sight" failure `roundToPlate` exists to avoid. The side stream keeps the variety and spends it out of a
-   * different purse.
+   * sight" failure `roundToPlate` exists to avoid. The side stream keeps the
+   * variety and spends it out of a different purse.
    *
    * AI-NOTE: set this on an entry ADDED after a golden baseline exists. An
    *          entry that legitimately belongs in the middle of a programme has
