@@ -76,6 +76,35 @@ export function tonnageByWeek(
   return new Map([...byWeek].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+/**
+ * Tonnage for the ISO week containing `date`. Zero when nothing was lifted in it.
+ *
+ * WHY this exists: `tonnageByWeek` omits weeks with no load, so its last entry is
+ * the most recent week that HAD load, not the current one. Profile's "This week"
+ * tile read `.at(-1)` and, on a Monday morning or after a layoff, printed an
+ * older week's tonnage under this week's label.
+ *
+ * WHY any day of the week rather than its Monday: callers hold `today`. Keyed on
+ * the Monday, every other day passed in would answer 0 — a wrong figure that
+ * looks exactly like an honest one.
+ *
+ * WHY built on `tonnageByWeek` rather than its own loop: the Weekly tonnage chart
+ * on the same page draws from that map, so the tile and the chart's row for this
+ * week cannot disagree about what the week weighed.
+ *
+ * AI-NOTE: `src/chat/facts.ts` hands the coach the same figure as
+ *          `tonnageByWeek(...).get(startOfWeek(today)) ?? 0`. Change what an empty
+ *          week reads as here and change it there, or the coach and the tile
+ *          disagree about the same week.
+ */
+export function tonnageForWeekOf(
+  sets: readonly SetRecord[],
+  date: LocalDate,
+  options: TonnageOptions = {}
+): number {
+  return tonnageByWeek(sets, options).get(startOfWeek(date)) ?? 0;
+}
+
 export interface MuscleTonnageOptions extends TonnageOptions {
   /**
    * Share of a set's load credited to each secondary muscle.

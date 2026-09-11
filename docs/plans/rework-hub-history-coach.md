@@ -269,6 +269,9 @@ that had sets — so for anyone who has not trained yet this week it prints last
 week's figure under this week's label. It never triggers on seeded data (zero
 of 35 archetype-days), which is why nobody has seen it; it bites real users. It
 is a metrics fix with its own test, not seed data, so it is its own task.
+_Fixed 2026-09-11 on branch `this-week-tonnage`: `tonnageForWeekOf` reads the
+week containing the user's local date, and a week with nothing lifted in it
+shows 0 kg rather than an older week's figure._
 
 **Templates are built from the programme, not from a logged session.** The app
 already has `templateFromSession()` — "save this as a template" — and reusing it
@@ -784,7 +787,8 @@ page's own metric functions over every archetype on seven seed dates, all
 populated. Not a browser pass — `/profile` needs a session. One correction to
 the section above: `tonnageByWeek` leaves out weeks with zero tonnage, not only
 weeks with no sets, so a week of only bodyweight or warm-up sets reads as empty
-too. The "This week" defect is split out as its own task.
+too. The "This week" defect is split out as its own task — since fixed, and the
+bodyweight-and-warm-up week is one of its test cases.
 
 **What review changed. Each of the three reviewers found something the other two
 did not.**

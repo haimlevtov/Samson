@@ -8,7 +8,7 @@ import { acwr, acwrBand } from '@/src/metrics/acwr';
 import { adherence, currentStreak } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { exerciseBests } from '@/src/metrics/pr';
-import { tonnageByWeek, totalTonnage } from '@/src/metrics/tonnage';
+import { tonnageByWeek, tonnageForWeekOf, totalTonnage } from '@/src/metrics/tonnage';
 import { compareTonnage } from '@/src/metrics/comparisons';
 import { levelProgress } from '@/src/gamification/level';
 import { STREAK_MILESTONES } from '@/src/gamification/xp';
@@ -65,7 +65,7 @@ export default async function ProfilePage() {
   const allTime = totalTonnage(history.sets);
   const comparison = compareTonnage(allTime, comparisonObjects);
   const weekly = [...tonnageByWeek(history.sets).entries()];
-  const thisWeek = weekly.at(-1);
+  const thisWeek = tonnageForWeekOf(history.sets, today);
   const peak = Math.max(...weekly.map(([, v]) => v), 1);
 
   const topLifts = [...exerciseBests(history.sets).values()]
@@ -302,7 +302,14 @@ export default async function ProfilePage() {
               )}
             </FieldHint>
           </div>
-          <div className="value">{thisWeek ? kg(thisWeek[1]) : '—'}</div>
+          {/*
+           * WHY 0 kg and never an em dash: on this page the dash means no figure
+           * exists — the ratio before 28 days of history, adherence with nothing
+           * due. A week with nothing lifted yet has a figure, and it is zero; the
+           * all-time line below prints 0 kg for a new user on the same reasoning,
+           * and the coach is told 0 for the same week (src/chat/facts.ts).
+           */}
+          <div className="value">{kg(thisWeek)}</div>
           <div className="muted small">{kg(allTime)} all time</div>
           {/*
            * The one place in this app where a number is allowed to stop being a
