@@ -173,32 +173,41 @@ export function CoachBox() {
         </summary>
 
         <div className="plan-body">
-          <label>
-            <span className="label">What are you after?</span>
-            {/*
-             * Not persisted — docs/plans/phase-6.md, "what is deliberately out".
-             * A stored goal goes stale silently, and the target is computed
-             * fresh from it every time.
-             *
-             * FOUND IN REVIEW: this echoed the RAW submitted goal, and a browser
-             * given a value matching no option selects the FIRST one. With
-             * `DIET_GOALS` ordered cut-first that made the UI's fail case a
-             * deficit, while the code's is maintain (`normaliseGoal`, and ADR
-             * 0024 §3 makes a point of it). The two defaults now agree.
-             */}
-            <select name="goal" defaultValue={state.goal} disabled={pending}>
-              {GOAL_ORDER.map((goal) => (
-                <option key={goal} value={goal}>
-                  {GOAL_BLURB[goal]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/*
+           * `.settings-form` for its grid and its `label { display: block }`,
+           * on a div rather than a form: the goal control posts through the one
+           * form that wraps this whole component, and a nested <form> is invalid
+           * HTML that browsers resolve by dropping the inner one — which would
+           * take the select's own submit button with it.
+           */}
+          <div className="settings-form">
+            <label>
+              <span className="label">What are you after?</span>
+              {/*
+               * Not persisted — docs/plans/phase-6.md, "what is deliberately out".
+               * A stored goal goes stale silently, and the target is computed
+               * fresh from it every time.
+               *
+               * FOUND IN REVIEW: this echoed the RAW submitted goal, and a browser
+               * given a value matching no option selects the FIRST one. With
+               * `DIET_GOALS` ordered cut-first that made the UI's fail case a
+               * deficit, while the code's is maintain (`normaliseGoal`, and ADR
+               * 0024 §3 makes a point of it). The two defaults now agree.
+               */}
+              <select name="goal" defaultValue={state.goal} disabled={pending}>
+                {GOAL_ORDER.map((goal) => (
+                  <option key={goal} value={goal}>
+                    {GOAL_BLURB[goal]}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <div className="settings-submit">
-            <button type="submit" className="secondary" disabled={pending}>
-              {pending ? 'Working it out…' : 'Work out my target'}
-            </button>
+            <div className="settings-submit">
+              <button type="submit" className="secondary" disabled={pending}>
+                {pending ? 'Working it out…' : 'Work out my target'}
+              </button>
+            </div>
           </div>
 
           {state.result === null ? (
