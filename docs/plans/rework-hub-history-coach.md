@@ -345,6 +345,33 @@ needs.
   `docs/specs/mobile-interface.md` §4.
 - `stopSpeaking` on unmount, the trap `CoachConsole` already documents.
 
+### What looking found, and the decisions — 2026-09-11, before the code
+
+- **The column is `personas.sample_line`, nullable, 1–280 characters.** Not
+  `not null`: `personas_write` still lets a user own a persona row, nothing in
+  the app authors one, and a required column no form asks for would turn such an
+  insert into an error about a field nobody offered. Every SHIPPED persona gets a
+  line, and `tests/db/personas.test.ts` pins that rather than the schema.
+- **Where it lives: the Voice card on Coach, for the selected chip.** That card
+  is where a coach is picked, so it is where "what does this one sound like" is
+  asked. A "Hear The Rival" control under the chips, not a new screen.
+- **It speaks with the voice a delivery would use** — the persona's own
+  language, variant and intensity — through one pure helper, so the preview is
+  the coach the user is about to choose rather than an approximation of it. Never
+  the gentle tone: a preview has no training context to be gentle about.
+- **The line obeys what the persona's words obey everywhere else**, checked by
+  the db test for every shipped row: no numeral (a coach states no figure it was
+  not given — invariant #1), none of its own banned phrases, and a clean pass
+  through `scanOutput`, the scanner every completion goes through. It is
+  authored content rather than a completion, so this is the same bar, not a
+  safety claim about a model.
+- **Every state renders something**, §4 of the mobile spec: a device that
+  cannot speak shows the line as text; a device that starts and then dies shows
+  it with the same note "Read it aloud" uses. Changing the selected chip stops a
+  preview mid-sentence, as unmount already does.
+- **The browser pass needs a signed-in session**, which this work cannot create.
+  It goes on the plans README's browser-pass row rather than being claimed.
+
 ---
 
 ## PR 7 — a plan becomes a template

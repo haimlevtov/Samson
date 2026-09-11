@@ -27,6 +27,17 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
+| `sample_line` | what the Coach tab's preview speaks before a plan exists. See below |
+
+### `sample_line` is the coach's first impression
+
+One sentence or three, 280 characters at most, in the character's own voice —
+it is spoken, so write it to be heard. The same rules bind it as bind every
+word the persona says: **no numeral** (a coach states no figure it was not
+given — invariant #1), **none of the row's own banned phrases**, and a clean
+pass through `scanOutput` in `src/llm/safety.ts`. `tests/db/personas.test.ts`
+checks all three for every shipped persona, so a new row without a line, or
+with one that breaks a rule, fails there.
 
 ### `system_prompt` is data, and that changes how you write it
 
