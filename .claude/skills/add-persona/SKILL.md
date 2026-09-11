@@ -28,6 +28,8 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
 | `sample_line` | what the Coach tab's Voice card speaks when a coach is previewed. See below |
+| `tts_voice_gender` | `male`, `female` or null — the kind of device voice to take first. **See §2** |
+| `tts_pitch`, `tts_rate` | 0.5–1.5, the coach's own voice shape. **See §2** |
 
 ### `sample_line` is the coach's first impression
 
@@ -66,13 +68,20 @@ identically, under a control labelled "Voice".
 
 Current allocation:
 
-| Slug         | `tts_voice_id` | `tts_voice_variant` |
-| ------------ | -------------- | ------------------- |
-| `old-master` | en-GB          | 0                   |
-| `rival`      | en-GB          | 1                   |
-| `sergeant`   | en-GB          | 2                   |
-| `analyst`    | en-US          | 0                   |
-| `physio`     | en-US          | 1                   |
+| Slug         | `tts_voice_id` | `tts_voice_gender` | `tts_voice_variant` | pitch / rate |
+| ------------ | -------------- | ------------------ | ------------------- | ------------ |
+| `old-master` | en-GB          | male               | 0                   | 0.70 / 0.80  |
+| `sergeant`   | en-GB          | male               | 1                   | 0.80 / 1.20  |
+| `rival`      | en-GB          | male               | 2                   | 1.00 / 1.10  |
+| `analyst`    | en-US          | female             | 0                   | 1.00 / 0.95  |
+| `physio`     | en-US          | female             | 1                   | 1.05 / 0.88  |
+
+**The voice is chosen by kind, then by number** (rework plan PR 6b). The picker
+takes the voices of the coach's language whose name marks `tts_voice_gender`,
+ranks the neural ones Edge and Chrome offer first, and `tts_voice_variant`
+picks within that. A device with no voice of that kind falls back to the whole
+language, so **pitch and rate must carry the character on their own**: give a
+new coach a pair no other coach has. Intensity drives the words, not the voice.
 
 **The next en-GB coach takes variant 3 and the next en-US one takes 2, not the
 default 0.** Nothing enforces this — the column defaults to 0 and no constraint

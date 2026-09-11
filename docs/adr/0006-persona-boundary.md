@@ -211,3 +211,23 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > `system_prompt`, and cleans `name` (the fence label) and `banned_phrases`
 > (outside the fence) (CLAUDE.md #11). _Narrowed in review: the first version of this paragraph said
 > no user text at all could reach a prompt that way._
+
+> **Amended 2026-09-11 — a coach's voice is chosen by kind, and shaped by its
+> row.** The allocation above picked the Nth device voice of a language, sorted
+> by name, and derived pitch and rate from intensity. Measured on a Windows
+> machine with only David, Mark and Zira, that gave the Sergeant Zira — a light
+> female voice — at the highest pitch and rate of the five, and the Old Master a
+> faster-than-normal delivery. Position is not character.
+>
+> Each persona row now names the kind of voice it takes (`tts_voice_gender`)
+> and its own `tts_pitch` and `tts_rate`. The picker takes the voices of the
+> language whose name marks that kind, ranks the neural voices Edge and Chrome
+> offer above the desktop ones, and uses `tts_voice_variant` within that;
+> intensity drives the words and no longer the voice. A gentle week slows the
+> rate by a fixed factor and leaves the pitch.
+>
+> The limit this ADR began with stands, and is the honest answer to "the Old
+> Master should sound like a samurai master": there is no TTS provider, so a
+> coach speaks in whatever voice the device has. This chooses the right kind and
+> shapes it; character beyond that needs audio clips, which would help fixed
+> lines only (rework plan, PR 6b).

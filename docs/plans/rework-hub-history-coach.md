@@ -18,7 +18,8 @@ because several of them touch the same surface.
 | 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
 | 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)   |
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | in review, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)   |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
+| 6b  | [Each coach sounds like itself](#pr-6b--each-coach-sounds-like-itself)                    | `coach-voices`         | in progress                                                          |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | in review, paused for 6b                                             |
 | 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
 
 PR 8 carries two of the requested changes because they are the same surface and
@@ -383,6 +384,80 @@ the reason every model-backed surface is scripted today.
 - **The browser pass needs a signed-in session**, which this agent does not
   create: it does not type passwords, the published demo one included. It goes
   on the plans README's browser-pass row rather than being claimed.
+
+---
+
+## PR 6b — each coach sounds like itself
+
+**Branch `coach-voices`.** Added 2026-09-11 from the user's report after PR 6
+shipped the preview: "coach doesn't have fitting voice to persona". PR 7 is
+paused for it, at the user's call.
+
+### What looking found
+
+Measured on this machine's own browser, which offers four voices — Microsoft
+David, Mark and Zira (US English) and one Hebrew — and no British English:
+
+| Coach          | Voice it got                   | Rate / pitch                     |
+| -------------- | ------------------------------ | -------------------------------- |
+| The Old Master | David                          | 1.05 / 1.00 — faster than normal |
+| The Rival      | Mark                           | 1.13 / 1.05                      |
+| The Sergeant   | **Zira**, a light female voice | **1.20 / 1.10 — the highest**    |
+| The Analyst    | David — the Old Master's voice | 0.97 / 0.95                      |
+| The Physio     | Mark — the Rival's voice       | 0.90 / 0.90                      |
+
+Two causes. **The voice is chosen by position** — the Nth voice of a language
+sorted by name, with no idea what that voice sounds like — so whichever coach
+lands on Zira gets Zira. **Pitch and rate rise with intensity**, so the loudest
+coach gets the highest, fastest voice, and the Old Master, who "speaks
+sparely", talks faster than normal.
+
+### The limit, stated first
+
+The browser speaks only with voices installed on the device, and no code turns
+David into a samurai master. What this PR can do is choose the right KIND of
+voice and shape it. A voice with real character needs audio — recorded, or made
+by a text-to-speech service with character voices — and none exists in the
+project: there is no TTS provider (ADR 0006), and the OpenRouter key is for the
+app's LLM calls only. Clips would help fixed lines only; a delivered plan is new
+text every time. That is a follow-up, and the user's call.
+
+### The decisions
+
+- **Each coach's voice character is content** — CLAUDE.md #7 — so it is three
+  columns on `personas`: `tts_voice_gender` (`male`, `female` or null for no
+  preference), `tts_pitch` and `tts_rate` (0.5–1.5). Migration, and one Docker
+  session for the types, which the user approved.
+- **The picker chooses by kind first.** Within the coach's language it takes
+  the voices whose name marks the wanted gender — "Male" and "Female" in
+  Google's names, the first name in Microsoft's — and falls back to the whole
+  language when the device has none, where pitch and rate still carry the
+  character. `tts_voice_variant` now picks within that kind.
+- **Better voices first.** Edge exposes free neural voices, named "Online
+  (Natural)"; Chrome, Google's. The picker ranks those above the basic desktop
+  voices, so the same coach sounds better in the browser that has better
+  voices, with no key.
+- **Pitch and rate come from the row, not from intensity.** Intensity keeps
+  driving the WORDS, as ADR 0006 has it. A gentle week slows the voice by a
+  fixed factor and leaves its pitch — its character — alone.
+- **The characters**, from the personas' own descriptions:
+
+  | Coach          | Voice  | Pitch | Rate | Why                                   |
+  | -------------- | ------ | ----- | ---- | ------------------------------------- |
+  | The Old Master | male   | 0.70  | 0.80 | the samurai master: deep, slow, spare |
+  | The Sergeant   | male   | 0.80  | 1.20 | the parade ground: low, clipped, fast |
+  | The Rival      | male   | 1.00  | 1.10 | dry and quick, never shouting         |
+  | The Analyst    | female | 1.00  | 0.95 | calm and precise, unhurried           |
+  | The Physio     | female | 1.05  | 0.88 | quietly warm, the slowest but one     |
+
+  The en-GB variants are renumbered so the two most different coaches, the
+  Old Master and the Sergeant, take different voices first: Old Master 0,
+  Sergeant 1, Rival 2. On a machine with two male voices, the Rival shares
+  the Old Master's, and 0.70/0.80 against 1.00/1.10 keeps them apart.
+
+- **What cannot be guaranteed**, as ADR 0006 already says: a device with one
+  voice speaks every coach in it. The character then lives in pitch, rate and
+  the words.
 
 ---
 

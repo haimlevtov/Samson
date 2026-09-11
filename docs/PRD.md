@@ -174,6 +174,13 @@ voice — or shows as text on a device that cannot speak — so picking a coach 
 not a blind choice. It is written, not generated: a stored line needs no API
 key.
 
+**Each coach sounds like itself, as far as the device allows (2026-09-11).**
+A coach's row names the kind of voice it takes and its own pitch and rate — the
+Old Master deep and slow, the Sergeant low and clipped — and the browser's
+better voices are preferred where it has them. It cannot make a device voice
+into an actor: a characterful voice needs recorded or generated audio, which the
+project does not have (rework plan, PR 6b).
+
 Personas may not alter any number in the plan they receive, asserted by test. A
 tone override forces a gentler register when an injury or a run of missed
 sessions is flagged, regardless of which persona is selected. High-frequency
