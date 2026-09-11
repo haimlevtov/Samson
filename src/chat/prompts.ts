@@ -281,6 +281,18 @@ export function unknownNumberCorrection(numbers: readonly number[]): string {
  * putting them in the trusted region, which is a small thing to avoid for free.
  * "Any digit at all" is the whole rule here and it is not ambiguous.
  */
+/**
+ * Fed back when ANY route's reply stated a figure with a calorie unit on it.
+ * Same trust rules as the two above — ADR 0008, unfenced.
+ *
+ * WHY it names no numeral either: quoting it back would put the figure in the
+ * trusted region, and on this path the figure is exactly what must not be
+ * repeated. The rule is the unit, and the rule is not ambiguous.
+ */
+export function calorieFigureCorrection(): string {
+  return 'That reply stated a calorie figure. No route may state one — the application computes the target, clamps it and prints it beside your words, and it is not yours to restate, confirm or adjust even if the user named it themselves. Say it in words, or say the figure on screen is the one that holds. Reply with JSON matching the schema exactly, and nothing else.';
+}
+
 export function numeralCorrection(): string {
   return 'That reply contained a digit. The diet route may not state any figure at all, in any script — the application prints them. Say it in words: "a modest deficit", "a little above what you burn". Reply with JSON matching the schema exactly, and nothing else.';
 }
