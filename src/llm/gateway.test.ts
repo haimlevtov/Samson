@@ -8,18 +8,34 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { callLLM } from './gateway';
+import { callLLM, callSpeech } from './gateway';
 import { SAFETY_PREAMBLE } from './safety';
-import { MissingApiKeyError, readApiKey } from './config';
+import { STAGE_MODELS } from './models';
+import { MissingApiKeyError, SPEECH_MAX_INPUT_CHARS, hasApiKey, readApiKey } from './config';
 import { BudgetExceededError, LlmCallFailedError } from './types';
 import type { GatewayDeps, LedgerClient, LlmCallInsert } from './types';
 
 const planSchema = z.object({ summary: z.string(), sessions: z.number().int() });
 
+/** What Postgres refuses in a `text` value: a NUL, or half of a surrogate pair. */
+function unstorable(value: string): boolean {
+  return Array.from(value).some((ch) => {
+    const code = ch.codePointAt(0) ?? 0;
+    return code === 0 || (code >= 0xd800 && code <= 0xdfff);
+  });
+}
+
 function fakeLedger(overrides: Partial<LedgerClient> = {}) {
   const rows: LlmCallInsert[] = [];
   const client: LedgerClient = {
     insertLlmCall: async (row) => {
+      // Refuses what Postgres refuses, so a test that a row lands means it —
+      // the NUL that review found would otherwise pass here and fail there.
+      for (const [field, value] of Object.entries(row)) {
+        if (typeof value === 'string' && unstorable(value)) {
+          throw new Error(`llm_calls insert failed: ${field} is not storable text`);
+        }
+      }
       rows.push(row);
     },
     sumSpendSince: async () => 0,
@@ -301,5 +317,391 @@ describe('callLLM', () => {
     const [a, b, c] = await Promise.all([run('prefix one'), run('prefix one'), run('prefix two')]);
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+  });
+});
+
+const speechOptions = {
+  userId: '11111111-1111-1111-1111-111111111111',
+  input: 'NOTES: calm and even.\nTRANSCRIPT: Turn up on the Tuesday.',
+  voice: 'Algenib',
+};
+
+const MP3 = new Uint8Array([0xff, 0xf3, 0x44, 0xc4]);
+
+const audioResponse = (body: BodyInit = MP3, headers: Record<string, string> = {}) =>
+  new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-tts-1', ...headers },
+  });
+
+describe('callSpeech', () => {
+  /*
+   * ADR 0025. The same door as callLLM — key, budget, retries, a ledger row per
+   * attempt — with none of the text machinery, because what comes back is
+   * audio. Every case runs against a scripted fetch; nothing here can speak.
+   */
+
+  it('posts the model, the voice and the input to the speech endpoint, and returns the audio', async () => {
+    const urls: string[] = [];
+    const { deps, calls } = makeDeps(async (url) => {
+      urls.push(url);
+      return audioResponse();
+    });
+
+    const result = await callSpeech(speechOptions, deps);
+
+    expect(urls).toEqual(['https://example.invalid/api/v1/audio/speech']);
+    expect(JSON.parse(String(calls[0]!.body))).toEqual({
+      model: STAGE_MODELS.speech[0],
+      input: speechOptions.input,
+      voice: 'Algenib',
+      response_format: 'mp3',
+    });
+    expect((calls[0]!.headers as Record<string, string>).Authorization).toBe(
+      'Bearer test-key-not-a-real-secret'
+    );
+    expect([...result.audio]).toEqual([...MP3]);
+    expect(result.contentType).toBe('audio/mpeg');
+    expect(result.attempts).toBe(1);
+  });
+
+  it('sends the input as it is, with no safety preamble for the model to read aloud', async () => {
+    // The preamble is conduct rules for a TEXT model. A speech model given it
+    // would perform it, before the coach's line.
+    const { deps, calls } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    const body = JSON.parse(String(calls[0]!.body));
+    expect(body.input).toBe(speechOptions.input);
+    expect(body.input).not.toContain(SAFETY_PREAMBLE.slice(0, 40));
+  });
+
+  it('sends one model and no fallback array, because a voice belongs to one model', async () => {
+    // ADR 0025 §3: a fallback would speak in a voice nobody cast.
+    expect(STAGE_MODELS.speech).toHaveLength(1);
+
+    const { deps, calls } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    const body = JSON.parse(String(calls[0]!.body));
+    expect(body.models).toBeUndefined();
+    expect(body.model).toBe(STAGE_MODELS.speech[0]);
+  });
+
+  it('writes one speech row: the generation id, the model, and no cost it did not measure', async () => {
+    const { deps, rows } = makeDeps(async () => audioResponse());
+    await callSpeech(speechOptions, deps);
+
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.stage).toBe('speech');
+    expect(row.status).toBe('ok');
+    expect(row.attempt).toBe(1);
+    expect(row.openrouter_id).toBe('gen-tts-1');
+    expect(row.model_used).toBe(STAGE_MODELS.speech[0]);
+    expect(row.models_requested).toEqual([STAGE_MODELS.speech[0]]);
+    // INVARIANT: the ledger records only what was measured. The budget gate
+    //            charges the assumption instead — src/db/ledger.ts.
+    expect(row.cost_credits).toBeNull();
+    expect(row.upstream_cost).toBeNull();
+    expect(row.prompt_prefix_hash).toBeNull();
+    expect(row.error).toBeNull();
+  });
+
+  it('retries a transient failure and records both attempts', async () => {
+    let n = 0;
+    const { deps, rows } = makeDeps(async () =>
+      ++n === 1 ? new Response('upstream busy', { status: 503 }) : audioResponse()
+    );
+
+    const result = await callSpeech(speechOptions, deps);
+
+    expect(result.attempts).toBe(2);
+    expect(rows.map((r) => r.status)).toEqual(['http_error', 'ok']);
+    expect(rows[0]!.error).toContain('HTTP 503');
+  });
+
+  it('does not retry a request the provider rejected', async () => {
+    const { deps, rows } = makeDeps(async () => new Response('unknown voice', { status: 400 }));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('http_error');
+  });
+
+  it('never hands on a 200 that carries an error instead of audio, and does not pay twice', async () => {
+    // Some failures arrive inside a 200. Played as audio, that is a broken
+    // clip; recorded as a success, it is spend the ledger calls a preview. One
+    // row, `schema_invalid`, which the budget charges — so no retry.
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response('{"error":{"message":"voice not found"}}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+    expect(rows[0]!.error).toContain('expected audio/mpeg, got application/json');
+    expect(rows[0]!.error).toContain('voice not found');
+  });
+
+  it('refuses audio in a format other than the mp3 it asked for', async () => {
+    // FOUND IN REVIEW: any audio/* was accepted, so a model ignoring
+    // response_format could fill the cache with clips no browser plays.
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(MP3, { 'content-type': 'audio/pcm' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({ status: 'schema_invalid', stage: 'speech' });
+  });
+
+  it('records a wrong-format audio body without its bytes, so the row — the charge — lands', async () => {
+    // FOUND IN THE SECOND REVIEW: the body was read as text into `error`, and
+    // a WAV header carries NUL bytes, which Postgres refuses — no row, no
+    // charge, on exactly the path written to charge.
+    const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41]);
+    const { deps, rows } = makeDeps(async () =>
+      audioResponse(wav, { 'content-type': 'audio/wav', 'content-length': '10' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('schema_invalid');
+    expect(rows[0]!.error).toBe('expected audio/mpeg, got audio/wav, 10 bytes');
+  });
+
+  it('takes audio/mp3 as mp3, and hands on the one type the browser is given', async () => {
+    const { deps } = makeDeps(async () => audioResponse(MP3, { 'content-type': 'audio/mp3' }));
+
+    const result = await callSpeech(speechOptions, deps);
+    expect(result.contentType).toBe('audio/mpeg');
+  });
+
+  it('records a timeout during the read after a 200 as a timeout, and does not retry it', async () => {
+    // Charged TIMEOUT_ASSUMED_COST_USD, and a 200 may have been billed, so a
+    // retry would pay twice. FOUND IN THE THIRD REVIEW: nothing pinned this.
+    const slow = new ReadableStream({
+      start(controller) {
+        controller.error(Object.assign(new Error('timed out reading'), { name: 'TimeoutError' }));
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () => new Response(slow, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['timeout']);
+  });
+
+  it('charges a 200 whose body fails mid-read, and does not retry it', async () => {
+    // FOUND IN THE SECOND REVIEW: it fell into the transport catch as an
+    // http_error — retried, and charged nothing — though a 200 may be billed.
+    const broken = new ReadableStream({
+      start(controller) {
+        controller.error(new Error('connection reset'));
+      },
+    });
+    const { deps, rows } = makeDeps(
+      async () => new Response(broken, { status: 200, headers: { 'content-type': 'audio/mpeg' } })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+  });
+
+  it('accepts audio/mpeg with parameters on the content type', async () => {
+    const { deps } = makeDeps(async () =>
+      audioResponse(MP3, { 'content-type': 'audio/mpeg; charset=binary' })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).resolves.toMatchObject({ attempts: 1 });
+  });
+
+  it('treats an audio response with no bytes as the wrong shape, not a silent clip', async () => {
+    const { deps, rows } = makeDeps(async () => audioResponse(new Uint8Array()));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows.map((r) => r.status)).toEqual(['schema_invalid']);
+  });
+
+  it('ignores LLM_MODELS, which swaps text models and would recast every coach', async () => {
+    // ADR 0025 §3: the override is for eval runs of the text stages. A speech
+    // call that honoured it would speak in a voice nobody cast.
+    vi.stubEnv('LLM_MODELS', 'openai/gpt-4o,google/gemini-2.5-flash');
+    try {
+      const { deps, calls } = makeDeps(async () => audioResponse());
+      await callSpeech(speechOptions, deps);
+      expect(JSON.parse(String(calls[0]!.body)).model).toBe(STAGE_MODELS.speech[0]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('records a timeout as its own status, which the budget charges', async () => {
+    const { deps, rows } = makeDeps(async () => {
+      const error = new Error('The operation was aborted due to timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    });
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.status === 'timeout' && r.stage === 'speech')).toBe(true);
+  });
+
+  it('denies an over-budget call with a row, and never reaches the network', async () => {
+    const ledger = fakeLedger({
+      sumSpendSince: async () => 0.5,
+      getWeeklyBudgetUsd: async () => 0.5,
+    });
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(async () => {
+      fetchSpy();
+      return audioResponse();
+    }, ledger);
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // INVARIANT: a denied call is still a call and still writes a row — CLAUDE.md #3
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({ stage: 'speech', status: 'budget_denied' });
+  });
+
+  it('refuses an input over the ceiling before charging or sending anything', async () => {
+    const budgetSpy = vi.fn(async () => 1);
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(
+      async () => {
+        fetchSpy();
+        return audioResponse();
+      },
+      fakeLedger({ getWeeklyBudgetUsd: budgetSpy })
+    );
+
+    await expect(
+      callSpeech({ ...speechOptions, input: 'x'.repeat(SPEECH_MAX_INPUT_CHARS + 1) }, deps)
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(budgetSpy).not.toHaveBeenCalled();
+    expect(rows).toEqual([]);
+  });
+
+  it('fails the call when the ledger write fails', async () => {
+    const ledger = fakeLedger({
+      insertLlmCall: async () => {
+        throw new Error('llm_calls insert failed: connection refused');
+      },
+    });
+    const { deps } = makeDeps(async () => audioResponse(), ledger);
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toThrow('llm_calls insert failed');
+  });
+});
+
+describe('the ledger writer', () => {
+  /*
+   * Postgres refuses a NUL in `text`, and half a surrogate pair — which a
+   * `.slice()` can leave at the cut. A refused insert is a call with no row:
+   * CLAUDE.md #3. Cleaned at the one writer both entry points share, so these
+   * run through each.
+   */
+  it('strips NUL from an error body before the row is written, on the text path too', async () => {
+    const { deps, rows } = makeDeps(
+      async () => new Response(`bad${String.fromCharCode(0)}input`, { status: 400 })
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error).toBe('HTTP 400: badinput');
+  });
+
+  it('cleans the fields a provider fills from its JSON, not only the error', async () => {
+    // FOUND IN THE THIRD REVIEW: `model_used` and `openrouter_id` come straight
+    // from the envelope, and a NUL there refused the row of a paid call.
+    const nul = String.fromCharCode(0);
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(
+          okBody({ summary: 'ok', sessions: 3 }, { model: `gemini${nul}`, id: `gen${nul}1` }),
+          { status: 200 }
+        )
+    );
+
+    await callLLM(baseOptions, deps);
+    expect(rows[0]!.model_used).toBe('gemini');
+    expect(rows[0]!.openrouter_id).toBe('gen1');
+  });
+
+  it('caps an unbounded error message', async () => {
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(
+          JSON.stringify({ id: 'gen-x', model: 'm', error: { message: 'e'.repeat(10_000) } }),
+          { status: 200 }
+        )
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error!.length).toBe(2_000);
+  });
+
+  it('replaces the half of a surrogate pair the 500-character cut leaves', async () => {
+    // The emoji straddles the cut: character 500 is its high half alone.
+    const body = `${'x'.repeat(499)}😀 and more`;
+    const { deps, rows } = makeDeps(async () => new Response(body, { status: 503 }));
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(LlmCallFailedError);
+    expect(rows[0]!.error).toBe(`HTTP 503: ${'x'.repeat(499)}${String.fromCodePoint(0xfffd)}`);
+  });
+});
+
+describe('the budget gate', () => {
+  it('denies a NaN spend, which `>=` would have let through', async () => {
+    // FOUND IN THE SECOND REVIEW: `numeric` accepts 'NaN', and every
+    // comparison with NaN is false.
+    const fetchSpy = vi.fn();
+    const { deps, rows } = makeDeps(
+      async () => {
+        fetchSpy();
+        return new Response('{}', { status: 200 });
+      },
+      fakeLedger({ sumSpendSince: async () => Number.NaN })
+    );
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(rows[0]!.status).toBe('budget_denied');
+  });
+
+  it('denies a NaN budget the same way', async () => {
+    const { deps } = makeDeps(
+      async () => audioResponse(),
+      fakeLedger({ getWeeklyBudgetUsd: async () => Number.NaN })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  it('denies the budget as PostgREST returns a NaN — the string "NaN" — with the budget refusal', async () => {
+    // FOUND IN THE THIRD REVIEW: the gate denied it, then BudgetExceededError's
+    // toFixed threw on the string, and the user got a generic failure.
+    const { deps } = makeDeps(
+      async () => audioResponse(),
+      fakeLedger({ getWeeklyBudgetUsd: async () => 'NaN' as unknown as number })
+    );
+
+    await expect(callSpeech(speechOptions, deps)).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+});
+
+describe('hasApiKey', () => {
+  it('says whether a key is set, by the same test readApiKey applies', () => {
+    expect(hasApiKey({})).toBe(false);
+    expect(hasApiKey({ OPENROUTER_API_KEY: '   ' })).toBe(false);
+    expect(hasApiKey({ OPENROUTER_API_KEY: 'sk-test' })).toBe(true);
   });
 });

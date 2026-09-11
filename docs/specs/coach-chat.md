@@ -147,7 +147,8 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
 2. **Every replayed turn is fenced separately**, the coach's own included, each
    with its own cap. The payload contains no `assistant` message — the
    transcript is client-supplied, so all of it is untrusted. ADR 0015 §2.
-3. **`scanOutput`** runs inside the gateway, as for every stage.
+3. **`scanOutput`** runs inside the gateway, as for every text stage — a speech
+   call returns audio and is not scanned (ADR 0025).
 4. **`findUnknownNumbers(allowed, reply)`** where `allowed` is the facts'
    **typed numeric leaves** plus every numeral in the user's own turns. What
    this does and does not guarantee is in ADR 0015 §4, and it is weaker than it

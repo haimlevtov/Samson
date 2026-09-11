@@ -1,6 +1,7 @@
 # ADR 0006 — The persona speaks; it does not decide
 
-**Status:** accepted, phase 3 — **amended 2026-09-02 and 2026-09-07, see below**
+**Status:** accepted, phase 3 — **amended 2026-09-02, 2026-09-07 and 2026-09-11,
+see below; voice superseded by [ADR 0025](0025-coach-voices.md)**
 **Date:** 2026-09-01
 
 ## Context
@@ -211,3 +212,9 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > `system_prompt`, and cleans `name` (the fence label) and `banned_phrases`
 > (outside the fence) (CLAUDE.md #11). _Narrowed in review: the first version of this paragraph said
 > no user text at all could reach a prompt that way._
+
+> **Superseded for voice, 2026-09-11, by [ADR 0025](0025-coach-voices.md).**
+> "There is no TTS provider", the device-voice allocation and every amendment
+> above about variants are history: device voices could not carry five
+> characters, and a coach now speaks in a voice synthesised from a direction in
+> its row, through the gateway. This ADR still governs what a persona may SAY.

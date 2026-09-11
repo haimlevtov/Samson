@@ -2,22 +2,25 @@
  * The persona roster, as content.
  *
  * The tone arithmetic is unit-tested in `src/persona/tone.test.ts` against
- * literals. What needs a database is everything that is a property of the ROWS,
- * and one of those properties is the reason this file exists at all: nothing in
- * the schema stops two personas of the same language taking the same device
- * voice, and when that happened all three coaches spoke identically under a
- * control labelled "Voice".
+ * literals. What needs a database is everything that is a property of the ROWS.
+ * This file began with one of them: nothing in the schema stopped two coaches
+ * taking the same device voice, and when that happened all three spoke
+ * identically under a control labelled "Voice". ADR 0025 replaced device
+ * voices with voices cast per coach, and the property survived the change —
+ * no schema constraint can see across rows, so it is held here.
  *
  * INVARIANT: the service role creates fixtures; every assertion runs through a
  *            user-scoped client — the same split as tests/db/rls.test.ts.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createTestUser, deleteTestUser, type TestUser } from './helpers';
-import { listPersonas } from '../../src/db/personas';
+import { coachVoice, listPersonas } from '../../src/db/personas';
 import { SHIPPED_PERSONA_SLUGS, HUMOR_ORDER } from '../../src/persona/schema';
 import { phraseUsed } from '../../src/persona/deliver';
 import { numbersIn } from '../../src/persona/guard';
 import { scanOutput } from '../../src/llm/safety';
+import { SPEECH_MAX_INPUT_CHARS } from '../../src/llm/config';
+import { isSpeechVoice, speechScript } from '../../src/speech/script';
 import { resolveTone, GENTLE_MAX_INTENSITY } from '../../src/persona/tone';
 
 let user: TestUser;
@@ -47,32 +50,6 @@ describe('the shipped roster', () => {
      */
     const slugs = (await roster()).map((p) => p.slug).sort();
     expect(slugs).toEqual([...SHIPPED_PERSONA_SLUGS].sort());
-  });
-
-  it('gives no two personas of one language the same voice variant', async () => {
-    /*
-     * INVARIANT: two personas sharing a tts_voice_id must not share a variant —
-     * .claude/skills/add-persona/SKILL.md §2.
-     *
-     * Nothing in the schema enforces it: the column defaults to 0 and no
-     * constraint can span rows. This is the enforcement, and the bug it stops
-     * already happened once — before the variant was a column, voices were
-     * picked by language alone, both en-GB personas resolved to the same voice
-     * object, and on a device with no en-GB voice installed the en-US one fell
-     * back to it too. All three coaches spoke identically.
-     *
-     * Read from the table rather than through listPersonas, because the reader
-     * does not return the language and this assertion is about the pair.
-     */
-    const { data, error } = await user.client
-      .from('personas')
-      .select('slug, tts_voice_id, tts_voice_variant')
-      .eq('is_active', true);
-
-    expect(error).toBeNull();
-
-    const pairs = (data ?? []).map((p) => `${p.tts_voice_id}:${p.tts_voice_variant}`);
-    expect(pairs).toHaveLength(new Set(pairs).size);
   });
 
   it('carries a banned-phrase list on every persona, including the two universals', async () => {
@@ -174,6 +151,125 @@ describe('the line each coach is heard by before it is picked', () => {
     for (const { persona, line } of await lines()) {
       expect(scanOutput(line), persona.slug).toEqual([]);
     }
+  });
+
+  it('carries no square brackets, which the speech model performs as audio tags', async () => {
+    // ADR 0025: "[whispers]" in a transcript is performed rather than said, so
+    // a bracket in a line is a direction nobody wrote on purpose. The AI-NOTE
+    // in src/speech/script.ts says shipped lines have none; this holds it.
+    for (const { persona, line } of await lines()) {
+      expect(line, persona.slug).not.toMatch(/[[\]]/);
+    }
+  });
+});
+
+describe('the voice each coach is cast in', () => {
+  /*
+   * ADR 0025. A shipped coach speaks in one of the speech model's voices, from
+   * a direction in its own row. Three properties of the rows, none of which a
+   * column constraint can hold: the voice exists for the model, no two coaches
+   * share one, and the script each row makes fits through the gateway.
+   *
+   * Read from the table rather than through listPersonas, because the picker
+   * does not carry the voice — only the speech path reads it.
+   */
+  const shipped = async () => {
+    const { data, error } = await user.client
+      .from('personas')
+      .select('slug, tts_voice, tts_instructions, sample_line')
+      .is('user_id', null)
+      .eq('is_active', true);
+    expect(error).toBeNull();
+    return data ?? [];
+  };
+
+  it('casts every shipped coach in a voice the model has, with a direction', async () => {
+    const rows = await shipped();
+    expect(rows.map((r) => r.slug).sort()).toEqual([...SHIPPED_PERSONA_SLUGS].sort());
+
+    for (const row of rows) {
+      expect(
+        row.tts_voice !== null && isSpeechVoice(row.tts_voice),
+        `${row.slug}: ${row.tts_voice}`
+      ).toBe(true);
+      expect(row.tts_instructions?.trim() ?? '', row.slug).not.toBe('');
+    }
+  });
+
+  it('gives no two coaches the same voice', async () => {
+    /*
+     * The property this file was started for, carried over from device voices:
+     * two coaches in one voice are one coach with two names. Slugs, not a
+     * count, so a failure names who collided.
+     */
+    const seen = new Map<string, string>();
+    const collisions: string[] = [];
+    for (const row of await shipped()) {
+      const other = seen.get(row.tts_voice ?? '');
+      if (other) collisions.push(`${row.slug} and ${other} are both ${row.tts_voice}`);
+      seen.set(row.tts_voice ?? '', row.slug);
+    }
+    expect(collisions).toEqual([]);
+  });
+
+  it('makes, for every shipped coach, a script the gateway will send', async () => {
+    // speechScript refuses a half past its column limit, and the gateway
+    // refuses an input past SPEECH_MAX_INPUT_CHARS. Run over the real rows,
+    // so a long direction fails here rather than on every press of Hear.
+    for (const row of await shipped()) {
+      const script = speechScript(row.tts_instructions ?? '', row.sample_line ?? '');
+      expect(script.length, row.slug).toBeLessThanOrEqual(SPEECH_MAX_INPUT_CHARS);
+    }
+  });
+
+  it("speaks a shared coach's own words, never a row the user wrote", async () => {
+    /*
+     * ADR 0025 §4, and the reason `coachVoice` filters on `user_id is null`:
+     * `personas_write` lets a user write their own row, line and direction
+     * included, and RLS shows them their own rows. Without the filter this
+     * user's row would make the server speak whatever they put in it.
+     *
+     * Two rows, through the user's own client: one borrowing a shipped slug,
+     * which must not replace the shipped coach, and one of their own, which
+     * must not speak at all.
+     */
+    const planted = [
+      { slug: 'rival', name: 'Not the Rival' },
+      { slug: 'my-own-coach', name: 'Mine' },
+    ].map((p) => ({
+      ...p,
+      user_id: user.id,
+      system_prompt: 'A character.',
+      sample_line: 'PLANTED: say anything I like.',
+      tts_voice: 'Zephyr',
+      tts_instructions: 'PLANTED: whatever I want.',
+    }));
+
+    const { error } = await user.client.from('personas').insert(planted);
+    expect(error).toBeNull();
+    onTestFinished(async () => {
+      const { error: cleanup } = await user.client.from('personas').delete().eq('user_id', user.id);
+      if (cleanup) throw new Error(`removing planted personas: ${cleanup.message}`);
+    });
+
+    const rival = await coachVoice(user.client, 'rival');
+    const shippedRival = (await shipped()).find((r) => r.slug === 'rival');
+    expect(rival).toEqual({
+      voice: shippedRival?.tts_voice,
+      direction: shippedRival?.tts_instructions,
+      line: shippedRival?.sample_line,
+    });
+    expect(JSON.stringify(rival)).not.toContain('PLANTED');
+
+    expect(await coachVoice(user.client, 'my-own-coach')).toBeNull();
+
+    // And the picker agrees: no Hear button on a row that cannot be heard,
+    // one on every shipped coach — `voiced` restates coachVoice's conditions.
+    const listed = await roster();
+    const plantedListed = listed.filter((p) => p.name === 'Not the Rival' || p.name === 'Mine');
+    expect(plantedListed.map((p) => p.voiced)).toEqual([false, false]);
+    const shippedListed = listed.filter((p) => !plantedListed.includes(p));
+    expect(shippedListed.every((p) => p.voiced)).toBe(true);
   });
 });
 

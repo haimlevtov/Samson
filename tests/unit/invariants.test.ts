@@ -108,9 +108,30 @@ describe('CLAUDE.md #2 — all LLM calls go through the gateway', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('exposes exactly one call entry point', () => {
+  it('exports exactly the names it lists', () => {
+    /*
+     * Two call paths since ADR 0025 — `callLLM` for text, `callSpeech` for a
+     * coach's voice — and one factory. Every exported name is pinned, however
+     * it is declared: a function, class (abstract too), const, let, var, enum,
+     * namespace, module, type or interface. So a new export of any of those —
+     * an `export async function speak()` that skipped the budget gate — has to
+     * be added here on purpose. Re-exports and default exports are refused
+     * outright, because a name list cannot see through them.
+     *
+     * FOUND IN REVIEW, three times: this asserted only that callLLM existed,
+     * then matched `export async function` only, then only names beginning
+     * `call`.
+     */
     const gateway = readFileSync(join(ROOT, 'src', 'llm', 'gateway.ts'), 'utf8');
-    expect(gateway).toContain('export async function callLLM');
+    expect(gateway, 'a re-export or default export hides what the gateway exposes').not.toMatch(
+      /export\s*(?:\{|\*|default\b)/
+    );
+    const exported = [
+      ...gateway.matchAll(
+        /export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\s*\*?\s*|const\s+|let\s+|var\s+|class\s+|enum\s+|namespace\s+|module\s+|type\s+|interface\s+)(\w+)/g
+      ),
+    ].map((m) => m[1]);
+    expect(exported.sort()).toEqual(['callLLM', 'callSpeech', 'createGatewayDeps']);
   });
 });
 

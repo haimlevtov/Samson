@@ -228,4 +228,6 @@ page satisfies. Only reading the server log found it.
   because the guard is over digits. Recorded in `guard.test.ts` as a known gap.
 - Voice is `speechSynthesis`, not precomputed persona clips. ADR 0006 records
   that reduction so the phase report does not claim the audio pipeline PLAN.md
-  described.
+  described. _Superseded for coaches on 2026-09-11 by ADR 0025: a coach's
+  preview line is synthesised through the gateway; "Rest over." stays device
+  speech._

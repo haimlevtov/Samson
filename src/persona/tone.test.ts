@@ -16,7 +16,6 @@ const persona = (over: Partial<Persona> = {}): Persona => ({
   intensity: 5,
   humorLevel: 'crude',
   bannedPhrases: [],
-  voiceVariant: 0,
   ...over,
 });
 

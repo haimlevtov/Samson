@@ -1,6 +1,7 @@
 # ADR 0005 — Injection, conduct and abuse: five layers, four of them code
 
-**Status:** accepted, phase 2 (cross-cutting)
+**Status:** accepted, phase 2 (cross-cutting) — amended 2026-09-11: the speech
+stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md)
 **Date:** 2026-09-01
 
 ## Context
@@ -65,6 +66,10 @@ instructions` defeats a naive string check and reads normally to the model.
 stage cannot forget it. It states the domain boundary, that content inside
 fences is data, and the conduct rules.
 
+_One stage has none: `speech`, since 2026-09-11, because a speech model would
+read the preamble aloud. [ADR 0025](0025-coach-voices.md)'s addendum records
+what stands in for it._
+
 It is first in the string, which means it is inside the cached prefix and costs
 almost nothing after the first call.
 
@@ -74,7 +79,10 @@ prompt instruction as a control.
 
 ### 4. Output is scanned before the user sees it — code
 
-`scanOutput()` runs on every completion inside the gateway. It blocks on:
+`scanOutput()` runs on every completion inside the gateway. _A speech call
+returns audio, not a completion, and is not scanned; what it speaks is stored
+text that a test holds to `scanOutput` — [ADR 0025](0025-coach-voices.md)'s
+addendum._ It blocks on:
 
 - **Protected attributes.** Race, ethnicity, religion, nationality, gender
   identity, sexual orientation, disability. _Any_ mention, not just hostile

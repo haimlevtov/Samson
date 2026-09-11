@@ -30,11 +30,13 @@ export type LlmStage =
 **`src/llm/models.ts`** — add a fallback array to `STAGE_MODELS`. It is a
 `Record<LlmStage, …>`, so the compiler will demand this.
 
-> Every slug there was checked against OpenRouter's `/models` endpoint for
-> `structured_outputs` support. A model without it fails **every** call in the
-> stage, and `provider.require_parameters` turns that into a routing error
-> rather than a silent plain-text response. Reuse a slug already in the file
-> unless you have checked a new one the same way.
+> Every text-stage slug there was checked against OpenRouter's `/models`
+> endpoint for `structured_outputs` support — the speech entry is the exception:
+> it returns audio, and was checked against `/models?output_modalities=speech`.
+> A text model without it fails **every** call in the stage, and
+> `provider.require_parameters` turns that into a routing error rather than a
+> silent plain-text response. Reuse a slug already in the file unless you have
+> checked a new one the same way.
 
 **`src/llm/config.ts`** — a `*_MAX_TOKENS` constant. Say in the comment what
 the expected output size is and why the ceiling is where it is. A ceiling far
@@ -129,6 +131,30 @@ ADR 0005 §5 requires it every phase, and the report records what **got
 through**, not only what was blocked — write those as passing tests that assert
 the hole.
 
+## A stage that does not return text
+
+The `speech` stage (ADR 0025) returns audio, and most of the list above does
+not apply to it: no schema, no system prompt, no `scanOutput` — there is no
+completion to scan — and no `max_tokens`. It goes through its own entry point,
+`callSpeech` in `src/llm/gateway.ts`, which shares what CLAUDE.md #2 and #3 are
+about: the key, the budget gate, retries and a ledger row per attempt.
+
+What still applies: **step 1** (`LlmStage`, `STAGE_MODELS`, a bound in
+`config.ts` — for speech an input ceiling, not a token one), **step 2** (the
+constraint migration, unchanged) and **step 6** (a scripted fetch, no key).
+Two things are new, and both cost something to forget:
+
+- **A provider that reports no price** leaves `cost_credits` null. Never put an
+  estimate in the row; add the stage to `chargedFor` in `src/db/ledger.ts` so
+  the budget gate charges an assumption, as it does for timeouts — for every
+  status that reached a 200, not only `ok`, and never retry an attempt that
+  reached a 200, or one press pays twice. (A timeout before any 200 is charged
+  and retried, as for every stage.) #49 learned both in review.
+- **`tests/unit/invariants.test.ts` names every export of the gateway** — every
+  function, class, const, let, var, enum, namespace, type and interface. A new
+  one fails it until it is added there on purpose, and a re-export or default
+  export fails it outright.
+
 ## Before you call it done
 
 ```bash
@@ -152,5 +178,7 @@ npx vitest run --config vitest.db.config.ts tests/db/schema-invariants.test.ts
 - `docs/adr/0001-llm-gateway.md` — why every call goes through one door
 - `docs/adr/0005-llm-safety.md` — the five layers, and which are code
 - `docs/adr/0008-correction-channel.md` — why corrections are not fenced
-- `docs/adr/0015-coach-chat.md` — the most recent stage, and a worked example
+- `docs/adr/0015-coach-chat.md` — the most recent TEXT stage, and a worked example
   of confining one whose input has no shape
+- `docs/adr/0025-coach-voices.md` — the stage that returns audio, and the
+  price the provider does not report
