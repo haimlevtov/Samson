@@ -10,16 +10,17 @@ because several of them touch the same surface.
 
 ## Status
 
-| PR  | What                                                                                      | Branch                 | State                                                                |
-| --- | ----------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------- |
-| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                        |
-| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09) |
-| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)          |
-| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)  |
-| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)   |
-| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | in review, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)   |
-| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | planned                                                              |
-| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                              |
+| PR  | What                                                                                      | Branch                 | State                                                                  |
+| --- | ----------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| 1   | [This plan](#pr-1--this-plan)                                                             | `rework-plan`          | shipped 09-09                                                          |
+| 2   | [The leaderboard ranks by level](#pr-2--the-leaderboard-ranks-by-level)                   | `leaderboard-level`    | shipped 09-09, [↓](#pr-2--the-leaderboard-ranks-by-level-2026-09-09)   |
+| 3   | [Challenges and quests the Hub can offer](#pr-3--challenges-and-quests)                   | `hub-challenges`       | shipped 09-09, [↓](#pr-3--challenges-and-quests-2026-09-09)            |
+| 4   | [The graphs show their numbers](#pr-4--the-graphs-show-their-numbers)                     | `history-graph-values` | shipped 09-10, [↓](#pr-4--the-graphs-show-their-numbers-2026-09-10)    |
+| 5   | [Templates and a full profile for the demo users](#pr-5--the-demo-users-are-furnished)    | `seed-furnishings`     | shipped 09-11, [↓](#pr-5--the-demo-users-are-furnished-2026-09-11)     |
+| 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)               | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11) |
+| 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                  | `coach-tts`            | in progress                                                            |
+| 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                             | `plan-to-template`     | in review, paused for 6b                                               |
+| 8   | [One box on Coach, and a plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for) | `coach-one-box`        | planned                                                                |
 
 PR 8 carries two of the requested changes because they are the same surface and
 would conflict as separate branches.
@@ -383,6 +384,77 @@ the reason every model-backed surface is scripted today.
 - **The browser pass needs a signed-in session**, which this agent does not
   create: it does not type passwords, the published demo one included. It goes
   on the plans README's browser-pass row rather than being claimed.
+
+---
+
+## PR 6b — each coach speaks in character
+
+**Branch `coach-tts`.** Added 2026-09-11, from the user's report after PR 6
+shipped the preview — "coach doesn't have fitting voice to persona" — and their
+rule: **a coach voice that does not fit its personality is useless.** PR 7 is
+paused for it, at the user's call. The decision is
+[ADR 0025](../adr/0025-coach-voices.md), committed first.
+
+### What looking found
+
+Measured on this machine's browser, which offers Microsoft David, Mark and Zira
+and nothing else: the Sergeant spoke in **Zira** — a light female voice — at the
+highest pitch and rate of the five, the Old Master faster than normal, and the
+Analyst and the Physio in the Old Master's and the Rival's voices. The voice
+was the Nth device voice of a language, sorted by name.
+
+**PR #48 tried to fix it on the device** — choose voices by kind, shape each
+coach with its own pitch and rate — and review showed the ceiling: three device
+voices cannot make five characters, and choosing by kind only moved the
+collisions. On a machine whose British voices are one male and two female, all
+three British coaches would have collapsed onto one. **Closed unmerged.**
+
+**The claim that no browser voice could sound like a samurai master was wrong in
+the way that mattered.** It is true of `speechSynthesis`; products with character
+voices do not use it. And OpenRouter now serves text-to-speech
+(`/api/v1/audio/speech`), where `openai/gpt-4o-mini-tts` takes written
+instructions for tone, pace and accent. The key and the gateway this project
+already has can speak in character.
+
+### The decisions
+
+- **Each coach's voice is a direction in its row**: `tts_voice`, the provider's
+  voice, and `tts_instructions`, how the character speaks, in words.
+- **A `speech` stage through the gateway**: `callSpeech` beside `callLLM`, with
+  the budget gate, retries and an `llm_calls` row per attempt. The stage needs
+  the `llm_calls.stage` migration the add-pipeline-stage skill warns about.
+- **This PR voices the preview only**, the coach's own sample line looked up by
+  slug. **Reading a delivered plan aloud is the next PR**: the delivery has to be
+  stored server-side first, because the server never speaks text the browser
+  sends.
+- **No mismatched fallback, and device voices leave the coach entirely.**
+  Without a key, budget or a working call, the line is shown as text. The
+  device-voice columns and the picker had no other consumer and go with it; the
+  rest timer keeps its neutral "Rest over."
+- **The characters**, as directions, from the personas' own descriptions:
+
+  | Coach          | Voice   | Direction, in short                                  |
+  | -------------- | ------- | ---------------------------------------------------- |
+  | The Old Master | `onyx`  | an old samurai sword master: deep, grave, unhurried  |
+  | The Sergeant   | `ash`   | a drill sergeant on the parade ground: loud, clipped |
+  | The Rival      | `verse` | a cocky training partner: dry, quick, a smirk in it  |
+  | The Analyst    | `sage`  | a sports scientist: calm, precise, no hype           |
+  | The Physio     | `coral` | an experienced physio: warm, gentle, unhurried       |
+
+- **Cost**: about $0.002 a preview, about $0.03 for a plan read aloud later,
+  inside the gateway's $0.50 per user per week. Automated tests spend nothing.
+- **Where it is going**: a coach that talks to the user live, mid-workout. Not
+  built here — real-time work is out of scope today — but the direction in the
+  row is written so that session can use it.
+
+### Acceptance
+
+- With the key set, "Hear _coach_" plays that coach's line in its character
+  voice, and each of the five sounds like its description.
+- Without the key, the Voice card shows each line as text and offers no button;
+  nothing speaks in a device voice.
+- Every call writes an `llm_calls` row with stage `speech`, and a user past the
+  weekly budget is refused with a row, not a charge.
 
 ---
 

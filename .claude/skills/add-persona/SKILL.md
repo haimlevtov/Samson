@@ -1,6 +1,6 @@
 ---
 name: add-persona
-description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or assigning its device voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
+description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or giving it a voice. Covers the migration, the voice-variant rule that silently breaks, and the tests that must ship with it.
 ---
 
 # Adding a persona
@@ -22,8 +22,8 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `slug` | stable, lowercase, never reused |
 | `name` | what the chip says — "The Rival" |
 | `system_prompt` | a description of a **character**, see below |
-| `tts_voice_id` | a BCP-47 language tag, e.g. `en-GB`. Not a voice name |
-| `tts_voice_variant` | which voice within that language. **See §2** |
+| `tts_voice` | the TTS provider's voice name, e.g. `onyx`. **See §2** |
+| `tts_instructions` | how the character speaks, in words. **See §2** |
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
@@ -52,43 +52,35 @@ the character's description and will not take effect the way you expect.
 > Good: "Short, clipped sentences. Dry rather than loud — never shouting."
 > Bad: "You must respond in under three sentences and never use exclamation marks."
 
-## 2. The voice variant — the rule that breaks silently
+## 2. The voice — a direction, not a device
 
-`tts_voice_id` narrows to a **language**; `tts_voice_variant` picks the Nth
-device voice within it.
+A coach speaks in a synthesised voice (ADR 0025): `tts_voice` names the TTS
+provider's voice, and `tts_instructions` says, in words, how the character
+speaks. Both go to OpenRouter's text-to-speech through the gateway's `speech`
+stage.
 
-**INVARIANT: two personas sharing a `tts_voice_id` must not share a variant.**
+**Write the direction for a person, not for a model**, the same rule as
+`system_prompt`: who is speaking, and how — pace, weight, what they never do.
 
-This was a real bug. Voices were selected by language alone, so the two `en-GB`
-personas resolved to the same voice object — and on a device with no en-GB voice
-installed, the `en-US` persona fell back to it too. All three coaches spoke
-identically, under a control labelled "Voice".
+> Good: "An old samurai sword master: deep, grave, unhurried; short deliberate
+> phrases with long pauses; never raises his voice."
+> Bad: "Use voice onyx at 0.7 speed and sound old."
 
-Current allocation:
+Current voices:
 
-| Slug         | `tts_voice_id` | `tts_voice_variant` |
-| ------------ | -------------- | ------------------- |
-| `old-master` | en-GB          | 0                   |
-| `rival`      | en-GB          | 1                   |
-| `sergeant`   | en-GB          | 2                   |
-| `analyst`    | en-US          | 0                   |
-| `physio`     | en-US          | 1                   |
+| Slug         | `tts_voice` | Direction, in short                                  |
+| ------------ | ----------- | ---------------------------------------------------- |
+| `old-master` | `onyx`      | an old samurai sword master: deep, grave, unhurried  |
+| `sergeant`   | `ash`       | a drill sergeant on the parade ground: loud, clipped |
+| `rival`      | `verse`     | a cocky training partner: dry, quick, a smirk in it  |
+| `analyst`    | `sage`      | a sports scientist: calm, precise, no hype           |
+| `physio`     | `coral`     | an experienced physio: warm, gentle, unhurried       |
 
-**The next en-GB coach takes variant 3 and the next en-US one takes 2, not the
-default 0.** Nothing enforces this — the column defaults to 0 and no constraint
-spans rows — so it is held by `tests/db/personas.test.ts`, which fails the
-moment two rows of one language share a number.
-
-Worth knowing before adding another en-GB coach: a device needs three installed
-en-GB voices before the three that exist already sound like three people, and
-most Windows machines ship with fewer. That is the platform's limit rather than
-a bug (ADR 0006), but a new coach in a crowded language buys less separation
-than one in an empty one.
-
-There is no TTS provider (ADR 0006): delivery uses the browser's own
-`speechSynthesis`. The device decides which voices exist and they differ per
-browser and per OS, so a stored voice **name** would be wrong on most machines.
-Persona voice is tone, rate and word choice rather than timbre.
+**A voice that does not fit the coach is worse than none** — the user's rule, and
+why there is no device-voice fallback: without the key or the budget, the coach's
+words are shown and nothing speaks. The old device-voice columns
+(`tts_voice_id`, `tts_voice_variant`) are gone; so is the variant rule that
+went with them.
 
 ## 3. Banned phrases are a ban, not a preference
 
@@ -154,16 +146,9 @@ boundaries make short words safe; they do not make a badly chosen one correct.
 one needs a case only if it exercises something new (a humour tier no shipped
 persona has, an intensity at a boundary).
 
-**Database** — assert the row landed and the allocation still holds. The
-voice-variant rule is the one worth pinning, because nothing else catches it:
-
-```ts
-it('gives no two personas of one language the same voice variant', async () => {
-  const { data } = await anon.from('personas').select('tts_voice_id, tts_voice_variant');
-  const pairs = (data ?? []).map((p) => `${p.tts_voice_id}:${p.tts_voice_variant}`);
-  expect(pairs).toHaveLength(new Set(pairs).size);
-});
-```
+**Database** — assert the row landed. `tests/db/personas.test.ts` already holds
+every shipped coach to having a voice and a direction, so a new row without one
+fails there.
 
 **The sample line** needs no new case: `tests/db/personas.test.ts` already
 checks every shipped persona's line — present, unlike the others, no numeral,
@@ -204,11 +189,14 @@ been evaluated for drift — it has not.
 ## Related
 
 - `docs/adr/0006-persona-boundary.md` — the persona changes delivery, never content
+- `docs/adr/0025-coach-voices.md` — how a coach is voiced, and why not on the
+  device
 - `docs/adr/0005-llm-safety.md` §1 — why a column is fenced, not concatenated
 - `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
-  pair, and the closest model to copy. Its insert predates `sample_line`; add it
+  pair, and the closest model to copy. Its insert predates `sample_line`,
+  `tts_voice` and `tts_instructions`; add all three
 - `supabase/migrations/20260911130000_persona_sample_line.sql` — the preview
   line, and the rules it is held to
 - `supabase/migrations/20260901154757_shipped_personas.sql` — the original three
-- `supabase/migrations/20260907120000_persona_voice_variant.sql` — why the
-  variant is a column rather than an array index
+- `supabase/migrations/20260907120000_persona_voice_variant.sql` — history: the
+  device-voice variant ADR 0025 removed

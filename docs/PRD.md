@@ -159,6 +159,15 @@ changed the jokes more than the register. Note that it is _not_ the tone
 override below — that applies regardless of which persona is selected and is
 therefore an argument against needing a gentle coach, not for one.
 
+**Replaced 2026-09-11: a coach speaks in a synthesised character voice**
+([ADR 0025](adr/0025-coach-voices.md)). Device voices could not carry five
+characters — on one machine the Sergeant spoke in a light female voice — and a
+voice that does not fit its coach is worse than none. Each coach's row now holds
+a voice and a written direction ("an old samurai sword master: deep, grave,
+unhurried"), spoken by a steerable TTS model through OpenRouter and the gateway.
+Without the key, the coach's words are shown and nothing speaks. The paragraph
+below is the history.
+
 **Corrected 2026-09-07.** This said "TTS voice", which promised something the
 project does not have: there is no TTS provider and the only key here is for
 text ([ADR 0006](adr/0006-persona-boundary.md)). Delivery uses the browser's own
