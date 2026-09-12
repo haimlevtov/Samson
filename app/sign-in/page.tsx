@@ -65,15 +65,32 @@ export default async function SignInPage({
         <code>npm run migrate &amp;&amp; npm run seed</code> if they are missing.
       </p>
       <div className="card">
-        <table>
+        {/*
+         * `.table-cards` — each row becomes a card and each cell carries its
+         * column name. MEASURED at 375x812: the two original columns alone came
+         * to 536px against a 375px viewport, so this table has been scrolling
+         * the whole PAGE sideways since it was written, which
+         * docs/specs/mobile-interface.md exists to prevent. Adding a third
+         * column for the reset took it to 631 and put the button off-screen,
+         * which is how it was noticed.
+         *
+         * A real table is right where alignment is the point — the leaderboard
+         * argues for one — and it is not the point here: this is six unrelated
+         * accounts read one at a time.
+         */}
+        <table className="table-cards">
           <tbody>
             {FIXTURES.map((f) => (
               <tr key={f.email}>
-                <td style={{ whiteSpace: 'nowrap' }}>
+                {/* AI-NOTE: every td here needs a data-label, or the cell
+                    renders with no idea what it is. An action gets "". */}
+                <td data-label="Email">
                   <code>{f.email}</code>
                 </td>
-                <td className="muted small">{f.label}</td>
-                <td>
+                <td data-label="Who" className="muted small">
+                  {f.label}
+                </td>
+                <td data-label="">
                   {/*
                    * The demo reset — ADR 0032 §4, as amended twice, and this is
                    * where the owner asked for it: one button beside the account

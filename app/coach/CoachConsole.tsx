@@ -12,6 +12,7 @@ import {
   type ShownReason,
 } from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
+import { openingCoach } from '@/src/persona/choice';
 
 /**
  * What the card says beside a coach's line when it is shown instead of heard —
@@ -84,7 +85,10 @@ export function CoachConsole({
    * is only which coach the page opens on.
    */
   const [selected, setSelected] = useState(
-    personas.find((p) => p.slug === chosenSlug)?.slug ?? personas[0]?.slug ?? ''
+    openingCoach(
+      personas.map((p) => p.slug),
+      chosenSlug
+    )
   );
   const [voice, setVoice] = useState<PlayerState>(EMPTY_PLAYER);
   const player = useRef<CoachPlayer | null>(null);
