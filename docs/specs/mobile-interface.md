@@ -298,7 +298,7 @@ section exists to prevent.
 | **Nothing lifted this week**  | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                      |
 | **No loaded sets yet**        | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.               |
 | **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                     |
-| **No coach voice**            | No key, or a coach with no voice (a user's own row): the reason, then the line as text, and no Hear button.                             |
+| **No coach voice**            | No key, or a coach with no voice (a user's own row): the reason, then the line as text, and no Try button.                              |
 | **Voice loading**             | "Finding _coach_'s voice…" on the button, which stays pressable: a second press joins the call already in flight.                       |
 | **Voice refused or fails**    | The reason, then the line — the week's budget spent, no voice, or the call failed. Blocked playback: "Tap again to play."               |
 | **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                               |

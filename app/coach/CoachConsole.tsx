@@ -103,53 +103,66 @@ export function CoachConsole({
           picker and the delivery, which is what a voice is. */}
       <h2 className="section">Voice</h2>
       <div className="card">
-        <span className="label">Pick one</span>
-        <div className="row">
-          {personas.map((p) => (
-            <button
-              key={p.slug}
-              type="button"
-              className={`chip ${p.slug === selected ? 'chip-on' : ''}`}
-              onClick={() => choose(p.slug)}
+        {/*
+         * A menu, not five chips — this plan's PR 1. Five chips spent a whole
+         * line of a 375px screen on a choice made once, and every one of them
+         * was a 44px target competing with the control people actually press.
+         *
+         * A native `<select>` rather than a custom dropdown: keyboard and screen
+         * reader navigable for free, rendered as the platform's own picker on a
+         * phone, and `docs/specs/mobile-interface.md`'s 44px rule is already
+         * satisfied by the base `select` min-height rather than by new CSS.
+         */}
+        <div className="row persona-picker">
+          <label className="persona-choice">
+            <span className="label">Change persona</span>
+            <select
+              value={selected}
+              onChange={(event) => choose(event.target.value)}
+              disabled={pending}
             >
-              {p.name}
-            </button>
-          ))}
+              {personas.map((p) => (
+                <option key={p.slug} value={p.slug}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/*
+           * The preview — rework plan PRs 6 and 6b, and PR 1 here made it a
+           * PRIMARY button. Primary is already `--accent`, so this is a token
+           * change rather than a new colour: nothing in this project carries
+           * state in a hardcoded hex.
+           *
+           * "Try" rather than "Hear {name}": the name is in the menu beside it,
+           * and a label that rebuilt itself per selection made the button change
+           * width every time somebody changed their mind.
+           *
+           * WHY it stays enabled while fetching: disabling the focused button
+           * drops keyboard focus, and a second press is harmless — the player
+           * joins the call already in flight rather than paying twice.
+           */}
+          {chosen && canHear ? (
+            voice.playing === chosen.slug ? (
+              <button type="button" className="secondary" onClick={() => player.current?.stop()}>
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-busy={fetching}
+                aria-label={`Try ${chosen.name}'s voice`}
+                onClick={() => void player.current?.hear(chosen.slug)}
+              >
+                {fetching ? 'Finding…' : 'Try'}
+              </button>
+            )
+          ) : null}
         </div>
 
-        {/*
-         * The preview — rework plan PRs 6 and 6b. A Hear button only where a
-         * voice exists; otherwise, or after a refusal or a blocked play, the
-         * line as text with the reason.
-         *
-         * WHY the button stays enabled while fetching: disabling the focused
-         * button drops keyboard focus, and a second press is harmless — the
-         * player joins the call already in flight rather than paying twice.
-         */}
         {chosen ? (
           <>
-            {canHear ? (
-              <div className="row">
-                {voice.playing === chosen.slug ? (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => player.current?.stop()}
-                  >
-                    Stop
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="secondary"
-                    aria-busy={fetching}
-                    onClick={() => void player.current?.hear(chosen.slug)}
-                  >
-                    {fetching ? `Finding ${chosen.name}’s voice…` : `Hear ${chosen.name}`}
-                  </button>
-                )}
-              </div>
-            ) : null}
             {why !== null ? (
               // A coach with no line still says why it is silent — every
               // state renders something, docs/specs/mobile-interface.md §4.
