@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
+import { openingCoach } from '@/src/persona/choice';
 import { hasApiKey } from '@/src/llm/config';
 import { normaliseGoal } from '@/src/diet/energy';
 import { displayDate } from '@/src/ui/format';
@@ -33,6 +34,10 @@ export default async function CoachPage() {
   if (!user) redirect('/sign-in');
 
   const [personas, plan] = await Promise.all([listPersonas(db), latestAcceptedPlan(db)]);
+
+  const voicedSlugs = personas.filter((p) => p.voiced).map((p) => p.slug);
+  const chatVoiceSlug = openingCoach(voicedSlugs, user.personaSlug);
+  const chatVoiceName = personas.find((p) => p.voiced && p.slug === chatVoiceSlug)?.name ?? null;
 
   const weekLabels = (plan?.block.weeks ?? []).map(
     (w) => `Week ${w.week_number}${w.is_deload ? ' · deload' : ''}`
@@ -209,7 +214,13 @@ export default async function CoachPage() {
        */}
       {/* The stored goal, so the selector opens where the user left it — ADR
           0032 §3. `normaliseGoal` handles a null or an unrecognised value. */}
-      <CoachBox goal={normaliseGoal(user.dietGoal ?? '')} />
+      {/*
+       * The voice the chat would speak in, named on the switch BEFORE it is
+       * turned on. Resolved exactly as `performReply` resolves it — the stored
+       * coach against the shared voiced rows, the first of them otherwise — so
+       * the label cannot name a different coach from the one that speaks.
+       */}
+      <CoachBox goal={normaliseGoal(user.dietGoal ?? '')} voiceName={chatVoiceName} />
     </>
   );
 }

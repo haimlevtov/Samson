@@ -8,21 +8,24 @@ import { activeWorkout, insertSet } from '@/src/db/training';
 import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
-import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
+import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
 import { loadXpSummary } from '@/src/db/gamification';
 import { loadHistory } from '@/src/db/training';
 import { loadEvidence } from '@/src/db/evidence';
 import { loadNotes, rememberNote } from '@/src/db/notes';
-import { coachVoice, listPersonas } from '@/src/db/personas';
-import { openingCoach } from '@/src/persona/choice';
+import { performReply, speakIfAsked, speechWindow } from '@/src/speech/perform';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { computeEnergy, dietFacts } from '@/src/diet/energy';
-import { speechScript, spokenLine, MAX_TRANSCRIPT_CHARS } from '@/src/speech/script';
 import { stripInvisible } from '@/src/llm/safety';
 import { spokeToCoachRecently, SESSION_COACH_COOLDOWN_SECONDS } from '@/src/db/plans';
 import { refusalFor } from '@/src/speech/refusal';
-import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  SPEECH_TIMEOUT_MS,
+  SPOKEN_REPLY_DEADLINE_MS,
+  SPOKEN_REPLY_MIN_WINDOW_MS,
+} from '@/src/llm/config';
 import type { SessionAnswer } from './session-coach';
 import { isUserFacing, logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
@@ -293,6 +296,8 @@ export async function askDuringSession(
   spoken: unknown,
   wantsVoice: unknown
 ): Promise<SessionAnswer> {
+  // For the speech deadline — see `speechWindow`.
+  const started = Date.now();
   /*
    * Trimmed BEFORE the length check — FOUND IN REVIEW. `min(1)` on an untrimmed
    * string admits a whitespace-only POST, which buys a whole chat call for a
@@ -362,12 +367,11 @@ export async function askDuringSession(
       };
     }
 
-    const [history, xp, evidence, notes, personas] = await Promise.all([
+    const [history, xp, evidence, notes] = await Promise.all([
       loadHistory(db),
       loadXpSummary(db, today),
       loadEvidence(db),
       loadNotes(db),
-      listPersonas(db),
     ]);
 
     // INVARIANT: every figure the coach may quote is computed here, in code —
@@ -440,98 +444,67 @@ export async function askDuringSession(
         : (answer.text ?? SUPPLEMENT_ANSWER_TURN);
 
     /*
-     * THE COACH THE USER PICKED, when that coach can speak — `users.persona_slug`.
+     * Everything from here is `performReply` — `src/speech/perform.ts`, which
+     * the Coach tab's chat now shares. It resolves the coach the user picked
+     * against the shared voiced rows, bounds the reply at
+     * `MAX_TRANSCRIPT_CHARS`, sanitises it with `spokenLine` before it reaches
+     * the speech model's instruction channel, and returns a clip or the reason
+     * there is none.
      *
-     * ADR 0031 §5 settled for "the first shared, voiced persona alphabetically"
-     * and said why it was a settle: there was no column. There is one now, so
-     * the settle became the FALLBACK and the stored choice became the answer.
-     *
-     * Eligibility is decided here rather than inside `openingCoach`: only a
-     * shared, voiced coach can be performed, so the stored slug is resolved
-     * against that subset. A user whose coach has no voice gets the voiced
-     * default rather than silence — which is the same thing every user got
-     * before the column existed.
-     *
-     * FOUND IN REVIEW: this comment used to end "there is no stored persona
-     * choice anywhere to make the two agree", and the PR that added the column
-     * left it standing.
+     * It was eighty lines here, and the second surface to want them is why it
+     * moved rather than being copied: what a copy would have duplicated is the
+     * sanitiser that stands between model prose and an instruction channel.
      */
-    const voicedSlugs = personas.filter((p) => p.voiced).map((p) => p.slug);
-    const speaking = openingCoach(voicedSlugs, user.personaSlug);
-    const voiced = personas.find((p) => p.voiced && p.slug === speaking) ?? null;
-
-    if (!speak) {
-      return { asked, reply, audio: null, silent: 'not-asked', coach: null, error: null };
-    }
-    if (voiced === null) {
-      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
-    }
-
     /*
-     * INVARIANT: only a reply within the speech stage's own bound is spoken —
-     *            ADR 0031 §4. `SPEECH_ASSUMED_COST_USD` is calibrated on
-     *            `MAX_TRANSCRIPT_CHARS`, and the budget gate charges that flat
-     *            figure per unpriced speech row — so speaking something longer
-     *            would not cost more in the ledger while costing more in fact.
+     * THROUGH `speakIfAsked`, FOUND IN REVIEW of rework PR 6 — and it was a
+     * regression that PR introduced on this card while fixing the same fault on
+     * the Coach tab.
      *
-     * Checked HERE rather than caught from `speechScript`'s RangeError: a
-     * refusal the card can explain is not an exception, and the user is told
-     * their answer was too long to read aloud rather than shown a failure.
-     */
-    if (reply.length > MAX_TRANSCRIPT_CHARS) {
-      return { asked, reply, audio: null, silent: 'too-long', coach: voiced.name, error: null };
-    }
-
-    /*
-     * INVARIANT: model-written prose is sanitised before it is performed —
-     *            CLAUDE.md #11, and `src/speech/script.ts`'s own AI-NOTE asked
-     *            for exactly this in exactly this PR. The first draft passed the
-     *            completion straight through, and a review caught it.
+     * This awaited `performReply` directly inside the outer try, so a speech
+     * failure — a timeout, a 502, a spent budget — reached the catch below, which
+     * returns `reply: ''`. The chat had succeeded and been paid for; the user
+     * saw "the coach could not answer that one". Worse, moving the persona read
+     * into `performReply` put it AFTER the chat call, so even a failed read of the
+     * persona table now discarded a paid answer.
      *
-     * The user does not choose these words, but they shape them, and the speech
-     * model's input IS an instruction channel: square brackets are performance
-     * tags and a second `### DIRECTOR'S NOTES` block is a second set of
-     * directions. "The chat model probably will not comply" is defence in depth,
-     * which ADR 0005 §3 says explicitly is not the control.
+     * `speakIfAsked` always resolves. The written reply is kept whatever happens
+     * to the voice, and the card already has a sentence for every reason.
+     *
+     * NOT a substituted reply, for the reason the Coach tab gives: an off-topic
+     * question or a supplement miss comes back as the app's own sentence, and
+     * speaking it puts code-owned words in a coach's voice and charges for them.
      */
-    const line = spokenLine(reply);
-    if (line === '') {
-      // A reply that was nothing but tags sanitises to nothing. `speechScript`
-      // throws on an empty transcript, and a refusal must not become a 500.
-      return { asked, reply, audio: null, silent: 'failed', coach: voiced.name, error: null };
-    }
+    const window = speechWindow({
+      elapsedMs: Date.now() - started,
+      deadlineMs: SPOKEN_REPLY_DEADLINE_MS,
+      minMs: SPOKEN_REPLY_MIN_WINDOW_MS,
+      maxMs: SPEECH_TIMEOUT_MS,
+    });
+    const speakable = answer.substituted ? null : reply;
 
-    const coach = await coachVoice(db, voiced.slug);
-    if (!coach) {
-      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
-    }
-
-    const clip = await callSpeech(
-      {
-        userId: user.id,
-        // The sanitised REPLY, which this function produced. Never `asked`.
-        input: speechScript(coach.direction, line),
-        voice: coach.voice,
-      },
-      createGatewayDeps(createSupabaseLedger(db))
+    const spokenReply = await speakIfAsked(
+      { wanted: speak, reply: window === null ? null : speakable },
+      (text) =>
+        performReply(db, {
+          userId: user.id,
+          reply: text,
+          personaSlug: user.personaSlug,
+          bounds: window ?? undefined,
+        }),
+      // The name and a bounded message, never the object — ADR 0028.
+      (cause) => console.error('session reply not spoken', logLine(cause))
     );
+
+    // Out of time with a reply worth speaking: say the voice did not come
+    // through, rather than going quiet as though nobody had asked.
+    const silent = speak && speakable !== null && window === null ? 'failed' : spokenReply.silent;
 
     return {
       asked,
       reply,
-      /*
-       * The `Uint8Array` as it is — FOUND IN REVIEW, and the first draft's
-       * comment claiming it does not survive the boundary was false.
-       * `src/speech/player.ts` records the opposite, measured: React serialises
-       * one in a server action's result unchanged, which is why `hearCoach`
-       * returns it raw. Converting it made a 1.4 MB clip a 1.4-million-element
-       * array and a decimal-text payload several times larger, against a ~4.5 MB
-       * response ceiling — so a long clip could be generated, charged, and then
-       * fail to cross.
-       */
-      audio: { bytes: clip.audio, contentType: clip.contentType },
-      silent: null,
-      coach: voiced.name,
+      audio: spokenReply.audio,
+      silent,
+      coach: spokenReply.coach,
       error: null,
     };
   } catch (cause) {

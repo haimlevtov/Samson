@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { askDuringSession } from '../actions';
-import type { SessionAnswer, SilentReason } from '../session-coach';
+import type { SessionAnswer } from '../session-coach';
 import {
   EMPTY_LISTEN,
   createListener,
@@ -11,6 +11,8 @@ import {
   type Listener,
   type Recogniser,
 } from '@/src/speech/listen';
+import { SILENT_TEXT, useReplyVoice } from '@/src/ui/reply-voice';
+import { SpeakSwitch } from '@/src/ui/SpeakSwitch';
 
 /**
  * Ask the coach mid-session — ADR 0031.
@@ -24,15 +26,6 @@ import {
  *            It sends a string and renders what comes back. Every guard is on
  *            the server — ADR 0031 §6.
  */
-
-/** What the card says when there was no clip. `not-asked` says nothing at all. */
-const SILENT_TEXT: Record<Exclude<SilentReason, 'not-asked'>, string> = {
-  'no-key': 'The coach voices are not set up here.',
-  budget: "This week's coaching budget is spent, so the coach cannot speak until it resets.",
-  'no-voice': 'No coach has a voice yet, so this one is written only.',
-  failed: 'The voice did not come through.',
-  'too-long': 'That answer was too long to read aloud — it is above.',
-};
 
 /** What the card says when a hold produced nothing. */
 const LISTEN_TEXT: Record<ListenFailure, string> = {
@@ -74,8 +67,6 @@ function makeRecogniser(): Recogniser | null {
 
 export function SessionCoach() {
   const [answer, setAnswer] = useState<SessionAnswer | null>(null);
-  /** Set when the browser refused to autoplay a clip we already paid for. */
-  const [blocked, setBlocked] = useState(false);
   const [listen, setListen] = useState<ListenState>(EMPTY_LISTEN);
   const [speak, setSpeak] = useState(false);
   const [typed, setTyped] = useState('');
@@ -83,8 +74,15 @@ export function SessionCoach() {
   const [pending, startTransition] = useTransition();
 
   const listener = useRef<Listener | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const clipUrl = useRef<string | null>(null);
+  /*
+   * The clip's playback — `src/ui/reply-voice.ts`, which the Coach tab's chat
+   * now shares. It MOVED — not verbatim: its generation guard changed shape, and
+   * `src/speech/reply-player.ts` says how and why that is the same or better.
+   * What went with it: the pause-before-return, the rejection
+   * guard and the NotAllowedError replay were each found in review on THIS
+   * card, and a second copy would have had to find them again.
+   */
+  const { blocked, play: playClip, replay } = useReplyVoice();
   /*
    * Which question the rendered answer belongs to — FOUND IN REVIEW.
    *
@@ -152,68 +150,17 @@ export function SessionCoach() {
     });
   };
 
-  const play = (result: SessionAnswer): void => {
-    if (audio.current === null) return;
-    // The generation this clip belongs to — FOUND IN RE-REVIEW. `play`'s
-    // rejection handler was the only continuation in this file with no check,
-    // so a refused autoplay from answer 1 could set `blocked` under answer 2 and
-    // the replay button would then play answer 1's clip.
-    const mine = turn.current;
-    /*
-     * Stopped BEFORE the early return — FOUND IN REVIEW. A new text-only answer
-     * used to leave the previous clip talking underneath it: ask with the toggle
-     * on, get fifteen seconds of coach, ask again with it off, and the old voice
-     * carries on over the new words. `player.ts` pauses before every load for
-     * the same reason.
-     */
-    audio.current.pause();
-    setBlocked(false);
-    if (result.audio === null) return;
-
-    // The previous clip's URL is revoked before the next is made: a session is
-    // many questions, and a leaked blob per answer is a leak per question.
-    if (clipUrl.current !== null) URL.revokeObjectURL(clipUrl.current);
-    const blob = new Blob([result.audio.bytes], { type: result.audio.contentType });
-    clipUrl.current = URL.createObjectURL(blob);
-    audio.current.src = clipUrl.current;
-    void audio.current.play().catch((cause: unknown) => {
-      /*
-       * NotAllowedError is the browser withholding sound after a multi-second
-       * network wait, and it is the common one — `src/speech/player.ts` handles
-       * it and `docs/specs/mobile-interface.md` §4 has a row for it. The first
-       * draft swallowed every rejection, so a clip the project had PAID FOR was
-       * unreachable and the card still said whose voice it was. FOUND IN REVIEW.
-       *
-       * The URL stays: the replay button below plays it from the cache, inside
-       * the tap, which is what the policy is waiting for.
-       */
-      if (mine !== turn.current) return;
-      if (cause instanceof DOMException && cause.name === 'NotAllowedError') {
-        setBlocked(true);
-        return;
-      }
-      /*
-       * Any other rejection is a clip that will not play at all, and the card
-       * must stop claiming it did — `player.ts` carries the same reasoning about
-       * replaying a broken clip under a message saying "Try again".
-       */
-      setAnswer((current) => (current === null ? current : { ...current, silent: 'failed' }));
-    });
-  };
-
-  const replay = async (): Promise<void> => {
-    if (audio.current === null || audio.current.src === '') return;
-    try {
-      await audio.current.play();
-      setBlocked(false);
-    } catch {
-      // Still refused. The text is on screen and the button stays, which is the
-      // honest state — nothing here can force sound out of a browser.
-    }
-  };
+  /*
+   * A clip that will not play at all marks the answer silent, so the card stops
+   * claiming a voice it cannot deliver — the reasoning `player.ts` carries about
+   * replaying a broken clip under a message saying "Try again".
+   */
+  const play = (result: SessionAnswer): void =>
+    playClip(result.audio, () =>
+      setAnswer((current) => (current === null ? current : { ...current, silent: 'failed' }))
+    );
 
   useEffect(() => {
-    audio.current = new Audio();
     const recogniser = makeRecogniser();
     setCanListen(recogniser !== null);
 
@@ -230,10 +177,7 @@ export function SessionCoach() {
       turn.current += 1;
       listener.current?.dispose();
       listener.current = null;
-      audio.current?.pause();
-      audio.current = null;
-      if (clipUrl.current !== null) URL.revokeObjectURL(clipUrl.current);
-      clipUrl.current = null;
+      // The audio and its blob URL are torn down by `useReplyVoice`'s own effect.
     };
     /*
      * Mount only, and deliberately: `ask` reads the toggle through a ref rather
@@ -253,47 +197,10 @@ export function SessionCoach() {
          * Rendered before the control, because it is what decides what the
          * control costs — ADR 0031 §3. Off by default, per session, and it says
          * what it costs in words: the money is the project's, and a figure would
-         * be asking the user to budget something that is not theirs.
+         * be asking the user to budget something that is not theirs. The markup
+         * is `SpeakSwitch`, shared with the Coach tab's chat.
          */}
-        <label className="speak-toggle">
-          {/*
-           * A switch, not a tickbox — and it is still an `<input type="checkbox">`
-           * underneath. `role="switch"` is the ARIA name for a control that is
-           * ON or OFF right now rather than one that will be submitted with a
-           * form, which is exactly what this is: nothing is saved, the toggle
-           * governs the next press.
-           *
-           * Building it on the native input rather than a styled `<div>` keeps
-           * the keyboard (space toggles), the label association, the focus ring
-           * and the disabled semantics for free. A hand-rolled switch has to
-           * reimplement all four and usually reimplements three.
-           */}
-          <input
-            type="checkbox"
-            role="switch"
-            className="sr-only"
-            aria-describedby="speak-cost"
-            checked={speak}
-            onChange={(event) => setSpeak(event.target.checked)}
-          />
-          <span className="track" aria-hidden="true">
-            <span className="knob" />
-          </span>
-          <span className="speak-label">Read the answers aloud</span>
-        </label>
-        {/*
-         * OUTSIDE the label, and described rather than named — FOUND IN REVIEW.
-         * Inside it, this sentence became part of the input's accessible name:
-         * `role="switch"` announced the state and then the name said it again,
-         * and because the name changed on every press the whole two-sentence
-         * string was re-announced each time. A description is read once, after
-         * the name and the state, which is the order somebody needs it in.
-         */}
-        <p className="muted small speak-cost" id="speak-cost">
-          {speak
-            ? 'On — the coach speaks its answers, which costs the app money.'
-            : 'Off — answers arrive written. Speaking them costs the app money.'}
-        </p>
+        <SpeakSwitch speak={speak} onChange={setSpeak} describedBy="speak-cost" />
 
         {mustType ? (
           /*

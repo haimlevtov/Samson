@@ -5,19 +5,14 @@
  * so a type declared beside the action is unreachable from the component and
  * from a test.
  */
-import type { VoiceRefusal } from '@/src/speech/player';
+import type { SilentReason } from '@/src/speech/perform';
 
-/** Why an answer arrived without audio. Each renders its own sentence. */
-export type SilentReason =
-  | VoiceRefusal
-  /** The user has not asked for audio. Not a failure, and says nothing. */
-  | 'not-asked'
-  /**
-   * The reply is longer than the speech stage's bound — ADR 0031 §4. The
-   * assumption behind `SPEECH_ASSUMED_COST_USD` is calibrated on that bound, so
-   * speaking past it would make the budget gate count the wrong thing.
-   */
-  | 'too-long';
+/**
+ * Why an answer arrived without audio — defined in `src/speech/perform.ts` now,
+ * because the Coach tab's chat returns it too. Re-exported so nothing that
+ * imported it from here had to move.
+ */
+export type { SilentReason };
 
 export interface SessionAnswer {
   /** What was heard, echoed back so the user can see what was recognised. */

@@ -2934,7 +2934,8 @@ label.choice-row input {
   flex: 1 1 auto;
 }
 /* The cost sentence sits below the switch rather than inside its label — it is
-   the input's DESCRIPTION, not part of its name. See SessionCoach.tsx. */
+   the input's DESCRIPTION, not part of its name. See src/ui/SpeakSwitch.tsx,
+   which both the session card and the Coach tab's chat render. */
 .speak-cost {
   margin: 0;
 }

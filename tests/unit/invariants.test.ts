@@ -293,8 +293,14 @@ describe('the voice switch is wired end to end', () => {
    *          what tells you to update it — re-point it rather than delete it.
    */
   const css = () => readFileSync(join(ROOT, 'app', 'globals.css'), 'utf8');
-  const component = () =>
-    readFileSync(join(ROOT, 'app', 'history', '[id]', 'SessionCoach.tsx'), 'utf8');
+  /*
+   * RE-POINTED in rework PR 6, as the AI-NOTE above asks. The markup moved from
+   * `SessionCoach.tsx` into `src/ui/SpeakSwitch.tsx` when the Coach tab's chat
+   * became the second surface to render it — so there is ONE switch to scan now,
+   * which both surfaces import, rather than two copies either of which could
+   * drift. The test failed on the move, which is the guard doing its job.
+   */
+  const component = () => readFileSync(join(ROOT, 'src', 'ui', 'SpeakSwitch.tsx'), 'utf8');
 
   it('paints the checked state from the input that carries it', () => {
     expect(css(), 'the switch no longer paints its ON state').toContain('input:checked + .track');
@@ -328,8 +334,29 @@ describe('the voice switch is wired end to end', () => {
   it('keeps the cost sentence out of the label and attached as a description', () => {
     // Inside the label it became part of the accessible name and was announced
     // twice, changing on every press — FOUND IN REVIEW.
+    //
+    // The id is a PROP now, because two surfaces render the switch — on
+    // different routes, so they never collide, but each names its own sentence
+    // at most once each and must not collide. So what is asserted is that the
+    // description and the sentence are wired to the SAME prop.
     const text = component();
-    expect(text).toContain('aria-describedby="speak-cost"');
-    expect(text).toContain('id="speak-cost"');
+    expect(text).toContain('aria-describedby={describedBy}');
+    expect(text).toContain('id={describedBy}');
+
+    // And the sentence sits after the label closes, not inside it.
+    expect(text.indexOf('id={describedBy}')).toBeGreaterThan(text.indexOf('</label>'));
+  });
+
+  it('is the switch both surfaces render, rather than a copy on each', () => {
+    // Two copies of this markup would be two places for the adjacent-sibling
+    // paint and the description wiring to drift. Both import the one component.
+    for (const surface of [
+      join(ROOT, 'app', 'history', '[id]', 'SessionCoach.tsx'),
+      join(ROOT, 'app', 'coach', 'CoachBox.tsx'),
+    ]) {
+      const text = readFileSync(surface, 'utf8');
+      expect(text, surface).toContain('<SpeakSwitch');
+      expect(text, surface).not.toContain('role="switch"');
+    }
   });
 });

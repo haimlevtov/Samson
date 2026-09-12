@@ -31,6 +31,7 @@
 import type { ChatTurn } from '@/src/chat/schema';
 import type { EvidenceRow } from '@/src/db/evidence';
 import type { DietGoal, EnergyResult } from '@/src/diet/energy';
+import type { SilentReason } from '@/src/speech/perform';
 
 export interface CoachState {
   /** The visible conversation, oldest first. Bounded by MAX_TRANSCRIPT_TURNS. */
@@ -70,6 +71,35 @@ export interface CoachState {
    * route; it says so here.
    */
   supplementMiss: boolean;
+  /**
+   * The newest reply, spoken — rework PR 6, ADR 0031 on a second surface.
+   *
+   * For the NEWEST answer only, like `row`. A clip belongs to the turn that
+   * produced it, and one carried forward past the next submission would play
+   * again under a question it did not answer.
+   *
+   * The `Uint8Array` as the gateway returned it: React serialises one in an
+   * action's result as a binary chunk, and converting it to a number array
+   * would inflate a long clip several times over against the response ceiling.
+   * `src/speech/player.ts` carries that reasoning for the Try button.
+   *
+   * NEVER SENT BACK. `CoachBox`'s `ask` wrapper nulls it before the next
+   * submission, because `useActionState` passes the previous state as an
+   * argument and a long clip exceeded the 1 MB action body limit — FOUND IN
+   * REVIEW, and it broke every later submission until a reload.
+   */
+  audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
+  /**
+   * Why the newest reply has no clip. `not-asked` when the switch was off;
+   * null when a clip arrived, when a supplement ROW was the answer, and on the
+   * returns that never reach a reply at all — a goal change, Clear, an error.
+   */
+  silent: SilentReason | null;
+  /**
+   * The coach whose voice the reply was, or would have been, spoken in — also
+   * set on `too-long` and `failed`, where nothing was heard.
+   */
+  coach: string | null;
   error: string | null;
 }
 
@@ -79,5 +109,8 @@ export const EMPTY_COACH: CoachState = {
   goal: 'maintain',
   row: null,
   supplementMiss: false,
+  audio: null,
+  silent: null,
+  coach: null,
   error: null,
 };
