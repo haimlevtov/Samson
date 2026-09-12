@@ -6,7 +6,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | PR  | What                                                                    | Branch                  | State                                                              |
 | --- | ----------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
 | 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)     | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                       | `coach-memory`          | planned                                                            |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                       | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)          |
 | 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)       | `session-talk`          | planned                                                            |
 | 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing) | `fresh-user-onboarding` | planned                                                            |
 
@@ -335,3 +335,60 @@ through." and nothing else.
 
 **Not opened in a browser.** The browser pass this plan's Verification section
 demands is still owed, and PR 1 does not discharge it.
+
+### PR 2 — the coach remembers, 2026-09-12
+
+Shipped as [#60](https://github.com/haimlevtov/Samson/pull/60), with
+[ADR 0030](../adr/0030-what-the-coach-remembers.md) committed first and ADR 0015
+amended in the same commit — because this is the PR that made one of that ADR's
+guarantees false, and the table it was quoted from is where it had to be said.
+_"A jailbroken chat cannot persist anything" is retired rather than reworded._
+
+**A detour came first.** Designing this leaned on "a note survives `scanOutput`",
+and checking that turned up a hole open since phase 0: the gateway scanned the
+RAW completion, which is a JSON document, so `{"reply":"you are \u0067ay"}`
+contained no word the scanner knew. All four checks, evadable by anything that
+could influence how the model spelled its answer. That is
+[#59](https://github.com/haimlevtov/Samson/pull/59), and it had to land first for
+this plan's claim to be true.
+
+**What review found, and twenty-seven findings is the number.** Three were
+defects, and two of them were rules that did not do what their own documents said:
+
+- **A zero-width space defeated the duplicate rule entirely.** `String.trim`
+  does not strip U+200B and the whitespace class does not match it, so the same
+  sentence with one appended passed every turn — and `sanitizeUntrusted` strips
+  them again on the way into the prompt, so twenty of those would evict twenty
+  real memories and leave the model reading twenty identical lines. The rule's
+  own failure producing the outcome the rule exists to prevent.
+- **"No numeral" is not "no figure", and three documents said it was.** "user
+  squats two hundred kilos" passed every check, and a note is re-fed every turn,
+  so the model could restate it and neither reply guard would fire — both read
+  numerals. The unit is the boundary now, as it is for `CALORIE_FIGURE`.
+- **A note that trips layer 4 costs the user their answer.** `scanValue` reports
+  no field, so the gateway cannot drop the note and keep the reply.
+  `PROTECTED_ATTRIBUTE` matches "disability" — so a user saying "I have a
+  disability in my right shoulder" got three blocked attempts and a generic
+  error. A denial path aimed at exactly the users the conduct rule protects. The
+  prompt now asks for what someone can and cannot do and never why; the real fix
+  is per-leaf attribution in `scanValue`, and it is named rather than made.
+
+**And a test that tested nothing, twice.** ADR 0030 calls the reader's `LIMIT`
+the control and the trigger hygiene — and nothing pinned the limit, because every
+other case leaves twenty rows. The first replacement also passed with the limit
+deleted: the trigger is a TABLE trigger and clears rows whoever inserts them,
+service role included. It now disables the trigger over a direct connection to
+reach the one state the limit exists for.
+
+**Departures from this plan, both argued rather than quiet:** the surface is
+Settings rather than Profile (ADR 0013's amendment moved this class of control
+there), and `acceptableNote` does not call `scanOutput`, because the gateway
+already has — reimplementing it would have looked like a second control.
+
+**Docker twice, stopped twice.** Once for the types regeneration the migration
+forces, once to run the db suite against the rewritten reader test rather than
+ship it unverified. The additive migration went to hosted before the merge, per
+the deploy-order rule.
+
+**Still not opened in a browser.** This plan's Verification section owes that and
+PR 2 does not discharge it.
