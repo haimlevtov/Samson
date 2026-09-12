@@ -316,6 +316,31 @@ describe('functions pin their search_path', () => {
     );
     expect(rows.map((r) => r.proname)).toEqual([]);
   });
+
+  it('counts no hidden badges for a caller with no identity, even with the grant', async () => {
+    /*
+     * ADR 0017's 2026-09-12 amendment, property 3. The revoke keeps anon out;
+     * this is the function being correct on its own. Without its
+     * `if uid is null` branch, a null auth.uid() joins no unlock events and the
+     * count is EVERY hidden badge — FOUND IN REVIEW that nothing tested it,
+     * because the anon test stops at the grant.
+     *
+     * `authenticated` holds the grant; with no JWT claims set, auth.uid() is
+     * null. Rolled back, so the role change cannot leak into later tests.
+     */
+    const client = db();
+    await client.query('begin');
+    try {
+      await client.query('set local role authenticated');
+      await client.query("select set_config('request.jwt.claims', '', true)");
+      const { rows } = await client.query<{ n: number }>(
+        'select public.hidden_achievements_remaining() as n'
+      );
+      expect(rows[0]?.n).toBe(0);
+    } finally {
+      await client.query('rollback');
+    }
+  });
 });
 
 describe('CLAUDE.md #8 and #9 — canonical units and UTC timestamps', () => {

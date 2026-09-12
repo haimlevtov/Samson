@@ -280,7 +280,8 @@ first; every badge you do not, with what to do to earn it; and, for hidden ones,
 its own column, written to match the unlock condition, because a badge's
 description is written for the person who already has it
 ([ADR 0017](adr/0017-held-hidden-achievements.md)'s 2026-09-12 amendment). A
-badge above your humour setting is not listed until you earn it.
+badge above your humour setting is not listed until you earn it — the page says
+how many there are, the same way it counts the hidden ones.
 
 Every completion is verified server-side. Nothing can be granted from the
 client, and submitted loads face plausibility checks — an empty bar spammed for

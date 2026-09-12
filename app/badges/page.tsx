@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { loadBadgeCatalogue } from '@/src/db/gamification';
-import { hiddenLine } from '@/src/gamification/catalogue';
+import { aboveCeilingLine, hiddenLine } from '@/src/gamification/catalogue';
 import { displayDate } from '@/src/ui/format';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Every badge, and how to earn it — rework PR 7, ADR 0017's 2026-09-12
+ * Every badge, and how to earn it — coach-memory PR 7, ADR 0017's 2026-09-12
  * amendment.
  *
  * INVARIANT: a hidden badge the user has not earned is a COUNT here and nothing
@@ -28,7 +28,7 @@ export default async function BadgesPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const catalogue = await loadBadgeCatalogue(db, user.humorMaxLevel);
+  const catalogue = await loadBadgeCatalogue(db, user.id);
   const hidden = hiddenLine(catalogue);
 
   return (
@@ -92,9 +92,15 @@ export default async function BadgesPage() {
       )}
 
       {/*
-       * A count, and nothing about which — the owner's decision of 2026-09-12.
-       * Omitting these silently would teach people the list above is complete.
+       * Counted, not named. Leaving them out silently would teach people
+       * the list above is complete. The owner's decision of 2026-09-12 covers
+       * the hidden ones, and the badges above a humour setting get the same
+       * treatment. FOUND IN REVIEW: the first version dropped those without a
+       * word.
        */}
+      {catalogue.aboveCeiling > 0 && (
+        <p className="card muted">{aboveCeilingLine(catalogue.aboveCeiling)}</p>
+      )}
       {hidden !== null && <p className="card muted">{hidden}</p>}
     </>
   );

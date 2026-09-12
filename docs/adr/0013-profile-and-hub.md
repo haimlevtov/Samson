@@ -35,10 +35,10 @@ name and your timezone.
 
 **Profile is you. Hub is other people.**
 
-| Tab         | Owns                                                                                                                                                                            |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Profile** | Identity, settings (at `/settings`, owned by this tab), level, XP, badges, streak, training load, bests, and the progression trees (at `/progression-trees`, owned by this tab) |
-| **Hub**     | Leaderboard, quests and challenges, and later collaboration                                                                                                                     |
+| Tab         | Owns                                                                                                                                                                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Profile** | Identity, settings (at `/settings`, owned by this tab), level, XP, badges, streak, training load, bests, the progression trees (at `/progression-trees`, owned by this tab), and every badge with how to earn it (at `/badges`, owned by this tab) |
+| **Hub**     | Leaderboard, quests and challenges, and later collaboration                                                                                                                                                                                        |
 
 Everything else in ADR 0012's table stands unchanged: History is past sessions,
 Workout is templates, Coach is the plan. Hub remains the landing page — "what is

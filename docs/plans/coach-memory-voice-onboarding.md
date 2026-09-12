@@ -448,6 +448,18 @@ class from PR 6b's design pass), tests.
 **Branch `badge-catalogue`.** Profile lists the badges you have earned. There is
 no way to see the ones you have not, or what any of them is for.
 
+> **What shipped differs from this entry.** Recorded where a reader meets it.
+>
+> - **A route, not a panel.** `/badges`, owned by Profile, reached from the Badges
+>   section and from each badge card (`/badges#slug`) — ADR 0017's amendment.
+> - **Not the `description`.** Read against the rows, no description works as an
+>   unlock condition, so `how_to_earn` is a new column, required on shared rows.
+> - **Not "one more read and no new policy".** No new policy holds. The count of
+>   hidden badges is not reachable through the policy, so it is a definer
+>   function; the catalogue makes four reads, one of them the humour setting.
+> - **Badges above the humour setting are counted,** which this entry did not
+>   foresee because it did not mention the setting at all.
+
 **A badge opens a panel**, and a link from the badges section opens the whole
 catalogue: every achievement, what unlocks it, and whether you hold it.
 

@@ -361,24 +361,31 @@ describe('the voice switch is wired end to end', () => {
   });
 });
 
-describe('ADR 0009 and ADR 0017 — an achievement predicate never leaves the server', () => {
+describe('ADR 0009 and ADR 0017 — application code never selects an achievement predicate', () => {
   /*
    * WHY: `achievements_read_visible` grants the ROW, and `predicate` is a column
    * on it — the SQL `evaluate_achievements` runs. A `select('*')` on that table
    * typechecks, renders correctly, and hands every visible badge's SQL to the
-   * browser. The badge catalogue (rework PR 7) was the first surface to read the
-   * table directly; this holds every read after it.
+   * page. The badge catalogue (PR 7 of coach-memory-voice-onboarding.md) was the
+   * first surface to read the table directly; this holds every read after it.
+   *
+   * WHAT THIS DOES NOT PROMISE, and the title used to: that the predicate never
+   * leaves the server. The table grant lets any signed-in session ask the API
+   * for that column on a visible row. ADR 0017's amendment says why that is
+   * accepted; this test is about what the app itself sends.
    */
-  it('reads achievements in application code with an explicit list that omits predicate', () => {
-    const reads = sourceFiles()
+  const application = () =>
+    sourceFiles()
       .filter((f) => f.rel.startsWith('src/') || f.rel.startsWith('app/'))
-      .filter((f) => !/\.test\.tsx?$/.test(f.rel))
-      .flatMap((f) =>
-        [...f.text.matchAll(/from\(\s*['"`]achievements['"`]\s*\)([\s\S]{0,200})/g)].map((m) => ({
-          rel: f.rel,
-          after: m[1] ?? '',
-        }))
-      );
+      .filter((f) => !/\.test\.tsx?$/.test(f.rel));
+
+  it('reads the table with an explicit column list that omits predicate', () => {
+    const reads = application().flatMap((f) =>
+      [...f.text.matchAll(/from\(\s*['"`]achievements['"`]\s*\)([\s\S]{0,200})/g)].map((m) => ({
+        rel: f.rel,
+        after: m[1] ?? '',
+      }))
+    );
 
     // Not vacuous: the catalogue's read is one of them.
     expect(reads.length).toBeGreaterThan(0);
@@ -391,5 +398,44 @@ describe('ADR 0009 and ADR 0017 — an achievement predicate never leaves the se
       ).not.toBeNull();
       expect(list![1], rel).not.toMatch(/\*|predicate/);
     }
+  });
+
+  it('never embeds the table with a star or the predicate from another read', () => {
+    /*
+     * FOUND IN REVIEW: the test above sees only `from('achievements')`. An
+     * embedded resource — `from('achievement_events').select('unlocked_at,
+     * achievements (*)')` — passes it, and that is exactly the shape
+     * src/db/gamification.ts had until commit f81e591.
+     */
+    const embeds = application().flatMap((f) =>
+      [...f.text.matchAll(/achievements\s*(?:!\w+\s*)?\(([^)]*)\)/g)]
+        // A call like `from('achievements')` is not an embed; its "columns" are a quote.
+        .filter((m) => !/^\s*['"`]/.test(m[1] ?? ''))
+        .map((m) => ({ rel: f.rel, columns: m[1] ?? '' }))
+    );
+
+    for (const { rel, columns } of embeds) {
+      expect(columns, `${rel}: an embedded achievements read`).not.toMatch(/\*|predicate/);
+    }
+  });
+});
+
+describe('a badge on Profile opens its own card in the catalogue', () => {
+  /*
+   * Profile links `/badges#<slug>`; the link only lands if /badges gives each
+   * card that id. Two files, one contract, and a renamed prop on either side
+   * breaks it with no build error — the shape the wiring tests above exist for.
+   */
+  const read = (...parts: string[]) => readFileSync(join(ROOT, ...parts), 'utf8');
+
+  it('links each held badge by its slug', () => {
+    expect(read('app', 'profile', 'page.tsx')).toContain('href={`/badges#${b.slug}`}');
+  });
+
+  it('gives every card on /badges its slug as its id', () => {
+    const page = read('app', 'badges', 'page.tsx');
+    const cards = page.match(/<article\b[^>]*className="card badge-card[^"]*"/g) ?? [];
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+    for (const card of cards) expect(card).toContain('id={badge.slug}');
   });
 });

@@ -261,12 +261,29 @@ h2.section {
  *
  * 12px matches `.grid`'s own gap, so a card followed by a grid keeps the same
  * rhythm as the tiles inside it.
+ *
+ * `.badge-shelf` is a grid without the class, so it is named here too — FOUND
+ * IN REVIEW of coach-memory PR 7, where Profile's link into /badges put a card
+ * directly above a shelf, and the hidden count on /badges sits directly below
+ * one. Both met at 0.
  */
 .card + .card,
 .card + .grid,
 .grid + .card,
-.grid + .grid {
+.grid + .grid,
+.card + .badge-shelf,
+.badge-shelf + .card {
   margin-top: 12px;
+}
+
+/*
+ * …and NOT between cards INSIDE a shelf. `.card + .card` reaches them too, so
+ * every card after the first gained 12px on top of the grid's own gap: 24px
+ * between cards on a phone, and the second card of a two-column row sitting
+ * 12px lower than the first. The grid gap is the spacing there.
+ */
+.badge-shelf > .card + .card {
+  margin-top: 0;
 }
 
 .grid {
@@ -1984,7 +2001,7 @@ details.quick-log[open] > summary {
 }
 
 /*
- * Rework PR 7 — a badge on Profile opens its place in /badges.
+ * coach-memory PR 7 — a badge on Profile opens its place in /badges.
  *
  * The stretched-link pattern: the name is the link, so a screen reader hears a
  * short name rather than the whole card, and its ::after covers the card so a
@@ -2004,20 +2021,24 @@ details.quick-log[open] > summary {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  /* The card's radius, named: `inherit` would take the inline link's, which is 0. */
+  border-radius: var(--radius);
 }
 
 .badge-linked:hover {
   border-color: var(--accent-text);
 }
 
-/* The outline goes on the CARD, via :has — the link itself is one line of text
-   and an outline around it would not show what a press opens. */
+/* The ring goes on the ::after, which already covers the card — the link itself
+   is one line of text, and a ring around it would not show what a press opens.
+   Not `:has` on the card: that removed the link's own outline unconditionally
+   and drew the replacement only where `:has` is supported, so a browser without
+   it showed keyboard focus nowhere. FOUND IN REVIEW. */
 .badge-linked h3 a:focus-visible {
   outline: none;
 }
 
-.badge-linked:has(h3 a:focus-visible) {
+.badge-linked h3 a:focus-visible::after {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }

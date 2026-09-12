@@ -2,13 +2,15 @@
  * Tests for `src/gamification/catalogue.ts`, written from ADR 0017's 2026-09-12
  * amendment and `docs/specs/mobile-interface.md` §4.
  *
- * What the database withholds is tested in `tests/db/badge-catalogue.test.ts`.
+ * What the database withholds is tested in `tests/db/achievements.test.ts`,
+ * under "the badge catalogue".
  * What is pinned here is what the catalogue does with whatever it is given: who
  * sees an unearned name, the order a person reads, and a count that cannot
  * render as nonsense.
  */
 import { describe, expect, it } from 'vitest';
 import {
+  aboveCeilingLine,
   buildCatalogue,
   hiddenLine,
   humorCeiling,
@@ -33,6 +35,7 @@ const held = (slug: string, localDate: string, over: Partial<HeldRow> = {}): Hel
   hidden: false,
   sourceHint: null,
   localDate,
+  unlockedAt: `${localDate}T12:00:00+00:00`,
   ...over,
 });
 
@@ -54,16 +57,36 @@ describe('what is earned', () => {
     });
   });
 
-  it('opens on the newest, and breaks a same-day tie by name', () => {
+  it('opens on the newest instant, not the newest date or the first name', () => {
     const catalogue = build({
       held: [
         held('b-older', '2026-08-01'),
-        held('z-same-day', '2026-09-02'),
-        held('a-same-day', '2026-09-02'),
+        held('a-this-morning', '2026-09-02', { unlockedAt: '2026-09-02T07:00:00+00:00' }),
+        // Earned later the same day; would sort second by name.
+        held('z-this-evening', '2026-09-02', { unlockedAt: '2026-09-02T19:30:00.5+00:00' }),
+        // A later instant on an EARLIER local date — a change of timezone.
+        held('m-after-a-flight', '2026-09-01', { unlockedAt: '2026-09-02T21:00:00+00:00' }),
       ],
     });
 
-    expect(catalogue.earned.map((b) => b.slug)).toEqual(['a-same-day', 'z-same-day', 'b-older']);
+    expect(catalogue.earned.map((b) => b.slug)).toEqual([
+      'm-after-a-flight',
+      'z-this-evening',
+      'a-this-morning',
+      'b-older',
+    ]);
+  });
+
+  it('breaks a tie on the instant by name', () => {
+    const at = '2026-09-02T07:00:00+00:00';
+    const catalogue = build({
+      held: [
+        held('zed', '2026-09-02', { unlockedAt: at }),
+        held('abe', '2026-09-02', { unlockedAt: at }),
+      ],
+    });
+
+    expect(catalogue.earned.map((b) => b.slug)).toEqual(['abe', 'zed']);
   });
 
   it('is shown above the humour ceiling — a person always sees what they have', () => {
@@ -105,6 +128,22 @@ describe('what is still to get', () => {
     expect(slugsAt('crude')).toEqual(['cheeky-one', 'clean-one', 'crude-one']);
   });
 
+  it('counts what the ceiling removed, and never a badge already held', () => {
+    const catalogue = build({
+      visible: [
+        visible('cheeky-one', { humorLevel: 'cheeky' }),
+        visible('crude-one', { humorLevel: 'crude' }),
+        visible('crude-held', { humorLevel: 'crude' }),
+        visible('fine'),
+      ],
+      held: [held('crude-held', '2026-09-01')],
+      humorCeiling: 'clean',
+    });
+
+    expect(catalogue.aboveCeiling).toBe(2);
+    expect(build({ visible: [visible('fine')], humorCeiling: 'clean' }).aboveCeiling).toBe(0);
+  });
+
   it('leaves out a row whose humour level is not one of the three', () => {
     // indexOf returns -1 for it, which is below every ceiling. Without the
     // explicit check, an unreadable level would be shown to everybody.
@@ -114,6 +153,7 @@ describe('what is still to get', () => {
     });
 
     expect(catalogue.toGet.map((b) => b.slug)).toEqual(['fine']);
+    expect(catalogue.aboveCeiling).toBe(1);
   });
 });
 
@@ -122,13 +162,15 @@ describe('the hidden count', () => {
     expect(build({ hiddenRemaining: 2 }).hiddenRemaining).toBe(2);
   });
 
-  it.each([
-    [-1, 0],
-    [2.7, 2],
-    [Number.NaN, 0],
-    [Number.POSITIVE_INFINITY, 0],
-  ])('never renders %s as anything but a count (%s)', (given, shown) => {
-    expect(build({ hiddenRemaining: given }).hiddenRemaining).toBe(shown);
+  it.each([[-1], [2.7], [Number.NaN], [Number.POSITIVE_INFINITY], [null]])(
+    'reads %s as no count at all, rather than as zero',
+    (given) => {
+      expect(build({ hiddenRemaining: given }).hiddenRemaining).toBeNull();
+    }
+  );
+
+  it('keeps zero, which is a count', () => {
+    expect(build({ hiddenRemaining: 0 }).hiddenRemaining).toBe(0);
   });
 });
 
@@ -145,6 +187,21 @@ describe('the line under the hidden count', () => {
     // Zero left and none held means none exist. That is not an achievement.
     expect(hiddenLine(build({ held: [held('seven', '2026-09-01')] }))).toBeNull();
   });
+
+  it('says nothing when the count could not be read — not "you found them all"', () => {
+    const holder = build({
+      held: [held('groundhog', '2026-09-01', { hidden: true })],
+      hiddenRemaining: Number.NaN,
+    });
+    expect(hiddenLine(holder)).toBeNull();
+  });
+});
+
+describe('the line for badges above the humour setting', () => {
+  it('counts them, singular and plural', () => {
+    expect(aboveCeilingLine(1)).toBe('1 more badge is above your humour setting.');
+    expect(aboveCeilingLine(4)).toBe('4 more badges are above your humour setting.');
+  });
 });
 
 describe('the humour ceiling', () => {
@@ -154,8 +211,9 @@ describe('the humour ceiling', () => {
     expect(humorCeiling('crude')).toBe('crude');
   });
 
-  it('reads anything else as the strictest', () => {
+  it('reads anything else, and nothing at all, as the strictest', () => {
     expect(humorCeiling('')).toBe('clean');
     expect(humorCeiling('CRUDE')).toBe('clean');
+    expect(humorCeiling(null)).toBe('clean');
   });
 });
