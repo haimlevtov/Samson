@@ -143,3 +143,62 @@ countable from the ledger rather than reconstructed from memory.
 The diet advisor's calorie floor (invariant #6) is a separate control and is not
 weakened or replaced by anything here. Clamping in code remains the mechanism;
 these layers sit on top of it.
+
+---
+
+## Amendment, 2026-09-12 — layer 4 ran on text the model had not finished writing
+
+**Found by probe while designing coach memory, not by the adversarial suite,
+which is the part worth recording.**
+
+`scanOutput` ran on `content` — the raw completion string — and it ran there
+deliberately: §4 says "before anything is parsed or returned", because a
+response that is not valid JSON still reaches a log and still had to be checked.
+That is a good reason and it produced a bad order. Every stage in this project
+asks for structured output, so `content` is a JSON **document**, and a JSON
+document may spell any character as an escape.
+
+So:
+
+```
+{"route":"training","reply":"you are gay","supplement_slug":"__none__"}
+```
+
+`scanOutput` on that string finds nothing — there is no `gay` in it. `JSON.parse`
+then yields `you are gay`, which is what the user reads, and which `scanOutput`
+finds immediately if it is asked. **Measured, not reasoned about**: the probe is
+now `src/llm/gateway.test.ts`'s "an escaped completion", which fails against the
+old order.
+
+This is not one guard's blind spot. It is all four — protected attribute,
+demeaning, prompt leak, credential — and it is available to anything that can
+influence how the model spells its answer, which on the chat stage is a fenced
+message from the user. Layer 4 is one of the four layers this ADR calls code
+rather than prompt, so "a determined prompt gets past it" was the one thing it
+was not allowed to be.
+
+### The fix, and why it is two scans rather than a moved one
+
+`scanOutput` still runs on the raw string, unchanged, for the reason §4 gave. A
+**second** scan runs on `JSON.stringify(parsed)` after schema validation
+succeeds — the re-encoded value, where every escape has become the character it
+denotes and `JSON.stringify` re-emits it literally. A finding from either is the
+same `safety_blocked` status, the same correction and the same retry; the caller
+cannot tell them apart, and nothing else in the gateway changes.
+
+Scanning the re-encoded object rather than walking its string fields is
+deliberate: a schema gains a field more often than anyone remembers to add it to
+a list of fields that get scanned. The structural noise this admits — key names,
+braces, commas — is fixed text the schema chose, so it cannot carry a match a
+field did not.
+
+### What it still does not do
+
+The two AI-NOTEs stand. A scan that reads characters cannot read meaning, and
+this amendment makes the guard cover the text it was always supposed to cover
+rather than making it cleverer. Homoglyphs, coded language and everything else
+§4 already disclaims are unchanged.
+
+**The adversarial suite gains this case**, per §5, and it is recorded as a hole
+that existed from phase 0 to 2026-09-12 rather than as a case that always
+passed.
