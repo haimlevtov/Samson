@@ -3,16 +3,16 @@
 Four changes, four branches, in this order. `main` is green at `3409c59`, the
 rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 
-| PR  | What                                                                                                 | Branch                  | State                                                                |
-| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
-| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12)   |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)            |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)    |
-| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12) |
-| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                              |
-| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                              |
-| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                              |
-| 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | planned                                                              |
+| PR  | What                                                                                                 | Branch                  | State                                                                         |
+| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12)            |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)                     |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)             |
+| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12)          |
+| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                                       |
+| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                       |
+| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                       |
+| 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12) |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -776,3 +776,111 @@ fixed every fresh build and left the deployed database wrong forever.
 
 **Not opened in a browser**, and this is the PR that most needs it: it is almost
 entirely surface, and the whole point is meeting empty states nobody has seen.
+
+### PR 8 — the welcome flow, after somebody used it, 2026-09-12
+
+Shipped as [#64](https://github.com/haimlevtov/Samson/pull/64), with two ADR
+amendments committed ahead of the code and a third written mid-PR when the owner
+changed a decision. Five things asked for, two of them changed while it was open,
+and sixteen review findings.
+
+**The fault worth keeping is not in either half of it.** Hub redirects a user
+whose `onboarded_at` is null to `/welcome` — ADR 0032 §2, and correct. The demo
+account's `onboarded_at` is null by design, because that is what makes it the
+fixture. The reset lived on Hub. **So the control that exists to restart the demo
+could only be reached by somebody who had already finished the demo.** Two rules
+that each hold, composing into a dead control; nothing but a user was going to
+find it, and the owner did.
+
+It moved twice. The first fix rendered the same card on `/welcome` as well. The
+owner then asked for something simpler — one button on the sign-in page, no
+explanation, no confirmation — and that is better than either version, for a
+reason neither could reach: **Hub and `/welcome` are both behind a session**, so
+where the control lives depends on where the app has decided to send this user.
+`/sign-in` is the one page with no such decision in front of it. One press signs
+in, resets, and lands on `/welcome`, which is the state the button exists to
+produce.
+
+**The owner overruled me on sex, and was right.** I shipped three options — male,
+female, and `unspecified` labelled "Prefer not to say" — arguing a health profile
+should carry a way to decline, and wrote that argument into the ADR. The reply
+was "this is for scientific calculation, its a must". `mifflinStJeor` selects its
+constant by sex, so a calorie target computed from `unspecified` is a figure
+derived from a value nobody stated. Safe, because that value takes the higher
+constant; still not an answer, in a project whose whole position is that a number
+the user sees comes from real inputs. Two options behind an unselectable "Choose
+one", because a two-option select with no placeholder records anybody who never
+looked at it as male.
+
+**A comment was load-bearing and false.** `PLAN_DAYS_PER_WEEK` was `[2,3,4,5,6]`
+because seven "leaves no rest day, **which the rules reject anyway**". There are
+six rules and not one of them looks at rest. Nothing rejected a seven-day week;
+the form never offered one, behind a claim nothing enforced, and the test
+asserting the refusal carried the same sentence. The reservation is real and is
+recorded rather than acted on — ADR 0027 now carries it beside its block-weeks
+sibling.
+
+### What sixteen review findings were about
+
+**Three were security or resilience, and the first is the one to remember:**
+
+- **The reset left behind everything the app never writes**, and this PR deleted
+  the note that said so. Eight tables carry a `user_id` and a write policy the
+  app does not use; the reset cleared none of them. `src/db/demo-reset.ts` had an
+  AI-NOTE naming that residue precisely — including that `exercises` was the one
+  that mattered, because `exercises_read` admits a user's own row into the
+  planner's candidate set. The note sat on `RESET_KEEPS`, this PR deleted the
+  arrays because nothing rendered them any more, and took the only record of the
+  gap with it. **A known gap whose record has been removed is worse than either
+  the gap or the note.** And it mattered more than when the note was written: the
+  account is shared, the reset is now one unauthenticated button, and this PR
+  added the surface that renders `listPersonas` — which includes the caller's own
+  rows. A persona planted under the demo account greeted whoever demoed next.
+- **A failed reset could never render its message.** The sign-in runs before the
+  RPC, so the error redirect landed on `/sign-in` holding a session, which
+  bounced to `/hub` and on to `/welcome` — the same destination as success. A
+  destructive control that fails silently reads as working.
+- **A failed onboarding stamp was an infinite redirect.** `/welcome` calls
+  `finishOnboarding` during render when every question is answered, so a failing
+  write went `/hub` → `/welcome` → `/hub` until the browser gave up. Blank page,
+  no message, for a user whose data was intact. The comment above it said "not
+  worth stopping for: the worst case is the welcome flow asking again". This one
+  pre-dated the branch and was found because the branch added a step to the flow.
+
+**Five were comments that stated something false**, which this repo treats as
+defects rather than untidiness, and every one of them was mine:
+
+- `isAnswered('coach')` accepted an empty slug while the test comment I wrote
+  beside it said an empty slug is not an answer.
+- Four sites described `openingCoach`'s fallback as ADR 0031 §5's "first shared,
+  voiced coach alphabetically". It returns the first coach the CALLER listed —
+  and §5 records a review correcting that exact conflation.
+- The `DEMO_ACCOUNT_EMAIL` note said three copies of the address and named the
+  function's gate as one. That gate has not been the address since
+  `20260912200000`, whose own header says so. **Two** copies, and nothing holds
+  them together — a count recited rather than rechecked, which is how that note
+  had already been wrong once.
+- A CSS comment counted three specificity notes in the sheet. Two.
+- `app/history/actions.ts` said "there is no stored persona choice anywhere to
+  make the two agree" — in the PR that added the column.
+
+**And two conventions this PR argued for and then broke in the same diff:**
+`isCompleteBody` and `openingCoach` were both extracted to `src/` with the
+reasoning that nothing under `app/` is in the unit suite, so a rule written there
+is one no test can fail on. The select-all shipped as three decisions inside a
+component. It is `src/catalogue/selection.ts` now. The coach step was the one
+refused form in `Steps.tsx` that dropped what the user had picked, in a file
+whose header says keeping values is the entire reason those components are
+clients.
+
+**The browser found something nobody had looked at.** The sign-in fixture table
+has been scrolling the page sideways since it was written — 536px of columns
+against a 375px viewport. Adding a third column for the reset took it to 631 and
+put the button off the screen, which is the only reason it was noticed.
+
+**Not covered:** the Coach tab's picker opening on a stored choice is held by
+`openingCoach`'s unit test and was not seen in a browser — no seeded account has
+both an accepted plan (which is what makes that console render) and a stored
+coach. Persisting a change made with that picker is PR 6's, and ADR 0031 §5 now
+records that only half of what it asked for shipped: a column with one writer,
+and no settings control.
