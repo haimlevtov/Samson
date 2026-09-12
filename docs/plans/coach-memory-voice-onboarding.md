@@ -13,7 +13,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                            |
 | 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                            |
 | 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12)      |
-| 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | planned                                                                            |
+| 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | shipped 09-12, [↓](#pr-9--date-of-birth-is-three-dropdowns-2026-09-12)             |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -1077,3 +1077,51 @@ took.
 
 **Verified in a browser at 375px**, and one Try press spent $0.02 against the
 $5 key to prove the paid path end to end — one press, not six.
+
+### PR 9 — date of birth is three dropdowns, 2026-09-12
+
+Shipped as [#66](https://github.com/haimlevtov/Samson/pull/66). One reported bug
+not reproduced, one unreported bug found in the browser, and twenty-nine review
+findings across three reviewers.
+
+**The reported bug was never reproduced, and nothing here claims to explain it.**
+The owner could not set a year ending in zero. What was established: the
+validator accepts 1990 and 2000, and the welcome input carried no `min` or
+`max` — so it was the browser's own widget. Three selects take the widget out of
+the path whatever the cause, and 1990 saves: `1990-04-02`, checked in the row.
+
+**The finding worth keeping is the one nobody reported.** `defaultValue` on a
+`<select>` is read once, at mount. React 19 resets an uncontrolled form after a
+function action resolves, and rewrites the `value` attribute of an `<input>` on
+re-render — so the text fields came back filled and every select came back
+empty. A refused body step kept the weight and the height and silently dropped
+the sex and the date.
+
+That had been live since **PR 4**, survived PR 8 reworking that very control,
+and violated an invariant written in three places. **No unit test and no reviewer
+could have seen it** — the suite runs under node with no DOM, and it only shows
+when a real form is refused in a real browser. It was found by walking the step
+and refusing it on purpose. PR 8's outcome entry, which called the coach step
+"the one refused form" that dropped a pick, is corrected in place.
+
+### What review found
+
+- **31 February was a loop this PR introduced.** A day list of 1–31 reaches
+  states the native widget could not, because that widget clamps the day to the
+  month. The date failed the schema and came back as "that did not look right"
+  under four controls, three of them fine — and two comments in the PR claimed
+  the existing message already covered it. It has its own sentence now.
+- **A comment of mine stated the opposite of the code.** It said the date
+  composed to `undefined` when a request sent none of it, preserving the
+  absent-is-not-blank distinction. The reader coalesced a missing field to `''`,
+  so omitting the date parsed as a deliberate clear. Nothing went red because the
+  omission test only ever omitted the first field; it loops all of them now.
+- **The month value came from an array position**, so reordering the list would
+  have produced wrong birth dates silently. One record per month now, pinned.
+- **Controls stayed live during a submit**, so a pick made during "Saving…" was
+  reverted by the refusal's echo — on the one step whose purpose is not losing
+  answers.
+
+**Two gaps left for a follow-up, and recorded rather than quietly dropped:**
+Settings still asks for the date with the native input, and its sex select has
+the same keep-the-value bug the welcome step just had.
