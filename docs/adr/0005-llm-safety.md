@@ -1,7 +1,8 @@
 # ADR 0005 — Injection, conduct and abuse: five layers, four of them code
 
 **Status:** accepted, phase 2 (cross-cutting) — amended 2026-09-11: the speech
-stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md)
+stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md); amended
+2026-09-12: §4 scanned an encoded document, see the amendment below
 **Date:** 2026-09-01
 
 ## Context
@@ -79,7 +80,9 @@ prompt instruction as a control.
 
 ### 4. Output is scanned before the user sees it — code
 
-`scanOutput()` runs on every completion inside the gateway. _A speech call
+`scanOutput()` runs on every completion inside the gateway. _It runs a second
+time on the parsed value's string leaves — the 2026-09-12 amendment at the foot
+of this file, which is where the paragraphs below stopped being the whole story._ _A speech call
 returns audio, not a completion, and is not scanned; what it speaks is stored
 text that a test holds to `scanOutput` — [ADR 0025](0025-coach-voices.md)'s
 addendum._ It blocks on:
@@ -143,3 +146,150 @@ countable from the ledger rather than reconstructed from memory.
 The diet advisor's calorie floor (invariant #6) is a separate control and is not
 weakened or replaced by anything here. Clamping in code remains the mechanism;
 these layers sit on top of it.
+
+---
+
+## Amendment, 2026-09-12 — layer 4 read an encoded document
+
+**Found by probe while designing coach memory, not by the adversarial suite,
+which is the part worth recording.** It then took two attempts, and the first
+one's failure is kept here because it is the more instructive half.
+
+### The hole
+
+`scanOutput` ran on `content` — the raw completion string — and it ran there
+deliberately: §4 said "before anything is parsed or returned", because a
+response that is not valid JSON still reaches a log and still had to be checked.
+That is a good reason and it produced a bad order. Every stage in this project
+asks for structured output, so `content` is a JSON **document**, and a JSON
+document may spell any character as an escape.
+
+```
+{"route":"training","reply":"you are \u0067ay","supplement_slug":"__none__"}
+```
+
+`scanOutput` on that string finds nothing. `JSON.parse` then yields
+`you are gay`, which is what the user reads.
+
+This is not one guard's blind spot. It is all four — protected attribute,
+demeaning, prompt leak, credential — and it is available to anything that can
+influence how the model spells its answer, which on the chat stage is a fenced
+message from the user. Layer 4 is one of the four layers this ADR calls code
+rather than prompt, so "a determined prompt gets past it" was the one thing it
+was not allowed to be.
+
+**It was open from phase 0 until 2026-09-12.**
+
+### The first fix was wrong, and two reviewers measured it
+
+The first version scanned `JSON.stringify(parsed)` and justified itself with
+the sentence _"every escape has become the character it denotes and
+`JSON.stringify` re-emits it literally"_. **That sentence is false.**
+`JSON.stringify` decodes `\u0067` into `g`, and then RE-ESCAPES `"`, `\\`
+and the whole C0 range. A real newline comes back out as two ordinary
+characters: a backslash and an n.
+
+**Why that matters, stated accurately** — the first attempt at this paragraph
+was itself wrong, and said `scanOutput` "normalises control characters to a
+space precisely so a line break cannot split a phrase". It does not.
+`CONTROL` in `safety.ts` deliberately **excludes tab and newline**; its own
+comment says so. What actually happens is two different things:
+
+- A real tab or newline SURVIVES the normalisation and is matched directly by
+  the `\s+` in the multi-word patterns (`DEMEANING`, `PROMPT_LEAK`). The
+  normalisation is load-bearing for the characters `\s` does NOT match — NUL,
+  DEL, the C1 range.
+- `PROTECTED_ATTRIBUTE` contains no whitespace at all. It is a bare alternation,
+  which is why the `\u0067ay` example above is caught by the word and not by
+  any separator.
+
+`JSON.stringify` re-escapes the whole of U+0000–U+001F, so a re-encoded document
+presents a newline as a backslash and an `n` — which neither mechanism matches.
+So:
+
+```
+{"summary":"you are\nfat"}     → reached the user, through the "fix"
+```
+
+One character cheaper for the attacker than the case the fix was written for,
+and the same insult on screen. Both reviewers ran it end to end through
+`callLLM` rather than reasoning about it, and the case is now in the suite.
+
+### What ships
+
+`scanOutput` still runs on the raw string, unchanged, for the reason §4 gave.
+**`scanValue` then walks the parsed value's string leaves and scans each one on
+its own.** A finding from either is the same `safety_blocked` status, the same correction
+and the same retry rule — one `blockOn`, so the caller cannot tell them apart and
+neither can a future edit. _FOUND IN REVIEW: the truncation rule below was
+applied to one of the two scans and not the other, and this sentence claimed
+otherwise while the code disagreed._
+
+- **Leaves, not the document.** The document is the encoded form, which is the
+  whole finding above.
+- **A structural walk, not a list of field names.** A schema gains a field more
+  often than anyone remembers to widen such a list, and a new field is covered
+  here by being a string.
+- **Each leaf separately, never joined.** Joining would let the separator
+  manufacture a match across two fields that neither field contains — a false
+  positive that fails a call for a user who did nothing.
+- **Keys are not scanned.** They are text the schema chose rather than text a
+  model wrote.
+- **A blocked response that was also truncated is not retried.** The MEASURED
+  rule for truncation applies with more force here, not less: a correction makes
+  the request longer against an unchanged `max_tokens`. The value is refused
+  either way; this decides only whether the refusal is paid for three times.
+
+### What still gets through, named rather than implied
+
+§4's existing disclaimer covers coded language, dogwhistles, novel slurs and
+bias in neutral vocabulary. It does **not** cover these two, so they are stated
+here in their own words, and both are **passing tests in the adversarial suite**
+that assert the hole:
+
+- **Homoglyphs and character substitution.** `g\u0430y` (Cyrillic а),
+  `\uFF47ay` (fullwidth g) and a combining accent all reach the user. This is
+  now the cheapest remaining bypass. Closing it means NFKC plus a confusables
+  table, which is a decision — a wrong one starts rejecting ordinary text — and
+  not a patch to make in the same change as this one.
+- **A phrase split across two fields.** Each leaf is scanned alone, so
+  `{"a":"you are so","b":"weak"}` matches nothing.
+
+  _The first version of this bullet said it was "not reachable to any effect
+  today, because on every stage here the prose is one field and the rest are
+  enums". **That was false**, and a reviewer measured it: only `chat` and
+  `normalizer` look like that. `persona` returns an opening, up to twelve week
+  notes and a closing — all prose, rendered in sequence — and `planner` returns a
+  rationale plus a focus per session. A persona delivery split across two of
+  those fields passed every scan and read as an insult on screen._
+
+  **So the persona stage now scans its own rendered text**, in
+  `src/persona/deliver.ts`, using the same `deliveredText` join the banned-phrase
+  guard already computes. That is not a joined guess: it is the string the user
+  reads, which is the one place joining is not an invention. `scanValue`'s
+  no-joining rule is unchanged.
+
+  **Still open, and named rather than implied:** the planner's `rationale` and
+  per-session `focus`, and the critic's `reasons[].detail`. None is read by a
+  user as one continuous string today, and the moment one is, it needs the same
+  treatment the persona stage just got.
+
+### Consequences
+
+- A model that deterministically re-emits a blocked answer now costs three
+  attempts where it used to cost one. That is the correct failure — the call
+  fails rather than degrading to unchecked output — but it is a **3× cost
+  multiplier a chat user can trigger against their own weekly budget**, and the
+  budget is what bounds it.
+- The correction feeds the rejected attempt back in its raw, still-escaped form,
+  fenced and sanitised by `rejectedAttempt`. A model steered by an injected
+  "spell your reply with escapes" will re-emit and burn the cap. Failing closed
+  is right; paying three times for it is the price.
+- **A `credential` finding no longer records the credential.** Every other code
+  matches a phrase the model wrote, which is what is worth reading back in
+  `llm_calls.error`; that one matches a SECRET that reached the output, and
+  writing it into a database column is the outcome the check exists to prevent.
+  `describeFinding` keeps the shape and drops the value. FOUND IN REVIEW, and
+  older than this change — the second scan is simply a second way to reach it.
+- **The adversarial suite gains this class**, per §5, recorded as a hole that
+  existed rather than as a case that always passed.

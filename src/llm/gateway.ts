@@ -45,8 +45,10 @@ import {
   SAFETY_PREAMBLE,
   SafetyBlockedError,
   fenceUntrusted,
+  describeFinding,
   safetyCorrection,
   scanOutput,
+  scanValue,
   type SafetyFinding,
 } from './safety';
 import {
@@ -356,27 +358,75 @@ export async function callLLM<T>(
            * Layer 4 runs BEFORE schema validation — ADR 0005 §4. A perfectly
            * well-formed response that insults the user is still one that must
            * not reach them, and shape says nothing about content.
+           *
+           * AND AGAIN AFTER IT, on the parsed value's string leaves — the
+           * 2026-09-12 amendment. THIS scan reads a JSON document, and a
+           * document may spell any character as an escape, so
+           * `{"reply":"you are \u0067ay"}` contains no word this function
+           * knows. See `rescan` below for why the leaves and not the document.
            */
+          /**
+           * Records a safety block on this attempt, identically for both scans.
+           *
+           * Extracted because the two were written out twice and a later change
+           * to how a block is recorded would have been made once — FOUND IN
+           * REVIEW. Corrected the same way a schema failure is: say what was
+           * wrong and ask again, rather than spending a retry on the same
+           * question.
+           */
+          const blockOn = (found: SafetyFinding[]): void => {
+            row.status = 'safety_blocked';
+            row.error = found.map(describeFinding).join('; ').slice(0, 1000);
+            /*
+             * NOT retryable when the response was truncated, for EITHER scan —
+             * FOUND IN REVIEW, which caught this applied to one of them. The
+             * MEASURED rule below says a length-truncated response repeats
+             * because nothing about the request changed, and a correction makes
+             * the request LONGER against an unchanged `max_tokens`. The value is
+             * refused either way; this decides only whether the refusal is paid
+             * for three times. The raw scan is the likelier of the two to see a
+             * truncated response, because the other one needs the cut-off
+             * document to still parse AND pass the schema.
+             */
+            retryable = !truncated;
+            lastFindings = found;
+            correction = [
+              rejectedAttempt(content, 500),
+              { role: 'user', content: safetyCorrection(found) },
+            ];
+          };
+
           const findings = scanOutput(content);
 
           if (findings.length > 0) {
-            row.status = 'safety_blocked';
-            row.error = findings
-              .map((f) => `${f.code}: ${f.match}`)
-              .join('; ')
-              .slice(0, 1000);
-            retryable = true;
-            lastFindings = findings;
-            // Corrected the same way a schema failure is: say what was wrong and
-            // ask again, rather than spending a retry on the same question.
-            correction = [
-              rejectedAttempt(content, 500),
-              { role: 'user', content: safetyCorrection(findings) },
-            ];
+            blockOn(findings);
           } else {
             const validation = safeParseJson(content, options.schema);
 
-            if (validation.ok) {
+            /*
+             * The second half of layer 4 — ADR 0005's 2026-09-12 amendment.
+             *
+             * The scan above reads what the model sent; this one reads what the
+             * caller will receive. `scanValue` walks the parsed value's string
+             * leaves, where an escape has become the character it denotes, and
+             * scans each on its own.
+             *
+             * MEASURED, and both halves of the finding are in this file's tests:
+             * the raw scan passed `\u0067ay` straight to the browser, and the
+             * first fix — a scan of `JSON.stringify(value)` — passed
+             * `you are\ngay`, because stringify re-escapes a newline into two
+             * ordinary characters and every pattern joins its words with
+             * whitespace.
+             *
+             * WHY not INSTEAD of the first scan: an unparseable response is
+             * never parsed, and §4's reason for scanning early was exactly that
+             * one still reaches a log.
+             */
+            const rescan = validation.ok ? scanValue(validation.value) : [];
+
+            if (rescan.length > 0) {
+              blockOn(rescan);
+            } else if (validation.ok) {
               row.status = 'ok';
               parsed = validation.value;
             } else if (truncated) {

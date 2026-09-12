@@ -21,7 +21,9 @@ import {
   SAFETY_PREAMBLE,
   fenceUntrusted,
   sanitizeUntrusted,
+  describeFinding,
   scanOutput,
+  scanValue,
 } from './safety';
 
 const codes = (text: string) => scanOutput(text).map((f) => f.code);
@@ -341,5 +343,124 @@ describe('scanOutput — the article gap the adversarial suite found', () => {
     ]) {
       expect(scanOutput(line), line).toEqual([]);
     }
+  });
+});
+
+/**
+ * The encoding blind spot — a HOLE, recorded as ADR 0005 §5 asks.
+ *
+ * `scanOutput` reads characters. It was called on a JSON document from phase 0
+ * until 2026-09-12, so anything that could influence how the model SPELLED its
+ * answer read past all four checks at once. The fix is in the gateway, which is
+ * where the document is, and these cases pin what this function does and does
+ * not owe.
+ */
+
+/**
+ * The encoding blind spot — ADR 0005's 2026-09-12 amendment, and a HOLE
+ * recorded as §5 asks rather than a case that always passed.
+ *
+ * `scanOutput` reads characters. From phase 0 until 2026-09-12 the gateway
+ * called it on the RAW completion and nowhere else, and a completion is a JSON
+ * document — so anything that could influence how the model SPELLED its answer
+ * read past all four checks at once. The fix is `scanValue`, below, and it went
+ * through two versions because the first one was measured and found wanting.
+ */
+describe('scanOutput and encoded text', () => {
+  it('decodes nothing, and is not expected to', () => {
+    // Not a bug in this function: a scanner that guessed at encodings would be
+    // guessing. The caller has to hand it the text a reader will see.
+    expect(scanOutput('{"reply":"you are \\u0067ay"}')).toEqual([]);
+    expect(scanOutput('you are gay')).not.toEqual([]);
+  });
+
+  it('is not rescued by re-encoding the document, which is what the first fix did', () => {
+    // MEASURED. `JSON.stringify` decodes `\u0067` and re-escapes a newline,
+    // so the second of these reaches the scanner as a backslash and an n, which
+    // the `\s+` in the multi-word patterns does not match.
+    const escaped = JSON.parse('{"reply":"you are \\u0067ay"}') as unknown;
+    const broken = JSON.parse('{"reply":"you are\\nfat"}') as unknown;
+
+    expect(scanOutput(JSON.stringify(escaped))).not.toEqual([]);
+    expect(scanOutput(JSON.stringify(broken))).toEqual([]);
+  });
+});
+
+describe('scanValue', () => {
+  it('catches both forms, because it scans the decoded leaves', () => {
+    expect(scanValue(JSON.parse('{"reply":"you are \\u0067ay"}'))).not.toEqual([]);
+    expect(scanValue(JSON.parse('{"reply":"you are\\nfat"}'))).not.toEqual([]);
+    expect(scanValue(JSON.parse('{"reply":"my \\u0073ystem prompt says otherwise"}'))).not.toEqual(
+      []
+    );
+  });
+
+  it('walks nested objects and arrays, so a new field is covered by being a string', () => {
+    expect(scanValue({ a: { b: ['fine', 'you are pathetic'] } })).not.toEqual([]);
+    expect(scanValue([{ deep: { deeper: 'kill yourself' } }])).not.toEqual([]);
+  });
+
+  it('does not scan keys, and does not fire on ordinary coaching prose', () => {
+    // Keys are text the schema chose, not text a model wrote. And the
+    // false-positive half matters as much as the first: a guard that fails a
+    // call for "your weak point is the lockout" is one somebody switches off.
+    expect(scanValue({ disability_note: 'keep your back straight' })).toEqual([]);
+    expect(
+      scanValue({
+        route: 'training',
+        reply: 'Your weak point is the lockout. Race pace, not grind.',
+      })
+    ).toEqual([]);
+  });
+
+  it('ignores non-string leaves rather than stringifying them', () => {
+    expect(scanValue({ sessions: 4, ok: true, none: null, missing: undefined })).toEqual([]);
+  });
+
+  /*
+   * WHAT STILL GETS THROUGH — written as passing tests, because ADR 0005 §5
+   * says the suite records what got through and not only what was blocked.
+   * Neither is fixed here, and neither is claimed to be.
+   */
+  it('HOLE: a phrase split across two fields is caught by nothing here', () => {
+    // Each leaf is scanned on its own, deliberately — joining them would let
+    // the separator manufacture a match across fields that neither contains,
+    // which fails calls for users who did nothing. The cost is this.
+    //
+    // FOUND IN REVIEW: the first version of this said it was unreachable
+    // "because on every stage the prose is one field and the rest are enums".
+    // True of `chat` and `normalizer`, FALSE of the other three — `persona`
+    // returns an opening, up to twelve week notes and a closing. The persona
+    // stage scans its own rendered text for that reason, in deliver.ts.
+    expect(scanValue({ a: 'you are so', b: 'weak' })).toEqual([]);
+    expect(scanOutput('you are so weak')).not.toEqual([]);
+  });
+
+  it('HOLE: a homoglyph is a different character and is not matched', () => {
+    // Cyrillic а, fullwidth ｇ, a combining accent. §4 disclaims coded language
+    // and novel slurs; it does NOT disclaim these, so they are named here.
+    // Normalising would mean NFKC plus a confusables table, which is a decision
+    // rather than a patch — and a wrong one would start failing ordinary text.
+    // Written as escapes on purpose: a Cyrillic а and a fullwidth g are
+    // invisible in a diff, and a reviewer has to be able to see the point.
+    expect(scanValue({ reply: 'you are g\u0430y' })).toEqual([]);
+    expect(scanValue({ reply: 'you are \uFF47ay' })).toEqual([]);
+    expect(scanOutput('you are gay')).not.toEqual([]);
+  });
+});
+
+describe('describeFinding', () => {
+  it('keeps the phrase for every code whose match is a sentence', () => {
+    expect(describeFinding({ code: 'demeaning', match: 'you are pathetic' })).toBe(
+      'demeaning: you are pathetic'
+    );
+  });
+
+  it('redacts the credential, which is the one match that is a secret', () => {
+    // FOUND IN REVIEW. This string goes into `llm_calls.error`, and writing a
+    // key into a database column is the outcome the check exists to prevent.
+    const line = describeFinding({ code: 'credential', match: 'sk-abcdefghij0123456789XYZ' });
+    expect(line).not.toContain('sk-');
+    expect(line).toBe('credential: redacted, 26 chars');
   });
 });
