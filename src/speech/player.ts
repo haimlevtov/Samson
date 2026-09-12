@@ -58,6 +58,25 @@ export const EMPTY_PLAYER: PlayerState = { fetching: null, playing: null, shown:
  * whether the card explains itself (docs/specs/mobile-interface.md §4), and
  * logic in a component cannot be tested under node.
  */
+/**
+ * Whether a Try button can be offered for this coach at all.
+ *
+ * FOUND IN REVIEW of rework PR 5: the two surfaces each wrote this predicate,
+ * and differently — one trimmed the line and one did not. A shared row with a
+ * whitespace-only `sample_line` would have shown a working-looking button on
+ * one and, because `whyShown` returns null for a voiced coach with a key,
+ * NOTHING AT ALL on the other, which is the §4 violation this module exists to
+ * make testable. It lives beside `whyShown` for the same reason that one does.
+ *
+ * The two are complements: exactly one of a button and a sentence should show.
+ */
+export function canHear(
+  coach: { voiced: boolean; sampleLine: string | null } | null,
+  voiceAvailable: boolean
+): boolean {
+  return voiceAvailable && coach !== null && coach.voiced && (coach.sampleLine ?? '').trim() !== '';
+}
+
 export function whyShown(
   state: PlayerState,
   chosen: { slug: string; voiced: boolean } | null,

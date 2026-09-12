@@ -87,13 +87,29 @@ with the line — static first, dynamic last, the same order every stage keeps.
 Cast from the personas' own descriptions, against Google's one-word descriptions
 of its thirty voices:
 
-| Coach          | Voice     | Google's word | Direction, in short                                  |
-| -------------- | --------- | ------------- | ---------------------------------------------------- |
-| The Old Master | `Algenib` | gravelly      | an old samurai sword master: deep, grave, unhurried  |
-| The Sergeant   | `Alnilam` | firm          | a drill sergeant on the parade ground: loud, clipped |
-| The Rival      | `Puck`    | upbeat        | a cocky training partner: dry, quick, a smirk in it  |
-| The Analyst    | `Erinome` | clear         | a sports scientist: calm, precise, no hype           |
-| The Physio     | `Sulafat` | warm          | an experienced physio: warm, gentle, unhurried       |
+| Coach          | Voice     | Google's word | Direction, in short                                    |
+| -------------- | --------- | ------------- | ------------------------------------------------------ |
+| The Old Master | `Algenib` | gravelly      | an old samurai sword master: deep, grave, unhurried    |
+| The Sergeant   | `Alnilam` | firm          | a drill sergeant on the parade ground: loud, clipped   |
+| The Rival      | `Puck`    | upbeat        | a cocky training partner: dry, quick, a smirk in it    |
+| The Analyst    | `Iapetus` | clear         | a sports scientist: calm, precise, no hype             |
+| The Physio     | `Achird`  | friendly      | an experienced physio: warm, gentle, unhurried         |
+| The Austrian   | `Orus`    | firm          | a genial Austrian champion: deep, unhurried, delighted |
+
+> **Recast 2026-09-12, rework PR 5.** The Analyst was `Erinome` and the Physio
+> `Sulafat`; the owner asked for male voices and both of those are female. The
+> DIRECTIONS did not change — they describe the character, not the timbre.
+>
+> Nothing in this repo knew which voices were male: the list above is Google's
+> style word, and it says nothing about the speaker. That is now
+> `SPEECH_VOICE_GENDER` in `src/speech/script.ts`, taken from Google's published
+> prebuilt-voice table, so "a male voice" is a property a test can assert rather
+> than a name somebody remembered.
+>
+> **Worth stating because nobody decided it: all six coaches are male-voiced
+> now.** Five of the six shipped that way and the recast made it six. The
+> product has no female-voiced coach, which is a content decision waiting to be
+> taken rather than one this PR took.
 
 A voice and a direction are a first draft of a performance. They are tuned by
 ear once the key is set, and a tuning is a migration like any other content.
@@ -134,6 +150,30 @@ rather than start again.
 
 Not decided: caching audio server-side (a replay on a later visit costs a second
 call until it is), and pre-rendered clips.
+
+> **Amended 2026-09-12, rework PR 5 — there are two preview surfaces now.**
+>
+> The budget reasoning below was written when Try was one button on the Coach
+> tab, behind an accepted plan. The welcome flow's coach step has six, on the
+> first screen a new user sees, which is the most exposed a paid control has
+> been in this project.
+>
+> Three things bound it, and the first two are new:
+>
+> - **A recency guard on `hearCoach`** — `askedForAVoiceRecently`, the guard its
+>   two paid siblings already had and it did not. FOUND IN REVIEW, and the
+>   reachability is what made it urgent: `/sign-in`'s credential-free demo
+>   button lands on `/welcome` as the published fixture, so a scripted loop
+>   could silence the demo account for a week.
+> - **The step says what a press costs** before it is pressed, which is ADR 0031
+>   §3's precedent — a feature able to spend the key in one session is not
+>   something to offer silently.
+> - The per-user weekly gate, unchanged, with the unreserved-read gap §4 already
+>   records.
+>
+> What is NOT done: previews are still not cached server-side, so the same coach
+> re-fetches on a fresh page. That was an open item before this PR and it is a
+> larger one now.
 
 ## Consequences
 

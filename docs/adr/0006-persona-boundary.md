@@ -82,6 +82,13 @@ Both clamps are `Math.min` over an ordered scale, in code, for the same reason
 the diet floor is clamped in code: a limit a prompt can be talked out of is not
 a limit.
 
+> **Amended 2026-09-12, rework PR 5.** `personas.bio` is a THIRD column of the
+> shape the 2026-09-11 amendment describes: authored, stored, writable by a user
+> on their own row, rendered to a person, and never read by delivery. The
+> guarantee holds unchanged — `asPersona` picks six fields and `bio` is not among
+> them, pinned by `src/persona/schema.test.ts` — and it is named here so the list
+> is complete rather than two thirds of itself.
+
 ## Consequences
 
 - The coach page renders two things side by side rather than one merged

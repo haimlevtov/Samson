@@ -20,7 +20,7 @@ import { phraseUsed } from '../../src/persona/deliver';
 import { numbersIn } from '../../src/persona/guard';
 import { scanOutput } from '../../src/llm/safety';
 import { SPEECH_MAX_INPUT_CHARS } from '../../src/llm/config';
-import { isSpeechVoice, speechScript } from '../../src/speech/script';
+import { isSpeechVoice, speechScript, SPEECH_VOICE_GENDER } from '../../src/speech/script';
 import { resolveTone, GENTLE_MAX_INTENSITY } from '../../src/persona/tone';
 
 let user: TestUser;
@@ -84,6 +84,15 @@ describe('the shipped roster', () => {
       'Repetition quality beats repetition count on a transverse plane movement.',
       'This is a deload, which is a decision rather than a failure.',
       'Progression on the hamstring work has been steady for three weeks.',
+      /*
+       * The two that FOUND THE AUSTRIAN'S LIST IN REVIEW, and they are here
+       * rather than in a comment because `phraseUsed` clears punctuation before
+       * matching — so a sentence BOUNDARY is not a word boundary, and a banned
+       * phrase can be assembled out of the end of one sentence and the start of
+       * the next. Both of these fired against a shipped list.
+       */
+      'You moved that like a man. Up you get, my friend, and we go again.',
+      'If you are ill, be back when you feel able and we will pick it up.',
     ].join(' ');
 
     // Through the shipped matcher, not a copy of it: a re-implementation here
@@ -163,6 +172,61 @@ describe('the line each coach is heard by before it is picked', () => {
   });
 });
 
+describe('the two sentences under the picker', () => {
+  /*
+   * `personas.bio` — migration 20260912230000, rework PR 5. The menu gave a name
+   * and nothing else, which was survivable at three coaches and guesswork at
+   * six.
+   *
+   * Read through the shipped reader, because a copy of the query here would
+   * measure the copy.
+   */
+  const bios = async () =>
+    (await roster()).map((persona) => ({ persona, bio: persona.bio?.trim() ?? '' }));
+
+  it('gives every shipped coach a bio', async () => {
+    const missing = (await bios()).filter(({ bio }) => bio === '').map((b) => b.persona.slug);
+    expect(missing).toEqual([]);
+  });
+
+  it('gives each coach its own', async () => {
+    // Two coaches described identically are one coach with two names — the same
+    // property the voice and the sample line are held to.
+    const all = (await bios()).map(({ bio }) => bio.toLowerCase());
+    expect(all).toHaveLength(new Set(all).size);
+  });
+
+  it('is not the system prompt wearing a different name', async () => {
+    /*
+     * THE DECISION THIS PINS. `system_prompt` is written FOR A MODEL and fenced
+     * into the per-call message (ADR 0006); `bio` is UI copy. Making one double
+     * as the other would put user-facing text in the payload that reaches the
+     * instruction channel's neighbourhood, and would make every edit to how a
+     * coach BEHAVES an edit to what the picker SAYS.
+     */
+    for (const { persona, bio } of await bios()) {
+      expect(bio, persona.slug).not.toBe(persona.systemPrompt.trim());
+    }
+  });
+
+  it('passes the scanner every completion goes through', async () => {
+    // It is database content rendered to a user, which is the shape ADR 0005
+    // scans. A bio is authored rather than generated, so this is a guard on the
+    // author rather than on a model — and it costs nothing.
+    for (const { persona, bio } of await bios()) {
+      expect(scanOutput(bio), persona.slug).toEqual([]);
+    }
+  });
+
+  it('fits under a picker on a phone', async () => {
+    // The column's CHECK is 240; this asserts the rows are actually written to
+    // it rather than relying on the constraint nobody reads.
+    for (const { persona, bio } of await bios()) {
+      expect(bio.length, persona.slug).toBeLessThanOrEqual(240);
+    }
+  });
+});
+
 describe('the voice each coach is cast in', () => {
   /*
    * ADR 0025. A shipped coach speaks in one of the speech model's voices, from
@@ -193,6 +257,36 @@ describe('the voice each coach is cast in', () => {
         `${row.slug}: ${row.tts_voice}`
       ).toBe(true);
       expect(row.tts_instructions?.trim() ?? '', row.slug).not.toBe('');
+    }
+  });
+
+  it('casts the Physio and the Analyst in male voices', async () => {
+    /*
+     * The owner asked for this, and asserting it needs the repo to KNOW which
+     * voices are male — `SPEECH_VOICES` carries Google's style label and says
+     * nothing about the speaker. `SPEECH_VOICE_GENDER` is that knowledge, from
+     * Google's published table, and this asserts the PROPERTY rather than the
+     * two names the migration happened to write: restating the migration would
+     * pass against any recast, including one back to a female voice.
+     *
+     * Both were cast female before — Erinome and Sulafat.
+     */
+    const rows = await shipped();
+    for (const slug of ['physio', 'analyst']) {
+      const row = rows.find((r) => r.slug === slug);
+      expect(row, slug).toBeDefined();
+      expect(SPEECH_VOICE_GENDER[row?.tts_voice ?? ''], `${slug}: ${row?.tts_voice}`).toBe('male');
+    }
+  });
+
+  it('knows the gender of every voice it cast', async () => {
+    // A voice missing from the gender map is a voice nobody checked. That is
+    // how the Physio and the Analyst came to be female in the first place.
+    for (const row of await shipped()) {
+      expect(
+        SPEECH_VOICE_GENDER[row.tts_voice ?? ''],
+        `${row.slug}: ${row.tts_voice}`
+      ).toBeDefined();
     }
   });
 

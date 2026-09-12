@@ -407,6 +407,7 @@ export type Database = {
       personas: {
         Row: {
           banned_phrases: string[]
+          bio: string | null
           created_at: string
           humor_level: string
           id: string
@@ -422,6 +423,7 @@ export type Database = {
         }
         Insert: {
           banned_phrases?: string[]
+          bio?: string | null
           created_at?: string
           humor_level?: string
           id?: string
@@ -437,6 +439,7 @@ export type Database = {
         }
         Update: {
           banned_phrases?: string[]
+          bio?: string | null
           created_at?: string
           humor_level?: string
           id?: string

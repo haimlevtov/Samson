@@ -3,7 +3,7 @@
  * missed-session flags, REGARDLESS of selected persona."
  *
  * The word doing the work is "regardless", so every case here runs across all
- * five shipped personas rather than one.
+ * six shipped personas rather than one.
  */
 import { describe, expect, it } from 'vitest';
 import type { Persona } from './schema';

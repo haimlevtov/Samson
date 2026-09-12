@@ -175,7 +175,8 @@ variant, intensity, humour tier, banned phrases — not a code branch. _Since
 2026-09-11 ([ADR 0025](adr/0025-coach-voices.md)) a voice and a written
 direction take the place of the language and variant, which nothing reads._
 
-**Five as of 2026-09-08**, phase 5's content fill. The Old Master was the one
+**Six as of 2026-09-12** — phase 5's content fill brought it to five, and
+rework PR 5 added the Austrian. The Old Master was the one
 picked at launch; the **Sergeant** is the other half of that sentence, finally
 built, and it is the first row to reach the `crude` humour tier that
 `users.humor_max_level` has offered since the first migration with nothing

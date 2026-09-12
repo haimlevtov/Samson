@@ -211,8 +211,9 @@ analysis is measuring.
 - Persona layer cannot alter any number in the plan it receives — asserted by
   test, not by prompt
 - Drift eval scores recorded for every shipped persona. _Was "all three"; there
-  are five as of 2026-09-08 — phase 5 shipped the Sergeant and the Physio. The
-  criterion is still unmet either way, and it is now unmet for five._
+  are six as of 2026-09-12 — phase 5 shipped the Sergeant and the Physio, and
+  rework PR 5 the Austrian. The criterion is still unmet either way, and it is
+  now unmet for six._
 - Tone override forces a gentler register on injury or missed-session flags,
   regardless of selected persona
 

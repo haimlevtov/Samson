@@ -269,6 +269,37 @@ describe('the coach player', () => {
     expect(h.audio.plays).toHaveLength(1);
   });
 
+  it('never plays the first of two presses when the second is for another coach', async () => {
+    /*
+     * THE RACE SIX BUTTONS RUN, and the one this suite did not have — FOUND IN
+     * REVIEW of rework PR 5. Every existing supersede case goes through
+     * `select()` or a cached replay; the welcome flow's coach step calls neither,
+     * because picking a radio there is deliberately independent of the audio. Its
+     * only supersede is one uncached press overtaking another.
+     *
+     * Deleting `if (mine !== press || disposed) return;` from `hear` left the
+     * whole suite green before this case existed. What the user would get is the
+     * first coach talking over the one they just pressed.
+     */
+    const h = harness();
+    const first = h.player.hear('old-master');
+    const second = h.player.hear('sergeant');
+    expect(h.state().fetching).toBe('sergeant');
+
+    // Out of order on purpose: the superseded one is the one that lands first.
+    h.calls[0]!.answer.resolve(OK);
+    h.calls[1]!.answer.resolve(OK);
+    await Promise.all([first, second]);
+
+    // One clip reached the element, and it is the second press's.
+    expect(h.audio.plays).toHaveLength(1);
+    expect(h.audio.src).toBe('blob:clip-2');
+    h.audio.start();
+    expect(h.state().playing).toBe('sergeant');
+    expect(h.state().fetching).toBeNull();
+    // Never keyed to the coach that was superseded.
+    expect(h.state().shown).toBeNull();
+  });
   it("never plays one coach's clip after the user has moved to another", async () => {
     const h = harness();
     const pressed = h.player.hear('sergeant');

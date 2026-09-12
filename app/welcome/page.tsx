@@ -3,6 +3,7 @@ import { createServerDb, currentUser } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
 import { userEquipment } from '@/src/db/exercises';
 import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
+import { hasApiKey } from '@/src/llm/config';
 import {
   ONBOARDING_STEPS,
   SKIP_COST,
@@ -48,7 +49,8 @@ export default async function WelcomePage({
   ]);
 
   /*
-   * Three fields of each row, not the row. `systemPrompt` is the character
+   * FIVE fields of each row, not the row. (It said "three" until review
+   * counted them, and the count is the part a future reader would trust.) `systemPrompt` is the character
    * description ADR 0006 fences into a message, and a client component has no
    * use for it — so it does not cross into one.
    */
@@ -56,6 +58,8 @@ export default async function WelcomePage({
     slug: persona.slug,
     name: persona.name,
     sampleLine: persona.sampleLine,
+    bio: persona.bio,
+    voiced: persona.voiced,
   }));
 
   /*
@@ -169,7 +173,7 @@ export default async function WelcomePage({
                 No coaches are available just now. You can pick one later on the Coach tab.
               </p>
             ) : (
-              <CoachStep coaches={coaches} carried={carried} />
+              <CoachStep coaches={coaches} voiceAvailable={hasApiKey()} carried={carried} />
             )}
             <SkipButton step="coach" carried={carried} />
           </div>

@@ -87,6 +87,59 @@ export const SPEECH_VOICES: Readonly<Record<string, string>> = {
   Sulafat: 'warm',
 };
 
+/**
+ * Which of the model's voices are male and which are female.
+ *
+ * WHY this exists at all: the owner asked for male voices for two coaches, and
+ * NOTHING in this repo knew which were which. `SPEECH_VOICES` above carries
+ * Google's one-word style label and says nothing about the speaker, and the
+ * provider catalogue the gateway reads carries neither. A cast picked from
+ * memory is the `add-persona` voice-variant bug in a new form — that one cast
+ * three coaches into one voice under a control labelled "Voice".
+ *
+ * SOURCE: Google's published prebuilt-voice table for Gemini-TTS, which lists
+ * each name as male or female —
+ * https://docs.cloud.google.com/text-to-speech/docs/gemini-tts
+ *
+ * AI-NOTE: two copies of one list. A name here that is not in `SPEECH_VOICES`,
+ *          or missing from here, fails `src/speech/script.test.ts`. If the
+ *          speech model changes, BOTH are rewritten in the same commit — and
+ *          the personas are recast in the same migration, because a voice name
+ *          belongs to one model.
+ */
+export const SPEECH_VOICE_GENDER: Readonly<Record<string, 'male' | 'female'>> = {
+  Achernar: 'female',
+  Achird: 'male',
+  Algenib: 'male',
+  Algieba: 'male',
+  Alnilam: 'male',
+  Aoede: 'female',
+  Autonoe: 'female',
+  Callirrhoe: 'female',
+  Charon: 'male',
+  Despina: 'female',
+  Enceladus: 'male',
+  Erinome: 'female',
+  Fenrir: 'male',
+  Gacrux: 'female',
+  Iapetus: 'male',
+  Kore: 'female',
+  Laomedeia: 'female',
+  Leda: 'female',
+  Orus: 'male',
+  Puck: 'male',
+  Pulcherrima: 'female',
+  Rasalgethi: 'male',
+  Sadachbia: 'male',
+  Sadaltager: 'male',
+  Schedar: 'male',
+  Sulafat: 'female',
+  Umbriel: 'male',
+  Vindemiatrix: 'female',
+  Zephyr: 'female',
+  Zubenelgenubi: 'male',
+};
+
 /** Whether the speech model has a voice by this name. */
 export function isSpeechVoice(name: string): boolean {
   return Object.hasOwn(SPEECH_VOICES, name);
