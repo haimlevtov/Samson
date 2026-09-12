@@ -236,3 +236,36 @@ describe('the popover clamp is wired end to end', () => {
     }
   });
 });
+
+describe('ADR 0028 — what a failed action may tell the user, and what it may log', () => {
+  /*
+   * WHICH errors are the user's business is a judgement and is not lintable —
+   * the ADR says so, and `src/llm/failure.ts` is where that judgement lives,
+   * tested there.
+   *
+   * The leak SHAPE is lintable, and that is what these two assert. Both patterns
+   * had shipped and been found by review six times between them, each time at
+   * whichever site a reviewer happened to be reading. A grep would have found
+   * the seventh before a person did.
+   */
+  it('logs no error OBJECT, only a name and a bounded message', () => {
+    /*
+     * `console.error('…', cause)` prints an Error's own enumerable properties
+     * after the stack. `LlmCallFailedError` declares `attempts: LlmCallInsert[]`,
+     * and every one of those rows carries `user_id` — so this wrote the user's
+     * auth UUID into the server log up to three times per failure, plus the
+     * upstream body.
+     */
+    const offenders = sourceFiles()
+      .filter((f) => f.rel.startsWith('app/') || f.rel.startsWith('src/'))
+      .flatMap((f) =>
+        f.text
+          .split('\n')
+          .map((line, i) => ({ line, n: i + 1 }))
+          .filter(({ line }) => /console\.error\([^)]*,\s*(cause|error|err|e)\s*\)/.test(line))
+          .map(({ n }) => `${f.rel}:${n}`)
+      );
+
+    expect(offenders, 'log logLine(cause), never the object — ADR 0028').toEqual([]);
+  });
+});
