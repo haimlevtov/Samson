@@ -10,6 +10,8 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)  |
 | 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | planned                                                            |
 | 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                            |
+| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                            |
+| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                            |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -352,6 +354,99 @@ in the third person — what they are like to be coached by.
 `app/coach/CoachConsole.tsx`, `app/globals.css`, `tests/db/personas.test.ts`,
 and `.claude/skills/add-persona/SKILL.md` — whose voice-allocation table is about
 to be wrong in two rows.
+
+---
+
+## PR 6 — the coach tab speaks too
+
+**Branch `coach-tab-voice`.** PR 3 put a voice switch on the session screen; the
+Coach tab, where people actually hold a conversation, still answers in silence.
+The same control, on the surface it was arguably for in the first place.
+
+**No new ADR.** [ADR 0031](../adr/0031-talking-during-a-session.md) already
+decided everything this needs and its reasoning is surface-independent:
+
+- **Opt-in per session**, off by default, because a spoken reply is $0.02 against
+  a $0.50 week. The Coach tab is the chattier surface, so the arithmetic bites
+  harder here, not less.
+- **The server never speaks text the browser sends** — the reply is generated and
+  spoken in one request, and `spokenLine` sanitises it before it is performed.
+- **Only a reply within `MAX_TRANSCRIPT_CHARS` is spoken**, which keeps
+  `SPEECH_ASSUMED_COST_USD` calibrated.
+
+What it does add, and it is the reason this is a PR rather than a copy-paste:
+
+- **The persona is CHOSEN here.** ADR 0031 §5 settles for "the first shared,
+  voiced coach alphabetically" because the session screen has no picker. The
+  Coach tab has one — three feet above the box. So the spoken reply should use
+  the coach the user has selected, and the switch should say whose voice it is
+  before they turn it on rather than after the first answer.
+- **The chat has a transcript.** The session card holds one exchange; this one
+  replays history, so a spoken reply arrives beside turns that were not spoken.
+  The card has to make clear that the switch affects the NEXT answer, not the
+  conversation.
+- **`askTheCoach` already returns a state object**, so the audio rides in it
+  rather than needing a second action — which is what keeps ADR 0025 §4 true.
+
+**Files:** `app/coach/CoachBox.tsx`, `app/coach/actions.ts`,
+`app/coach/coach-state.ts`, `app/globals.css` (the switch is already a shared
+class from PR 6b's design pass), tests.
+
+---
+
+## PR 7 — every badge, and how to get it
+
+**Branch `badge-catalogue`.** Profile lists the badges you have earned. There is
+no way to see the ones you have not, or what any of them is for.
+
+**A badge opens a panel**, and a link from the badges section opens the whole
+catalogue: every achievement, what unlocks it, and whether you hold it.
+
+### The constraint that shapes this, and it is a real one
+
+**[ADR 0017](../adr/0017-held-hidden-achievements.md) exists precisely to stop this.** Its
+policy is `hidden = false` for anything the user has not earned — `docs/PLAN.md`
+phase 5 requires that hidden achievement definitions are never sent to a client
+that has not earned them, and the RLS policy is what enforces it, not the UI.
+
+So "all available badges and how to unlock them" cannot mean all of them:
+
+- **A visible achievement** shows its name, its description and its unlock
+  condition, earned or not.
+- **A hidden one the user HOLDS** shows everything — that is ADR 0017's whole
+  point, and the surface where it was never rendered.
+- **A hidden one the user does NOT hold** shows that it exists and nothing else.
+  Not silently omitted: a catalogue that quietly hides rows teaches people the
+  list is complete when it is not, and "there are three more to find" is better
+  copy than a short list anyway.
+
+_The count of unearned hidden badges is itself information, and a small amount.
+It is worth it — and if the owner would rather it were invisible, that is a
+one-line change and a note in this plan._
+
+### What the unlock condition says
+
+Not the SQL. `achievements.predicate` is a SQL boolean (ADR 0009), and putting it
+on screen would be both unreadable and a description of the schema. The
+`description` column is what the user reads, and the catalogue's job is to render
+it for a badge somebody has not earned — which nothing currently does.
+
+**If a description does not stand on its own** for an unearned badge, that is a
+content bug in the row, and the PR should say which rows need rewriting rather
+than inventing prose in the component. Content lives in the database — CLAUDE.md
+#7.
+
+### Reading it
+
+`loadUnlockedAchievements` returns what the user holds. The catalogue needs the
+whole visible table plus that set, which is one more read in `src/db/gamification.ts`
+and no new policy: the existing one already returns exactly the rows the user may
+see. **That is the thing to verify first and by test** — the panel must not need
+a policy change, and if it seems to, the design is wrong rather than the policy.
+
+**Files:** `src/db/gamification.ts`, a Profile panel, `app/globals.css`,
+`tests/db/achievements.test.ts` (a hidden, unearned row returns no description to
+its non-holder), tests.
 
 ---
 
