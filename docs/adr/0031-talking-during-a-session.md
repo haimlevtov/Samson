@@ -209,6 +209,37 @@ through: a session screen is not where somebody reads a citation.
   the provider returns no price. §4 keeps it honest by bounding what is spoken
   rather than by improving the estimate.
 
+## What two review rounds changed, recorded because the pattern repeated
+
+Three findings in this ADR were claims that read as true and were not, and two
+of the fixes for them were themselves wrong on the first attempt. That is worth a
+section rather than a footnote, because the shape was the same every time: **a
+guard written, a sentence written to match it, and nothing measuring whether the
+sentence held.**
+
+- **"There is no path where the browser hands the server words to say."** True of
+  the arguments, false of the outcome — `src/speech/script.ts` had an AI-NOTE
+  naming this PR and saying what it had to strip. §2 now describes `spokenLine`.
+- **`spokenLine` itself, first version.** It stripped the labels BEFORE the
+  whitespace collapse and before `sanitizeUntrusted` — both of which rebuild what
+  the matcher just missed. Five spellings walked through, including a curly
+  apostrophe, which is what a model actually emits.
+- **"The assumption stays exactly true by construction."** It is calibrated on
+  duration, not characters. §4 says what it really buys.
+- **The `holding` latch, twice.** First with no owner at all, then with an owner
+  that could not tell which press an `onend` belonged to — and the regression
+  test written for it passed against the code it was meant to catch.
+- **No catch on the client’s own await**, so a failed REQUEST — not a failed
+  answer — replaced the whole session screen, set grid included.
+
+**Four of those are bugs `src/speech/player.ts` had already found and fixed**, in
+its own second review, and they came back because this PR wrote playback and
+in-flight bookkeeping from scratch instead of reading the module next door. The
+lesson is in that file’s header already: the resilience bugs live in the press,
+cache and in-flight bookkeeping, which is why they belong in a testable module
+rather than in a component. `listen.ts` took that advice; the component did not,
+and `turn`, `blocked` and `mustType` are still untested because of it.
+
 ## Consequences
 
 - The session screen gains a client component and one server action. No new

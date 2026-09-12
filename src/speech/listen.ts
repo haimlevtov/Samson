@@ -64,7 +64,14 @@ export interface Listener {
 function failureFor(error: string): ListenFailure | null {
   if (error === 'aborted') return null;
   if (error === 'no-speech') return 'no-speech';
-  if (error === 'not-allowed' || error === 'service-not-allowed') return 'no-permission';
+  /*
+   * `not-allowed` ONLY — FOUND IN RE-REVIEW. `service-not-allowed` was mapped
+   * here too, and it is what Chrome emits when the speech SERVICE is briefly
+   * unavailable. The component latches its text-box fallback on this value, so
+   * one bad network second permanently removed the microphone for the session,
+   * under a sentence blaming a permission the user had actually granted.
+   */
+  if (error === 'not-allowed') return 'no-permission';
   return 'failed';
 }
 
@@ -111,6 +118,23 @@ export function createListener(deps: {
   let state: ListenState = EMPTY_LISTEN;
   /** Whether a recognition is running. The only thing that may hold `holding`. */
   let open = false;
+  /**
+   * Whether the running recognition has been asked to stop.
+   *
+   * FOUND IN RE-REVIEW, and `open` alone was not enough. A boolean over one
+   * shared recogniser cannot say WHICH press an `onend` belongs to, so
+   * press → release → press still let the FIRST recognition's `onend` clear the
+   * SECOND hold's latch — the exact path the previous fix claimed to close, with
+   * a test that passed against the code it was meant to catch.
+   *
+   * This is the distinction that matters: a press with no release between is the
+   * same utterance and the open recognition genuinely serves it. A press AFTER a
+   * release is a new utterance, and the recognition still settling belongs to
+   * the previous one.
+   */
+  let stopping = false;
+  /** One transcript per hold. Chrome can deliver more than one final result. */
+  let delivered = false;
   /** After this, every method is a no-op — the same latch `player.ts` carries. */
   let disposed = false;
 
@@ -127,8 +151,18 @@ export function createListener(deps: {
   recogniser.interimResults = false;
 
   recogniser.onresult = (event) => {
+    /*
+     * One per hold — FOUND IN RE-REVIEW. Chrome can fire more than one final
+     * result for a single utterance, and each one was starting its own request:
+     * two model calls, two charges, and a race over which answer got rendered.
+     * The component's generation guard picked a winner; it could not stop the
+     * second call being made.
+     */
+    if (delivered) return;
     const text = transcriptOf(event);
-    if (text !== '') onTranscript(text);
+    if (text === '') return;
+    delivered = true;
+    onTranscript(text);
   };
 
   recogniser.onerror = (event) => {
@@ -140,11 +174,13 @@ export function createListener(deps: {
      * first draft skipped by returning before the state write.
      */
     open = false;
+    stopping = false;
     set({ holding: false, failure: failureFor(event.error) ?? state.failure });
   };
 
   recogniser.onend = () => {
     open = false;
+    stopping = false;
     set({ holding: false });
   };
 
@@ -153,19 +189,25 @@ export function createListener(deps: {
       if (disposed) return;
       // The previous failure is cleared on press rather than on success: a
       // sentence about the last attempt must not sit beside a live one.
+      delivered = false;
       set({ holding: true, failure: null });
       try {
         recogniser.start();
         open = true;
+        stopping = false;
       } catch {
         /*
          * `start()` throws InvalidStateError when a recognition is already
-         * running, which a fast double press causes and which is not a failure:
-         * the recognition the user wants is open. Every OTHER throw means
-         * nothing is open, nothing will fire `onend`, and the latch would stay
-         * set forever — so `open` decides which of the two this was.
+         * running. Whether that is a problem depends on WHOSE recognition it is:
+         *
+         * - Open and not stopping: a fast double press inside one utterance. The
+         *   recognition the user wants is running, so the latch is correct.
+         * - Anything else: this press got no recognition of its own. Nothing
+         *   will deliver its transcript, so it is told immediately rather than
+         *   silently dropped — the "nothing happens" outcome
+         *   docs/specs/mobile-interface.md §4 exists to prevent.
          */
-        if (!open) set({ holding: false, failure: 'failed' });
+        if (!open || stopping) set({ holding: false, failure: 'failed' });
       }
     },
 
@@ -175,6 +217,7 @@ export function createListener(deps: {
       // latch is already down, and `stop()` on a recogniser that never started
       // is a no-op that would produce no `onend` to clear anything.
       if (!open) return;
+      stopping = true;
       // `stop` asks for the final result; `abort` would throw it away. The
       // state stays `holding` until `onend`, because the transcript has not
       // arrived yet and a button that says "ready" while still listening is
@@ -192,6 +235,7 @@ export function createListener(deps: {
       // transcript to, and `stop` would produce one.
       recogniser.abort();
       open = false;
+      stopping = false;
       disposed = true;
       state = EMPTY_LISTEN;
     },

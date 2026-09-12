@@ -146,12 +146,17 @@ describe('createListener', () => {
       expect(h.states.at(-1)!.holding).toBe(true);
     });
 
-    it('does not let an old recognition end a newer hold', () => {
+    it('tells the user when a press after a release got no recognition', () => {
       /*
-       * press → release → press → the FIRST recognition ends. The first draft
-       * cleared the second hold's latch here, so the button read "Hold to talk"
-       * while the user was still pressing it, and the release that followed did
-       * nothing at all.
+       * press → release → press. The second `start()` throws because the first
+       * recognition is still settling, so THIS press has nothing of its own and
+       * nothing will ever deliver its transcript.
+       *
+       * FOUND IN RE-REVIEW, twice: the first fix let the first recognition's
+       * `onend` clear the second hold's latch — a silently dropped utterance —
+       * and the test written for it asserted only that `release()` did not
+       * throw, which was ALSO true of the broken code it was meant to catch.
+       * This asserts the state the user actually sees.
        */
       const h = harness();
       h.listener.press();
@@ -159,15 +164,28 @@ describe('createListener', () => {
       h.recogniser.start = () => {
         throw new Error('InvalidStateError');
       };
+
       h.listener.press();
 
-      h.recogniser.onend!();
+      // Told immediately, at the press — not left holding until somebody else's
+      // recognition happens to end.
+      expect(h.states.at(-1)!.holding).toBe(false);
+      expect(h.states.at(-1)!.failure).toBe('failed');
+    });
 
-      // The second hold has no recognition of its own, so the honest state is
-      // "not holding" — but it must have been reached by the guard rather than
-      // by the first recognition's event, and the release below must not throw.
-      expect(() => h.listener.release()).not.toThrow();
-      expect(h.calls.filter((c) => c === 'stop')).toHaveLength(1);
+    it('keeps the latch for a double press INSIDE one utterance', () => {
+      // The other side of the same distinction: no release between, so the open
+      // recognition is genuinely the one this press wants.
+      const h = harness();
+      h.listener.press();
+      h.recogniser.start = () => {
+        throw new Error('InvalidStateError');
+      };
+
+      h.listener.press();
+
+      expect(h.states.at(-1)!.holding).toBe(true);
+      expect(h.states.at(-1)!.failure).toBeNull();
     });
 
     it('clears it on an error, without waiting for onend', () => {
@@ -215,12 +233,24 @@ describe('createListener', () => {
     });
 
     it('reports a refused microphone, which needs a permission instead', () => {
-      for (const error of ['not-allowed', 'service-not-allowed']) {
-        const h = harness();
-        h.listener.press();
-        h.recogniser.onerror!({ error });
-        expect(h.states.at(-1)!.failure).toBe('no-permission');
-      }
+      const h = harness();
+      h.listener.press();
+      h.recogniser.onerror!({ error: 'not-allowed' });
+      expect(h.states.at(-1)!.failure).toBe('no-permission');
+    });
+
+    it('treats an unavailable speech service as retryable, not as a refusal', () => {
+      /*
+       * FOUND IN RE-REVIEW. `service-not-allowed` was mapped to 'no-permission'
+       * alongside 'not-allowed', and the component latches its text-box
+       * fallback on that value — so one bad network second removed the
+       * microphone for the whole session, blaming a permission the user had
+       * granted.
+       */
+      const h = harness();
+      h.listener.press();
+      h.recogniser.onerror!({ error: 'service-not-allowed' });
+      expect(h.states.at(-1)!.failure).toBe('failed');
     });
 
     it('says nothing about an abort, which is what a silent release fires', () => {
@@ -329,5 +359,46 @@ describe('transcriptOf', () => {
 describe('EMPTY_LISTEN', () => {
   it('is not holding and has nothing to report', () => {
     expect(EMPTY_LISTEN).toEqual({ holding: false, failure: null });
+  });
+});
+
+describe('one transcript per hold', () => {
+  it('delivers only the first final result', () => {
+    /*
+     * FOUND IN RE-REVIEW. Chrome can fire more than one final `onresult` for a
+     * single utterance, and each one started its own request: two model calls,
+     * two charges, and a race over which answer was rendered. The component's
+     * generation guard could pick a winner; it could not stop the second call
+     * from being made, and the cooldown added in the same pass made it worse —
+     * the SECOND call was the one refused, and being later it won.
+     */
+    const h = harness();
+    h.listener.press();
+    h.recogniser.onresult!({ results: [[{ transcript: 'my shoulder' }]] });
+    h.recogniser.onresult!({ results: [[{ transcript: 'my shoulder again' }]] });
+
+    expect(h.heard).toEqual(['my shoulder']);
+  });
+
+  it('delivers again after the next press', () => {
+    // Per HOLD, not per listener: a session is many questions.
+    const h = harness();
+    h.listener.press();
+    h.recogniser.onresult!({ results: [[{ transcript: 'first' }]] });
+    h.recogniser.onend!();
+    h.listener.press();
+    h.recogniser.onresult!({ results: [[{ transcript: 'second' }]] });
+
+    expect(h.heard).toEqual(['first', 'second']);
+  });
+
+  it('does not count an empty result as the one delivery', () => {
+    // A blank result must not burn the hold's single slot.
+    const h = harness();
+    h.listener.press();
+    h.recogniser.onresult!({ results: [[{ transcript: '   ' }]] });
+    h.recogniser.onresult!({ results: [[{ transcript: 'the real one' }]] });
+
+    expect(h.heard).toEqual(['the real one']);
   });
 });

@@ -120,7 +120,30 @@ export function SessionCoach() {
     if (question === '') return;
     const mine = ++turn.current;
     startTransition(async () => {
-      const result = await askDuringSession(question, wantsVoice.current);
+      /*
+       * CAUGHT HERE, and the first version had no catch at all — FOUND IN
+       * RE-REVIEW, rated critical and rightly.
+       *
+       * The action's own try cannot help: this rejects when the REQUEST fails —
+       * offline in a gym basement, a 502, deploy skew, a serialization error at
+       * the action boundary. React rethrows a rejected transition during render,
+       * and the nearest boundary is the ROOT one, so a failed question replaced
+       * the entire session route — the set grid and its unsaved rows with it.
+       *
+       * `src/speech/player.ts` already carries this exact guard, added by its
+       * own second review, and docs/specs/mobile-interface.md §4 has the row:
+       * offline or a failed request renders the inline error path.
+       */
+      const result = await askDuringSession(question, wantsVoice.current).catch(
+        (): SessionAnswer => ({
+          asked: question,
+          reply: '',
+          audio: null,
+          silent: 'failed',
+          coach: null,
+          error: 'That did not get through. Try again in a moment.',
+        })
+      );
       // Superseded, or unmounted: publish nothing. The cleanup bumps this too,
       // so a continuation crossing teardown cannot touch the refs either.
       if (mine !== turn.current) return;
@@ -131,6 +154,11 @@ export function SessionCoach() {
 
   const play = (result: SessionAnswer): void => {
     if (audio.current === null) return;
+    // The generation this clip belongs to — FOUND IN RE-REVIEW. `play`'s
+    // rejection handler was the only continuation in this file with no check,
+    // so a refused autoplay from answer 1 could set `blocked` under answer 2 and
+    // the replay button would then play answer 1's clip.
+    const mine = turn.current;
     /*
      * Stopped BEFORE the early return — FOUND IN REVIEW. A new text-only answer
      * used to leave the previous clip talking underneath it: ask with the toggle
@@ -159,12 +187,22 @@ export function SessionCoach() {
        * The URL stays: the replay button below plays it from the cache, inside
        * the tap, which is what the policy is waiting for.
        */
-      if (cause instanceof DOMException && cause.name === 'NotAllowedError') setBlocked(true);
+      if (mine !== turn.current) return;
+      if (cause instanceof DOMException && cause.name === 'NotAllowedError') {
+        setBlocked(true);
+        return;
+      }
+      /*
+       * Any other rejection is a clip that will not play at all, and the card
+       * must stop claiming it did — `player.ts` carries the same reasoning about
+       * replaying a broken clip under a message saying "Try again".
+       */
+      setAnswer((current) => (current === null ? current : { ...current, silent: 'failed' }));
     });
   };
 
   const replay = async (): Promise<void> => {
-    if (audio.current === null) return;
+    if (audio.current === null || audio.current.src === '') return;
     try {
       await audio.current.play();
       setBlocked(false);

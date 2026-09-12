@@ -292,10 +292,6 @@ export async function askDuringSession(
   spoken: unknown,
   wantsVoice: unknown
 ): Promise<SessionAnswer> {
-  const db = await createServerDb();
-  const user = await currentUser(db);
-  if (!user) redirect('/sign-in');
-
   /*
    * Trimmed BEFORE the length check — FOUND IN REVIEW. `min(1)` on an untrimmed
    * string admits a whitespace-only POST, which buys a whole chat call for a
@@ -328,6 +324,21 @@ export async function askDuringSession(
   const speak = wantsVoice === true;
 
   try {
+    /*
+     * INSIDE the try, and the previous pass claimed to have done this and had
+     * not — FOUND IN RE-REVIEW, along with the false claim. `createServerDb`
+     * awaits `cookies()` and `currentUser` awaits an auth round trip plus a
+     * `users` select; either can reject, and a rejection escaping this action
+     * reaches the root error boundary, which replaces the whole live session
+     * screen — the set grid included — because a VOICE question failed.
+     *
+     * `redirect` still works from in here: it throws a control-flow signal that
+     * `unstable_rethrow` passes straight back out of the catch below.
+     */
+    const db = await createServerDb();
+    const user = await currentUser(db);
+    if (!user) redirect('/sign-in');
+
     const today = localDateFor(user.timezone);
 
     /*
