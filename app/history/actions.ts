@@ -1,5 +1,6 @@
 'use server';
 
+import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
@@ -7,7 +8,20 @@ import { activeWorkout, insertSet } from '@/src/db/training';
 import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
-import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
+import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
+import { loadXpSummary } from '@/src/db/gamification';
+import { loadHistory } from '@/src/db/training';
+import { loadEvidence } from '@/src/db/evidence';
+import { loadNotes, rememberNote } from '@/src/db/notes';
+import { coachVoice, listPersonas } from '@/src/db/personas';
+import { coachFacts } from '@/src/chat/facts';
+import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
+import { computeEnergy, dietFacts } from '@/src/diet/energy';
+import { speechScript, MAX_TRANSCRIPT_CHARS } from '@/src/speech/script';
+import { refusalFor } from '@/src/speech/refusal';
+import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
+import { BudgetExceededError } from '@/src/llm/types';
+import type { SessionAnswer } from './session-coach';
 import { logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
 import { normalizedSetSchema } from '@/src/normalizer/schema';
@@ -256,4 +270,191 @@ export async function confirmParsedSets(formData: FormData): Promise<void> {
   }
 
   revalidatePath(`/history/${workoutId}`);
+}
+
+/**
+ * One question asked out loud during a session — [ADR 0031](../../docs/adr/0031-talking-during-a-session.md).
+ *
+ * INVARIANT: the server never speaks text the browser sent — ADR 0025 §4, and
+ *            it is what shapes this function. The browser sends a QUESTION; the
+ *            answer is generated here and passed to `callSpeech` without ever
+ *            leaving the server. There is no argument to this action that
+ *            becomes something the project's key says out loud.
+ *
+ * INVARIANT: the transcript is a message like any other — ADR 0031 §6. Same
+ *            stage, same fencing, same route guards, same memory rules. Speaking
+ *            it rather than typing it changes how it arrived and nothing else.
+ *
+ * Called directly rather than through a form, so every argument is parsed.
+ */
+export async function askDuringSession(
+  spoken: unknown,
+  wantsVoice: unknown
+): Promise<SessionAnswer> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const parsed = z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS).safeParse(spoken);
+  const silent = (reason: SessionAnswer['silent']): SessionAnswer => ({
+    asked: '',
+    reply: '',
+    audio: null,
+    silent: reason,
+    coach: null,
+    error: 'That did not come through. Say it again.',
+  });
+  if (!parsed.success) return silent('failed');
+
+  const asked = parsed.data;
+  const speak = wantsVoice === true;
+
+  const today = localDateFor(user.timezone);
+
+  try {
+    const [history, xp, evidence, notes, personas] = await Promise.all([
+      loadHistory(db),
+      loadXpSummary(db, today),
+      loadEvidence(db),
+      loadNotes(db),
+      listPersonas(db),
+    ]);
+
+    // INVARIANT: every figure the coach may quote is computed here, in code —
+    //            CLAUDE.md #1. Identical to the Coach tab's, because it is the
+    //            same stage answering the same kind of question.
+    const facts = coachFacts({
+      today,
+      workouts: history.workouts,
+      sets: history.sets,
+      exerciseNames: new Map([...history.exercises].map(([id, e]) => [id, e.name])),
+      lifetimeXp: xp.lifetime,
+    });
+
+    /*
+     * The diet goal is not asked for here: there is no selector on a session
+     * screen and inventing one would be inventing a preference. `maintain` is
+     * the same fallback `askTheCoach` falls to for an unrecognised value, and
+     * the figure is the app's either way — the model is never shown it.
+     */
+    const energy = computeEnergy({
+      today,
+      bodyweightKg: user.bodyweightKg,
+      heightCm: user.heightCm,
+      birthDate: user.birthDate,
+      sex: user.sex,
+      sessionsLast28Days: facts.sessions_last_28_days,
+      goal: 'maintain',
+    });
+
+    const answer = await askCoach(
+      user.id,
+      {
+        facts,
+        // No transcript: the session card holds one conversation on screen, and
+        // replaying it would mean trusting the client with history on a surface
+        // that has no Clear button to escape it. Each question stands alone.
+        history: [],
+        message: asked,
+        diet: energy.kind === 'ok' ? dietFacts(energy) : null,
+        evidence: evidence.rows,
+        notes: notes.map((note) => note.text),
+      },
+      { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
+    );
+
+    // ADR 0030, and the same rules as the Coach tab — nothing about this surface
+    // relaxes them. Its own try/catch for the same reason: a note is a side
+    // effect of an answer the user is waiting for.
+    if (answer.remember !== null) {
+      try {
+        await rememberNote(db, user.id, answer.remember);
+      } catch (cause) {
+        console.error('session note not stored', logLine(cause));
+      }
+    }
+
+    const reply = answer.text ?? SUPPLEMENT_ANSWER_TURN;
+
+    /*
+     * The first persona alphabetically — ADR 0031 §5. There is no stored choice
+     * anywhere, and `listPersonas` orders by name, so this is the coach the
+     * Coach tab opens with rather than an arbitrary one.
+     */
+    const voiced = personas.find((p) => p.voiced) ?? null;
+
+    if (!speak) {
+      return { asked, reply, audio: null, silent: 'not-asked', coach: null, error: null };
+    }
+    if (voiced === null) {
+      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
+    }
+
+    /*
+     * INVARIANT: only a reply within the speech stage's own bound is spoken —
+     *            ADR 0031 §4. `SPEECH_ASSUMED_COST_USD` is calibrated on
+     *            `MAX_TRANSCRIPT_CHARS`, and the budget gate charges that flat
+     *            figure per unpriced speech row — so speaking something longer
+     *            would not cost more in the ledger while costing more in fact.
+     *
+     * Checked HERE rather than caught from `speechScript`'s RangeError: a
+     * refusal the card can explain is not an exception, and the user is told
+     * their answer was too long to read aloud rather than shown a failure.
+     */
+    if (reply.length > MAX_TRANSCRIPT_CHARS) {
+      return { asked, reply, audio: null, silent: 'too-long', coach: voiced.name, error: null };
+    }
+
+    const coach = await coachVoice(db, voiced.slug);
+    if (!coach) {
+      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
+    }
+
+    const clip = await callSpeech(
+      {
+        userId: user.id,
+        // The REPLY, which this function produced. Never `asked`.
+        input: speechScript(coach.direction, reply),
+        voice: coach.voice,
+      },
+      createGatewayDeps(createSupabaseLedger(db))
+    );
+
+    return {
+      asked,
+      reply,
+      // A Uint8Array does not survive the server-action boundary; a plain array
+      // does, and the component rebuilds it.
+      audio: { bytes: Array.from(clip.audio), contentType: clip.contentType },
+      silent: null,
+      coach: voiced.name,
+      error: null,
+    };
+  } catch (cause) {
+    /*
+     * Two errors are the user's business and the rest are not — ADR 0028. The
+     * budget one especially: it reports their OWN weekly spend, and on this
+     * surface it is the likeliest refusal there is.
+     */
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
+      return {
+        asked,
+        reply: '',
+        audio: null,
+        silent: refusalFor(cause),
+        coach: null,
+        error: cause.message,
+      };
+    }
+
+    console.error('session coach failed', logLine(cause));
+    return {
+      asked,
+      reply: '',
+      audio: null,
+      silent: 'failed',
+      coach: null,
+      error: 'The coach could not answer that one.',
+    };
+  }
 }
