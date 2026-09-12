@@ -1,7 +1,8 @@
 # ADR 0005 — Injection, conduct and abuse: five layers, four of them code
 
 **Status:** accepted, phase 2 (cross-cutting) — amended 2026-09-11: the speech
-stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md)
+stage is exempt from §3 and §4, see [ADR 0025](0025-coach-voices.md); amended
+2026-09-12: §4 scanned an encoded document, see the amendment below
 **Date:** 2026-09-01
 
 ## Context
@@ -79,7 +80,9 @@ prompt instruction as a control.
 
 ### 4. Output is scanned before the user sees it — code
 
-`scanOutput()` runs on every completion inside the gateway. _A speech call
+`scanOutput()` runs on every completion inside the gateway. _It runs a second
+time on the parsed value's string leaves — the 2026-09-12 amendment at the foot
+of this file, which is where the paragraphs below stopped being the whole story._ _A speech call
 returns audio, not a completion, and is not scanned; what it speaks is stored
 text that a test holds to `scanOutput` — [ADR 0025](0025-coach-voices.md)'s
 addendum._ It blocks on:
@@ -146,29 +149,27 @@ these layers sit on top of it.
 
 ---
 
-## Amendment, 2026-09-12 — layer 4 ran on text the model had not finished writing
+## Amendment, 2026-09-12 — layer 4 read an encoded document
 
 **Found by probe while designing coach memory, not by the adversarial suite,
-which is the part worth recording.**
+which is the part worth recording.** It then took two attempts, and the first
+one's failure is kept here because it is the more instructive half.
+
+### The hole
 
 `scanOutput` ran on `content` — the raw completion string — and it ran there
-deliberately: §4 says "before anything is parsed or returned", because a
+deliberately: §4 said "before anything is parsed or returned", because a
 response that is not valid JSON still reaches a log and still had to be checked.
 That is a good reason and it produced a bad order. Every stage in this project
 asks for structured output, so `content` is a JSON **document**, and a JSON
 document may spell any character as an escape.
 
-So:
-
 ```
-{"route":"training","reply":"you are gay","supplement_slug":"__none__"}
+{"route":"training","reply":"you are \u0067ay","supplement_slug":"__none__"}
 ```
 
-`scanOutput` on that string finds nothing — there is no `gay` in it. `JSON.parse`
-then yields `you are gay`, which is what the user reads, and which `scanOutput`
-finds immediately if it is asked. **Measured, not reasoned about**: the probe is
-now `src/llm/gateway.test.ts`'s "an escaped completion", which fails against the
-old order.
+`scanOutput` on that string finds nothing. `JSON.parse` then yields
+`you are gay`, which is what the user reads.
 
 This is not one guard's blind spot. It is all four — protected attribute,
 demeaning, prompt leak, credential — and it is available to anything that can
@@ -177,28 +178,79 @@ message from the user. Layer 4 is one of the four layers this ADR calls code
 rather than prompt, so "a determined prompt gets past it" was the one thing it
 was not allowed to be.
 
-### The fix, and why it is two scans rather than a moved one
+**It was open from phase 0 until 2026-09-12.**
 
-`scanOutput` still runs on the raw string, unchanged, for the reason §4 gave. A
-**second** scan runs on `JSON.stringify(parsed)` after schema validation
-succeeds — the re-encoded value, where every escape has become the character it
-denotes and `JSON.stringify` re-emits it literally. A finding from either is the
-same `safety_blocked` status, the same correction and the same retry; the caller
-cannot tell them apart, and nothing else in the gateway changes.
+### The first fix was wrong, and two reviewers measured it
 
-Scanning the re-encoded object rather than walking its string fields is
-deliberate: a schema gains a field more often than anyone remembers to add it to
-a list of fields that get scanned. The structural noise this admits — key names,
-braces, commas — is fixed text the schema chose, so it cannot carry a match a
-field did not.
+The first version scanned `JSON.stringify(parsed)` and justified itself with
+the sentence _"every escape has become the character it denotes and
+`JSON.stringify` re-emits it literally"_. **That sentence is false.**
+`JSON.stringify` decodes `\u0067` into `g`, and then RE-ESCAPES `"`, `\\`
+and the whole C0 range. A real newline comes back out as two ordinary
+characters: a backslash and an n.
 
-### What it still does not do
+Every pattern in `safety.ts` joins its words with `\s+`, and `scanOutput`
+normalises control characters to a space **precisely so** a line break cannot
+split a phrase — a normalisation that never fires on a re-escaped one. So:
 
-The two AI-NOTEs stand. A scan that reads characters cannot read meaning, and
-this amendment makes the guard cover the text it was always supposed to cover
-rather than making it cleverer. Homoglyphs, coded language and everything else
-§4 already disclaims are unchanged.
+```
+{"summary":"you are\nfat"}     → reached the user, through the "fix"
+```
 
-**The adversarial suite gains this case**, per §5, and it is recorded as a hole
-that existed from phase 0 to 2026-09-12 rather than as a case that always
-passed.
+One character cheaper for the attacker than the case the fix was written for,
+and the same insult on screen. Both reviewers ran it end to end through
+`callLLM` rather than reasoning about it, and the case is now in the suite.
+
+### What ships
+
+`scanOutput` still runs on the raw string, unchanged, for the reason §4 gave.
+**`scanValue` then walks the parsed value's string leaves and scans each one on
+its own.** A finding from either is the same `safety_blocked` status, the same
+correction and the same retry; the caller cannot tell them apart.
+
+- **Leaves, not the document.** The document is the encoded form, which is the
+  whole finding above.
+- **A structural walk, not a list of field names.** A schema gains a field more
+  often than anyone remembers to widen such a list, and a new field is covered
+  here by being a string.
+- **Each leaf separately, never joined.** Joining would let the separator
+  manufacture a match across two fields that neither field contains — a false
+  positive that fails a call for a user who did nothing.
+- **Keys are not scanned.** They are text the schema chose rather than text a
+  model wrote.
+- **A blocked response that was also truncated is not retried.** The MEASURED
+  rule for truncation applies with more force here, not less: a correction makes
+  the request longer against an unchanged `max_tokens`. The value is refused
+  either way; this decides only whether the refusal is paid for three times.
+
+### What still gets through, named rather than implied
+
+§4's existing disclaimer covers coded language, dogwhistles, novel slurs and
+bias in neutral vocabulary. It does **not** cover these two, so they are stated
+here in their own words, and both are **passing tests in the adversarial suite**
+that assert the hole:
+
+- **Homoglyphs and character substitution.** `g\u0430y` (Cyrillic а),
+  `\uFF47ay` (fullwidth g) and a combining accent all reach the user. This is
+  now the cheapest remaining bypass. Closing it means NFKC plus a confusables
+  table, which is a decision — a wrong one starts rejecting ordinary text — and
+  not a patch to make in the same change as this one.
+- **A phrase split across two fields.** Each leaf is scanned alone, so
+  `{"a":"you are so","b":"weak"}` matches nothing. Not reachable to any effect
+  today, because on every stage here the prose is one field and the rest are
+  enums; a schema with two prose fields would make it reachable, and that is the
+  moment to revisit the no-joining rule.
+
+### Consequences
+
+- A model that deterministically re-emits a blocked answer now costs three
+  attempts where it used to cost one. That is the correct failure — the call
+  fails rather than degrading to unchecked output — but it is a **3× cost
+  multiplier a chat user can trigger against their own weekly budget**, and the
+  budget is what bounds it.
+- The correction feeds the rejected attempt back in its raw, still-escaped form,
+  fenced and sanitised by `rejectedAttempt`. A model steered by an injected
+  "spell your reply with escapes" will re-emit and burn the cap. Failing closed
+  is right; paying three times for it is the price.
+- **The adversarial suite gains this class**, per §5, recorded as a hole that
+  existed rather than as a case that always passed.

@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { callLLM, callSpeech } from './gateway';
-import { SAFETY_PREAMBLE, SafetyBlockedError, scanOutput } from './safety';
+import { SAFETY_PREAMBLE, SafetyBlockedError, scanOutput, scanValue } from './safety';
 import { STAGE_MODELS } from './models';
 import { MissingApiKeyError, SPEECH_MAX_INPUT_CHARS, hasApiKey, readApiKey } from './config';
 import { BudgetExceededError, LlmCallFailedError, NoProfileError } from './types';
@@ -807,11 +807,31 @@ describe('callLLM — an escaped completion', () => {
       usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20, cost: 0.000001 },
     });
 
-  it('is invisible to the pre-parse scan and visible to the post-parse one', () => {
-    // The premise, asserted rather than asserted-about: if this ever stops being
-    // true the test below would pass for the wrong reason.
+  /**
+   * The SECOND version of this fix — FOUND IN REVIEW, by two reviewers, and both
+   * measured it rather than arguing it.
+   *
+   * The first scanned `JSON.stringify(value)`, which decodes `\\u0067` and then
+   * RE-ESCAPES every control character. A real newline comes back out as a
+   * backslash and an n, every pattern in safety.ts joins its words with
+   * whitespace, and `scanOutput` normalises control characters to a space
+   * precisely so a line break cannot split a phrase. So this one — one
+   * character cheaper for whoever writes it — walked straight through the fix.
+   */
+  const NEWLINE = '{"summary":"you are\\nfat","sessions":4}';
+
+  it('is invisible to the pre-parse scan and visible to a scan of the leaves', () => {
+    // The premises, asserted rather than asserted-about: if either stops being
+    // true, the tests below would pass for the wrong reason.
     expect(scanOutput(ESCAPED)).toEqual([]);
+    expect(scanOutput(NEWLINE)).toEqual([]);
+
+    // And the distinction that matters: the document is not enough for one of
+    // them, the leaves are enough for both.
     expect(scanOutput(JSON.stringify(JSON.parse(ESCAPED)))).not.toEqual([]);
+    expect(scanOutput(JSON.stringify(JSON.parse(NEWLINE)))).toEqual([]);
+    expect(scanValue(JSON.parse(ESCAPED))).not.toEqual([]);
+    expect(scanValue(JSON.parse(NEWLINE))).not.toEqual([]);
   });
 
   it('blocks it, tells the model what was wrong, and takes the clean retry', async () => {
@@ -840,6 +860,53 @@ describe('callLLM — an escaped completion', () => {
     const retry = JSON.parse(String(calls[1]!.body)) as { messages: { content: string }[] };
     expect(retry.messages.at(-1)!.content).toContain('automated content check');
     expect(retry.messages.at(-1)!.content).toContain('protected_attribute');
+  });
+
+  it('blocks a phrase split by an escaped newline, which the first fix did not', async () => {
+    const { deps, rows } = makeDeps(async () => new Response(envelope(NEWLINE), { status: 200 }));
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(SafetyBlockedError);
+    expect(rows[0]!.status).toBe('safety_blocked');
+    expect(rows[0]!.error).toContain('demeaning');
+  });
+
+  it('lets an ordinary multi-field answer through — the false-positive direction', async () => {
+    // Scanning a structure rather than a string is how a guard starts failing
+    // calls for users who did nothing. Keys are not scanned, and each leaf is
+    // scanned on its own, so neither a field name nor a join separator can
+    // manufacture a match.
+    const { deps, rows } = makeDeps(
+      async () =>
+        new Response(
+          okBody({
+            summary: 'Upper/lower, four days, back off if the shoulder complains',
+            sessions: 4,
+          }),
+          { status: 200 }
+        )
+    );
+
+    const result = await callLLM(baseOptions, deps);
+    expect(result.attempts).toBe(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('ok');
+  });
+
+  it('does not pay for a retry when the blocked response was also truncated', async () => {
+    // The MEASURED rule in gateway.ts: a truncated response repeats, because
+    // nothing about the request changed — and a correction makes the request
+    // longer against an unchanged ceiling. The value is refused either way.
+    const truncated = JSON.stringify({
+      id: 'gen-escaped-cut',
+      model: 'google/gemini-2.5-flash-lite',
+      choices: [{ message: { content: ESCAPED }, finish_reason: 'length' }],
+      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20, cost: 0.000001 },
+    });
+    const { deps, rows } = makeDeps(async () => new Response(truncated, { status: 200 }));
+
+    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(SafetyBlockedError);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('safety_blocked');
   });
 
   it('fails the call rather than degrading when every attempt is escaped', async () => {

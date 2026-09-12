@@ -79,9 +79,18 @@ describe('CLAUDE.md #11 — untrusted text never reaches the instruction channel
     expect(gateway?.text).toContain('SAFETY_PREAMBLE');
   });
 
-  it('scans every completion before returning it', () => {
+  it('scans every completion before returning it, and scans what it returns', () => {
+    /*
+     * FOUND IN REVIEW: this asserted only `toContain('scanOutput')`, which
+     * passes with BOTH scans deleted — the word survives in the comments. It is
+     * still a substring grep, which is all this file can do, but it now names
+     * the two calls and the word that has to be next to them.
+     */
     const gateway = sourceFiles().find((f) => f.rel === 'src/llm/gateway.ts');
-    expect(gateway?.text).toContain('scanOutput');
+    expect(gateway?.text).toContain('scanOutput(content)');
+    // The parsed value's leaves — ADR 0005's 2026-09-12 amendment. A document
+    // scan is not enough; see `scanValue` and its tests for why.
+    expect(gateway?.text).toContain('scanValue(validation.value)');
   });
 });
 

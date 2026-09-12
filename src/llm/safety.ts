@@ -261,6 +261,63 @@ export function scanOutput(text: string): SafetyFinding[] {
   return findings;
 }
 
+/**
+ * Every string a parsed completion carries, each scanned on its own.
+ *
+ * ADR 0005's 2026-09-12 amendment, SECOND version — the first scanned
+ * `JSON.stringify(value)` and was wrong in a way worth keeping written down.
+ * `JSON.stringify` decodes `\u0067` into `g`, which is what that version was
+ * for, and then RE-ESCAPES every control character: a real newline comes back
+ * out as two ordinary characters, a backslash and an n. Every pattern above
+ * joins its words with `\s+`, and `scanOutput` replaces control characters
+ * with a space precisely so a line break cannot split a phrase — so
+ * `"you are\ngay"` survived a scan of the re-encoded document, at a cost of
+ * one character to whoever wrote it. FOUND IN REVIEW, and measured end to end
+ * through `callLLM` rather than argued.
+ *
+ * So the leaves, decoded, are what is scanned. This keeps the property the
+ * amendment argued for — no list of field names for a new field to be missing
+ * from — because the walk is structural: a field added to a schema tomorrow is
+ * scanned because it is a string, not because somebody remembered it.
+ *
+ * INVARIANT: each leaf is scanned SEPARATELY, never joined. Joining would let
+ *            the separator manufacture a match across two fields that neither
+ *            field contains — a false positive that fails a call for a user who
+ *            did nothing. The cost is that a phrase deliberately split across
+ *            two fields is not caught; on every stage here the prose is one
+ *            field and the rest are enums, so there is nothing to split across.
+ *
+ * Object KEYS are not scanned. They are text the schema chose rather than text
+ * a model wrote, and there is nothing for a completion to hide in them.
+ *
+ * AI-NOTE: this walks own enumerable properties, so a `Map` or a `Set` would be
+ *          walked as an empty object and its CONTENTS would go unscanned. No
+ *          output schema in this project can produce either — every leaf here
+ *          originates from `JSON.parse` — and a `z.map`/`z.set` added to one
+ *          would need this function widened in the same change.
+ */
+export function scanValue(value: unknown): SafetyFinding[] {
+  const findings: SafetyFinding[] = [];
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): void => {
+    if (typeof node === 'string') {
+      findings.push(...scanOutput(node));
+      return;
+    }
+    if (node === null || typeof node !== 'object') return;
+    // Zod hands back a tree, so this is insurance rather than a known case —
+    // and the alternative to insurance here is an unbounded walk in the gateway.
+    if (seen.has(node)) return;
+    seen.add(node);
+    // Arrays included: Object.values walks their elements.
+    for (const child of Object.values(node as Record<string, unknown>)) walk(child);
+  };
+
+  walk(value);
+  return findings;
+}
+
 /** The corrective message sent back on a retry, mirroring the schema-failure path. */
 export function safetyCorrection(findings: SafetyFinding[]): string {
   const codes = [...new Set(findings.map((f) => f.code))].join(', ');

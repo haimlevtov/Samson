@@ -275,10 +275,13 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
    transcript is client-supplied, so all of it is untrusted. ADR 0015 §2.
 3. **`scanOutput`** runs inside the gateway, as for every text stage — a speech
    call returns audio and is not scanned (ADR 0025). It runs **twice**: once on
-   the raw completion, and once on the re-encoded value after schema validation.
-   A completion is a JSON document, and one that spells a word as an escape
-   carries no word at all until it is parsed — ADR 0005's 2026-09-12 amendment.
-   The second scan is what covers the text this box actually renders.
+   the raw completion, and once — as `scanValue` — over each string in the
+   parsed value. A completion is a JSON document, and one that spells a word as
+   an escape carries no word at all until it is parsed; re-encoding the document
+   is not enough either, because that puts the control characters back. ADR
+   0005's 2026-09-12 amendment has the measurement and names what still gets
+   through: homoglyphs, and a phrase split across two fields. The second scan is
+   what covers the `reply` this box renders.
 4. **The route's own number guard.** `training` uses
    `findUnknownNumbers(allowed, reply)` where `allowed` is the facts' **typed
    numeric leaves** plus every numeral in the user's own turns. What this does
