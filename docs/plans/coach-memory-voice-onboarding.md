@@ -10,7 +10,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)                  |
 | 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12)               |
 | 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | shipped 09-12, [↓](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart-2026-09-12) |
-| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                            |
+| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | shipped 09-12, [↓](#pr-6--the-coach-tab-speaks-too-2026-09-12)                     |
 | 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                            |
 | 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12)      |
 | 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | shipped 09-12, [↓](#pr-9--date-of-birth-is-three-dropdowns-2026-09-12)             |
@@ -1140,3 +1140,61 @@ and refusing it on purpose. PR 8's outcome entry, which called the coach step
 **Two gaps left for a follow-up, and recorded rather than quietly dropped:**
 Settings still asks for the date with the native input, and its sex select has
 the same keep-the-value bug the welcome step just had.
+
+### PR 6 — the coach tab speaks too, 2026-09-12
+
+Shipped as [#67](https://github.com/haimlevtov/Samson/pull/67). The Coach tab's
+chat reads its answers aloud behind the same off-by-default switch the session
+card has, and the session card's speech path was extracted into shared modules
+rather than copied. Four reviewers; the findings that mattered are below.
+
+**Review found a button that spent money it promised not to.** "Work out my
+target" with a draft in the box sent a paid speech call. The fix made the
+action speak only when the form says `intent=ask` — and I did not put that
+on the Send button, so with the switch on every reply would have come back
+silent. Caught before the fix pass was pushed. Nothing would have: the unit
+suite tests `speakIfAsked` with the flag already set, and nothing under
+`app/` is in that suite.
+
+**The one that broke the tab was an upload, not a download.** `useActionState`
+passes the previous state to the action, and a server action serialises every
+argument into the POST body — so the last reply's clip rode along on the next
+submission. Next rejects an action body over 1 MB; after any spoken reply longer
+than about twenty seconds, every later Send, goal change and Clear failed with a
+413 before the action ran, until a reload. Measured after the fix: the next
+request body was 816 bytes.
+
+**The same PR regressed the surface it was extracted from.** The session card
+awaited speech inside its outer try, so a failed speech call returned an empty
+reply for a chat call already paid for. `speakIfAsked` always resolves now, on
+both surfaces.
+
+**Speech could outlive the route.** The Coach tab caps a function at 60 seconds
+and the gateway's default speech retry alone is 40.5. A slow chat plus one
+timed-out attempt killed the function mid-retry and replaced the page, losing
+the transcript. `speechWindow` gives one attempt sized to what is left, or none.
+
+### What review also found
+
+- **A paid call with no recency guard**, on the credential-free demo account. The
+  speech is guarded now; the chat on that tab was unguarded before this PR and
+  still is — recorded, not widened.
+- **A reply the app substituted for the coach's could be spoken** in the coach's
+  voice. It never is.
+- **The previous answer's voice status showed under the new answer for a frame**,
+  announced by a `role="status"` line. A layout effect now.
+- **`spokenLine` let six label and bracket spellings through** — `DIRECTORS' NOTES`,
+  a backtick for the apostrophe, three bracket pairs. Closed. **A homoglyph inside
+  the label still survives**, and the comment says so and what bounds it.
+- **Five comments claimed more than the code did**, including that the player
+  moved "verbatim" and that `performReply` was exercised by a test. Nothing
+  tests it directly, and the header now says that.
+
+**Not done, and this entry, ADR 0031 §5 and PR 8's outcome all said it would be:
+persisting the Coach tab's persona picker.** The picker still resets with the
+page. The chat speaks in the stored coach and its switch names that voice before
+it is turned on, so the mismatch is visible rather than silent.
+
+**Verified in a browser at 375px against hosted**, with three spoken replies —
+the minimum to see a clip play, a second submission succeed after it, and the
+switch state carry.
