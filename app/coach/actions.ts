@@ -6,6 +6,7 @@ import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { loadXpSummary } from '@/src/db/gamification';
 import { coachVoice, latestAcceptedPlan, listPersonas } from '@/src/db/personas';
+import { performReply, speakIfAsked } from '@/src/speech/perform';
 import { listWorkouts, loadHistory } from '@/src/db/training';
 import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
 import { speechScript } from '@/src/speech/script';
@@ -64,7 +65,13 @@ const RECENT_NOTES = 5;
  * row carried forward past a failure would appear under the user's question
  * rather than under an answer to it.
  */
-const ANSWERLESS = { row: null, supplementMiss: false } as const;
+const ANSWERLESS = {
+  row: null,
+  supplementMiss: false,
+  audio: null,
+  silent: null,
+  coach: null,
+} as const;
 
 /**
  * The only `error` strings a plan run may show the user.
@@ -169,6 +176,15 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
   if (formData.get('intent') === 'clear') return { ...EMPTY_COACH, goal };
 
   const message = String(formData.get('message') ?? '').trim();
+
+  /*
+   * The voice switch — ADR 0031 §3. Off unless the form says otherwise, because
+   * a spoken reply is SPEECH_ASSUMED_COST_USD against a $0.50 week, and the
+   * Coach tab is the chattier surface, so the arithmetic bites harder here.
+   * Exactly `'on'` and nothing else: a hand-written POST should not turn on a
+   * paid feature by sending something truthy.
+   */
+  const speak = formData.get('speak') === 'on';
 
   const today = localDateFor(user.timezone);
   const [history, xp] = await Promise.all([loadHistory(db), loadXpSummary(db, today)]);
@@ -280,6 +296,28 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       }
     }
 
+    /*
+     * THE ANSWER, SPOKEN — rework PR 6, ADR 0031 on its second surface.
+     *
+     * Only when the switch is on and there is PROSE to speak. The supplement
+     * route answers with a row rather than a sentence, and reading out the
+     * constant that names what happened would be speaking the app's words in a
+     * coach's voice.
+     *
+     * `performReply` is the same function the session card calls: it resolves
+     * the coach the user picked against the shared voiced rows, bounds the reply
+     * at `MAX_TRANSCRIPT_CHARS`, and sanitises it with `spokenLine` before it
+     * reaches the speech model's instruction channel. What it speaks is the
+     * REPLY this request generated — never the message, never anything the
+     * client sent (ADR 0025 §4).
+     */
+    const speech = await speakIfAsked(
+      { wanted: speak, reply: answer.text },
+      (reply) => performReply(db, { userId: user.id, reply, personaSlug: user.personaSlug }),
+      // The name and a bounded message, never the object — ADR 0028.
+      (cause) => console.error('coach reply not spoken', logLine(cause))
+    );
+
     return {
       turns: trim([...withUser, { role: 'coach', text: spoken }]),
       result,
@@ -289,6 +327,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       // `/evidence` link from this rather than by recognising the constant's
       // text, which a user could type themselves — see `coach-state.ts`.
       supplementMiss: answer.route === 'supplement' && answer.row === null,
+      ...speech,
       error: null,
     };
   } catch (cause) {

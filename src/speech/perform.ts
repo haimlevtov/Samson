@@ -24,9 +24,28 @@ import { openingCoach } from '../persona/choice';
 import { callSpeech, createGatewayDeps } from '../llm/gateway';
 import { createSupabaseLedger } from '../db/ledger';
 import { MAX_TRANSCRIPT_CHARS, speechScript, spokenLine } from './script';
+import type { VoiceRefusal } from './player';
+import { MissingApiKeyError } from '../llm/config';
+import { BudgetExceededError } from '../llm/types';
 
-/** Why a reply was shown rather than heard. The card has a sentence for each. */
-export type SilentReason = 'no-voice' | 'too-long' | 'failed';
+/**
+ * Why a reply arrived without audio. Each surface renders a sentence for every
+ * one but `not-asked`, which is not a failure and says nothing.
+ *
+ * Here because two surfaces return it — the session card and the Coach tab's
+ * chat — and `app/history/session-coach.ts` had it first. Moved rather than
+ * copied, and re-exported from there.
+ */
+export type SilentReason =
+  | VoiceRefusal
+  /** The user did not ask for audio. */
+  | 'not-asked'
+  /**
+   * The reply is longer than the speech stage's bound — ADR 0031 §4. The
+   * assumption behind `SPEECH_ASSUMED_COST_USD` is calibrated on that bound, so
+   * speaking past it would make the budget gate count the wrong thing.
+   */
+  | 'too-long';
 
 /** A clip, or the reason there is none, plus who would have said it. */
 export interface Performance {
@@ -37,7 +56,12 @@ export interface Performance {
    * compile error rather than a runtime surprise.
    */
   audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
-  silent: SilentReason | null;
+  /**
+   * Never `not-asked`, `no-key` or `budget` from here: the caller knows whether
+   * speech was asked for, and the two gateway refusals are thrown for the caller
+   * to word (ADR 0028).
+   */
+  silent: Exclude<SilentReason, 'not-asked' | 'no-key' | 'budget'> | null;
   /** The coach's name, for the card to attribute the voice. Null when unknown. */
   coach: string | null;
 }
@@ -125,4 +149,52 @@ export async function performReply(
     silent: null,
     coach: voiced.name,
   };
+}
+
+/** What a surface stores about the newest reply's voice. */
+export interface SpokenReply {
+  audio: Performance['audio'];
+  silent: SilentReason | null;
+  coach: string | null;
+}
+
+/**
+ * Speaks a reply when asked, and ALWAYS resolves — rework PR 6.
+ *
+ * INVARIANT: a failure to SPEAK never costs the user the WRITTEN answer. This
+ *            runs after the chat call has succeeded and the answer exists. If it
+ *            rejected, the action's outer catch would replace a reply the user
+ *            can read with an error they cannot act on — so every failure here
+ *            becomes a silent reason the card has a sentence for, and the reply
+ *            is kept.
+ *
+ * The two gateway refusals are the user's business and are named (ADR 0028):
+ * no key, and the week's budget spent — which on the chattier surface is the
+ * likeliest refusal there is. Everything else is `failed`, handed to `onFailure`
+ * so the caller can log a name and a bounded message rather than the object.
+ *
+ * WHY here rather than in the action: nothing under `app/` is in the unit suite,
+ * and this is the one decision on the Coach tab's voice path that has to be held
+ * by a test. `perform` is injected so the test does not need a database or a key.
+ */
+export async function speakIfAsked(
+  input: { wanted: boolean; reply: string | null },
+  perform: (reply: string) => Promise<Performance>,
+  onFailure: (cause: unknown) => void = () => {}
+): Promise<SpokenReply> {
+  if (!input.wanted) return { audio: null, silent: 'not-asked', coach: null };
+
+  // Nothing written to speak: the supplement route answers with a row, and
+  // reading out the constant naming what happened would put the app's words in
+  // a coach's voice.
+  if (input.reply === null) return { audio: null, silent: null, coach: null };
+
+  try {
+    return await perform(input.reply);
+  } catch (cause) {
+    if (cause instanceof MissingApiKeyError) return { audio: null, silent: 'no-key', coach: null };
+    if (cause instanceof BudgetExceededError) return { audio: null, silent: 'budget', coach: null };
+    onFailure(cause);
+    return { audio: null, silent: 'failed', coach: null };
+  }
 }

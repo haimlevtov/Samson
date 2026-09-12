@@ -31,6 +31,7 @@
 import type { ChatTurn } from '@/src/chat/schema';
 import type { EvidenceRow } from '@/src/db/evidence';
 import type { DietGoal, EnergyResult } from '@/src/diet/energy';
+import type { SilentReason } from '@/src/speech/perform';
 
 export interface CoachState {
   /** The visible conversation, oldest first. Bounded by MAX_TRANSCRIPT_TURNS. */
@@ -70,6 +71,22 @@ export interface CoachState {
    * route; it says so here.
    */
   supplementMiss: boolean;
+  /**
+   * The newest reply, spoken — rework PR 6, ADR 0031 on a second surface.
+   *
+   * For the NEWEST answer only, like `row`. A clip belongs to the turn that
+   * produced it, and one carried forward past the next submission would play
+   * again under a question it did not answer.
+   *
+   * The `Uint8Array` as the gateway returned it: React serialises one in an
+   * action's result unchanged, and converting it would inflate a long clip past
+   * the ~4.5 MB response ceiling — `src/speech/perform.ts` records the measure.
+   */
+  audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
+  /** Why the newest reply has no clip, or null when it has one or nobody asked. */
+  silent: SilentReason | null;
+  /** Whose voice the newest reply was spoken in, for the card to name. */
+  coach: string | null;
   error: string | null;
 }
 
@@ -79,5 +96,8 @@ export const EMPTY_COACH: CoachState = {
   goal: 'maintain',
   row: null,
   supplementMiss: false,
+  audio: null,
+  silent: null,
+  coach: null,
   error: null,
 };
