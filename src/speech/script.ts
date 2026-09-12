@@ -10,9 +10,16 @@
  *
  * INVARIANT: static first, dynamic last — the order CLAUDE.md #11 keeps for
  *            every stage. The preamble is a constant.
- * INVARIANT: known text only — ADR 0025 §4. Both halves come from a shared
- *            persona row (`coachVoice` in src/db/personas.ts); nothing here
- *            takes what the browser sent.
+ * INVARIANT: the DIRECTION is known text — ADR 0025 §4. It comes from a shared
+ *            persona row (`coachVoice` in src/db/personas.ts) and nothing a user
+ *            can write reaches it.
+ * INVARIANT: the TRANSCRIPT is no longer known text, as of ADR 0031. A coach's
+ *            sample line still comes from a shared row, but a mid-session reply
+ *            is model-written prose answering a question the user spoke — so
+ *            everything that reaches the transcript through that path goes
+ *            through `spokenLine` first. Calling `speechScript` with raw model
+ *            output is the bug the AI-NOTE below was written to prevent, and it
+ *            was made once already.
  *
  * AI-NOTE: this format belongs to the model in STAGE_MODELS.speech. A model
  *          with a separate instructions field would take the notes there, and
@@ -20,12 +27,12 @@
  *          changing this file and recasting every persona row.
  * AI-NOTE: square brackets in a transcript are audio tags to this model —
  *          "[whispers]" is performed, not said. Shipped lines have none
- *          (tests/db/personas.test.ts). The later PR that speaks model-written
- *          prose — a delivered plan, shaped by the user's own notes — makes the
- *          transcript untrusted (CLAUDE.md #11) and must strip the brackets AND
- *          this file's own label text (`### DIRECTOR'S NOTES`, `### TRANSCRIPT`)
- *          first, and stop logging upstream error bodies, which can echo the
- *          input back. Found in the security review of #49.
+ *          (tests/db/personas.test.ts). This note used to say that the later PR
+ *          speaking model-written prose "must strip the brackets AND this file's
+ *          own label text first" — found in the security review of #49. ADR 0031
+ *          is that PR, it shipped the first draft WITHOUT doing any of it, and a
+ *          review caught it. `spokenLine` below is the answer; use it for
+ *          anything that is not a shared row's own column.
  */
 
 /**
@@ -35,6 +42,18 @@
  * coach's `tts_voice` must be a key here, and no two may share one —
  * tests/db/personas.test.ts. The words are what the coaches were cast by.
  */
+import { MAX_UNTRUSTED_CHARS, sanitizeUntrusted, stripInvisible } from '../llm/safety';
+
+/**
+ * How many strip-and-collapse rounds `spokenLine` runs.
+ *
+ * Bounded rather than `while`: this runs on model output on a request path, and
+ * a loop whose exit depends on a regex reaching a fixed point is a loop worth
+ * capping. Three is one more than the deepest case found — a label split by a
+ * bracketed tag, which needs two.
+ */
+const MAX_STRIP_PASSES = 3;
+
 export const SPEECH_VOICES: Readonly<Record<string, string>> = {
   Zephyr: 'bright',
   Puck: 'upbeat',
@@ -97,6 +116,92 @@ export const MAX_DIRECTION_CHARS = 600;
  * voice and no direction is a voice nobody briefed — the gravelly one reading
  * the Physio's line. A voice that does not fit is worse than none (ADR 0025).
  */
+/**
+ * Makes model-written prose safe to hand to the speech model — ADR 0031 §2.
+ *
+ * FOUND IN REVIEW, and the note above had already asked for it. Until this
+ * existed, `askDuringSession` passed a chat completion straight to
+ * `speechScript`, and that completion answers a question the user spoke. The
+ * user does not choose the words — but they shape them, and "shaped by the
+ * browser" is what CLAUDE.md #11 is about. The chat model declining to comply is
+ * defence in depth, which ADR 0005 §3 says explicitly is not the control.
+ *
+ * Three things are removed, and each is a different attack:
+ *
+ * - **Square brackets.** Audio tags to this model: "[whispers]" is PERFORMED
+ *   rather than said. They are also a duration attack — "[long pause]" makes a
+ *   280-character line minutes long, and `SPEECH_ASSUMED_COST_USD` is calibrated
+ *   on thirty seconds and charged flat, so the budget would count the wrong
+ *   thing.
+ * - **This file's own labels, and any heading.** A second `### DIRECTOR'S NOTES`
+ *   block inside the transcript is a second set of instructions in the region
+ *   the preamble tells the model to perform from — the speech stage's version of
+ *   closing a fence early.
+ * - **Whatever `sanitizeUntrusted` removes**, which is the same treatment every
+ *   other untrusted string in this project gets.
+ *
+ * INVARIANT: this returns a line to SPEAK, never a line to show. The user reads
+ *            the model's reply as written; only what is performed is stripped.
+ *
+ * AI-NOTE: an empty result is a real outcome — a reply that was nothing but tags
+ *          sanitises to nothing — and the caller must treat it as "do not
+ *          speak", not pass it on. `speechScript` throws on an empty transcript,
+ *          which would turn a refusal into a 500.
+ */
+export function spokenLine(text: string): string {
+  /*
+   * ORDER IS THE WHOLE FIX, and the first version had it backwards — FOUND IN
+   * REVIEW, twice over. It stripped the labels and THEN collapsed whitespace and
+   * sanitised, so both of those later passes rebuilt what the matcher had just
+   * failed to see. All five of these reached the speech model verbatim:
+   *
+   *   "DIRECTOR'S\nNOTES"        the collapse rejoined the words
+   *   "DIRECTOR'S  NOTES"        the same, via a double space
+   *   "DIRECTOR'S\u00a0NOTES"     a non-breaking space
+   *   "DIRECTOR\u200bS NOTES"     stripInvisible rejoined it, AFTER the matcher
+   *   "DIRECTOR\u2019S NOTES"     a curly apostrophe, which models emit constantly
+   *
+   * So: normalise and strip invisibles FIRST, take the headings while the line
+   * breaks still exist, then strip and collapse together until nothing changes.
+   */
+  const normalised = stripInvisible(text.normalize('NFKC'))
+    // Line-anchored, so it has to happen before anything collapses newlines.
+    .replace(/^[ \t]*#{1,6}.*$/gmu, ' ');
+
+  let out = normalised;
+  for (let pass = 0; pass < MAX_STRIP_PASSES; pass++) {
+    const before = out;
+    out = out
+      // The whole bracketed SPAN: removing only the delimiters left the tag
+      // WORD to be read aloud. NFKC has already folded the fullwidth forms;
+      // the CJK pair is not NFKC-equivalent to anything, so it is named.
+      .replace(/[[【〔][^\]】〕]*[\]】〕]?/gu, ' ')
+      .replace(/[[\]【】〔〕]/gu, ' ')
+      .replace(/director[\u2019'\u02bc]?s\s+notes/giu, ' ')
+      // Anchored, unlike the first version, which deleted the word "transcript"
+      // out of ordinary prose — "the transcript is fine" became "the is fine".
+      // A guard that fires on normal language is one somebody switches off;
+      // src/llm/safety.ts argues that at length about its own patterns.
+      .replace(/\btranscript\s*:/giu, ' ')
+      .replace(/\bTRANSCRIPT\b/gu, ' ')
+      // Collapsing creates new adjacencies, which is why this loops rather than
+      // running once: "DIRECTOR'S [tag] NOTES" needs two passes.
+      .replace(/\s+/gu, ' ');
+    if (out === before) break;
+  }
+
+  /*
+   * Sanitised LAST and then length-checked, rather than capped at the bound:
+   * `sanitizeUntrusted`'s truncation marker is "… [truncated at N characters]",
+   * which puts square brackets back into a string this function exists to take
+   * them out of. Too long is therefore "do not speak", not "speak the first 280
+   * characters" — ADR 0031 §4 already refuses to truncate a reply to fit a
+   * budget, and doing it here would be the same trade made quietly.
+   */
+  const clean = sanitizeUntrusted(out.trim(), MAX_UNTRUSTED_CHARS);
+  return clean.length > MAX_TRANSCRIPT_CHARS ? '' : clean;
+}
+
 export function speechScript(direction: string, transcript: string): string {
   const notes = direction.trim();
   const line = transcript.trim();

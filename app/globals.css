@@ -2821,3 +2821,51 @@ details.quick-log[open] > summary {
      better than a select too narrow to read a coach's name in. */
   min-width: 11rem;
 }
+
+/* Ask the coach mid-session — ADR 0031.
+
+   Its own block rather than reusing .chat-log: that one is a scrolling
+   transcript and this is a single exchange, because the session card holds one
+   question at a time (the action replays no history). */
+.session-coach {
+  display: grid;
+  gap: 12px;
+}
+.speak-toggle {
+  align-items: flex-start;
+  gap: 10px;
+}
+.speak-toggle input {
+  /* The 44px target the rest of the app gets — mobile-interface.md §3. A
+     checkbox does not inherit it from the base button rule. */
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: 0;
+}
+.session-coach .grow {
+  flex: 1 1 12rem;
+}
+.block {
+  display: block;
+}
+/* Held: the button says it is listening, and looks it. Not a colour change on
+   its own — a state carried only by hue is a state somebody cannot see. */
+.session-coach button.holding {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.session-answer {
+  display: grid;
+  gap: 6px;
+}
+.session-answer .asked {
+  /* What was HEARD, quoted, so a mis-recognition is visible rather than
+     inferred from a strange answer — ADR 0031. */
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.session-answer p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

@@ -80,3 +80,59 @@ export async function startedPlanRunRecently(db: Db, seconds: number): Promise<b
 
   return (data ?? []).length > 0;
 }
+
+/**
+ * How long after a mid-session question before the next one — ADR 0031.
+ *
+ * Shorter than `PLAN_RUN_COOLDOWN_SECONDS` because the two protect different
+ * things: a plan run is a minute of work somebody pressed a button for, and this
+ * is a question asked between sets, where a wait longer than the rest itself
+ * makes the feature useless. Long enough that a scripted loop is not free.
+ */
+export const SESSION_COACH_COOLDOWN_SECONDS = 8;
+
+/**
+ * Whether this user spoke to the coach within the window.
+ *
+ * INVARIANT: RLS scopes the read to the caller — CLAUDE.md #10. `llm_calls` is
+ *            own-row, so this counts nobody else's questions.
+ *
+ * FOUND IN REVIEW of ADR 0031: that action is the most expensive in the app —
+ * up to six chat calls plus two speech attempts per press — and it shipped
+ * without the guard `startedPlanRunRecently` already gives its cheaper sibling.
+ * `disabled={pending}` is client state on one tab and stops nobody scripting a
+ * POST, and the budget gate reads spend before it allows, so concurrent presses
+ * all pass on one stale figure.
+ *
+ * Thrown rather than swallowed into `false`, for the same reason as the sibling:
+ * a read that failed says nothing about whether a call is in flight, and
+ * guessing "no" is the guess that spends.
+ *
+ * AI-NOTE: read-then-act, so two requests in the same instant still race — the
+ *          caveat `startedPlanRunRecently` carries and which an earlier draft of
+ *          this comment dropped while claiming a scripted loop is not free. It
+ *          raises the cost of a loop; what BOUNDS the damage is the per-user
+ *          weekly budget, and that gate has an unreserved gap of its own
+ *          (ADR 0025). Do not describe this as a rate limit.
+ *
+ * AI-NOTE: a `budget_denied` row is a `chat` row too — CLAUDE.md #3 — so once
+ *          the week is spent, the first press writes one and the next few
+ *          seconds of presses say "one question at a time" instead of the budget
+ *          sentence the card has a state for. Cosmetic, and it hides the only
+ *          actionable message; worth filtering on `status` if it ever annoys
+ *          somebody.
+ */
+export async function spokeToCoachRecently(db: Db, seconds: number): Promise<boolean> {
+  const since = new Date(Date.now() - seconds * 1000).toISOString();
+
+  const { data, error } = await db
+    .from('llm_calls')
+    .select('id')
+    .eq('stage', 'chat')
+    .gte('created_at', since)
+    .limit(1);
+
+  if (error) throw new Error(`llm_calls recency check failed: ${error.message}`);
+
+  return (data ?? []).length > 0;
+}

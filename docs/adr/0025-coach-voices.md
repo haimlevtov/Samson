@@ -179,12 +179,22 @@ and written here before their code.
 - **The speech stage is exempt from ADR 0005 §3 and §4.** `callSpeech` sends no
   `SAFETY_PREAMBLE`, because a speech model would read it aloud, and runs no
   `scanOutput`, because what comes back is audio rather than a completion. What
-  stands in for both is decision 4: only stored text from a shared row is
+  stands in for both was decision 4: only stored text from a shared row is
   spoken, and `tests/db/personas.test.ts` holds every shipped line to
-  `scanOutput`, to no numeral and to none of its coach's banned phrases. The
-  later PR that speaks a delivered plan changes that — its transcript is
-  model-written from the user's own notes, so untrusted (CLAUDE.md #11) — and
-  must strip audio tags and this script's own labels before speaking it.
+  `scanOutput`, to no numeral and to none of its coach's banned phrases.
+
+  **That stopped being the whole story on 2026-09-12.**
+  [ADR 0031](0031-talking-during-a-session.md) speaks a chat reply, which is
+  model-written prose answering a question the user spoke — untrusted, CLAUDE.md
+  #11. This paragraph predicted it ("the later PR that speaks a delivered plan
+  … must strip audio tags and this script's own labels"), the PR shipped its
+  first draft without doing any of it, and a review caught it. What stands in
+  for §3 and §4 now is decision 4 **for a shared row's own columns, and
+  `spokenLine` for everything else** — bracketed spans, headings and this
+  script's labels removed, then the sanitising every untrusted string gets.
+  Anything that reaches `speechScript` by a path other than `coachVoice` has to
+  go through it.
+
 - **One assertion throws before a call exists, and writes no `llm_calls` row**:
   an input over `SPEECH_MAX_INPUT_CHARS` (1,200; the column limits allow 1,104
   at the most, so nothing reaches it). It comes before the budget gate, so

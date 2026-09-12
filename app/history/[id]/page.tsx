@@ -8,6 +8,7 @@ import { pendingTargets, templateProgress } from '@/src/templates/progress';
 import { totalTonnage } from '@/src/metrics/tonnage';
 import { displayDate } from '@/src/ui/format';
 import { FinishForm } from './FinishForm';
+import { SessionCoach } from './SessionCoach';
 import { SessionConsole, type Candidate } from './SessionConsole';
 import { SessionTimer } from './SessionTimer';
 
@@ -118,6 +119,13 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
         candidates={candidates}
         editable={editable}
       />
+
+      {/*
+       * Ask the coach — ADR 0031. Only while the session is EDITABLE: a finished
+       * workout is a record being read, and "hold to talk" on a page about last
+       * Tuesday is a control with nothing to be mid-session about.
+       */}
+      {editable ? <SessionCoach /> : null}
 
       {editable ? (
         <>

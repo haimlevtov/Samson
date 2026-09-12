@@ -1,14 +1,29 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+import { z } from 'zod';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { activeWorkout, insertSet } from '@/src/db/training';
 import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
-import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
-import { logLine, userFacingError } from '@/src/llm/failure';
+import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
+import { loadXpSummary } from '@/src/db/gamification';
+import { loadHistory } from '@/src/db/training';
+import { loadEvidence } from '@/src/db/evidence';
+import { loadNotes, rememberNote } from '@/src/db/notes';
+import { coachVoice, listPersonas } from '@/src/db/personas';
+import { coachFacts } from '@/src/chat/facts';
+import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
+import { computeEnergy, dietFacts } from '@/src/diet/energy';
+import { speechScript, spokenLine, MAX_TRANSCRIPT_CHARS } from '@/src/speech/script';
+import { stripInvisible } from '@/src/llm/safety';
+import { spokeToCoachRecently, SESSION_COACH_COOLDOWN_SECONDS } from '@/src/db/plans';
+import { refusalFor } from '@/src/speech/refusal';
+import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
+import type { SessionAnswer } from './session-coach';
+import { isUserFacing, logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
 import { normalizedSetSchema } from '@/src/normalizer/schema';
 import { EMPTY_PARSE, type ParseState } from './parse-state';
@@ -256,4 +271,294 @@ export async function confirmParsedSets(formData: FormData): Promise<void> {
   }
 
   revalidatePath(`/history/${workoutId}`);
+}
+
+/**
+ * One question asked out loud during a session — [ADR 0031](../../docs/adr/0031-talking-during-a-session.md).
+ *
+ * INVARIANT: the server never speaks text the browser sent — ADR 0025 §4, and
+ *            it is what shapes this function. The browser sends a QUESTION; the
+ *            answer is generated here and passed to `callSpeech` without ever
+ *            leaving the server. There is no argument to this action that
+ *            becomes something the project's key says out loud.
+ *
+ * INVARIANT: the transcript is a message like any other — ADR 0031 §6. Same
+ *            stage, same fencing, same route guards, same memory rules. Speaking
+ *            it rather than typing it changes how it arrived and nothing else.
+ *
+ * Called directly rather than through a form, so every argument is parsed.
+ */
+export async function askDuringSession(
+  spoken: unknown,
+  wantsVoice: unknown
+): Promise<SessionAnswer> {
+  /*
+   * Trimmed BEFORE the length check — FOUND IN REVIEW. `min(1)` on an untrimmed
+   * string admits a whitespace-only POST, which buys a whole chat call for a
+   * question with nothing in it. `askTheCoach` trims and returns first.
+   */
+  const parsed = z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS))
+    .safeParse(spoken);
+
+  if (!parsed.success) {
+    return {
+      // Echoed even here — FOUND IN REVIEW. A transcript that failed the LENGTH
+      // check is a recogniser that ran away, which is precisely the state where
+      // the user most needs to see what was heard. ADR 0031 promises it.
+      // `stripInvisible` for the same reason the leaderboard's display-name
+      // clamp uses it: a bidi override in a pasted string scrambles the card for
+      // the person reading it. Their own text, so nothing else is at stake.
+      asked: typeof spoken === 'string' ? stripInvisible(spoken).slice(0, 120) : '',
+      reply: '',
+      audio: null,
+      silent: 'not-asked',
+      coach: null,
+      error: 'That did not come through as a question. Say it again.',
+    };
+  }
+
+  const asked = parsed.data;
+  const speak = wantsVoice === true;
+
+  try {
+    /*
+     * INSIDE the try, and the previous pass claimed to have done this and had
+     * not — FOUND IN RE-REVIEW, along with the false claim. `createServerDb`
+     * awaits `cookies()` and `currentUser` awaits an auth round trip plus a
+     * `users` select; either can reject, and a rejection escaping this action
+     * reaches the root error boundary, which replaces the whole live session
+     * screen — the set grid included — because a VOICE question failed.
+     *
+     * `redirect` still works from in here: it throws a control-flow signal that
+     * `unstable_rethrow` passes straight back out of the catch below.
+     */
+    const db = await createServerDb();
+    const user = await currentUser(db);
+    if (!user) redirect('/sign-in');
+
+    const today = localDateFor(user.timezone);
+
+    /*
+     * The cooldown `requestPlan` already has, for the reason its comment calls
+     * "the finding with money attached" — FOUND IN REVIEW, and this action needs
+     * it more. One press is up to six chat calls plus two speech attempts, the
+     * budget gate reads spend before it allows (the unreserved gap ADR 0025
+     * names), and this is the action ADR 0031 itself calls the first that can
+     * spend the whole key in one session. `disabled={pending}` is client state
+     * on one tab and stops nobody scripting a POST.
+     */
+    if (await spokeToCoachRecently(db, SESSION_COACH_COOLDOWN_SECONDS)) {
+      return {
+        asked,
+        reply: '',
+        audio: null,
+        silent: 'not-asked',
+        coach: null,
+        error: 'One question at a time — give the last one a moment.',
+      };
+    }
+
+    const [history, xp, evidence, notes, personas] = await Promise.all([
+      loadHistory(db),
+      loadXpSummary(db, today),
+      loadEvidence(db),
+      loadNotes(db),
+      listPersonas(db),
+    ]);
+
+    // INVARIANT: every figure the coach may quote is computed here, in code —
+    //            CLAUDE.md #1. Identical to the Coach tab's, because it is the
+    //            same stage answering the same kind of question.
+    const facts = coachFacts({
+      today,
+      workouts: history.workouts,
+      sets: history.sets,
+      exerciseNames: new Map([...history.exercises].map(([id, e]) => [id, e.name])),
+      lifetimeXp: xp.lifetime,
+    });
+
+    /*
+     * The diet goal is not asked for here: there is no selector on a session
+     * screen and inventing one would be inventing a preference. `maintain` is
+     * the same fallback `askTheCoach` falls to for an unrecognised value, and
+     * the figure is the app's either way — the model is never shown it.
+     */
+    const energy = computeEnergy({
+      today,
+      bodyweightKg: user.bodyweightKg,
+      heightCm: user.heightCm,
+      birthDate: user.birthDate,
+      sex: user.sex,
+      sessionsLast28Days: facts.sessions_last_28_days,
+      goal: 'maintain',
+    });
+
+    const answer = await askCoach(
+      user.id,
+      {
+        facts,
+        // No transcript: the session card holds one conversation on screen, and
+        // replaying it would mean trusting the client with history on a surface
+        // that has no Clear button to escape it. Each question stands alone.
+        history: [],
+        message: asked,
+        diet: energy.kind === 'ok' ? dietFacts(energy) : null,
+        evidence: evidence.rows,
+        notes: notes.map((note) => note.text),
+      },
+      { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
+    );
+
+    // ADR 0030, and the same rules as the Coach tab — nothing about this surface
+    // relaxes them. Its own try/catch for the same reason: a note is a side
+    // effect of an answer the user is waiting for.
+    if (answer.remember !== null) {
+      try {
+        await rememberNote(db, user.id, answer.remember);
+      } catch (cause) {
+        console.error('session note not stored', logLine(cause));
+      }
+    }
+
+    /*
+     * The supplement route has no home here — FOUND IN REVIEW. Its answer is the
+     * ROW (claim, grade, dose, citation), which the Coach tab renders beneath
+     * the constant and this card has nowhere to put. Returning
+     * `SUPPLEMENT_ANSWER_TURN` announced a table that would never appear, and
+     * with the toggle on the app paid two cents to SAY so.
+     *
+     * A code-owned sentence instead, pointing at the surface that can show it. A
+     * session screen is not where somebody reads a citation.
+     */
+    const reply =
+      answer.route === 'supplement' && answer.row !== null
+        ? 'The evidence table has an answer for that one — it is on the Coach tab.'
+        : (answer.text ?? SUPPLEMENT_ANSWER_TURN);
+
+    /*
+     * The first SHARED, VOICED persona alphabetically — ADR 0031 §5.
+     * `listPersonas` orders by name and `voiced` requires `user_id is null`.
+     *
+     * This comment used to end "so this is the coach the Coach tab opens with",
+     * which ADR 0031 §5 itself records as a claim a review falsified: that tab
+     * defaults to `personas[0]`, which includes a user's own rows and unvoiced
+     * ones. There is no stored persona choice anywhere to make the two agree.
+     */
+    const voiced = personas.find((p) => p.voiced) ?? null;
+
+    if (!speak) {
+      return { asked, reply, audio: null, silent: 'not-asked', coach: null, error: null };
+    }
+    if (voiced === null) {
+      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
+    }
+
+    /*
+     * INVARIANT: only a reply within the speech stage's own bound is spoken —
+     *            ADR 0031 §4. `SPEECH_ASSUMED_COST_USD` is calibrated on
+     *            `MAX_TRANSCRIPT_CHARS`, and the budget gate charges that flat
+     *            figure per unpriced speech row — so speaking something longer
+     *            would not cost more in the ledger while costing more in fact.
+     *
+     * Checked HERE rather than caught from `speechScript`'s RangeError: a
+     * refusal the card can explain is not an exception, and the user is told
+     * their answer was too long to read aloud rather than shown a failure.
+     */
+    if (reply.length > MAX_TRANSCRIPT_CHARS) {
+      return { asked, reply, audio: null, silent: 'too-long', coach: voiced.name, error: null };
+    }
+
+    /*
+     * INVARIANT: model-written prose is sanitised before it is performed —
+     *            CLAUDE.md #11, and `src/speech/script.ts`'s own AI-NOTE asked
+     *            for exactly this in exactly this PR. The first draft passed the
+     *            completion straight through, and a review caught it.
+     *
+     * The user does not choose these words, but they shape them, and the speech
+     * model's input IS an instruction channel: square brackets are performance
+     * tags and a second `### DIRECTOR'S NOTES` block is a second set of
+     * directions. "The chat model probably will not comply" is defence in depth,
+     * which ADR 0005 §3 says explicitly is not the control.
+     */
+    const line = spokenLine(reply);
+    if (line === '') {
+      // A reply that was nothing but tags sanitises to nothing. `speechScript`
+      // throws on an empty transcript, and a refusal must not become a 500.
+      return { asked, reply, audio: null, silent: 'failed', coach: voiced.name, error: null };
+    }
+
+    const coach = await coachVoice(db, voiced.slug);
+    if (!coach) {
+      return { asked, reply, audio: null, silent: 'no-voice', coach: null, error: null };
+    }
+
+    const clip = await callSpeech(
+      {
+        userId: user.id,
+        // The sanitised REPLY, which this function produced. Never `asked`.
+        input: speechScript(coach.direction, line),
+        voice: coach.voice,
+      },
+      createGatewayDeps(createSupabaseLedger(db))
+    );
+
+    return {
+      asked,
+      reply,
+      /*
+       * The `Uint8Array` as it is — FOUND IN REVIEW, and the first draft's
+       * comment claiming it does not survive the boundary was false.
+       * `src/speech/player.ts` records the opposite, measured: React serialises
+       * one in a server action's result unchanged, which is why `hearCoach`
+       * returns it raw. Converting it made a 1.4 MB clip a 1.4-million-element
+       * array and a decimal-text payload several times larger, against a ~4.5 MB
+       * response ceiling — so a long clip could be generated, charged, and then
+       * fail to cross.
+       */
+      audio: { bytes: clip.audio, contentType: clip.contentType },
+      silent: null,
+      coach: voiced.name,
+      error: null,
+    };
+  } catch (cause) {
+    /*
+     * Two errors are the user's business and the rest are not — ADR 0028. The
+     * budget one especially: it reports their OWN weekly spend, and on this
+     * surface it is the likeliest refusal there is.
+     */
+    // Control flow, not failure: `redirect` throws by design and must pass.
+    unstable_rethrow(cause);
+
+    /*
+     * REBUILT from the error's typed fields rather than read off `.message` —
+     * ADR 0028, and `userFacingError` exists because a previous review found the
+     * guarantee depending on nobody reassigning that property. The first draft
+     * hand-rolled the branch and read `.message`; this is the same decision made
+     * by the module that owns it.
+     */
+    const shown = userFacingError(cause, 'The coach could not answer that one.');
+    if (isUserFacing(cause)) {
+      return {
+        asked,
+        reply: '',
+        audio: null,
+        silent: refusalFor(cause),
+        coach: null,
+        error: shown,
+      };
+    }
+
+    console.error('session coach failed', logLine(cause));
+    return {
+      asked,
+      reply: '',
+      audio: null,
+      silent: 'failed',
+      coach: null,
+      error: shown,
+    };
+  }
 }
