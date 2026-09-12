@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { DIET_GOALS } from '@/src/diet/energy';
-import { BIRTH_MONTHS } from '@/src/onboarding/schema';
+import { BIRTH_DATE_FIELDS, BIRTH_MONTH_OPTIONS } from '@/src/onboarding/schema';
 import { canHear, whyShown } from '@/src/speech/player';
 import { CoachTryButton, SHOWN_TEXT, useCoachVoice } from '../coach/CoachTry';
 import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
@@ -93,13 +93,25 @@ export function BodyStep({ years, carried }: { years: number[]; carried: string 
    * dropped the sex and the date. That is the INVARIANT this file exists for —
    * `welcome-state.ts` states it, and the header says keeping values is the whole
    * reason these are client components. It had been true of the sex select since
-   * PR 8 and was about to be true of three more.
+   * PR 4 — which shipped it — and survived PR 8 reworking that very control. It
+   * was about to be true of three more.
    *
    * Keying on the echoed value remounts the select when — and only when — the
    * server sends a different one back, which is exactly when its default needs
    * re-reading.
    */
   const keyed = (name: string) => `${name}-${value(name)}`;
+
+  /*
+   * Every control is disabled while a submit is in flight — FOUND IN REVIEW, and
+   * the sibling `CoachStep` in this file already did it for the same reason.
+   *
+   * `FormData` is captured at submit, before the pending render, so disabling
+   * costs nothing. What it prevents: changing a select while "Saving…" is shown,
+   * then having the refusal echo the value you submitted and remount the control
+   * back to it. The later choice vanishes with nothing said — on the one step
+   * whose whole purpose is not losing answers.
+   */
 
   return (
     <>
@@ -115,11 +127,18 @@ export function BodyStep({ years, carried }: { years: number[]; carried: string 
             inputMode="decimal"
             name="bodyweightKg"
             defaultValue={value('bodyweightKg')}
+            disabled={pending}
           />
         </label>
         <label>
           <span className="label">Height (cm)</span>
-          <input type="text" inputMode="decimal" name="heightCm" defaultValue={value('heightCm')} />
+          <input
+            type="text"
+            inputMode="decimal"
+            name="heightCm"
+            defaultValue={value('heightCm')}
+            disabled={pending}
+          />
         </label>
         {/*
          * THREE SELECTS, not `<input type="date">` — the owner reported that the
@@ -139,7 +158,12 @@ export function BodyStep({ years, carried }: { years: number[]; carried: string 
           <legend className="label">Date of birth</legend>
           <label>
             <span className="sr-only">Day</span>
-            <select key={keyed('birthDay')} name="birthDay" defaultValue={value('birthDay')}>
+            <select
+              key={keyed('birthDay')}
+              name={BIRTH_DATE_FIELDS.day}
+              defaultValue={value('birthDay')}
+              disabled={pending}
+            >
               <option value="">Day</option>
               {DAYS.map((day) => (
                 <option key={day} value={day}>
@@ -150,20 +174,30 @@ export function BodyStep({ years, carried }: { years: number[]; carried: string 
           </label>
           <label>
             <span className="sr-only">Month</span>
-            <select key={keyed('birthMonth')} name="birthMonth" defaultValue={value('birthMonth')}>
+            <select
+              key={keyed('birthMonth')}
+              name={BIRTH_DATE_FIELDS.month}
+              defaultValue={value('birthMonth')}
+              disabled={pending}
+            >
               <option value="">Month</option>
-              {BIRTH_MONTHS.map((month, index) => (
-                // The VALUE is the number and the label is the name: "02" is
-                // what the ISO date needs and "February" is what a person picks.
-                <option key={month} value={String(index + 1)}>
-                  {month}
+              {BIRTH_MONTH_OPTIONS.map((month) => (
+                // Value and label from one record, never an array index — a
+                // reordered list must not become a wrong birth date.
+                <option key={month.value} value={month.value}>
+                  {month.label}
                 </option>
               ))}
             </select>
           </label>
           <label>
             <span className="sr-only">Year</span>
-            <select key={keyed('birthYear')} name="birthYear" defaultValue={value('birthYear')}>
+            <select
+              key={keyed('birthYear')}
+              name={BIRTH_DATE_FIELDS.year}
+              defaultValue={value('birthYear')}
+              disabled={pending}
+            >
               <option value="">Year</option>
               {years.map((year) => (
                 <option key={year} value={year}>
@@ -188,7 +222,13 @@ export function BodyStep({ years, carried }: { years: number[]; carried: string 
            * refuses a blank anyway — `isCompleteBody` — because a required
            * attribute is a convenience, never a control.
            */}
-          <select key={keyed('sex')} name="sex" defaultValue={value('sex')} required>
+          <select
+            key={keyed('sex')}
+            name="sex"
+            defaultValue={value('sex')}
+            required
+            disabled={pending}
+          >
             <option value="">Choose one</option>
             {WELCOME_SEXES.map((option) => (
               <option key={option} value={option}>

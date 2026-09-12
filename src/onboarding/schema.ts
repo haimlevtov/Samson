@@ -22,6 +22,7 @@ import {
   MAX_HEIGHT_CM,
   SEXES,
   birthDateField,
+  isRealDate,
   measurementField,
 } from '../diet/biometrics';
 
@@ -89,20 +90,43 @@ export interface BirthDateParts {
   year: string;
 }
 
-/** How the months are offered. The VALUE is the number; this is the label. */
-export const BIRTH_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+/**
+ * The names the three selects post under — spelled once, here, and read by the
+ * control and by `readBirthDateParts` alike. FOUND IN REVIEW: they were written
+ * out in both, so renaming one silently produced a blank date.
+ */
+export const BIRTH_DATE_FIELDS = {
+  day: 'birthDay',
+  month: 'birthMonth',
+  year: 'birthYear',
+} as const;
+
+/**
+ * How the months are offered, as value and label TOGETHER.
+ *
+ * FOUND IN REVIEW: this was a list of names, and the control derived each
+ * option's value from its array POSITION. Reordering the list — alphabetically,
+ * say — would have silently produced wrong birth dates, with nothing failing.
+ * The value is the contract with `composeBirthDate`; the label is incidental.
+ * `schema.test.ts` pins all twelve.
+ *
+ * It lives here rather than beside `SEX_LABEL` in `src/ui/` for that reason:
+ * the number is what the composer reads, and a label list without its values
+ * would re-open the position coupling.
+ */
+export const BIRTH_MONTH_OPTIONS = [
+  { value: '1', label: 'January' },
+  { value: '2', label: 'February' },
+  { value: '3', label: 'March' },
+  { value: '4', label: 'April' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'June' },
+  { value: '7', label: 'July' },
+  { value: '8', label: 'August' },
+  { value: '9', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
 ] as const;
 
 /** The earliest year the bounds admit — `EARLIEST_BIRTH_DATE` is 1900-01-01. */
@@ -114,9 +138,19 @@ export const EARLIEST_BIRTH_YEAR = Number(EARLIEST_BIRTH_DATE.slice(0, 4));
  * NEWEST FIRST because a birth year is nearly always recent-ish: ascending from
  * 1900 puts most people ninety options down a list.
  *
- * BOUNDED BY TODAY because `isFutureBirthDate` refuses a future date, and
- * `docs/specs/mobile-interface.md` — with Settings' own date input saying it in
- * as many words — is that a picker must not offer what the save will refuse.
+ * BOUNDED BY THE LOCAL YEAR, which is a weaker claim than Settings' input
+ * makes and is said that way deliberately. That one carries `max={maxBirthDate}`
+ * and is exact to the DAY; a list of years cannot be. So today's year is
+ * offered, and a date later this year composes, parses, and is then refused by
+ * `isFutureBirthDate` with its own sentence and every value echoed. That is a
+ * recoverable refusal rather than the dead end the spec's rule is about — but it
+ * IS a case where the picker offers something the save declines, and pretending
+ * otherwise is how a comment stops being true. FOUND IN REVIEW.
+ *
+ * The rule itself — a picker should not offer what the save refuses — is written
+ * at `app/settings/SettingsForm.tsx`'s date input. An earlier version of this
+ * comment attributed it to `docs/specs/mobile-interface.md`, which does not
+ * contain it.
  *
  * INVARIANT: `today` is the USER's local date, computed on the server — CLAUDE.md
  *            #9. A year built in the component would be the device's, and
@@ -133,8 +167,12 @@ export function birthYears(today: string): number[] {
 
 /** What three selects add up to. */
 export interface ComposedBirthDate {
-  /** The ISO date, or '' for "not answered" — which is what blank means here. */
-  iso: string;
+  /**
+   * The ISO date, '' for "not answered" — which is what blank means here — or
+   * `undefined` when the form sent no date fields at all, which only a
+   * hand-written request does.
+   */
+  iso: string | undefined;
   /** Some parts answered and not others, which is neither a date nor a blank. */
   partial: boolean;
 }
@@ -155,20 +193,51 @@ export interface ComposedBirthDate {
  * Pure, and in `src/` rather than the action, because nothing under `app/` is in
  * the unit suite — `vitest.config.ts` includes `src/**` and `tests/unit/**`.
  */
-export function composeBirthDate(parts: BirthDateParts): ComposedBirthDate {
-  const given = [parts.day, parts.month, parts.year].filter((part) => part.trim() !== '');
+export function composeBirthDate(parts: Partial<BirthDateParts>): ComposedBirthDate {
+  const all = [parts.day, parts.month, parts.year];
+
+  // NONE OF THE THREE SENT — a hand-written request, not a user. It composes to
+  // `undefined` so the schema names the field, exactly as it does for a missing
+  // bodyweight. A real form always posts all three, blank or not.
+  if (all.every((part) => part === undefined)) return { iso: undefined, partial: false };
+
+  const given = all.filter((part) => (part ?? '').trim() !== '');
   if (given.length === 0) return { iso: '', partial: false };
   if (given.length < 3) return { iso: '', partial: true };
 
   // Zero-padded, because `isRealDate` requires the ISO shape and `ageOn` slices
   // fixed offsets out of the string — an unpadded date reads the wrong year.
-  const pad = (value: string) => value.trim().padStart(2, '0');
-  return { iso: `${parts.year.trim()}-${pad(parts.month)}-${pad(parts.day)}`, partial: false };
+  const pad = (value: string | undefined) => (value ?? '').trim().padStart(2, '0');
+  return {
+    iso: `${(parts.year ?? '').trim()}-${pad(parts.month)}-${pad(parts.day)}`,
+    partial: false,
+  };
 }
+
+/**
+ * Whether all three parts were chosen AND they name a date that exists.
+ *
+ * FOUND IN REVIEW, and it is a state the control this replaced could not reach:
+ * the browser's date widget clamps the day to the month, and a list of 1–31 does
+ * not. 31 February parses to a well-formed string and is then refused by
+ * `isRealDate` — with `INVALID_MESSAGE`, "that did not look right", under four
+ * controls of which three are fine. Nothing said which one to change, and
+ * pressing Continue again reproduced it exactly: a loop.
+ *
+ * So the caller asks this and says something the user can act on.
+ */
+export function namesARealDate(parts: Partial<BirthDateParts>): boolean {
+  const { iso, partial } = composeBirthDate(parts);
+  if (partial || iso === undefined || iso === '') return true;
+  return isRealDate(iso);
+}
+
+/** What an impossible date is told — ADR 0028, and it names the control. */
+export const IMPOSSIBLE_DATE_MESSAGE = 'That day does not exist in that month. Check the day.';
 
 /** What a partial date is told, in the app's own words — ADR 0028. */
 export const PARTIAL_BIRTH_DATE_MESSAGE =
-  'Choose a day, a month and a year — or leave all three and skip this step.';
+  'Choose a day, a month and a year — or clear all three and skip this step.';
 
 /** What a partial answer is told, in the app's own words — ADR 0028. */
 export const INCOMPLETE_BODY_MESSAGE =
@@ -201,11 +270,25 @@ export function readBodyForm(formData: FormData): Record<string, unknown> {
   };
 }
 
-/** The three fields the control posts, as strings. */
-export function readBirthDateParts(formData: FormData): BirthDateParts {
+/**
+ * The three fields the control posts.
+ *
+ * `undefined` for a part the form did not send AT ALL, which is the distinction
+ * `field` above exists to keep — and which this reader lost in its first
+ * version, FOUND IN REVIEW. It coalesced a missing field to `''`, so a
+ * hand-written POST omitting the date was indistinguishable from one clearing
+ * it, while omitting the bodyweight still failed the schema by name. Three of
+ * the four fields behaving one way and the fourth another is worse than either
+ * rule.
+ */
+export function readBirthDateParts(formData: FormData): Partial<BirthDateParts> {
+  const part = (name: string) => {
+    const value = formData.get(name);
+    return value === null ? undefined : String(value);
+  };
   return {
-    day: String(formData.get('birthDay') ?? ''),
-    month: String(formData.get('birthMonth') ?? ''),
-    year: String(formData.get('birthYear') ?? ''),
+    day: part(BIRTH_DATE_FIELDS.day),
+    month: part(BIRTH_DATE_FIELDS.month),
+    year: part(BIRTH_DATE_FIELDS.year),
   };
 }

@@ -10,11 +10,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  BIRTH_DATE_FIELDS,
+  BIRTH_MONTH_OPTIONS,
   EARLIEST_BIRTH_YEAR,
   birthYears,
   composeBirthDate,
   isCompleteBody,
+  namesARealDate,
   onboardingBodySchema,
+  readBirthDateParts,
   readBodyForm,
 } from './schema';
 
@@ -67,10 +71,27 @@ describe('absent is not blank', () => {
      * this", so a POST that simply leaves one out used to be indistinguishable
      * from one clearing it — and a request carrying only some fields **erased a
      * health profile** while reporting success. `undefined` must fail.
+     *
+     * FOR EVERY FIELD, not just the first — FOUND IN REVIEW of rework PR 9. This
+     * omitted only the bodyweight, so when the date became three selects and its
+     * reader started coalescing a missing field to `''`, omitting the date parsed
+     * as a deliberate clear and nothing went red. `settings-schema.test.ts` has
+     * always looped; this now does too.
      */
-    const { bodyweightKg: _omitted, ...rest } = COMPLETE;
-    const parsed = onboardingBodySchema.safeParse(readBodyForm(form(rest)));
-    expect(parsed.success).toBe(false);
+    const DATE = ['birthDay', 'birthMonth', 'birthYear'];
+    const fields = Object.keys(COMPLETE).filter((key) => !DATE.includes(key));
+
+    for (const omitted of fields) {
+      const rest = Object.fromEntries(Object.entries(COMPLETE).filter(([key]) => key !== omitted));
+      expect(onboardingBodySchema.safeParse(readBodyForm(form(rest))).success, omitted).toBe(false);
+    }
+
+    // The date is ONE answer posted as three fields, so it is absent when all
+    // three are — the only way a hand-written request can omit it.
+    const noDate = Object.fromEntries(
+      Object.entries(COMPLETE).filter(([key]) => !DATE.includes(key))
+    );
+    expect(onboardingBodySchema.safeParse(readBodyForm(form(noDate))).success, 'date').toBe(false);
   });
 
   it('accepts a blank field as a deliberate "no answer"', () => {
@@ -240,5 +261,67 @@ describe('birthYears', () => {
   it('is newest first, because a birth year is nearly always recent-ish', () => {
     const years = birthYears('2026-09-12');
     expect(years[0]).toBeGreaterThan(years[1]!);
+  });
+});
+
+describe('namesARealDate', () => {
+  const parts = (day: string, month: string, year: string) => ({ day, month, year });
+
+  it('refuses a day the month does not have', () => {
+    /*
+     * FOUND IN REVIEW. A list of 1–31 reaches states the browser's date widget
+     * could not — it clamps the day to the month. 31 February composed, then
+     * failed the schema as "that did not look right" under four controls of
+     * which three were fine, and pressing Continue again reproduced it exactly.
+     */
+    expect(namesARealDate(parts('31', '2', '1995'))).toBe(false);
+    expect(namesARealDate(parts('31', '9', '1995'))).toBe(false);
+    expect(namesARealDate(parts('29', '2', '1995'))).toBe(false);
+  });
+
+  it('accepts the leap day in a leap year', () => {
+    expect(namesARealDate(parts('29', '2', '2000'))).toBe(true);
+  });
+
+  it('has no opinion on partial or blank dates, which have their own sentences', () => {
+    expect(namesARealDate(parts('31', '2', ''))).toBe(true);
+    expect(namesARealDate(parts('', '', ''))).toBe(true);
+    expect(namesARealDate({})).toBe(true);
+  });
+});
+
+describe('BIRTH_MONTH_OPTIONS', () => {
+  it('pairs every month with the number the composer reads', () => {
+    /*
+     * FOUND IN REVIEW: the control derived each month's value from its position
+     * in a list of names, so reordering the list would have silently produced
+     * wrong birth dates. Value and label are one record now, and this pins them.
+     */
+    expect(BIRTH_MONTH_OPTIONS).toHaveLength(12);
+    BIRTH_MONTH_OPTIONS.forEach((month, index) => {
+      expect(month.value, month.label).toBe(String(index + 1));
+    });
+    expect(BIRTH_MONTH_OPTIONS[1]).toEqual({ value: '2', label: 'February' });
+    expect(BIRTH_MONTH_OPTIONS[11]).toEqual({ value: '12', label: 'December' });
+  });
+
+  it('round-trips through the composer', () => {
+    for (const month of BIRTH_MONTH_OPTIONS) {
+      const { iso } = composeBirthDate({ day: '1', month: month.value, year: '1995' });
+      expect(iso, month.label).toBe(`1995-${month.value.padStart(2, '0')}-01`);
+    }
+  });
+});
+
+describe('BIRTH_DATE_FIELDS', () => {
+  it('names the fields the reader actually reads', () => {
+    // Spelled once and used by both the control and the reader. A rename that
+    // reached one and not the other would post a blank date with nothing failing.
+    const posted = form({
+      [BIRTH_DATE_FIELDS.day]: '2',
+      [BIRTH_DATE_FIELDS.month]: '4',
+      [BIRTH_DATE_FIELDS.year]: '1995',
+    });
+    expect(composeBirthDate(readBirthDateParts(posted)).iso).toBe('1995-04-02');
   });
 });

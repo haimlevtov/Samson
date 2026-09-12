@@ -8,10 +8,12 @@ import { logLine } from '@/src/llm/failure';
 import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import {
+  IMPOSSIBLE_DATE_MESSAGE,
   INCOMPLETE_BODY_MESSAGE,
   PARTIAL_BIRTH_DATE_MESSAGE,
   composeBirthDate,
   isCompleteBody,
+  namesARealDate,
   onboardingBodySchema,
   readBirthDateParts,
   readBodyForm,
@@ -110,9 +112,11 @@ export async function saveBiometrics(
     heightCm: String(formData.get('heightCm') ?? ''),
     // The three selects echo back separately — rework PR 9. Echoing the composed
     // ISO date would put nothing back in the controls the user actually used.
-    birthDay: parts.day,
-    birthMonth: parts.month,
-    birthYear: parts.year,
+    // `?? ''` because a part the form did not send at all is `undefined`, and
+    // what goes back in a control is a string.
+    birthDay: parts.day ?? '',
+    birthMonth: parts.month ?? '',
+    birthYear: parts.year ?? '',
     sex: String(formData.get('sex') ?? ''),
   };
 
@@ -124,6 +128,22 @@ export async function saveBiometrics(
    */
   if (composeBirthDate(parts).partial) {
     return { error: PARTIAL_BIRTH_DATE_MESSAGE, values: typed };
+  }
+
+  /*
+   * 31 February, and the states the control this replaced could not reach: the
+   * browser's date widget clamps the day to the month, and a list of 1–31 does
+   * not. FOUND IN REVIEW.
+   *
+   * Its own sentence, naming the control. The schema refuses it too — `isRealDate`
+   * — but that refusal arrives as `INVALID_MESSAGE`, "that did not look right",
+   * under four controls of which three are fine and with the selects showing
+   * exactly what the user picked. Nothing said which one to change, and pressing
+   * Continue again reproduced it: a loop, which is the shape §4 exists to
+   * prevent. Two comments in this PR claimed the existing message covered it.
+   */
+  if (!namesARealDate(parts)) {
+    return { error: IMPOSSIBLE_DATE_MESSAGE, values: typed };
   }
 
   const parsed = onboardingBodySchema.safeParse(readBodyForm(formData));
