@@ -767,6 +767,7 @@ export type Database = {
           birth_date: string | null
           bodyweight_kg: number | null
           created_at: string
+          diet_goal: string | null
           display_name: string | null
           height_cm: number | null
           humor_max_level: string
@@ -783,6 +784,7 @@ export type Database = {
           birth_date?: string | null
           bodyweight_kg?: number | null
           created_at?: string
+          diet_goal?: string | null
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string
@@ -799,6 +801,7 @@ export type Database = {
           birth_date?: string | null
           bodyweight_kg?: number | null
           created_at?: string
+          diet_goal?: string | null
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string

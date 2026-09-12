@@ -27,6 +27,7 @@ import {
   type Archetype,
   type EquipmentOf,
   type GeneratedWorkout,
+  FRESH_ACCOUNT,
 } from '../src/seed/archetypes';
 import { createTemplate } from '../src/db/templates';
 import { assignFromPool, type PoolTemplate } from '../src/gamification/assignment';
@@ -840,6 +841,25 @@ async function main(): Promise<void> {
   }));
   if (pool.length === 0) {
     throw new Error('the challenge pool is empty — have the migrations been applied?');
+  }
+
+  /*
+   * The empty account — ADR 0032 §1. Created before the furnished five so that
+   * a failure here is loud rather than buried under five parallel successes.
+   *
+   * INVARIANT: an auth user and NOTHING else. No `users` row is written, which
+   *            is the whole fixture: it is what makes `/welcome` ask the first
+   *            question, and what proves the app renders for somebody the
+   *            profile table has never heard of.
+   */
+  console.log(`Seeding the empty account (${FRESH_ACCOUNT.email})`);
+  const fresh = await admin.auth.admin.createUser({
+    email: FRESH_ACCOUNT.email,
+    password: DEMO_PASSWORD,
+    email_confirm: true,
+  });
+  if (fresh.error || !fresh.data.user) {
+    throw new Error(`creating ${FRESH_ACCOUNT.email}: ${fresh.error?.message}`);
   }
 
   console.log('Seeding synthetic users, one session at a time');

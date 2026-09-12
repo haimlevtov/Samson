@@ -9,6 +9,8 @@ import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { acceptChallengeAction } from './actions';
+import { DEMO_ACCOUNT_EMAIL, RESET_KEEPS, RESET_TABLES } from '@/src/db/demo-reset';
+import { resetDemoAccount } from './reset-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +30,26 @@ export const dynamic = 'force-dynamic';
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
  */
-export default async function HubPage() {
+export default async function HubPage({
+  searchParams,
+}: {
+  // The reset redirects back with these — see app/hub/reset-actions.ts.
+  searchParams: Promise<{ reset?: string }>;
+}) {
   const db = await createServerDb();
   const user = await currentUser(db);
+  const { reset } = await searchParams;
+
+  /*
+   * A user with nothing goes to the welcome questions — ADR 0032 §2.
+   *
+   * Here rather than at `/` because sign-in lands on /hub directly, so the root
+   * redirect is not on the path a new user actually takes. The test is the
+   * DISPLAY NAME: it is the one answer onboarding insists on, so its absence is
+   * exactly "has not been through this".
+   */
   if (!user) redirect('/sign-in');
+  if (user.displayName === null || user.displayName.trim() === '') redirect('/welcome');
 
   const today = localDateFor(user.timezone);
   const [history, challenges, board] = await Promise.all([
@@ -282,6 +300,55 @@ export default async function HubPage() {
           </table>
         </div>
       )}
+      {/*
+       * The demo reset — ADR 0032 §4, and it is here because the owner asked
+       * for it on the main page: it exists to be pressed between demo runs, and
+       * a control you have to navigate to mid-demo is friction in exactly the
+       * moment it was added to remove.
+       *
+       * It renders for ONE account. That is a convenience gate rather than a
+       * control — the action checks the same thing, because a server action is
+       * an endpoint and rendering a button for one account stops nobody else
+       * POSTing to it. What makes it safe is RLS: the deletes are scoped to the
+       * caller, so the worst a bypass achieves is somebody emptying their own
+       * training.
+       *
+       * LAST on the page, deliberately. The first screen of the app is not where
+       * an irreversible control should meet a thumb first.
+       */}
+      {user.email === DEMO_ACCOUNT_EMAIL ? (
+        <>
+          <h2 className="section">Demo</h2>
+          <div className="card danger-card">
+            <p>
+              This is the empty demo account. Resetting returns it to the state a brand-new user
+              sees — the welcome questions, no history, no plan.
+            </p>
+            <p className="muted small">
+              It deletes your {RESET_TABLES.join(', ')}. It keeps {RESET_KEEPS.join(' and ')}.
+            </p>
+            {reset === 'unconfirmed' ? (
+              <p className="error" role="status">
+                Type RESET to confirm.
+              </p>
+            ) : null}
+            {reset === 'failed' ? (
+              <p className="error" role="status">
+                That did not go through. Nothing may have been removed — try again.
+              </p>
+            ) : null}
+            <form action={resetDemoAccount} className="row reset-form">
+              <label className="grow">
+                <span className="label">Type RESET to confirm</span>
+                <input type="text" name="confirm" autoComplete="off" placeholder="RESET" />
+              </label>
+              <button type="submit" className="secondary">
+                Reset this demo account
+              </button>
+            </form>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }
