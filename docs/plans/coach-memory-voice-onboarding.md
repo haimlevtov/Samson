@@ -3,12 +3,12 @@
 Four changes, four branches, in this order. `main` is green at `3409c59`, the
 rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 
-| PR  | What                                                                    | Branch                  | State   |
-| --- | ----------------------------------------------------------------------- | ----------------------- | ------- |
-| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)     | `coach-persona-menu`    | planned |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                       | `coach-memory`          | planned |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)       | `session-talk`          | planned |
-| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing) | `fresh-user-onboarding` | planned |
+| PR  | What                                                                    | Branch                  | State                                                              |
+| --- | ----------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
+| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)     | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                       | `coach-memory`          | planned                                                            |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)       | `session-talk`          | planned                                                            |
+| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing) | `fresh-user-onboarding` | planned                                                            |
 
 Ordered smallest-risk first, and PR 4 last because it is the one that consumes
 the other three: a brand-new user meets the persona menu, then the onboarding
@@ -284,3 +284,54 @@ mutation and by reading. All four PRs here are surfaces, PR 4 is nothing but
 surface, and the request for it asked for user experience and design in as many
 words. That cannot be discharged by a test suite, and this plan should not
 pretend otherwise: **someone has to open it on a phone.**
+
+---
+
+## Outcomes
+
+### PR 1 — the persona picker is a menu, 2026-09-12
+
+Shipped as [#58](https://github.com/haimlevtov/Samson/pull/58). Five chips and a
+`Hear {name}` button became a `Change persona` menu and a primary **Try**.
+
+The two claims this PR rested on both held, and both were checked rather than
+assumed: `--accent` is already the purple the request asked for and the base
+`button` rule already uses it, so "purple" was a token change from `.secondary`
+and no hex was added; and the base `select` rule already carries
+`min-height: var(--tap)`, so the 44px rule in
+[mobile-interface.md](../specs/mobile-interface.md) §3 needed no new CSS. It also
+carries `font-size: 16px`, which is the iOS-zoom rule the same spec sets and
+which nobody thought about in advance.
+
+**What the two reviewers found, and it was eleven things.** Three are worth
+keeping here:
+
+- **The accessible name stopped changing.** An `aria-label` of
+  `Try {name}'s voice` is a constant, and `aria-busy` announces nothing on a
+  button in any of the three major screen readers — so a screen-reader user got
+  silence for the whole fetch, which [ADR 0025](../adr/0025-coach-voices.md)
+  measured live at about eight seconds. The visible word was also no longer
+  contained in the accessible name, which WCAG 2.5.3 asks for. The fix is
+  `.sr-only` content rather than a label: it tracks the state, so the press is
+  audible, and it contains what is drawn.
+- **A `disabled` that protected nothing.** The select was disabled during a plan
+  delivery. React serialises the form at submit, so a later choice cannot reach a
+  request already in flight; and the mismatch it looked like it prevented — a
+  delivered plan rendered under a coach who did not deliver it — is free again
+  the instant the delivery lands. It also contradicted the button's own reason
+  for staying live, six lines below it. That mismatch is real and older than this
+  PR, and is left as its own task.
+- **The plan's Files line named a spec that does not exist**, which is why two
+  docs that DID name the control were missed: §4's state table one row below the
+  row that was updated, and `.claude/skills/add-persona/SKILL.md`, which tells
+  the next persona author that `name` is "what the chip says". A wrong pointer in
+  a plan is worse than no pointer, because it is followed.
+
+**And a copy collision nobody planned for:** the failure sentence read "The voice
+did not come through. Try again in a moment." — directly under a button now
+labelled **Try**, where it stops being a reassurance and becomes an instruction
+to press the control that just failed. It is now "The voice did not come
+through." and nothing else.
+
+**Not opened in a browser.** The browser pass this plan's Verification section
+demands is still owed, and PR 1 does not discharge it.
