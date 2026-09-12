@@ -172,6 +172,42 @@ The Hub copy stays for the case after onboarding. Nothing about the authority
 changes: `reset_demo_account()` still takes no argument and still reads
 `raw_app_meta_data`.
 
+### And then it moved to the sign-in page — amended 2026-09-12, same day
+
+The owner saw the fix and asked for something simpler: **the reset goes on the
+sign-in page, next to that account, as one button with no explanation and no
+confirmation.** That supersedes §4's placement and the amendment above it; both
+are kept because the reasoning is what a reader needs, not the destination.
+
+It is better than either, and for a reason neither version could reach:
+
+- **No redirect can strand it.** Hub and `/welcome` are both behind a session,
+  so where the button lives depends on where the app has decided to send this
+  user. `/sign-in` is the one page with no such decision in front of it.
+- **The action signs in and resets in one press**, landing on `/welcome` — which
+  is the state the button exists to produce. Pressing it IS starting the demo.
+- **It needs no gate of its own.** The old card rendered on an email match; this
+  button is one row of a list of published fixtures.
+
+**The confirmation goes, and that is the owner's call taken with the cost
+named.** A typed RESET stood in front of an irreversible delete. What it guarded
+is one seeded demo account whose password is printed on the same page, so
+anybody who can press the button can already sign in and empty it by hand. The
+button adds no capability that page did not have; it removes the friction the
+owner asked twice to be rid of.
+
+**What does not change is the only thing that was ever the control.**
+`reset_demo_account()` is `security definer`, takes no argument, and refuses any
+caller whose `raw_app_meta_data` is not marked. A signed-in user cannot write
+that column. An unauthenticated POST to this action signs in as a published
+fixture and resets that fixture's own rows; it reaches nothing else.
+
+**`RESET_TABLES` and `RESET_KEEPS` are deleted with the card.** They existed so
+that what the user was SHOWN and what the function DID could be held together —
+review found them disagreeing twice. With nothing rendering them they were two
+dead arrays and an AI-NOTE describing a screen that no longer exists, which is a
+worse guard than none: it reads as maintained.
+
 ### A sixth question, and the column three things had been waiting for
 
 Onboarding asks which coach you want, and that needs `users.persona_slug`.
