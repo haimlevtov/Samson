@@ -274,7 +274,11 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
    with its own cap. The payload contains no `assistant` message — the
    transcript is client-supplied, so all of it is untrusted. ADR 0015 §2.
 3. **`scanOutput`** runs inside the gateway, as for every text stage — a speech
-   call returns audio and is not scanned (ADR 0025).
+   call returns audio and is not scanned (ADR 0025). It runs **twice**: once on
+   the raw completion, and once on the re-encoded value after schema validation.
+   A completion is a JSON document, and one that spells a word as an escape
+   carries no word at all until it is parsed — ADR 0005's 2026-09-12 amendment.
+   The second scan is what covers the text this box actually renders.
 4. **The route's own number guard.** `training` uses
    `findUnknownNumbers(allowed, reply)` where `allowed` is the facts' **typed
    numeric leaves** plus every numeral in the user's own turns. What this does
