@@ -29,15 +29,27 @@ planner that breaks every rule. The second run is the interesting one — it mus
 reject all thirty cases, and reject them by _arithmetic_, before the critic
 model is ever consulted.
 
-| What                                           | Command                                | Cost              |
-| ---------------------------------------------- | -------------------------------------- | ----------------- |
-| Everything that can be checked without a model | `npm run verify`                       | **free**          |
-| One real plan, end to end through both models  | `npm run demo:llm`                     | ~/usr/bin/bash.05 |
-| The full live golden set                       | `npm run eval:planner -- --live --all` | ~.50              |
+| What                                           | Command                                              | Cost                         |
+| ---------------------------------------------- | ---------------------------------------------------- | ---------------------------- |
+| Everything that can be checked without a model | `npm run verify`                                     | **free**                     |
+| One real plan, end to end through both models  | `npm run demo:llm`                                   | ~$0.05                       |
+| The full live golden set                       | `npm run eval:planner -- --live --all --max-spend 2` | never measured; ~$1 expected |
 
 `demo:llm` is the cheap proof that real models are involved: one case, one
-planner call, one critic call, a hard /usr/bin/bash.15 abort, and the cost printed at the
+planner call, one critic call, a hard $0.15 abort, and the cost printed at the
 end. It needs `OPENROUTER_API_KEY` in `.env.local`.
+
+**The golden-set figure is an estimate, and the row says so because nobody has
+run it.** `docs/plans/phase-2.md` records the acceptance rate across all thirty
+cases as "still unmeasured live", and puts the cost at roughly $3 — measured when
+`DEFAULT_CANDIDATE_LIMIT` was 120. It is 40 now, which `docs/adr/0007-grouped-sets.md`
+records as cutting the planner prompt from ~13,000 tokens to ~4,500, so the
+per-case cost fell with it. Hence ~$1, and hence an estimate rather than a
+number.
+
+`--max-spend 2` is in the command deliberately: the script aborts past **$0.75**
+by default, so the row as it stood documented a run that would have stopped
+partway through and reported a partial acceptance rate as if it were the real one.
 
 **Why the free path is the important one.** The deterministic floor — six rules
 in `src/planner/rules.ts` — is what makes the plans safe, and none of it needs
