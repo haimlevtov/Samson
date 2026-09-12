@@ -969,7 +969,8 @@ button.set-prev.copy:hover:not(:disabled) {
   min-width: 0;
 }
 
-.humor {
+.humor,
+.equipment-set {
   display: grid;
   gap: 2px;
   margin: 0;
@@ -977,7 +978,8 @@ button.set-prev.copy:hover:not(:disabled) {
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
 }
-.humor legend {
+.humor legend,
+.equipment-set legend {
   padding: 0 4px;
 }
 /* Three abreast: the choice is small and comparing them is the whole task. */
@@ -2731,34 +2733,33 @@ details.quick-log[open] > summary {
 /*
  * The equipment picker — ADR 0029.
  *
- * One column, not the two `.joint-set` uses: each row can grow a weight input
- * under it when ticked, and a two-column grid would make the page reflow
- * sideways every time somebody checked a box.
+ * The frame is `.humor`'s, shared rather than copied: FOUND IN REVIEW, this was
+ * a byte-for-byte duplicate of it, which made `.joint-set` and `.equipment-set`
+ * the second and third copies of one bordered fieldset. `.equipment-set` is
+ * added to that rule instead; only what differs lives here.
  *
- * The 44px target comes from `.settings-form label.check-row`'s own min-height,
- * which these labels carry — docs/specs/mobile-interface.md.
+ * Nothing differs, as it turns out — one column is what `.humor` already does,
+ * and the comment claiming otherwise was arguing with `.joint-set` for no
+ * reason.
  */
-.equipment-set {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  padding: 8px 12px 10px;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.equipment-set legend {
-  padding: 0 4px;
-}
 
-/* The weight input is indented under its checkbox so the pair reads as one
-   item rather than as a new question. */
-.equipment-load {
+/*
+ * Scoped to beat `.settings-form label { display: block }`, which is (0,1,1) and
+ * outranks a bare class — the same trap `.settings-form label.check-row` records
+ * above, dated 2026-09-07, and the same one this rule fell into. FOUND IN REVIEW:
+ * as `.equipment-load` alone the grid never applied, so the caption and its input
+ * sat on one line and `gap` did nothing.
+ *
+ * Indented under its checkbox so the pair reads as one item rather than a new
+ * question.
+ */
+.settings-form label.equipment-load {
   display: grid;
   gap: 2px;
   margin: 0 0 8px 34px;
 }
-.equipment-load input {
+.settings-form label.equipment-load input {
   /* Narrower than a full-width field: it holds at most four characters, and a
-     full-width number box reads as the most important control on the page. */
+     full-width box reads as the most important control on the page. */
   max-width: 9rem;
 }

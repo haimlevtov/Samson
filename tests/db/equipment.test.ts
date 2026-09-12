@@ -9,12 +9,9 @@
  *            user can do runs through a user-scoped client — as in rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  equipmentCatalogue,
-  ownedEquipment,
-  replaceEquipment,
-  type EquipmentTag,
-} from '../../src/db/equipment';
+import { equipmentCatalogue, replaceEquipment, type EquipmentTag } from '../../src/db/equipment';
+import { userEquipment } from '../../src/db/exercises';
+import { EQUIPMENT_TAGS } from '../../src/catalogue/equipment';
 import { adminClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 
 let user: TestUser;
@@ -41,11 +38,20 @@ const rowsOf = async (id: string) => {
 };
 
 describe('the shared catalogue', () => {
-  it('is readable by a signed-in user, and is not empty', () => {
-    // Read through the USER's client in beforeAll, so this is RLS being
-    // measured rather than the service role.
-    expect(tags.length).toBeGreaterThan(0);
-    expect(tags.every((t) => t.slug !== '' && t.name !== '')).toBe(true);
+  it('offers exactly the vocabulary the catalogue module defines', () => {
+    /*
+     * Read through the USER's client in beforeAll, so this is RLS being measured
+     * rather than the service role.
+     *
+     * Pinned against `src/catalogue/equipment.ts` rather than asserted as "more
+     * than zero" — FOUND IN REVIEW, where a comment claimed twelve rows and
+     * nothing checked it. That module is the vocabulary the seed writes and the
+     * planner's join depends on, so a row missing from the database or a slug
+     * added to one side only fails here.
+     */
+    expect(tags.map((row) => row.slug).sort()).toEqual(
+      EQUIPMENT_TAGS.map((tag) => tag.slug).sort()
+    );
   });
 
   it('leaves out a private tag even when the caller owns it', async () => {
@@ -111,15 +117,39 @@ describe('replaceEquipment', () => {
   });
 
   it('replaces rather than adds, so a deselected item is gone', async () => {
+    /*
+     * Seeds its own precondition — FOUND IN REVIEW. This asserted `toHaveLength(1)`
+     * after writing one item, which passes from an empty table too: it
+     * demonstrated replacement only because the previous case happened to leave
+     * two rows behind. A `-t` filter or a reorder made it green and vacuous.
+     */
+    await replaceEquipment(
+      user.client,
+      user.id,
+      [
+        { slug: 'barbell', maxLoadKg: null },
+        { slug: 'dumbbell', maxLoadKg: 30 },
+      ],
+      tags
+    );
+    expect(await rowsOf(user.id)).toHaveLength(2);
+
     await replaceEquipment(user.client, user.id, [{ slug: 'barbell', maxLoadKg: null }], tags);
 
     const rows = await rowsOf(user.id);
-    expect(rows).toHaveLength(1);
+    // The surviving row is the one that was kept, not merely "one row".
+    expect(rows.map((r) => r.equipment_tag_id)).toEqual([
+      tags.find((tag) => tag.slug === 'barbell')?.id,
+    ]);
   });
 
   it('accepts an empty selection and removes everything', async () => {
     // ADR 0029: having nothing is a real answer, and it is the state every
-    // non-seeded user is already in.
+    // non-seeded user is already in. Seeds its own precondition, so "removed"
+    // is measured rather than inherited.
+    await replaceEquipment(user.client, user.id, [{ slug: 'barbell', maxLoadKg: null }], tags);
+    expect(await rowsOf(user.id)).toHaveLength(1);
+
     await replaceEquipment(user.client, user.id, [], tags);
     expect(await rowsOf(user.id)).toHaveLength(0);
   });
@@ -128,7 +158,7 @@ describe('replaceEquipment', () => {
     await replaceEquipment(user.client, user.id, [{ slug: 'barbell', maxLoadKg: 100 }], tags);
     await replaceEquipment(other.client, other.id, [{ slug: 'dumbbell', maxLoadKg: 20 }], tags);
 
-    const mine = await ownedEquipment(user.client);
+    const mine = await userEquipment(user.client, user.id);
     expect(mine).toHaveLength(1);
     expect(mine[0]?.maxLoadKg).toBe(100);
   });
@@ -150,13 +180,66 @@ describe('replaceEquipment', () => {
   });
 
   it("cannot insert equipment onto another user's row", async () => {
-    const dumbbell = tags.find((t) => t.slug === 'kettlebell') ?? tags[0];
-    if (!dumbbell) throw new Error('empty catalogue');
+    const tag = tags.find((row) => row.slug === 'kettlebell');
+    if (!tag) throw new Error('the catalogue lacks kettlebell');
 
     const { error } = await user.client
       .from('user_equipment')
-      .insert({ user_id: other.id, equipment_tag_id: dumbbell.id, max_load_kg: null });
+      .insert({ user_id: other.id, equipment_tag_id: tag.id, max_load_kg: null });
 
     expect(error, "a user wrote another user's equipment").not.toBeNull();
+    /*
+     * The CODE, not merely "an error" — FOUND IN REVIEW. `not.toBeNull()` also
+     * passes for a primary-key conflict or a foreign-key failure, and with the
+     * old `?? tags[0]` fallback picking whichever row sorted first that was a
+     * live possibility. 42501 is insufficient_privilege, which is RLS refusing.
+     */
+    expect(error?.code, 'the insert failed for some reason other than RLS').toBe('42501');
+  });
+});
+
+describe('the column bound', () => {
+  it('refuses a ceiling above the bound even from a direct write', async () => {
+    /*
+     * Migration 20260912140000. The application refuses this in
+     * `src/settings/equipment.ts`; `user_equipment_own` lets an authenticated
+     * user POST their own rows directly, so the column has to refuse it too.
+     * Two gates are defence in depth only while they both exist.
+     */
+    const tag = tags.find((row) => row.slug === 'barbell');
+    if (!tag) throw new Error('the catalogue lacks barbell');
+
+    await replaceEquipment(user.client, user.id, [], tags);
+
+    const { error } = await user.client
+      .from('user_equipment')
+      .insert({ user_id: user.id, equipment_tag_id: tag.id, max_load_kg: 9999.99 });
+
+    expect(error, '9999.99 became a ceiling').not.toBeNull();
+    expect(error?.message).toContain('user_equipment_max_load_bounded');
+  });
+
+  it('refuses NaN, which a > 0 check admits', async () => {
+    // `'NaN'::numeric > 0` is TRUE — measured against this project and recorded
+    // in 20260908100100. The upper bound is what excludes it, because
+    // `NaN <= 1000` is false.
+    const tag = tags.find((row) => row.slug === 'barbell');
+    if (!tag) throw new Error('the catalogue lacks barbell');
+
+    const { error } = await user.client.from('user_equipment').insert({
+      user_id: user.id,
+      equipment_tag_id: tag.id,
+      max_load_kg: 'NaN' as unknown as number,
+    });
+
+    expect(error, 'NaN became a ceiling').not.toBeNull();
+    expect(error?.message).toContain('user_equipment_max_load_bounded');
+  });
+
+  it('still accepts a real ceiling, so the bound is not simply refusing everything', async () => {
+    await replaceEquipment(user.client, user.id, [{ slug: 'dumbbell', maxLoadKg: 30 }], tags);
+    const rows = await rowsOf(user.id);
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0]?.max_load_kg)).toBe(30);
   });
 });

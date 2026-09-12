@@ -5,12 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { readSettingsForm, settingsSchema } from '@/src/settings/schema';
-import {
-  MAX_LOAD_KG,
-  equipmentCatalogue,
-  equipmentSelection,
-  replaceEquipment,
-} from '@/src/db/equipment';
+import { equipmentCatalogue, replaceEquipment } from '@/src/db/equipment';
+import { equipmentSelection } from '@/src/settings/equipment';
 import { logLine } from '@/src/llm/failure';
 import type { SettingsFormState } from './form-state';
 
@@ -149,21 +145,42 @@ export async function saveEquipment(
 
     if (!parsed.success) {
       /*
-       * The only reachable failure is a ceiling outside its bound, because
-       * unknown slugs are dropped rather than rejected. So the message names
-       * the bound rather than the field — there is only one kind of field it
-       * could be about.
+       * The message comes from the schema, and it names WHICH item — FOUND IN
+       * REVIEW. The hand-written sentence here stated a bound the server did not
+       * enforce ("between 1 and 1000") and, with twelve possible ceiling fields,
+       * told the user nothing about which row to fix.
+       *
+       * `issue.path` is `[index, 'maxLoadKg']`, and the index is into the
+       * selection rather than into the catalogue — so the item is looked up
+       * rather than guessed. Same shape `updateSettings` uses thirty lines up.
        */
+      const issue = parsed.error.issues[0];
+      const at = typeof issue?.path[0] === 'number' ? issue.path[0] : -1;
+      const slug = at >= 0 ? formData.getAll('equipment')[at] : undefined;
+      const named = tags.find((t) => t.slug === slug)?.name;
+
       return {
-        error: `A heaviest weight has to be a number between 1 and ${MAX_LOAD_KG} kg, or blank.`,
+        error: named
+          ? `${named}: ${issue?.message ?? 'that is not a weight.'}`
+          : (issue?.message ?? 'Could not save that.'),
         saved: false,
       };
     }
 
     await replaceEquipment(db, user.id, parsed.data, tags);
   } catch (cause) {
-    // ADR 0028: a code-owned sentence and a bounded log line, never the object
-    // and never the database's own words.
+    /*
+     * ADR 0028: a code-owned sentence to the browser, and to the log a name plus
+     * a BOUNDED message — which for this path does include up to 200 characters
+     * of PostgREST's own words, because `replaceEquipment` wraps them. The ADR's
+     * log clause permits that; an earlier version of this comment claimed the
+     * opposite, which was the defect rather than the behaviour.
+     *
+     * AI-NOTE: never widen this to `error.details`. PostgREST puts the failing
+     *          ROW there — `Failing row contains (…)` — and for this table that
+     *          is the user's id. The 50-line-up AI-NOTE on the `users` write says
+     *          the same thing about the same field.
+     */
     console.error('equipment save failed', logLine(cause));
     return { error: 'Could not save that. Try again in a moment.', saved: false };
   }

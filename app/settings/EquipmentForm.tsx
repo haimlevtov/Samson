@@ -1,7 +1,8 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { MAX_LOAD_KG, type EquipmentTag, type OwnedEquipment } from '@/src/db/equipment';
+import type { EquipmentTag } from '@/src/db/equipment';
+import type { OwnedEquipment } from './equipment-props';
 import { saveEquipment } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -61,7 +62,9 @@ export function EquipmentForm({ tags, owned }: { tags: EquipmentTag[]; owned: Ow
           const existing = ownedById.get(tag.id);
 
           return (
-            <div key={tag.id} className="equipment-item">
+            // A plain div: it groups the checkbox with its optional weight and
+            // needs no rule of its own.
+            <div key={tag.id}>
               <label className="check-row">
                 <input
                   type="checkbox"
@@ -76,13 +79,21 @@ export function EquipmentForm({ tags, owned }: { tags: EquipmentTag[]; owned: Ow
 
               {isChecked ? (
                 <label className="equipment-load">
-                  <span className="muted small">Heaviest (kg, optional)</span>
+                  {/* Named per item: twelve inputs all called "Heaviest" give a
+                      screen reader no way to tell them apart. */}
+                  <span className="muted small">Heaviest {tag.name} (kg, optional)</span>
+                  {/*
+                   * `text`, not `number`, and the same choice the biometrics
+                   * inputs make. FOUND IN REVIEW: `<input type="number">`
+                   * sanitises anything it cannot parse to an EMPTY STRING, so
+                   * "30 kg" would have arrived as blank — and blank means no
+                   * ceiling, which is the cap silently coming off. Text lets the
+                   * raw value reach the server, where the grammar can refuse it
+                   * and say so.
+                   */}
                   <input
-                    type="number"
+                    type="text"
                     name={`max_load_${tag.slug}`}
-                    min={1}
-                    max={MAX_LOAD_KG}
-                    step="0.5"
                     inputMode="decimal"
                     defaultValue={existing?.maxLoadKg ?? ''}
                     placeholder="no limit"

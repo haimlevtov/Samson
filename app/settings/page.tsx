@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
-import { equipmentCatalogue, ownedEquipment } from '@/src/db/equipment';
+import { equipmentCatalogue } from '@/src/db/equipment';
+import { userEquipment } from '@/src/db/exercises';
 import { EquipmentForm } from './EquipmentForm';
 import { SettingsForm } from './SettingsForm';
 import { SignOutButton } from './SignOutButton';
@@ -49,7 +50,7 @@ export default async function SettingsPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const [tags, owned] = await Promise.all([equipmentCatalogue(db), ownedEquipment(db)]);
+  const [tags, owned] = await Promise.all([equipmentCatalogue(db), userEquipment(db, user.id)]);
 
   const zones = knownTimezones();
   // A stored zone this runtime does not list would otherwise vanish from the

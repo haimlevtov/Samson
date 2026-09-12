@@ -410,8 +410,8 @@ export function SessionConsole({
 
           {candidates.length === 0 ? (
             <p className="error small">
-              No equipment recorded, so nothing can be prescribed. Seeded users have equipment; a
-              new account needs rows in <code>user_equipment</code>.
+              No equipment recorded, so there is nothing to choose from. Tell it what you can train
+              with under <a href="/settings">Settings</a>.
             </p>
           ) : null}
 

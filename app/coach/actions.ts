@@ -494,8 +494,11 @@ export async function requestPlan(_previous: PlanState, formData: FormData): Pro
      * planner may only pick from that list — so a run against nothing cannot
      * produce a valid block, and sending it would buy a guaranteed rejection.
      *
-     * Nothing but `scripts/seed.ts` writes that table today, which is why this is
-     * a named state rather than a defensive branch.
+     * It was a named state rather than a defensive branch because nothing but
+     * `scripts/seed.ts` wrote that table. The picker (ADR 0029) changed that, and
+     * the state stays: a user can still have saved nothing, which is the honest
+     * answer to "I have no equipment" — the difference is that the card can now
+     * point them somewhere.
      */
     if (candidates.length === 0) {
       return { ...EMPTY_PLAN, outcome: 'no-equipment' };

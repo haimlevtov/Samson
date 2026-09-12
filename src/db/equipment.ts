@@ -1,17 +1,15 @@
 /**
  * The equipment a user says they have — ADR 0029.
  *
- * Two halves on purpose. `equipmentSelection` is pure and is where the rules
- * about what a selection may be live; the reader and the writer below are the
- * only things that touch Postgres.
+ * The queries only. What a submission may contain, and how it is read, is
+ * `src/settings/equipment.ts` — the module this project already uses for that.
  *
  * INVARIANT: RLS scopes every statement here to the caller — CLAUDE.md #10.
  *            `user_equipment_own` is `for all to authenticated` with
  *            `user_id = auth.uid()` on both `using` and `with check`, and the
  *            catalogue read is filtered to shared rows. No service role.
  */
-import { z } from 'zod';
-
+import type { EquipmentSelection } from '../settings/equipment';
 import type { Db } from './client';
 
 /** One row of the shared catalogue, as the picker renders it. */
@@ -21,93 +19,8 @@ export interface EquipmentTag {
   name: string;
 }
 
-/** What the user currently has, as the picker pre-fills it. */
-export interface OwnedEquipment {
-  tagId: string;
-  maxLoadKg: number | null;
-}
-
 /**
- * The heaviest ceiling the form accepts, in kilograms.
- *
- * WHY a bound at all: `max_load_kg` is `numeric` and PostgREST casts the JSON
- * string `"NaN"` into a numeric column on the way in, where `NaN > 0` is TRUE —
- * the trap `docs/specs/diet.md` §1 records for the biometrics. An upper bound
- * excludes NaN, because `NaN < 1000` is false, and bounds the magnitude at the
- * same time.
- *
- * WHY 1000 and not a type-shaped number: the heaviest plate-loaded machine in a
- * commercial gym is a few hundred kilograms. This is a human bound, like the
- * biometrics', rather than the column's.
- */
-export const MAX_LOAD_KG = 1000;
-
-/**
- * One selection, validated.
- *
- * INVARIANT: the slug is checked against the catalogue by the CALLER, which
- *            holds the rows. This schema bounds the shape and the number; it
- *            cannot know which tags exist.
- */
-export const equipmentSelectionSchema = z.array(
-  z.strictObject({
-    slug: z.string().min(1).max(64),
-    /**
-     * Null means no ceiling, which is the column's own meaning — ADR 0029 §1.
-     * Blank in the form becomes null here rather than 0, because a user who
-     * owns dumbbells and does not know their heaviest is not a user whose
-     * dumbbells stop at nothing.
-     */
-    maxLoadKg: z.number().positive().max(MAX_LOAD_KG).nullable(),
-  })
-);
-
-export type EquipmentSelection = z.infer<typeof equipmentSelectionSchema>;
-
-/**
- * Reads a selection out of form data, against the catalogue that produced it.
- *
- * The form sends one `equipment` value per checked box and a `max_load_<slug>`
- * field beside it. Unknown slugs are DROPPED rather than rejected: the only way
- * to send one is to craft the request, the catalogue is the authority on what
- * exists, and failing the whole save because of one ignored value would punish
- * the wrong person.
- *
- * A blank, whitespace-only or unparseable ceiling is null — no ceiling. A
- * ceiling outside the bound fails the parse, because a user who typed 99999 did
- * mean something by it and silently storing null would be the app deciding they
- * did not.
- */
-export function equipmentSelection(
-  form: { getAll(name: string): unknown[]; get(name: string): unknown },
-  tags: readonly EquipmentTag[]
-): z.ZodSafeParseResult<EquipmentSelection> {
-  const known = new Set(tags.map((t) => t.slug));
-
-  const chosen = form
-    .getAll('equipment')
-    .filter((v): v is string => typeof v === 'string' && known.has(v));
-
-  // A form can repeat a checkbox name; two copies of one slug would violate the
-  // (user_id, equipment_tag_id) primary key on insert.
-  const unique = [...new Set(chosen)];
-
-  return equipmentSelectionSchema.safeParse(
-    unique.map((slug) => {
-      const raw = form.get(`max_load_${slug}`);
-      const text = typeof raw === 'string' ? raw.trim() : '';
-      const parsed = text === '' ? null : Number(text);
-
-      return {
-        slug,
-        maxLoadKg: parsed === null || !Number.isFinite(parsed) ? null : parsed,
-      };
-    })
-  );
-}
-
-/**
- * The shared catalogue, twelve rows.
+ * The shared catalogue.
  *
  * INVARIANT: `user_id is null` — the shared rows only. A user may own private
  *            tags by RLS and nothing in the app creates them; offering one would
@@ -125,17 +38,18 @@ export async function equipmentCatalogue(db: Db): Promise<EquipmentTag[]> {
   return data ?? [];
 }
 
-/** What this user currently owns. RLS scopes it; no `user_id` filter is needed. */
-export async function ownedEquipment(db: Db): Promise<OwnedEquipment[]> {
-  const { data, error } = await db.from('user_equipment').select('equipment_tag_id, max_load_kg');
-
-  if (error) throw new Error(`reading user_equipment: ${error.message}`);
-
-  return (data ?? []).map((row) => ({
-    tagId: row.equipment_tag_id,
-    maxLoadKg: row.max_load_kg === null ? null : Number(row.max_load_kg),
-  }));
-}
+/*
+ * `ownedEquipment` was here and is gone. `userEquipment` in `./exercises.ts`
+ * already reads the same two columns of the same table, and the two disagreed
+ * about the column's runtime type — this one cast it with `Number()`, that one
+ * passes it through, and only one can be right.
+ *
+ * MEASURED against the hosted project: PostgREST returns `numeric` as a JSON
+ * NUMBER, which is what `src/db/types.ts` says too. So the cast was noise
+ * contradicting the generated type, and the pass-through was correct. One reader
+ * now, which is what `exercises.ts`'s own header asks for — "one definition of
+ * 'can this user do this'". FOUND IN REVIEW.
+ */
 
 /**
  * Replaces this user's equipment with the selection.
@@ -159,17 +73,30 @@ export async function replaceEquipment(
 ): Promise<void> {
   const idBySlug = new Map(tags.map((t) => [t.slug, t.id]));
 
+  /*
+   * EVERYTHING THAT CAN FAIL HAPPENS BEFORE THE DELETE — FOUND IN REVIEW.
+   *
+   * The id resolution used to sit after it behind a non-null assertion, so a
+   * caller whose selection and `tags` disagreed would delete the user's rows and
+   * then fail the insert, leaving them with nothing. That is unreachable from
+   * `saveEquipment` — one request, one `tags` array, and the selection is
+   * filtered against it — but the signature does not say so, and the tests call
+   * this function directly.
+   *
+   * Resolving first makes the pairing mechanical rather than a comment.
+   */
+  const rows = selection.map((item) => {
+    const tagId = idBySlug.get(item.slug);
+    if (tagId === undefined) {
+      throw new Error(`equipment selection names a tag that is not in the catalogue: ${item.slug}`);
+    }
+    return { user_id: userId, equipment_tag_id: tagId, max_load_kg: item.maxLoadKg };
+  });
+
   const { error: cleared } = await db.from('user_equipment').delete().eq('user_id', userId);
   if (cleared) throw new Error(`clearing user_equipment: ${cleared.message}`);
 
-  if (selection.length === 0) return;
-
-  const rows = selection.map((item) => ({
-    user_id: userId,
-    // Non-null: the caller filtered the selection against these same tags.
-    equipment_tag_id: idBySlug.get(item.slug)!,
-    max_load_kg: item.maxLoadKg,
-  }));
+  if (rows.length === 0) return;
 
   const { error: written } = await db.from('user_equipment').insert(rows);
   if (written) throw new Error(`writing user_equipment: ${written.message}`);

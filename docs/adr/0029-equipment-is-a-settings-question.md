@@ -7,10 +7,14 @@
 
 ## Context
 
-`public.user_equipment` has been written by exactly one thing since phase 0:
-`scripts/seed.ts`. There is no UI for it anywhere — confirmed by grep across
-`app/` and `src/`, and on the hosted project, where the only rows belong to the
-five seeded archetypes.
+**Nothing under `app/` or `src/` writes `public.user_equipment`.** `scripts/seed.ts`
+does, and so does one `tests/db/` fixture; no application code does. Confirmed by
+grep, and on the hosted project, where the only rows belong to the five seeded
+archetypes. There is no UI for it anywhere.
+
+_An earlier draft of this sentence said "written by exactly one thing since phase
+0", which the test fixture falsifies. The claim that matters is the one about
+application code._
 
 That is not a cosmetic gap. `availableExercises` returns an **empty list** for a
 user with no rows, and invariant #5 says the planner selects only from that
@@ -52,8 +56,25 @@ and protect nobody.
 **It is optional per item, not required.** Blank means null means no ceiling,
 which is the column's own semantics and the right default: most gear in most
 rooms has no meaningful cap, and a required field would make people invent one.
-The input appears only once an item is selected — seven number boxes nobody needs
-is how a form gets abandoned halfway.
+The input appears only once an item is selected — twelve number boxes nobody
+needs is how a form gets abandoned halfway.
+
+**But "optional" is not "anything goes", and the first implementation got that
+wrong.** It read an unparseable value as null — which means NO CEILING, so a
+mistyped cap silently removed the protection. `<input type="number">` makes that
+reachable without any crafted request: the browser sanitises a value it cannot
+parse to an **empty string**, so "30 kg" arrives as blank. Two fixes, both taken
+from what this repo already does for the biometrics:
+
+- The field is `type="text"` with `inputMode="decimal"`, so the raw value reaches
+  the server instead of being blanked by the browser.
+- The grammar is `measurementField` from `src/diet/biometrics.ts` — blank is
+  null, and anything else that is not a number to at most **two decimal places**
+  is a parse failure. Two places because the column is `numeric(6, 2)` and
+  PostgreSQL rounds to scale BEFORE the CHECK runs, so `0.001` would otherwise
+  be stored as `0.00` and violate `> 0` — after the delete below had already
+  run. `docs/specs/diet.md` §1: "two gates are defence in depth only while they
+  agree."
 
 ### 2. Delete first, then insert — and the order is a safety decision
 
@@ -72,25 +93,56 @@ So: delete first. A half-save leaves the user under-equipped and informed rather
 than over-equipped and unaware, which is the same direction every other safety
 default in this project points.
 
+**And everything that can fail happens before it.** The tag ids are resolved and
+the numbers validated first, so the only statement after the delete is one whose
+inputs are already known good. FOUND IN REVIEW: the id lookup used to sit after
+the delete behind a non-null assertion, which made "the caller filtered the
+selection against these same tags" a comment rather than a mechanism — and the
+tests call this function directly.
+
 ### 3. The catalogue is read, never written
 
-The picker offers the **shared** tags — `equipment_tags` where `user_id is null`,
-twelve of them. A user may own private tags by RLS (`equipment_tags_write`), and
+The picker offers the **shared** tags — `equipment_tags` where `user_id is null`.
+`src/catalogue/equipment.ts` is the vocabulary the seed writes and
+`tests/db/equipment.test.ts` pins the two against each other, so the count is
+asserted rather than recited in a comment. A user may own private tags by RLS (`equipment_tags_write`), and
 nothing in the app creates them; offering a "something else" text field would put
 a user-authored string into a catalogue the planner's candidate join reads, for a
 feature nobody asked for.
 
-### 4. No migration
+### 4. One migration, and the first draft of this section said none
 
-Verified rather than assumed, which is the whole reason this section exists:
+**The RLS half needs nothing**, and that was verified rather than assumed:
 
 | Policy                | Migration        | Why it is enough                                                                                                   |
 | --------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `equipment_tags_read` | `20260824150203` | `for select to authenticated using (user_id is null or user_id = auth.uid())` — the shared rows are readable       |
 | `user_equipment_own`  | `20260825071917` | `for all to authenticated`, `user_id = auth.uid()` on **both** `using` and `with check` — own rows, read and write |
 
-No schema change, no RLS change, no `src/db/types.ts` regeneration, and no Docker
-session.
+**The CHECK half does.** FOUND IN REVIEW: this section concluded "no migration"
+from the two policies, and had not looked at the column.
+`check (max_load_kg > 0)` does not exclude `NaN` — `'NaN'::numeric > 0` is TRUE,
+measured against this project and recorded in `20260908100100` — and it bounds no
+magnitude, so `numeric(6, 2)` admits **9,999.99**.
+
+The NaN direction fails closed by luck: `Math.min(NaN, 30)` is `NaN` and
+`heaviest <= NaN` is false, so `load_ceiling` raises a finding. 9,999.99 fails
+**open** — a real number that simply never binds, which is a ceiling quietly
+removed.
+
+`scripts/seed.ts` is the only thing that has ever written this column, and the
+picker starts writing it in the same PR, so this is the last moment the
+constraint can be tightened without a backfill — the identical argument
+`20260909120000` made for the four biometric columns. `20260912140000` adds
+`max_load_kg is null or (max_load_kg > 0 and max_load_kg <= 1000)`.
+
+Checked on hosted before writing it: 18 rows, one ceiling (30.00 — Yossi's
+dumbbells, the archetype the rule exists for), no NaN, nothing that would
+violate. Additive, so it goes to hosted before the merge —
+`docs/plans/` records that order.
+
+No table, no column, no RLS change, no `src/db/types.ts` regeneration (a CHECK
+moves no column), and no Docker session.
 
 ## Consequences
 
