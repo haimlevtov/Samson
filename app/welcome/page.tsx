@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createServerDb, currentUser } from '@/src/db/server';
+import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
 import { userEquipment } from '@/src/db/exercises';
 import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
@@ -11,6 +11,7 @@ import {
   progressFor,
   type OnboardingStep,
 } from '@/src/onboarding/steps';
+import { birthYears } from '@/src/onboarding/schema';
 import { EquipmentForm } from '../settings/EquipmentForm';
 import { PlanRequestForm } from '../coach/PlanRequestForm';
 import { finishOnboarding, skipStep } from './actions';
@@ -184,7 +185,12 @@ export default async function WelcomePage({
         <>
           <h2 className="section">A few numbers, so the coach can talk about food</h2>
           <div className="card">
-            <BodyStep carried={carried} />
+            {/* On the SERVER — CLAUDE.md #9. A year built in the component
+                would be the device's, and somebody whose phone is in another
+                timezone would get a list that disagrees with the action's own
+                future-date check. The reasoning Settings records for
+                `maxBirthDate`. */}
+            <BodyStep years={birthYears(localDateFor(user.timezone))} carried={carried} />
             <SkipButton step="body" carried={carried} />
           </div>
         </>

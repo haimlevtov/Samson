@@ -9,8 +9,11 @@ import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import {
   INCOMPLETE_BODY_MESSAGE,
+  PARTIAL_BIRTH_DATE_MESSAGE,
+  composeBirthDate,
   isCompleteBody,
   onboardingBodySchema,
+  readBirthDateParts,
   readBodyForm,
 } from '@/src/onboarding/schema';
 import { listPersonas } from '@/src/db/personas';
@@ -101,12 +104,27 @@ export async function saveBiometrics(
    * this rule earns its keep: one out-of-range height used to cost the user
    * their weight, height, date of birth and sex.
    */
+  const parts = readBirthDateParts(formData);
   const typed: Record<string, string> = {
     bodyweightKg: String(formData.get('bodyweightKg') ?? ''),
     heightCm: String(formData.get('heightCm') ?? ''),
-    birthDate: String(formData.get('birthDate') ?? ''),
+    // The three selects echo back separately — rework PR 9. Echoing the composed
+    // ISO date would put nothing back in the controls the user actually used.
+    birthDay: parts.day,
+    birthMonth: parts.month,
+    birthYear: parts.year,
     sex: String(formData.get('sex') ?? ''),
   };
+
+  /*
+   * A date that is two thirds answered, which a single input could not produce.
+   * Its own sentence rather than the four-or-none one: "fill in the rest" is
+   * true of the whole step, and this is about one control. Treating it as blank
+   * would silently discard two answers the user gave.
+   */
+  if (composeBirthDate(parts).partial) {
+    return { error: PARTIAL_BIRTH_DATE_MESSAGE, values: typed };
+  }
 
   const parsed = onboardingBodySchema.safeParse(readBodyForm(formData));
   if (!parsed.success) return { error: INVALID_MESSAGE, values: typed };

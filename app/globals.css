@@ -3086,3 +3086,26 @@ label.coach-choice {
 .coach-row > button {
   flex: none;
 }
+
+/* Day, month and year as three selects — rework PR 9, replacing the native date
+   input. They share a row and each takes what it needs: the month name is the
+   longest, the year is four digits, the day is two. `minmax(0, …)` so a long
+   month name cannot push the row past 375px. */
+.birth-date {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.birth-date legend {
+  padding: 0;
+}
+/* Scoped to beat `.settings-form label { display: block }` (0,1,1) — the trap
+   recorded three times in this sheet. `.welcome-form` has no such rule today,
+   and this control is the kind that gets reused onto that surface. */
+.welcome-form .birth-date label {
+  display: block;
+  min-width: 0;
+}

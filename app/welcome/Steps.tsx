@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { DIET_GOALS } from '@/src/diet/energy';
+import { BIRTH_MONTHS } from '@/src/onboarding/schema';
 import { canHear, whyShown } from '@/src/speech/player';
 import { CoachTryButton, SHOWN_TEXT, useCoachVoice } from '../coach/CoachTry';
 import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
@@ -24,6 +25,15 @@ import { EMPTY_WELCOME, type WelcomeState } from './welcome-state';
  * their own state (ADR 0029's picker, 8b's questionnaire), which is the point of
  * reusing them.
  */
+
+/**
+ * The days a month can have. Thirty-one always, because which months are short
+ * is `isRealDate`'s business — 31 February composes fine and is refused there,
+ * with a message that already exists. Narrowing this list per month would be a
+ * second definition of a real date, in a component, that leap years would then
+ * have to be taught about.
+ */
+const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 
 /** The sentence a refusal renders. Never an upstream message — ADR 0028. */
 function Problem({ state }: { state: WelcomeState }) {
@@ -65,9 +75,31 @@ export function NameStep({ carried }: { carried: string }) {
   );
 }
 
-export function BodyStep({ carried }: { carried: string }) {
+export function BodyStep({ years, carried }: { years: number[]; carried: string }) {
   const [state, action, pending] = useActionState(saveBiometrics, EMPTY_WELCOME);
   const value = (name: string) => state.values[name] ?? '';
+
+  /*
+   * FOUND IN THE BROWSER, and neither the unit suite nor any reviewer could have
+   * seen it: **`defaultValue` on a `<select>` is read once, at mount.**
+   *
+   * React 19 resets an uncontrolled form after a function action resolves, and
+   * for an `<input>` it also updates the `value` ATTRIBUTE on re-render — so the
+   * text fields above come back filled. A `<select>`'s default lives on the
+   * `selected` attribute of an option, which React does not rewrite after mount,
+   * so the reset restores it to "nothing chosen".
+   *
+   * The effect: a refused step kept the weight and the height and silently
+   * dropped the sex and the date. That is the INVARIANT this file exists for —
+   * `welcome-state.ts` states it, and the header says keeping values is the whole
+   * reason these are client components. It had been true of the sex select since
+   * PR 8 and was about to be true of three more.
+   *
+   * Keying on the echoed value remounts the select when — and only when — the
+   * server sends a different one back, which is exactly when its default needs
+   * re-reading.
+   */
+  const keyed = (name: string) => `${name}-${value(name)}`;
 
   return (
     <>
@@ -89,10 +121,58 @@ export function BodyStep({ carried }: { carried: string }) {
           <span className="label">Height (cm)</span>
           <input type="text" inputMode="decimal" name="heightCm" defaultValue={value('heightCm')} />
         </label>
-        <label>
-          <span className="label">Date of birth</span>
-          <input type="date" name="birthDate" defaultValue={value('birthDate')} />
-        </label>
+        {/*
+         * THREE SELECTS, not `<input type="date">` — the owner reported that the
+         * date input would not take a year ending in zero. That was not
+         * reproduced here and this does not pretend to explain it;
+         * `src/onboarding/schema.ts` records what WAS established. Three selects
+         * remove the browser's widget from the path, which is the fix whatever
+         * the cause, and it is the better control on a phone besides: a date
+         * input's segments are typed blind and its value stays empty until all
+         * three are filled.
+         *
+         * A `fieldset`, because three controls answering one question need one
+         * label between them — three `<label>`s would announce as three
+         * questions.
+         */}
+        <fieldset className="birth-date">
+          <legend className="label">Date of birth</legend>
+          <label>
+            <span className="sr-only">Day</span>
+            <select key={keyed('birthDay')} name="birthDay" defaultValue={value('birthDay')}>
+              <option value="">Day</option>
+              {DAYS.map((day) => (
+                <option key={day} value={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Month</span>
+            <select key={keyed('birthMonth')} name="birthMonth" defaultValue={value('birthMonth')}>
+              <option value="">Month</option>
+              {BIRTH_MONTHS.map((month, index) => (
+                // The VALUE is the number and the label is the name: "02" is
+                // what the ISO date needs and "February" is what a person picks.
+                <option key={month} value={String(index + 1)}>
+                  {month}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Year</span>
+            <select key={keyed('birthYear')} name="birthYear" defaultValue={value('birthYear')}>
+              <option value="">Year</option>
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
         <label>
           <span className="label">Sex</span>
           {/*
@@ -108,7 +188,7 @@ export function BodyStep({ carried }: { carried: string }) {
            * refuses a blank anyway — `isCompleteBody` — because a required
            * attribute is a convenience, never a control.
            */}
-          <select name="sex" defaultValue={value('sex')} required>
+          <select key={keyed('sex')} name="sex" defaultValue={value('sex')} required>
             <option value="">Choose one</option>
             {WELCOME_SEXES.map((option) => (
               <option key={option} value={option}>
