@@ -2828,6 +2828,14 @@ label.choice-row input {
 .persona-picker {
   align-items: flex-end;
 }
+/* Who the selected coach is, under the menu that names them — rework PR 5.
+   Full width rather than inside .persona-picker, because it belongs to the
+   selection rather than to the row that makes it, and two sentences beside a
+   select would wrap to one word a line at 375px. */
+.persona-bio {
+  margin: 8px 0 0;
+}
+
 .persona-choice {
   flex: 1 1 auto;
   /* Below this the menu and the button stop sharing a line and wrap, which is
@@ -3039,11 +3047,18 @@ label.coach-choice + label.coach-choice {
      lines a radio up with the first line of wrapped text is here. */
   margin-top: 4px;
 }
-/* Name over line, so the line reads as the coach talking rather than as a
-   caption on a control. */
+/* Name, then who they are, then what they sound like — so the line reads as
+   the coach talking rather than as a caption on a control. */
 .coach-choice > span {
   display: grid;
   gap: 2px;
+}
+/* The quoted line, set apart from the bio above it: one describes the coach and
+   the other is the coach. Italic rather than a second colour, because .muted is
+   already doing the colour work and two greys would read as a hierarchy that
+   is not there. */
+.coach-line {
+  font-style: italic;
 }
 
 /* The demo reset's card WAS HERE — `.danger-card`, `.reset-form` and its
@@ -3054,3 +3069,22 @@ label.coach-choice + label.coach-choice {
    `.secondary` button in a table cell. Deleted rather than left, because an
    unused selector in a hand-written sheet is a rule the next person has to
    prove nothing uses. */
+
+/* A coach and its Try button on one line — rework PR 5, the welcome step.
+   The button sits OUTSIDE the label (a button inside one activates the label's
+   control), so the row is what holds them together. */
+.coach-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.coach-row + .coach-row {
+  border-top: 1px solid var(--border);
+}
+.coach-row > label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.coach-row > button {
+  flex: none;
+}

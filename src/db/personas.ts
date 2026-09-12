@@ -31,6 +31,15 @@ export interface ListedPersona extends Persona {
   /** Null for a row with none — the column is nullable, migration 20260911130000. */
   sampleLine: string | null;
   /**
+   * Two sentences about the coach, in the third person — migration
+   * 20260912230000. Null for a row with none.
+   *
+   * NOT `systemPrompt`, which is written for a model and fenced into a message
+   * (ADR 0006). This is UI copy, and the separation is what keeps an edit to how
+   * a coach behaves from being an edit to what the picker says.
+   */
+  bio: string | null;
+  /**
    * Whether `coachVoice` would speak this coach: a shared row with a voice, a
    * direction and a line. The Voice card offers Try only when this is true —
    * a button that cannot speak is not shown (docs/specs/mobile-interface.md §4).
@@ -49,7 +58,7 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
   const { data, error } = await db
     .from('personas')
     .select(
-      'slug, name, system_prompt, intensity, humor_level, banned_phrases, sample_line, user_id, tts_voice, tts_instructions'
+      'slug, name, system_prompt, intensity, humor_level, banned_phrases, sample_line, bio, user_id, tts_voice, tts_instructions'
     )
     .eq('is_active', true)
     .order('name');
@@ -79,6 +88,7 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
     humorLevel: row.humor_level as HumorLevel,
     bannedPhrases: row.banned_phrases ?? [],
     sampleLine: row.sample_line,
+    bio: row.bio,
     voiced:
       row.user_id === null &&
       Boolean(row.tts_voice) &&

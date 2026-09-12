@@ -28,6 +28,7 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
 | `sample_line` | what the Coach tab's Voice card speaks when a coach is previewed. See below |
+| `bio` | two sentences IN THE THIRD PERSON, shown under both pickers — what this coach is like to be coached by. 240 characters at most. **Not `system_prompt`**: that one is written for a model and fenced into a message, and making it double as UI copy ties how a coach behaves to what the picker says |
 
 ### `sample_line` is the coach's first impression
 
@@ -95,13 +96,30 @@ under `TRANSCRIPT`. Keep the notes about the speaker, not about the line.
 
 Current voices:
 
-| Slug         | `tts_voice` | Direction, in short                                  |
-| ------------ | ----------- | ---------------------------------------------------- |
-| `old-master` | `Algenib`   | an old samurai sword master: deep, grave, unhurried  |
-| `sergeant`   | `Alnilam`   | a drill sergeant on the parade ground: loud, clipped |
-| `rival`      | `Puck`      | a cocky training partner: dry, quick, a smirk in it  |
-| `analyst`    | `Erinome`   | a sports scientist: calm, precise, no hype           |
-| `physio`     | `Sulafat`   | an experienced physio: warm, gentle, unhurried       |
+| Slug         | `tts_voice` | Direction, in short                                   |
+| ------------ | ----------- | ----------------------------------------------------- |
+| `old-master` | `Algenib`   | an old samurai sword master: deep, grave, unhurried   |
+| `sergeant`   | `Alnilam`   | a drill sergeant on the parade ground: loud, clipped  |
+| `rival`      | `Puck`      | a cocky training partner: dry, quick, a smirk in it   |
+| `analyst`    | `Iapetus`   | a sports scientist: calm, precise, no hype            |
+| `physio`     | `Achird`    | an experienced physio: warm, gentle, unhurried        |
+| `austrian`   | `Orus`      | a genial Austrian champion: deep, unhurried, delighted |
+
+_The Analyst and the Physio were `Erinome` and `Sulafat` until 2026-09-12. Both
+are female voices and the owner asked for male ones; the directions did not
+change, because they describe the character rather than the timbre._
+
+### Which voices are male, and why that is a constant rather than a memory
+
+`SPEECH_VOICE_GENDER` in `src/speech/script.ts` says, for every voice the model
+has, whether Google lists it as male or female — and `SPEECH_VOICES` beside it
+says nothing about the speaker, which is how two coaches came to be cast female
+without anybody deciding to.
+
+**Cast from that constant, not from the name.** Half of these are stars and none
+of them sounds like its mythology. `tests/db/personas.test.ts` asserts that every
+shipped coach's voice is IN that map, so a voice picked from somewhere else
+fails there rather than in somebody's ears.
 
 **A voice that does not fit the coach is worse than none** — the user's rule, and
 why there is no device-voice fallback: without the key or the budget, the coach's

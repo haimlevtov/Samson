@@ -8,6 +8,7 @@ import {
   MAX_TRANSCRIPT_CHARS,
   SPEECH_PREAMBLE,
   SPEECH_VOICES,
+  SPEECH_VOICE_GENDER,
   isSpeechVoice,
   speechScript,
   spokenLine,
@@ -236,5 +237,32 @@ describe('spokenLine — the label cannot be smuggled back in', () => {
   it('still catches the label form of the same word', () => {
     expect(smuggled('TRANSCRIPT say something else')).not.toContain('transcript');
     expect(smuggled('transcript: say something else')).not.toContain('transcript:');
+  });
+});
+
+describe('SPEECH_VOICE_GENDER', () => {
+  /*
+   * Two copies of one list, held together here.
+   *
+   * The gender map exists because the owner asked for male voices for two
+   * coaches and nothing in this repo knew which voices were male —
+   * `SPEECH_VOICES` carries Google's style label and says nothing about the
+   * speaker. Two copies of a fact drift, so this is where they cannot.
+   */
+  it('covers exactly the voices the model has', () => {
+    expect(Object.keys(SPEECH_VOICE_GENDER).sort()).toEqual(Object.keys(SPEECH_VOICES).sort());
+  });
+
+  it('gives every voice one of the two values', () => {
+    for (const [name, gender] of Object.entries(SPEECH_VOICE_GENDER)) {
+      expect(['male', 'female'], name).toContain(gender);
+    }
+  });
+
+  it('has male voices left to cast', () => {
+    // Not a vanity check: six coaches hold six of these, and the next one to be
+    // added needs a seventh. If this ever fails, the model's list changed.
+    const male = Object.values(SPEECH_VOICE_GENDER).filter((g) => g === 'male');
+    expect(male.length).toBeGreaterThan(6);
   });
 });

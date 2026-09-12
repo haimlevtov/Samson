@@ -46,6 +46,7 @@ export const SHIPPED_PERSONA_SLUGS = [
   'old-master',
   'sergeant',
   'physio',
+  'austrian',
 ] as const;
 
 /**

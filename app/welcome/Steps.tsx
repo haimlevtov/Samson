@@ -2,6 +2,8 @@
 
 import { useActionState } from 'react';
 import { DIET_GOALS } from '@/src/diet/energy';
+import { whyShown } from '@/src/speech/player';
+import { SHOWN_TEXT, useCoachVoice } from '../coach/coach-voice';
 import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
 import { saveBiometrics, saveCoach, saveGoal, saveName } from './actions';
 import { EMPTY_WELCOME, type WelcomeState } from './welcome-state';
@@ -137,6 +139,20 @@ export interface CoachChoice {
   name: string;
   /** The row's own line, spoken elsewhere and read here. Null for a row without one. */
   sampleLine: string | null;
+  /**
+   * Two sentences about the coach — `personas.bio`, rework PR 5.
+   *
+   * Shown here as well as on the Coach tab's menu, because this step asks the
+   * same question that menu asks and a sample line alone demonstrates a coach
+   * without describing one. Null for a row without a bio.
+   */
+  bio: string | null;
+  /**
+   * Whether `coachVoice` would speak this one — a shared row with a voice, a
+   * direction and a line. The Try button is offered only when it is true: a
+   * button that cannot speak is not shown (mobile-interface.md §4).
+   */
+  voiced: boolean;
 }
 
 /**
@@ -151,8 +167,26 @@ export interface CoachChoice {
  * trip. The action checks the slug against the persona rows regardless — a
  * required attribute is a convenience, never a control.
  */
-export function CoachStep({ coaches, carried }: { coaches: CoachChoice[]; carried: string }) {
+export function CoachStep({
+  coaches,
+  voiceAvailable,
+  carried,
+}: {
+  coaches: CoachChoice[];
+  /** Whether the server can speak at all — false with no key configured. */
+  voiceAvailable: boolean;
+  carried: string;
+}) {
   const [state, action, pending] = useActionState(saveCoach, EMPTY_WELCOME);
+
+  /*
+   * ONE player for the whole list, from the same hook the Coach tab uses. It
+   * keys everything by slug — `fetching`, `playing` and `shown` all name a
+   * coach — so six buttons share it, a second press joins the call already in
+   * flight rather than paying twice, and changing coach supersedes a press that
+   * has not landed.
+   */
+  const { voice, hear, stop } = useCoachVoice();
 
   return (
     <>
@@ -160,29 +194,80 @@ export function CoachStep({ coaches, carried }: { coaches: CoachChoice[]; carrie
       <form action={action} className="welcome-form">
         <fieldset className="coach-set">
           <legend className="label">Pick a coach</legend>
-          {coaches.map((coach) => (
-            <label key={coach.slug} className="choice-row coach-choice">
-              {/* Keeps the pick through a refusal — mobile-interface.md §4.
-                  React 19 resets an uncontrolled form once a function action
-                  resolves, so without this a transient save failure clears the
-                  choice and the five sample lines have to be read again. */}
-              <input
-                type="radio"
-                name="personaSlug"
-                value={coach.slug}
-                defaultChecked={state.values['personaSlug'] === coach.slug}
-                required
-                disabled={pending}
-              />
-              <span>
-                <strong>{coach.name}</strong>
-                {/* The row's own words. Rendered as text, never as markup. */}
-                {coach.sampleLine === null ? null : (
-                  <span className="muted small">{coach.sampleLine}</span>
-                )}
-              </span>
-            </label>
-          ))}
+          {coaches.map((coach) => {
+            const canHear = voiceAvailable && coach.voiced && (coach.sampleLine ?? '') !== '';
+            const why = whyShown(voice, coach, voiceAvailable);
+            const fetching = voice.fetching === coach.slug;
+
+            return (
+              /*
+               * A row, with the label around the radio and its text and the Try
+               * button OUTSIDE it. A button inside a label activates the label's
+               * control, so pressing Try would also pick that coach — a side
+               * effect nobody asked for, and a nested interactive element a
+               * screen reader has to guess at.
+               */
+              <div key={coach.slug} className="coach-row">
+                <label className="choice-row coach-choice">
+                  {/* Keeps the pick through a refusal — mobile-interface.md §4.
+                      React 19 resets an uncontrolled form once a function action
+                      resolves, so without this a transient save failure clears
+                      the choice and six bios have to be read again. */}
+                  <input
+                    type="radio"
+                    name="personaSlug"
+                    value={coach.slug}
+                    defaultChecked={state.values['personaSlug'] === coach.slug}
+                    required
+                    disabled={pending}
+                  />
+                  <span>
+                    <strong>{coach.name}</strong>
+                    {/* Both are the row's own words, rendered as text and never
+                        as markup. The bio says who they are; the line shows it. */}
+                    {coach.bio === null ? null : <span className="muted small">{coach.bio}</span>}
+                    {coach.sampleLine === null ? null : (
+                      <span className="muted small coach-line">“{coach.sampleLine}”</span>
+                    )}
+                    {why === null ? null : (
+                      // Every state renders something — mobile-interface.md §4.
+                      <span className="muted small" role="status">
+                        {SHOWN_TEXT[why]}
+                      </span>
+                    )}
+                  </span>
+                </label>
+
+                {canHear ? (
+                  voice.playing === coach.slug ? (
+                    <button type="button" className="secondary" onClick={stop}>
+                      Stop
+                    </button>
+                  ) : (
+                    /*
+                     * Stays enabled while fetching, like the Coach tab's:
+                     * disabling the focused button drops keyboard focus, and a
+                     * second press joins the call in flight rather than paying
+                     * twice. The name is in the content rather than an
+                     * `aria-label`, so the press is audible to a screen reader
+                     * and the visible word is contained in the accessible name
+                     * (WCAG 2.5.3) — six buttons reading "Try" would otherwise
+                     * be six identical names.
+                     */
+                    <button
+                      type="button"
+                      className="secondary"
+                      aria-busy={fetching}
+                      onClick={() => hear(coach.slug)}
+                    >
+                      {fetching ? 'Finding…' : 'Try'}
+                      <span className="sr-only"> {coach.name}’s voice</span>
+                    </button>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
         </fieldset>
         <input type="hidden" name="skipped" value={carried} />
         <button type="submit" disabled={pending}>

@@ -1,38 +1,12 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
-import { deliverForPersona, hearCoach } from './actions';
+import { useActionState, useState } from 'react';
+import { deliverForPersona } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
-import {
-  EMPTY_PLAYER,
-  createCoachPlayer,
-  whyShown,
-  type CoachPlayer,
-  type PlayerState,
-  type ShownReason,
-} from '@/src/speech/player';
+import { whyShown } from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
 import { openingCoach } from '@/src/persona/choice';
-
-/**
- * What the card says beside a coach's line when it is shown instead of heard —
- * every state renders something (docs/specs/mobile-interface.md §4).
- */
-const SHOWN_TEXT: Record<ShownReason, string> = {
-  'no-key': 'The coach voices are not set up here.',
-  budget: "This week's coaching budget is spent, so the coach cannot speak until it resets.",
-  'no-voice': 'This coach has no voice yet.',
-  /*
-   * "Try again in a moment" was here until the button became Try — FOUND IN
-   * REVIEW. Under a control with that word on it, the sentence stopped being a
-   * reassurance and became an instruction to press the thing that just failed.
-   * The button is right there and is still pressable, so the affordance did not
-   * need a sentence; ADR 0025's open item is that this wording is wrong for a
-   * provider REFUSAL, and saying less is the smaller claim.
-   */
-  failed: 'The voice did not come through.',
-  blocked: 'This browser held the sound back. Tap again to play.',
-};
+import { SHOWN_TEXT, useCoachVoice } from './coach-voice';
 
 /**
  * The plan and the voice, side by side.
@@ -93,25 +67,10 @@ export function CoachConsole({
       chosenSlug
     )
   );
-  const [voice, setVoice] = useState<PlayerState>(EMPTY_PLAYER);
-  const player = useRef<CoachPlayer | null>(null);
-
-  // One player per mount, made in the browser and disposed on unmount: it
-  // stops the audio, supersedes any press in flight and revokes every URL.
-  useEffect(() => {
-    const created = createCoachPlayer({
-      audio: new Audio(),
-      fetchClip: hearCoach,
-      toUrl: (audio, contentType) => URL.createObjectURL(new Blob([audio], { type: contentType })),
-      revoke: (url) => URL.revokeObjectURL(url),
-      onChange: setVoice,
-    });
-    player.current = created;
-    return () => {
-      created.dispose();
-      player.current = null;
-    };
-  }, []);
+  // One player per mount, disposed on unmount — `./coach-voice`, which the
+  // welcome flow's coach step shares. The markup below is not shared: this tab
+  // has one selected coach and one button, that step has six rows.
+  const { voice, hear, stop, select } = useCoachVoice();
 
   const chosen = personas.find((p) => p.slug === selected) ?? null;
   const line = chosen?.sampleLine?.trim() ?? '';
@@ -126,7 +85,7 @@ export function CoachConsole({
    * here existed for the chips, where pressing the lit one was a real event.
    */
   const choose = (slug: string) => {
-    player.current?.select();
+    select();
     setSelected(slug);
   };
 
@@ -191,15 +150,11 @@ export function CoachConsole({
            */}
           {chosen && canHear ? (
             voice.playing === chosen.slug ? (
-              <button type="button" className="secondary" onClick={() => player.current?.stop()}>
+              <button type="button" className="secondary" onClick={stop}>
                 Stop
               </button>
             ) : (
-              <button
-                type="button"
-                aria-busy={fetching}
-                onClick={() => void player.current?.hear(chosen.slug)}
-              >
+              <button type="button" aria-busy={fetching} onClick={() => hear(chosen.slug)}>
                 {fetching ? 'Finding…' : 'Try'}
                 {/*
                  * FOUND IN REVIEW, and this was an `aria-label` until it was.
@@ -219,6 +174,23 @@ export function CoachConsole({
             )
           ) : null}
         </div>
+
+        {chosen?.bio ? (
+          /*
+           * Who this coach is, under the menu that names them — rework PR 5.
+           *
+           * The menu gave a name and nothing else, which was survivable at
+           * three coaches and guesswork at six. It is a row (`personas.bio`),
+           * not copy per slug, and it changes with the selection from personas
+           * already loaded — no request per change, which is what PR 1 was
+           * careful about when it made this a menu.
+           *
+           * `aria-live` is deliberately absent: the select announces its own
+           * value on change, and a live region repeating the same choice as a
+           * paragraph would say everything twice.
+           */
+          <p className="muted small persona-bio">{chosen.bio}</p>
+        ) : null}
 
         {chosen && why !== null ? (
           // A coach with no line still says why it is silent — every state
