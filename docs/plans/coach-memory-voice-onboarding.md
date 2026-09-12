@@ -13,6 +13,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                       |
 | 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                       |
 | 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12) |
+| 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | planned                                                                       |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -551,6 +552,71 @@ On delete it sets null, which is the honest behaviour if a coach is ever retired
 **Files:** a migration and the `src/db/types.ts` regeneration it forces,
 `src/planner/request.ts`, `app/welcome/`, the equipment form, `app/hub/`,
 `src/db/server.ts`, tests.
+
+---
+
+## PR 9 — date of birth is three dropdowns
+
+**Branch `welcome-birth-date`.** The owner reported that the welcome flow's date
+of birth will not take a year ending in zero — 1990, 2000 — and asked for it to
+be split into dropdown menus.
+
+### What is known, and what is not
+
+**I could not reproduce the year behaviour, and this plan does not pretend to
+explain it.** What was checked:
+
+- `birthDateField()` accepts any real ISO date from `1900-01-01` on, so 1990 and
+  2000 pass validation. The refusal is not the app's.
+- The welcome step's control is a bare `<input type="date">` with **no `min` and
+  no `max`** (`app/welcome/Steps.tsx`), unlike the Settings one, which carries
+  both. So whatever is happening is inside the browser's own date widget.
+
+That is enough to act on without a diagnosis, because the fix the owner asked
+for removes the widget from the path entirely. A native date input is also the
+worst of the three controls on a phone: its segments are typed blind, its value
+stays empty until all three are filled, and nothing about that is visible.
+
+### Three selects, and a pure function to join them
+
+`birthDay`, `birthMonth` and `birthYear`, composed into the ISO date the schema
+already validates.
+
+- **The composition is a pure function in `src/onboarding/schema.ts`**, not in
+  the action. Nothing under `app/` is in the unit suite — `vitest.config.ts`
+  includes `src/**` and `tests/unit/**` — so a rule written there is one no test
+  can fail on. That argument is PR 8's, made twice and then broken once in the
+  same PR; this is the third time it applies.
+- **Partial answers are refused with their own sentence**, the way the four-or-
+  none biometrics guard is. Two of three selects answered is not a date, and
+  silently treating it as blank is the class of silent loop PR 8 closed.
+- **February the thirty-first is caught by `isRealDate`**, which the schema
+  already runs — so the impossible combination a three-select control makes
+  reachable is refused by a check that exists, with a message that exists.
+
+### The year list stops at this year, computed on the server
+
+`docs/specs/mobile-interface.md` and Settings' own comment both say a picker must
+not offer what the save will refuse: `isFutureBirthDate` rejects a future date,
+so the years run from `EARLIEST_BIRTH_DATE` to the user's current year and no
+further.
+
+**On the SERVER**, and passed in — the same reasoning Settings records for
+`maxBirthDate`: this is a client component, so a year built here would be the
+DEVICE's, and a user whose phone is in another timezone would get a picker that
+disagrees with the action's own check (CLAUDE.md #9).
+
+### Settings keeps its date input, for now
+
+It carries `min` and `max`, so it does not have the reported problem, and
+`readSettingsForm`'s AI-NOTE is explicit that a surface writing these fields must
+post the whole form rather than a subset — so changing it is a change to that
+reader too. Recorded as a deliberate asymmetry rather than an oversight: two
+surfaces asking one question two ways is the thing the sex control already had to
+argue, and if the owner wants one control everywhere, this is the follow-up.
+
+**Files:** `src/onboarding/schema.ts` + test, `app/welcome/Steps.tsx`,
+`app/welcome/actions.ts`, `app/welcome/page.tsx`, `app/globals.css`.
 
 ---
 
