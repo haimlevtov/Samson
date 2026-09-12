@@ -99,7 +99,7 @@ function harness(options: { toUrl?: () => string } = {}) {
     },
   });
 
-  /** Press Hear for a coach and let its fetch come back with `result`. */
+  /** Press Try for a coach and let its fetch come back with `result`. */
   const heard = async (slug: string, result: VoiceResult = OK) => {
     const pressed = player.hear(slug);
     calls.at(-1)!.answer.resolve(result);
@@ -240,7 +240,7 @@ describe('the coach player', () => {
   });
 
   it('joins the call in flight when the same coach is pressed twice', async () => {
-    // The Hear button stays enabled while it fetches, so this is the ordinary
+    // The Try button stays enabled while it fetches, so this is the ordinary
     // double tap. FOUND IN REVIEW: re-pressing paid twice and leaked a URL.
     const h = harness();
     const first = h.player.hear('sergeant');

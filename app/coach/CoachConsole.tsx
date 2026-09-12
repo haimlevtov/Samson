@@ -21,7 +21,15 @@ const SHOWN_TEXT: Record<ShownReason, string> = {
   'no-key': 'The coach voices are not set up here.',
   budget: "This week's coaching budget is spent, so the coach cannot speak until it resets.",
   'no-voice': 'This coach has no voice yet.',
-  failed: 'The voice did not come through. Try again in a moment.',
+  /*
+   * "Try again in a moment" was here until the button became Try — FOUND IN
+   * REVIEW. Under a control with that word on it, the sentence stopped being a
+   * reassurance and became an instruction to press the thing that just failed.
+   * The button is right there and is still pressable, so the affordance did not
+   * need a sentence; ADR 0025's open item is that this wording is wrong for a
+   * provider REFUSAL, and saying less is the smaller claim.
+   */
+  failed: 'The voice did not come through.',
   blocked: 'This browser held the sound back. Tap again to play.',
 };
 
@@ -84,9 +92,12 @@ export function CoachConsole({
     EMPTY_DELIVERY
   );
 
+  /*
+   * A native `<select>` fires `change` only when the value actually changes, so
+   * there is no same-slug case to short-circuit — the guard that used to sit
+   * here existed for the chips, where pressing the lit one was a real event.
+   */
   const choose = (slug: string) => {
-    // The lit chip changes nothing, so it supersedes nothing either.
-    if (slug === selected) return;
     player.current?.select();
     setSelected(slug);
   };
@@ -103,62 +114,91 @@ export function CoachConsole({
           picker and the delivery, which is what a voice is. */}
       <h2 className="section">Voice</h2>
       <div className="card">
-        <span className="label">Pick one</span>
-        <div className="row">
-          {personas.map((p) => (
-            <button
-              key={p.slug}
-              type="button"
-              className={`chip ${p.slug === selected ? 'chip-on' : ''}`}
-              onClick={() => choose(p.slug)}
-            >
-              {p.name}
-            </button>
-          ))}
+        {/*
+         * A menu, not five chips — this plan's PR 1. Five chips spent a whole
+         * line of a 375px screen on a choice made once, and every one of them
+         * was a 44px target competing with the control people actually press.
+         *
+         * A native `<select>` rather than a custom dropdown: keyboard and screen
+         * reader navigable for free, rendered as the platform's own picker on a
+         * phone, and `docs/specs/mobile-interface.md`'s 44px rule is already
+         * satisfied by the base `select` min-height rather than by new CSS.
+         */}
+        <div className="row persona-picker">
+          <label className="persona-choice">
+            <span className="label">Change persona</span>
+            {/*
+             * NOT disabled during a delivery, and it was on the first pass —
+             * FOUND IN REVIEW. React serialises the form at submit, so a later
+             * choice cannot reach a request already in flight; the hidden field
+             * below was never at risk. And it contradicted the button's own
+             * reason for staying live: disabling the focused control drops
+             * keyboard focus. The mismatch it looked like it prevented — a plan
+             * rendered under a coach who did not deliver it — is not prevented
+             * by it either, since the choice is free again the moment the
+             * delivery lands.
+             */}
+            <select value={selected} onChange={(event) => choose(event.target.value)}>
+              {personas.map((p) => (
+                <option key={p.slug} value={p.slug}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/*
+           * The preview — rework plan PRs 6 and 6b, and PR 1 here made it a
+           * PRIMARY button. Primary is already `--accent`, so this is a token
+           * change rather than a new colour: nothing in this project carries
+           * state in a hardcoded hex.
+           *
+           * "Try" rather than "Hear {name}": the name is in the menu beside it,
+           * and a label that rebuilt itself per selection made the button change
+           * width every time somebody changed their mind.
+           *
+           * WHY it stays enabled while fetching: disabling the focused button
+           * drops keyboard focus, and a second press is harmless — the player
+           * joins the call already in flight rather than paying twice.
+           */}
+          {chosen && canHear ? (
+            voice.playing === chosen.slug ? (
+              <button type="button" className="secondary" onClick={() => player.current?.stop()}>
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                aria-busy={fetching}
+                onClick={() => void player.current?.hear(chosen.slug)}
+              >
+                {fetching ? 'Finding…' : 'Try'}
+                {/*
+                 * FOUND IN REVIEW, and this was an `aria-label` until it was.
+                 * A constant label is a name that does not change when the
+                 * button is pressed, and `aria-busy` announces nothing on a
+                 * button — so a screen-reader user got silence for the whole
+                 * fetch, which ADR 0025 measured at about eight seconds. The
+                 * name is in the content instead: it changes with the state, so
+                 * the press is audible, and the visible word is contained in it,
+                 * which an overriding `aria-label` was not (WCAG 2.5.3).
+                 *
+                 * Clipped rather than shortened, because the button's width is
+                 * why the name left the label in the first place.
+                 */}
+                <span className="sr-only"> {chosen.name}’s voice</span>
+              </button>
+            )
+          ) : null}
         </div>
 
-        {/*
-         * The preview — rework plan PRs 6 and 6b. A Hear button only where a
-         * voice exists; otherwise, or after a refusal or a blocked play, the
-         * line as text with the reason.
-         *
-         * WHY the button stays enabled while fetching: disabling the focused
-         * button drops keyboard focus, and a second press is harmless — the
-         * player joins the call already in flight rather than paying twice.
-         */}
-        {chosen ? (
-          <>
-            {canHear ? (
-              <div className="row">
-                {voice.playing === chosen.slug ? (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => player.current?.stop()}
-                  >
-                    Stop
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="secondary"
-                    aria-busy={fetching}
-                    onClick={() => void player.current?.hear(chosen.slug)}
-                  >
-                    {fetching ? `Finding ${chosen.name}’s voice…` : `Hear ${chosen.name}`}
-                  </button>
-                )}
-              </div>
-            ) : null}
-            {why !== null ? (
-              // A coach with no line still says why it is silent — every
-              // state renders something, docs/specs/mobile-interface.md §4.
-              <p className="muted small" role="status">
-                {SHOWN_TEXT[why]}
-                {line !== '' ? ` ${chosen.name}: “${line}”` : null}
-              </p>
-            ) : null}
-          </>
+        {chosen && why !== null ? (
+          // A coach with no line still says why it is silent — every state
+          // renders something, docs/specs/mobile-interface.md §4.
+          <p className="muted small" role="status">
+            {SHOWN_TEXT[why]}
+            {line !== '' ? ` ${chosen.name}: “${line}”` : null}
+          </p>
         ) : null}
 
         <form action={formAction} className="coach-actions">

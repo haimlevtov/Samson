@@ -17,9 +17,10 @@
  *            coach is being fetched joins the call in flight. The next press
  *            pays again only after a clip fails to play or a fetch brings back
  *            none.
- * INVARIANT: a clip is played only for the press that is still current. A chip
- *            change, any newer press — a cached replay included — or disposal
- *            supersedes it, so one coach's voice never arrives over another's.
+ * INVARIANT: a clip is played only for the press that is still current. A
+ *            change of persona, any newer press — a cached replay included — or
+ *            disposal supersedes it, so one coach's voice never arrives over
+ *            another's.
  */
 
 /** Why a coach's line is shown instead of heard. */
@@ -108,7 +109,7 @@ export function createCoachPlayer(deps: PlayerDeps) {
   /** Fetches in flight, by slug — what a second press joins. */
   const pending = new Map<string, Promise<Loaded>>();
 
-  /** Bumped by every press, chip change and disposal. */
+  /** Bumped by every press, change of persona and disposal. */
   let press = 0;
   /**
    * Bumped by every play. The element is shared, so an event or a rejected

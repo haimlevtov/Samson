@@ -20,7 +20,7 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | Column | Notes |
 | --- | --- |
 | `slug` | stable, lowercase, never reused |
-| `name` | what the chip says — "The Rival" |
+| `name` | what the persona menu on Coach lists — "The Rival" |
 | `system_prompt` | a description of a **character**, see below |
 | `tts_voice` | the speech model's voice name, e.g. `Algenib`; 64 characters at most. **See §2** |
 | `tts_instructions` | how the character speaks, in words; 600 characters at most. **See §2** |

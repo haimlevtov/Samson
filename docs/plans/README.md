@@ -1,7 +1,7 @@
 # Plans — what each one is, and which to open
 
-Ten documents, written over sixteen days, in four different genres. This file
-is the way in.
+Eleven documents, written over nineteen days, in four different genres. This
+file is the way in.
 
 It exists because phase 5 alone is three files whose names do not say how they
 relate, and because `docs/plans/` had no index at all — you had to already know
@@ -17,12 +17,12 @@ committed alongside its implementation cannot show it came first. So these
 documents are not interchangeable, and merging them into one file would destroy
 the distinction each of them spends its opening paragraph establishing:
 
-| Genre                             | Written                                        | Documents                                                                   |
-| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md` |
-| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                 |
-| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                               |
-| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                |
+| Genre                             | Written                                        | Documents                                                                                                       |
+| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md`; `coach-memory-voice-onboarding.md` |
+| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                                                     |
+| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                                                                   |
+| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                                                    |
 
 **The second row is a finding rather than a category anyone chose**, and it came
 out of checking this table instead of writing it from the filenames. `phase-0.md`
@@ -41,18 +41,19 @@ backdating one would have been the actual offence.
 Status is against each document's **own** acceptance criteria, not against
 whether the feature exists.
 
-| Document                                                   | Genre                | Covers                                                   | Status                       |
-| ---------------------------------------------------------- | -------------------- | -------------------------------------------------------- | ---------------------------- |
-| [phase-0.md](phase-0.md)                                   | plan, with its code  | Foundations: schema, gateway, ledger, CI                 | shipped                      |
-| [phase-1.md](phase-1.md)                                   | plan, with its code  | Deterministic substrate — metrics, seeder                | shipped                      |
-| [phase-2.md](phase-2.md)                                   | plan, first          | Planner and critic                                       | shipped, two criteria unmet  |
-| [phase-3.md](phase-3.md)                                   | plan, first          | Normalizer and persona                                   | shipped, one criterion unmet |
-| [phase-4.md](phase-4.md)                                   | plan, first          | Gamification vertical slice                              | shipped                      |
-| [phase-5.md](phase-5.md)                                   | **record**           | What phase 5 actually became: interface and feature work | shipped                      |
-| [rework-profile-hub-coach.md](rework-profile-hub-coach.md) | plan, committed late | PRs #11–#17, the middle of phase 5                       | shipped                      |
-| [phase-5-content-fill.md](phase-5-content-fill.md)         | plan, first          | What phase 5 was briefed to build, done afterwards       | shipped                      |
-| [phase-6.md](phase-6.md)                                   | plan, first          | The diet advisor on the Coach tab; file import           | shipped, one criterion unmet |
-| [rework-hub-history-coach.md](rework-hub-history-coach.md) | plan, first          | Hub, graphs, demo data and the Coach — after the phases  | 12 of 12 shipped             |
+| Document                                                             | Genre                | Covers                                                          | Status                       |
+| -------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------- | ---------------------------- |
+| [phase-0.md](phase-0.md)                                             | plan, with its code  | Foundations: schema, gateway, ledger, CI                        | shipped                      |
+| [phase-1.md](phase-1.md)                                             | plan, with its code  | Deterministic substrate — metrics, seeder                       | shipped                      |
+| [phase-2.md](phase-2.md)                                             | plan, first          | Planner and critic                                              | shipped, two criteria unmet  |
+| [phase-3.md](phase-3.md)                                             | plan, first          | Normalizer and persona                                          | shipped, one criterion unmet |
+| [phase-4.md](phase-4.md)                                             | plan, first          | Gamification vertical slice                                     | shipped                      |
+| [phase-5.md](phase-5.md)                                             | **record**           | What phase 5 actually became: interface and feature work        | shipped                      |
+| [rework-profile-hub-coach.md](rework-profile-hub-coach.md)           | plan, committed late | PRs #11–#17, the middle of phase 5                              | shipped                      |
+| [phase-5-content-fill.md](phase-5-content-fill.md)                   | plan, first          | What phase 5 was briefed to build, done afterwards              | shipped                      |
+| [phase-6.md](phase-6.md)                                             | plan, first          | The diet advisor on the Coach tab; file import                  | shipped, one criterion unmet |
+| [rework-hub-history-coach.md](rework-hub-history-coach.md)           | plan, first          | Hub, graphs, demo data and the Coach — after the phases         | 12 of 12 shipped             |
+| [coach-memory-voice-onboarding.md](coach-memory-voice-onboarding.md) | plan, first          | Coach memory, a voice in a session, and a user who starts empty | 0 of 4 shipped               |
 
 ## Phase 5 is three documents, and here is why
 
