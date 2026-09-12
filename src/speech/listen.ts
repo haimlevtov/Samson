@@ -6,9 +6,16 @@
  * anything living in a `.tsx` file is proved by reading. A pure object with an
  * injected recogniser is proved by test.
  *
- * INVARIANT: nothing here reaches a model. It turns speech into a string and
- *            hands it to the caller; every guard that matters runs on the
- *            server, on that string, exactly as it does on a typed one.
+ * INVARIANT: nothing here reaches a model of OURS. It turns speech into a
+ *            string and hands it to the caller; every guard that matters runs on
+ *            the server, on that string, exactly as it does on a typed one.
+ *
+ * AI-NOTE: "of ours" is load-bearing, and this comment said "nothing here
+ *          reaches a model" until a question about it — which was wrong in the
+ *          direction that matters. `SpeechRecognition` is remote in Chrome: the
+ *          audio goes to Google's speech service. The spec permits on-device and
+ *          Chrome does not do that. ADR 0031 §1 carries the consequence; do not
+ *          restate this file as "the audio never leaves the browser".
  */
 
 /**

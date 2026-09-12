@@ -18,20 +18,48 @@ project's whole weekly key in one session.
 
 ## Decision
 
-### 1. Recognition is the browser's, not a provider's
+### 1. Recognition is the browser's provider, not ours
 
 The owner chose `SpeechRecognition` over a paid speech-to-text stage.
 
-- Free, no key, no new `llm_calls.stage`, no migration, no budget assumption —
-  which matters against a key funded in single dollars.
+- Free **to this project**, no key, no new `llm_calls.stage`, no migration, no
+  budget assumption — which matters against a key funded in single dollars.
 - It is the mirror image of [ADR 0025](0025-coach-voices.md), and deliberately
   so: that ADR killed device speech for OUTPUT because **a device voice cannot
   be a character**, and character is the whole product. Recognition has no
   character to get wrong. The argument that applied to output does not apply to
   input.
 
-**It does not exist in iOS Safari.** This is a phone-first product, so that is a
-real hole rather than a footnote.
+#### The audio leaves the device, and the first version of this ADR did not say so
+
+This section was titled _"Recognition is the browser's, not a provider's"_ and
+listed the choice as free with no provider attached. **Free is true of the money
+and false of the data.** The Web Speech API permits an implementation to
+recognise on-device or remotely, and **Chrome's is remote**: it streams the
+captured audio to Google's speech service. Edge does the same to Microsoft's.
+There is a provider. It is not ours, we do not pay it, and it is not in any other
+ADR — which is exactly why it belongs in this one.
+
+It matters more here than it would in most apps. The questions this feature is
+built for are _"my shoulder feels off on presses"_ — **the user's own voice,
+saying something about their body, going to a company none of our documents
+mention.** This project wrote a careful control for the REPLY reaching a
+text-to-speech provider ([ADR 0025](0025-coach-voices.md) §4, and §2 below) and
+said nothing about the QUESTION reaching a recognition one.
+
+**Nothing changes in the code because of this**, and that is a decision rather
+than an omission: the alternative is a paid speech-to-text stage, which the owner
+declined for the budget reasons above and which would send the same audio to a
+provider we pay instead of one we do not. What changes is that it is written
+down, and that a report describing this feature must say where the audio goes.
+
+_Not measured here — it is Chrome's documented behaviour rather than something
+this project observed, because no browser pass has happened yet. Worth confirming
+in the one that is owed._
+
+**It does not exist in iOS Safari**, which sidesteps the paragraph above by
+having no API at all. This is a phone-first product, so the absence is a real
+hole rather than a footnote.
 
 **Where it is missing, the button is not rendered and a text box is.** A control
 that does nothing is worse than an absent one, and
