@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { loadXpSummary } from '@/src/db/gamification';
@@ -492,6 +493,23 @@ export async function requestPlan(_previous: PlanState, formData: FormData): Pro
       // The whole reason this action can exist — ADR 0027 §1 and §2.
       { maxIterations: WEB_PLAN_MAX_ITERATIONS, deadlineMs: WEB_PLAN_DEADLINE_MS }
     );
+
+    /*
+     * FOUND BY READING, before review: without this the accepted case did
+     * nothing visible. `useActionState` returns state to the client; it does not
+     * re-run the server component, so a plan that was written and stored would
+     * have left the questionnaire sitting there looking as though the press had
+     * been ignored — and `PlanRequest` renders no sentence for `accepted`
+     * precisely because the plan itself is supposed to appear.
+     *
+     * That is the dead end ADR 0027 §4 forbids, arriving by omission rather than
+     * by design. Both routes read `latestAcceptedPlan`: `/coach` renders the
+     * block, and `/workout`'s template import offers its sessions.
+     */
+    if (result.status === 'accepted') {
+      revalidatePath('/coach');
+      revalidatePath('/workout');
+    }
 
     return {
       outcome: result.status,
