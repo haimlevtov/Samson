@@ -132,6 +132,11 @@ coach produces an audibly different speaker on any ordinary device. The claim in
 the first paragraph stands: nothing here is a recorded or synthesised persona
 voice. It is the device's voices, allocated so they do not collide.
 
+_Superseded for voice by [ADR 0025](0025-coach-voices.md): the coaches speak
+through a real provider now, and `tts_voice_id` and `tts_voice_variant` were
+dropped on 2026-09-12 (migration `20260912160000`). Everything below is the
+decision as it was taken, and the paragraph on persona-as-tone still holds._
+
 `tts_voice_id` keeps its misleading name for now; renaming a column is a
 migration and a type regeneration for a cosmetic gain. `src/ui/speak.ts` says
 what it actually holds, and `src/ui/speak.test.ts` pins the behaviour that was

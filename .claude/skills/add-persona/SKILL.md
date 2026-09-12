@@ -88,9 +88,9 @@ Current voices:
 **A voice that does not fit the coach is worse than none** — the user's rule, and
 why there is no device-voice fallback: without the key or the budget, the coach's
 words are shown and nothing speaks. The old device-voice columns
-(`tts_voice_id`, `tts_voice_variant`) are read by nothing and are dropped by the
-first migration after ADR 0025's code is deployed — do not set them. The variant
-rule that went with them is gone.
+(`tts_voice_id`, `tts_voice_variant`) were dropped on 2026-09-12 by migration
+`20260912160000` — they no longer exist, so an insert naming either one fails.
+The variant rule that went with them is gone.
 
 ## 3. Banned phrases are a ban, not a preference
 
@@ -205,7 +205,7 @@ been evaluated for drift — it has not.
 - `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
   pair, and the closest model to copy. Its insert predates `sample_line`,
   `tts_voice` and `tts_instructions`; add all three, and leave out its
-  `tts_voice_id` and `tts_voice_variant`, which nothing reads
+  `tts_voice_id` and `tts_voice_variant`, which no longer exist
 - `supabase/migrations/20260911140100_persona_voice_direction.sql` — the five
   voices and directions, and the model for casting a new coach
 - `supabase/migrations/20260911130000_persona_sample_line.sql` — the preview
