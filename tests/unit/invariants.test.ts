@@ -360,3 +360,36 @@ describe('the voice switch is wired end to end', () => {
     }
   });
 });
+
+describe('ADR 0009 and ADR 0017 — an achievement predicate never leaves the server', () => {
+  /*
+   * WHY: `achievements_read_visible` grants the ROW, and `predicate` is a column
+   * on it — the SQL `evaluate_achievements` runs. A `select('*')` on that table
+   * typechecks, renders correctly, and hands every visible badge's SQL to the
+   * browser. The badge catalogue (rework PR 7) was the first surface to read the
+   * table directly; this holds every read after it.
+   */
+  it('reads achievements in application code with an explicit list that omits predicate', () => {
+    const reads = sourceFiles()
+      .filter((f) => f.rel.startsWith('src/') || f.rel.startsWith('app/'))
+      .filter((f) => !/\.test\.tsx?$/.test(f.rel))
+      .flatMap((f) =>
+        [...f.text.matchAll(/from\(\s*['"`]achievements['"`]\s*\)([\s\S]{0,200})/g)].map((m) => ({
+          rel: f.rel,
+          after: m[1] ?? '',
+        }))
+      );
+
+    // Not vacuous: the catalogue's read is one of them.
+    expect(reads.length).toBeGreaterThan(0);
+
+    for (const { rel, after } of reads) {
+      const list = after.match(/^\s*\.select\(\s*'([^']*)'/);
+      expect(
+        list,
+        `${rel}: an achievements read must name its columns in a literal`
+      ).not.toBeNull();
+      expect(list![1], rel).not.toMatch(/\*|predicate/);
+    }
+  });
+});

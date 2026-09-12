@@ -15,6 +15,7 @@ import type { Db } from './client';
 import { startOfWeek } from '../metrics/dates';
 import { WEEKLY_XP_CEILING } from '../gamification/xp';
 import { challengeSpecSchema, type ChallengeSpec } from '../gamification/challenge';
+import { buildCatalogue, humorCeiling, type Catalogue } from '../gamification/catalogue';
 import type { LocalDate } from '../metrics/types';
 
 export interface XpSummary {
@@ -120,6 +121,56 @@ export async function loadUnlockedAchievements(db: Db): Promise<UnlockedAchievem
     unlockedAt: row.unlocked_at,
     localDate: row.local_date,
   }));
+}
+
+/**
+ * Every badge this user may see, shaped for `/badges` — ADR 0017's 2026-09-12
+ * amendment.
+ *
+ * Three reads, and none of them relaxes anything:
+ *
+ * - the SHARED visible rows, through `achievements_read_visible` — which is what
+ *   keeps a locked hidden badge out of the response;
+ * - what the user holds, through `unlocked_achievements()`, as Profile reads it;
+ * - how many hidden badges are left, as one integer.
+ *
+ * INVARIANT: the select list is explicit and never contains `predicate` — the
+ *            policy grants the ROW, and that column is the SQL the evaluator
+ *            runs (ADR 0009). `tests/unit/invariants.test.ts` fails on a
+ *            `select('*')` or a `predicate` in any read of `achievements`.
+ *
+ * WHY `user_id is null`: a user-owned achievement's predicate is never executed
+ * (ADR 0009 §3), so it can never be earned, and listing it with instructions
+ * would be a promise the evaluator does not keep.
+ */
+export async function loadBadgeCatalogue(db: Db, humorMaxLevel: string): Promise<Catalogue> {
+  const [visible, held, remaining] = await Promise.all([
+    db
+      .from('achievements')
+      .select('slug, name, how_to_earn, tier, humor_level')
+      .is('user_id', null),
+    loadUnlockedAchievements(db),
+    db.rpc('hidden_achievements_remaining'),
+  ]);
+
+  if (visible.error) throw new Error(`loading badges: ${visible.error.message}`);
+  if (remaining.error) throw new Error(`counting hidden badges: ${remaining.error.message}`);
+
+  return buildCatalogue({
+    visible: (visible.data ?? []).map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      // Required on shared rows by `achievements_shared_rows_say_how_to_earn`;
+      // the type cannot know that, and an empty string renders as a gap rather
+      // than as "null".
+      howToEarn: row.how_to_earn ?? '',
+      tier: row.tier,
+      humorLevel: row.humor_level,
+    })),
+    held,
+    hiddenRemaining: remaining.data ?? 0,
+    humorCeiling: humorCeiling(humorMaxLevel),
+  });
 }
 
 /**

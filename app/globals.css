@@ -1983,6 +1983,57 @@ details.quick-log[open] > summary {
   margin-top: 8px;
 }
 
+/*
+ * Rework PR 7 — a badge on Profile opens its place in /badges.
+ *
+ * The stretched-link pattern: the name is the link, so a screen reader hears a
+ * short name rather than the whole card, and its ::after covers the card so a
+ * thumb anywhere on it lands. `position: relative` on the card is what the
+ * ::after is measured against.
+ */
+.badge-linked {
+  position: relative;
+}
+
+.badge-linked h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.badge-linked h3 a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.badge-linked:hover {
+  border-color: var(--accent-text);
+}
+
+/* The outline goes on the CARD, via :has — the link itself is one line of text
+   and an outline around it would not show what a press opens. */
+.badge-linked h3 a:focus-visible {
+  outline: none;
+}
+
+.badge-linked:has(h3 a:focus-visible) {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* A badge still to get. Dashed rather than faded: the text on it is the
+   instruction, and fading it would make the most useful words on the page the
+   hardest to read. */
+.badge-locked {
+  border-style: dashed;
+}
+
+/* /badges#slug lands the card below the top edge rather than flush against it. */
+.badge-card[id] {
+  scroll-margin-top: 16px;
+}
+
 /* ---------------------------------------------------------------------------
  * ADR 0013 — the level card, and settings behind a cog.
  * Phone-first: base rules are the narrow layout, min-width only.

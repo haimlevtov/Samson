@@ -20,7 +20,8 @@ Insert into `achievements` via a new migration:
 | ------------- | -------------------------------------------------------------------------------------- |
 | `slug`        | stable, lowercase, never reused after release                                          |
 | `name`        | the joke or reference. See naming rules below.                                         |
-| `description` | shown after unlock                                                                     |
+| `description` | shown after unlock — the reward copy, written to the person who holds it               |
+| `how_to_earn` | **required.** What to do to earn it, for somebody who does not — see §2b               |
 | `predicate`   | SQL boolean over the user's logged data                                                |
 | `tier`        | `volume`, `consistency`, `comeback`, `pr`, `recovery`, `variety`, `hidden`, `calendar` |
 | `humor_level` | `clean`, `cheeky`, or `crude`                                                          |
@@ -63,6 +64,34 @@ also holds shared catalogue rows the filter is
 --      evaluation silently fires on the wrong day for every non-server user.
 ```
 
+### 2b. Write how to earn it
+
+`/badges` lists every visible badge a user does not hold, and what it shows
+under the name is `how_to_earn` — ADR 0017's 2026-09-12 amendment. It is
+**required on every shared row** by `achievements_shared_rows_say_how_to_earn`,
+so a migration that omits it fails when it is applied.
+
+**It is not the description reworded.** `description` is past tense and written
+to someone who has the badge. `how_to_earn` is an instruction to someone who
+does not, and it must be **true to the predicate, not to the name**. When this
+column was first filled, two of the eleven descriptions were not the condition:
+`hundred-tonnes` never mentioned its thirty logged days, and `new-years-day`
+said "trained" when a planned rest day earns it too.
+
+Read the predicate, then write what it checks in words a lifter uses: the
+window, whether rest days count, whether warm-ups count, and any minimum the
+predicate enforces that the name does not suggest. Leave out the plausibility
+limits — they are a guard, not a goal.
+
+**Changing a predicate means changing its `how_to_earn` in the same
+migration.** Nothing can test prose against SQL, so this is the one step where
+the only check is you.
+
+A hidden badge's `how_to_earn` is as secret as its name: it is a column on the
+row the policy withholds. Write it as freely as any other — it reaches nobody
+until they hold the badge, and `unlocked_achievements()` does not return it
+even then.
+
 ### 3. Name it
 
 - Twist the reference toward lifting rather than quoting it verbatim. "I Am
@@ -83,7 +112,8 @@ Every achievement ships with a test in the same commit asserting:
 3. It fires exactly once — re-running evaluation does not duplicate the event
 4. For `calendar` tier: it fires on the correct local date for a fixture user
    in a non-server timezone
-5. For `hidden`: the definition is absent from the client payload while it is
+5. For `hidden`: the definition — `how_to_earn` included — is absent from the
+   client payload while it is
    LOCKED, and present for the holder once earned. Both halves — ADR 0017
    narrowed the criterion, and a test for only the first half would pass on a
    version that never showed the badge to anyone.
