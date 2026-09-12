@@ -50,10 +50,20 @@ reader navigable without work, and it degrades to an open section with CSS off �
 > exists it reads **Show my plan**; when none does, the card explains where
 > plans come from instead of offering a control that would dead-end.
 >
-> _Rework plan PR 8b builds the button anyway, and the limits above are the
-> reason it is a stakeholder decision rather than an obvious one. Nothing in
-> this paragraph turned out to be wrong; it stops being the whole story when 8b
-> ships._
+> **Amended 2026-09-12, rework PR 8b: the button exists now, and every clause
+> above is still true.** It was built on a stakeholder decision taken against
+> this argument, and [ADR 0027](../adr/0027-planner-in-a-function.md) is where
+> the limits are named rather than discovered. What makes it fit: **one**
+> iteration instead of three, a **four-week** block instead of eight, and a
+> wall-clock **deadline** enforced inside the planner loop so the function
+> returns a state rather than being killed mid-call.
+>
+> The paragraph above stays because the reasoning it contains is what the
+> amendment answers. Deleting it would leave the decision looking obvious, and
+> it is not: **this button sometimes does not produce a plan**, by design, and a
+> failed attempt still costs the user budget. Where a plan exists the control
+> still reads **Show my plan**; where none does, the card now offers the
+> questionnaire instead of explaining where plans come from.
 
 **Save as a template** lives inside the plan disclosure — rework plan PR 7,
 `docs/specs/workout-templates.md` §6. It exists only where there is a plan, so

@@ -23,7 +23,7 @@ because several of them touch the same surface.
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                                      |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
 | 8a  | [One box on Coach](#pr-8--one-box-and-a-plan-you-can-ask-for)                              | `coach-one-box`        | shipped 09-12, [↓](#pr-8a--one-box-on-coach-2026-09-12)                        |
-| 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | planned, after 8a                                                              |
+| 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | in progress, [ADR 0027](../adr/0027-planner-in-a-function.md)                  |
 
 PR 8 was written as one item because both changes land on one surface. It ships
 as two: 8a rearranges that surface and 8b fills the state 8a leaves — the
@@ -726,6 +726,13 @@ written down so nobody rediscovers them:
   call and the loop allows three. Mitigations that do not need a queue: cap the
   block at fewer weeks for a first plan, and surface a partial failure as a
   state rather than a hang.
+
+> **Decided in [ADR 0027](../adr/0027-planner-in-a-function.md), 8b, committed
+> first.** The limits above are not merely named, they are enforced: a wall-clock
+> deadline inside the planner loop, ONE iteration rather than three, and a
+> four-week block rather than eight. The ADR also states what none of that buys —
+> pressing the button does not guarantee a plan, and a failed attempt still costs
+> the user budget.
 
 **A questionnaire, then.** `ContextInput` in `src/planner/context.ts` takes
 `goal`, `daysPerWeek`, `blockWeeks`, `injuredJoints`, `asOf`, `workouts`, `sets`
