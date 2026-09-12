@@ -119,7 +119,18 @@ async function furnish(id: string, marker: string): Promise<void> {
     .select('id')
     .is('user_id', null)
     .limit(1);
-  if (tag?.[0]) await put('user_equipment', { equipment_tag_id: tag[0].id });
+  if (tag?.[0]) {
+    // Upsert: the PK is (user_id, equipment_tag_id) and `furnish` runs more than
+    // once per user. CI caught this where a local run did not, because the
+    // seeded database it builds on reaches the second call.
+    const { error } = await admin
+      .from('user_equipment')
+      .upsert(
+        { user_id: id, equipment_tag_id: tag[0].id },
+        { onConflict: 'user_id,equipment_tag_id' }
+      );
+    if (error) throw new Error(`user_equipment: ${error.message}`);
+  }
 
   const { data: badge } = await admin.from('achievements').select('id').limit(1);
   if (badge?.[0]) {
