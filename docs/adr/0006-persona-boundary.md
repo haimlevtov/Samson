@@ -218,3 +218,8 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > above about variants are history: device voices could not carry five
 > characters, and a coach now speaks in a voice synthesised from a direction in
 > its row, through the gateway. This ADR still governs what a persona may SAY.
+>
+> **And the columns are gone, 2026-09-12** — migration `20260912160000`, rework
+> PR 6d. `tts_voice_id` and `tts_voice_variant` no longer exist, so the
+> paragraphs above about keeping a misleading name and allocating variants
+> describe a schema rather than the schema.

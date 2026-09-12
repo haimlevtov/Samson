@@ -20,7 +20,7 @@ because several of them touch the same surface.
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)         |
 | 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)          |
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | shipped 09-12, [↓](#pr-6c--the-budget-cannot-be-moved-by-its-owner-2026-09-12) |
-| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                                      |
+| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | in progress, [ADR 0025 §6](../adr/0025-coach-voices.md)                        |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
 | 8a  | [One box on Coach](#pr-8--one-box-and-a-plan-you-can-ask-for)                              | `coach-one-box`        | shipped 09-12, [↓](#pr-8a--one-box-on-coach-2026-09-12)                        |
 | 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | shipped 09-12, [↓](#pr-8b--a-plan-you-can-ask-for-2026-09-12)                  |

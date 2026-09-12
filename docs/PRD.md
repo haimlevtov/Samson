@@ -205,6 +205,11 @@ language hint (`tts_voice_id`, a BCP-47 tag) and a `tts_voice_variant` saying
 which of the matching voices this coach takes. Persona voice is therefore tone,
 rate and word choice rather than timbre.
 
+_The two columns named above were dropped on 2026-09-12 — migration
+`20260912160000`, rework PR 6d. The paragraph is kept because it is the reasoning
+[ADR 0025](adr/0025-coach-voices.md) had to answer, not because any of it still
+holds._
+
 **A coach can be heard before it is chosen (2026-09-11).** Each row also
 carries a sample line, which the Voice card on Coach speaks in that coach's
 voice — or shows as text when the voice is unavailable — so picking a coach is

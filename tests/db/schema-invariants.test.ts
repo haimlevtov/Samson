@@ -337,6 +337,40 @@ describe('CLAUDE.md #8 and #9 — canonical units and UTC timestamps', () => {
   });
 });
 
+describe('ADR 0025 §6 — the device-voice machinery is gone', () => {
+  it('keeps no column describing a device voice', async () => {
+    /*
+     * Rework PR 6d, the contract half of an expand-and-contract. `tts_voice_id`
+     * (a BCP-47 language tag, despite the name) and `tts_voice_variant` picked a
+     * voice out of the browser's own `speechSynthesis`; the coaches speak through
+     * the gateway now, so the columns described nothing and were dropped.
+     *
+     * WHY assert the absence rather than trust the migration: a later migration
+     * can add a column back, and an insert naming one is a runtime failure rather
+     * than a type error — `personas` rows are written by migrations, which
+     * TypeScript never sees. The generated types catch a column that exists and
+     * should not; this catches the same thing from the database's side.
+     */
+    const { rows } = await db().query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'personas'
+          and column_name in ('tts_voice_id', 'tts_voice_variant')`
+    );
+    expect(rows.map((r) => r.column_name)).toEqual([]);
+  });
+
+  it('still has the columns that replaced them, so this is a swap and not a loss', async () => {
+    // The other half of the same fact: asserting only the absence would pass on a
+    // `personas` table that had lost its voice entirely.
+    const { rows } = await db().query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'personas'
+          and column_name in ('tts_voice', 'tts_instructions')`
+    );
+    expect(rows.map((r) => r.column_name).sort()).toEqual(['tts_instructions', 'tts_voice']);
+  });
+});
+
 describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', () => {
   /*
    * WHY this test exists: `llm_calls.stage` is a CHECK constraint, not an enum
