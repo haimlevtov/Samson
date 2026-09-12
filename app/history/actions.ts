@@ -8,7 +8,7 @@ import { awardSessionXp } from '@/src/db/gamification';
 import { availableExercises } from '@/src/db/exercises';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { callLLM, createGatewayDeps } from '@/src/llm/gateway';
-import { MissingApiKeyError } from '@/src/llm/config';
+import { logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
 import { normalizedSetSchema } from '@/src/normalizer/schema';
 import { EMPTY_PARSE, type ParseState } from './parse-state';
@@ -198,12 +198,30 @@ export async function parseFreeText(
       error: null,
     };
   } catch (cause) {
-    // Running without a key is the common case today; say so plainly rather
-    // than surfacing a transport error.
-    if (cause instanceof MissingApiKeyError) return { ...EMPTY_PARSE, error: cause.message };
+    /*
+     * ADR 0028. This returned `cause.message` for everything that was not a
+     * missing key, so a raw Postgres error — table names, column semantics,
+     * constraint names — or up to 500 characters of upstream provider body
+     * reached the browser. It is the sixth site where that was found, which is
+     * why the judgement now lives in a tested module instead of in a seventh
+     * copy of this `catch`.
+     *
+     * `BudgetExceededError` used to reach the user here only by accident: it is
+     * an Error, so the fall-through showed its message. That was the right
+     * outcome for the wrong reason — `isUserFacing` names it deliberately now.
+     *
+     * The FIGURES do not survive this failure the way the diet target does
+     * (ADR 0028 §3): nothing was parsed, so there is nothing to render beside a
+     * sentence, and the sentence is the whole answer.
+     */
+    console.error('free-text parse failed', logLine(cause));
+
     return {
       ...EMPTY_PARSE,
-      error: cause instanceof Error ? cause.message : 'Could not read that.',
+      error: userFacingError(
+        cause,
+        'Could not read that. Try writing the set as "3x5 at 60" and log it again.'
+      ),
     };
   }
 }
