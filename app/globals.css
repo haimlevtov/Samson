@@ -2698,3 +2698,32 @@ details.quick-log[open] > summary {
   padding: 11px 0;
   margin: -5px 0;
 }
+
+/*
+ * The injured-joint checkboxes — rework PR 8b.
+ *
+ * Same shape as `.humor`: a bordered fieldset whose legend sits in the border,
+ * because a group of seven checkboxes with no frame reads as seven unrelated
+ * rows. Two columns rather than one, since the labels are single words and
+ * seven stacked rows is most of a phone screen before the button.
+ *
+ * The 44px target comes from `.settings-form label.check-row`'s own min-height,
+ * which these labels carry — docs/specs/mobile-interface.md.
+ */
+.joint-set {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.joint-set legend {
+  padding: 0 4px;
+}
+/* The note under the boxes spans both columns rather than sitting beside one. */
+.joint-set > p {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+}

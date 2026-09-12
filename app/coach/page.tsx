@@ -9,8 +9,22 @@ import { planSessionOptions } from '@/src/templates/plan';
 import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole } from './CoachConsole';
 import { CoachBox } from './CoachBox';
+import { PlanRequest } from './PlanRequest';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The planner run happens in a server action on this route, and its ceiling is
+ * the whole subject of ADR 0027. Stated here rather than inherited from a
+ * platform default, because the default is the binding constraint on the one
+ * feature this page's most argued-over control depends on.
+ *
+ * AI-NOTE: this and `WEB_PLAN_DEADLINE_MS` are two halves of one fact. The gap
+ *          between them is the bookkeeping's — reading history, building the
+ *          context, a ledger row per attempt, and the plan_runs row at the end.
+ *          Change both together and keep the gap.
+ */
+export const maxDuration = 60;
 
 export default async function CoachPage() {
   const db = await createServerDb();
@@ -53,21 +67,20 @@ export default async function CoachPage() {
       </header>
 
       {plan === null ? (
-        <div className="card">
-          {/*
-           * No "Create a plan" button here, and the card says why instead of
-           * offering one — docs/specs/coach-chat.md §1. A planner run is up to
-           * three planner+critic round trips at 25 to 120 seconds each, which
-           * does not fit in a serverless function, and making it fit means a
-           * job queue that CLAUDE.md puts out of scope. A button that dead-ends
-           * would be worse than this sentence.
-           */}
-          <p className="muted">
-            No accepted plan yet. Plans are produced by the planner run, which has to pass the
-            deterministic rules and the safety critic before anything appears here. You can still
-            talk to your coach below.
-          </p>
-        </div>
+        /*
+         * The questionnaire — rework PR 8b, ADR 0027.
+         *
+         * This card used to explain why there was NO button, and the explanation
+         * was right about the arithmetic: three planner+critic rounds at their
+         * configured timeouts is 540s against a 60s function ceiling. The button
+         * exists on a stakeholder decision taken with the limits named, and what
+         * makes it fit is a budget rather than optimism — one iteration, a
+         * four-week block, and a deadline enforced inside the loop.
+         *
+         * It renders no Voice card, which is how it already worked: a coach with
+         * no plan has nothing to deliver.
+         */
+        <PlanRequest />
       ) : (
         <>
           {/*

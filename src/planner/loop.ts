@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto';
 import {
   CRITIC_MAX_TOKENS,
+  DEFAULT_TIMEOUT_MS,
   MAX_PLAN_ITERATIONS,
   PLANNER_MAX_TOKENS,
   PLANNER_TIMEOUT_MS,
@@ -96,12 +97,61 @@ function fromRules(findings: RuleFinding[]): Rejection[] {
   }));
 }
 
+/**
+ * How much of a run a caller can afford — ADR 0027.
+ *
+ * WHY a parameter rather than lower constants: `MAX_PLAN_ITERATIONS` and
+ * `PLANNER_TIMEOUT_MS` are right for `npm run eval:planner`, which has no
+ * function ceiling and whose whole job is finding out what the planner can do.
+ * Lowering them globally would make a GRADED output worse in order to fit a
+ * surface the eval does not run on. Omit this and nothing changes.
+ */
+export interface PlanBudget {
+  /** Ceiling on planner+critic rounds. Defaults to `MAX_PLAN_ITERATIONS`. */
+  maxIterations?: number;
+  /**
+   * Wall-clock milliseconds for the WHOLE run, from the moment it starts.
+   *
+   * WHY the whole run rather than per call: a serverless ceiling applies to the
+   * sum, and each call's own timeout is blind to what the previous ones spent.
+   * One iteration at the configured timeouts is 180s against a 60s ceiling, so
+   * capping calls individually would still be killed mid-generation — and a
+   * killed function writes no ledger row and renders no state.
+   */
+  deadlineMs?: number;
+}
+
+/**
+ * Below this, a call is not worth starting: the model cannot produce a block in
+ * it, and spending the request means paying for a timeout that was predictable.
+ * The run finishes as `failed` with a reason instead.
+ */
+const MIN_USEFUL_CALL_MS = 5_000;
+
 export async function generatePlan(
   userId: string,
   input: PlannerInput,
   context: RuleContext,
-  deps: PlannerDeps
+  deps: PlannerDeps,
+  budget: PlanBudget = {}
 ): Promise<PlanRunResult> {
+  const startedAt = Date.now();
+  const maxIterations = budget.maxIterations ?? MAX_PLAN_ITERATIONS;
+
+  /**
+   * What one call may have: its own default, or whatever is left of the run,
+   * whichever is smaller. `null` means there is not enough left to try.
+   */
+  const allowance = (preferred: number): number | null => {
+    if (budget.deadlineMs === undefined) return preferred;
+    const left = budget.deadlineMs - (Date.now() - startedAt);
+    return left < MIN_USEFUL_CALL_MS ? null : Math.min(preferred, left);
+  };
+
+  /** WHY a sentence rather than a code: it is rendered, and ADR 0027 §4 requires
+   *  every terminal state to say something. */
+  const OUT_OF_TIME = 'the plan did not finish inside the time this page has';
+
   const inputHash = hashInput(input);
   const rejections: Rejection[] = [];
   const modelsUsed: (string | null)[] = [];
@@ -135,12 +185,15 @@ export async function generatePlan(
     return { status, block, iterations, rejections, costCredits, modelsUsed, inputHash, error };
   };
 
-  for (let iteration = 1; iteration <= MAX_PLAN_ITERATIONS; iteration++) {
+  for (let iteration = 1; iteration <= maxIterations; iteration++) {
     iterations = iteration;
 
     // Escalate rather than repeat — ADR 0004. Asking the same model the same
     // question a third time mostly buys a third copy of the same answer.
-    const escalating = iteration === MAX_PLAN_ITERATIONS && rejections.length > 0;
+    const escalating = iteration === maxIterations && rejections.length > 0;
+
+    const plannerMs = allowance(PLANNER_TIMEOUT_MS);
+    if (plannerMs === null) return finish('failed', null, OUT_OF_TIME);
 
     let block: TrainingBlock;
     try {
@@ -156,7 +209,7 @@ export async function generatePlan(
         //            model never to obey anything fenced, and it obeys that.
         messages: [{ role: 'user', content: plannerUserMessage(input, current, iteration) }],
         maxTokens: PLANNER_MAX_TOKENS,
-        timeoutMs: PLANNER_TIMEOUT_MS,
+        timeoutMs: plannerMs,
         ...(escalating ? { models: ESCALATION_MODELS } : {}),
       });
       costCredits += planned.costCredits;
@@ -191,6 +244,21 @@ export async function generatePlan(
     }
 
     // ---- Judgement, on a block that has already passed the arithmetic ----
+    /*
+     * The critic gets an allowance too, and it is the half that would otherwise
+     * blow the ceiling: it runs on DEFAULT_TIMEOUT_MS (60s), which on its own is
+     * the whole budget of a serverless function — so a planner call that used
+     * most of the deadline would be followed by a critic call that could not
+     * finish inside what remained. ADR 0027 §1.
+     *
+     * A block that passed the rules and ran out of time before the critic is
+     * NOT accepted. The critic is the second opinion the whole pipeline is built
+     * around (CLAUDE.md, architecture), and a block no second model looked at is
+     * not a plan this project will hand to somebody's body.
+     */
+    const criticMs = allowance(DEFAULT_TIMEOUT_MS);
+    if (criticMs === null) return finish('failed', null, OUT_OF_TIME);
+
     let approved: boolean;
     try {
       const verdict = await deps.call({
@@ -201,6 +269,7 @@ export async function generatePlan(
         system: CRITIC_SYSTEM,
         messages: [{ role: 'user', content: criticUserMessage(input, block) }],
         maxTokens: CRITIC_MAX_TOKENS,
+        timeoutMs: criticMs,
       });
       costCredits += verdict.costCredits;
       modelsUsed.push(verdict.modelUsed);

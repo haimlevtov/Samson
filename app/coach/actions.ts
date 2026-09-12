@@ -19,6 +19,13 @@ import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { MAX_TRANSCRIPT_TURNS, chatHistorySchema, type ChatTurn } from '@/src/chat/schema';
 import { EMPTY_COACH, type CoachState } from './coach-state';
+import { EMPTY_PLAN_REQUEST, type PlanState } from './plan-state';
+import { availableExercises } from '@/src/db/exercises';
+import { createSupabasePlanStore } from '@/src/db/plans';
+import { buildPlannerContext } from '@/src/planner/context';
+import { generatePlan } from '@/src/planner/loop';
+import { planRequestFrom } from '@/src/planner/request';
+import { WEB_PLAN_DEADLINE_MS, WEB_PLAN_MAX_ITERATIONS } from '@/src/llm/config';
 import { adherence } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { deliverPlan } from '@/src/persona/deliver';
@@ -392,5 +399,129 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
       );
     }
     return { ok: false, reason };
+  }
+}
+
+/**
+ * Generate a plan from the questionnaire — rework PR 8b,
+ * [ADR 0027](../../docs/adr/0027-planner-in-a-function.md).
+ *
+ * `docs/specs/coach-chat.md` §1 argued this should not exist, and the argument
+ * was right about the arithmetic: three planner+critic rounds at their
+ * configured timeouts is 540s against a 60s function ceiling. What makes it fit
+ * is a budget — one iteration, a four-week block, and a wall-clock deadline
+ * enforced inside the loop — and what that costs is in the ADR's table.
+ *
+ * INVARIANT: the block is NOT returned through this action's state — it is a
+ *            `plan_runs` row, and the page re-reads it. A block arriving through
+ *            client state would be a training plan whose provenance is a POST.
+ *
+ * INVARIANT: every figure in the block comes from the model INSIDE the planner
+ *            pipeline, checked by `checkRules` and the critic before it is
+ *            stored — CLAUDE.md #1 and #5. This action chooses none of it; it
+ *            supplies four answers and the candidate list.
+ *
+ * INVARIANT: the candidates are equipment-filtered in SQL before the model sees
+ *            anything — CLAUDE.md #5. `availableExercises` does it, and an empty
+ *            list refuses the run rather than sending it.
+ */
+export async function requestPlan(_previous: PlanState, formData: FormData): Promise<PlanState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const parsed = planRequestFrom(formData);
+  if (!parsed.success) {
+    // Nothing was sent, so nothing was spent. The control's own bounds make this
+    // unreachable by hand; a crafted POST reaches it.
+    return {
+      ...EMPTY_PLAN_REQUEST,
+      outcome: 'invalid',
+      error: 'Those answers did not add up to a request. Check the form and try again.',
+    };
+  }
+
+  const request = parsed.data;
+  const today = localDateFor(user.timezone);
+
+  const [history, candidates] = await Promise.all([
+    loadHistory(db),
+    availableExercises(db, user.id),
+  ]);
+
+  /*
+   * ADR 0027 §5: no candidates, no call. `availableExercises` returns an empty
+   * list for a user with no `user_equipment` rows, and invariant #5 means the
+   * planner may only pick from that list — so a run against nothing cannot
+   * produce a valid block, and sending it would buy a guaranteed rejection.
+   *
+   * Nothing but `scripts/seed.ts` writes that table today, which is why this is
+   * a named state rather than a defensive branch.
+   */
+  if (candidates.length === 0) {
+    return { ...EMPTY_PLAN_REQUEST, outcome: 'no-equipment' };
+  }
+
+  const context = buildPlannerContext({
+    goal: request.goal,
+    daysPerWeek: request.days_per_week,
+    blockWeeks: request.block_weeks,
+    injuredJoints: request.injured_joints,
+    asOf: today,
+    workouts: history.workouts,
+    sets: history.sets,
+    candidates: candidates.map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      name: c.name,
+      primaryMuscle: c.primaryMuscle,
+      movementPattern: c.movementPattern,
+      equipment: c.equipment,
+    })),
+  });
+
+  try {
+    const result = await generatePlan(
+      user.id,
+      context.plannerInput,
+      context.ruleContext,
+      {
+        call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
+        plans: createSupabasePlanStore(db),
+      },
+      // The whole reason this action can exist — ADR 0027 §1 and §2.
+      { maxIterations: WEB_PLAN_MAX_ITERATIONS, deadlineMs: WEB_PLAN_DEADLINE_MS }
+    );
+
+    return {
+      outcome: result.status,
+      rejectionCount: result.rejections.length,
+      /*
+       * `result.error` is the loop's own: either a gateway message, which the
+       * gateway already bounds, or this action's deadline sentence. It is not a
+       * raw Postgres string — `insertPlanRun` throws rather than returning, so a
+       * database failure lands in the catch below.
+       */
+      error: result.status === 'accepted' ? null : result.error,
+    };
+  } catch (cause) {
+    // The same allowlist every other action on this page uses, for the reason
+    // `askTheCoach` records: a raw error here would hand a user constraint and
+    // column names for tables they cannot read.
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
+      return { ...EMPTY_PLAN_REQUEST, outcome: 'failed', error: cause.message };
+    }
+
+    // Name and bounded message only — `LlmCallFailedError` carries every ledger
+    // row and every row carries the user's id. See `askTheCoach`.
+    console.error(
+      'plan request failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
+    return {
+      ...EMPTY_PLAN_REQUEST,
+      outcome: 'failed',
+      error: 'That did not finish. Nothing was saved, and you can try again.',
+    };
   }
 }
