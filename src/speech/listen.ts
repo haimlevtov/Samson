@@ -12,9 +12,11 @@
  *
  * AI-NOTE: "of ours" is load-bearing, and this comment said "nothing here
  *          reaches a model" until a question about it — which was wrong in the
- *          direction that matters. `SpeechRecognition` is remote in Chrome: the
- *          audio goes to Google's speech service. The spec permits on-device and
- *          Chrome does not do that. ADR 0031 §1 carries the consequence; do not
+ *          direction that matters. `SpeechRecognition` is remote BY DEFAULT in
+ *          Chrome: the audio goes to Google's speech service. Chrome has an
+ *          opt-in on-device path (`installOnDevice`, `processLocally`) and this
+ *          file does not ask for it — so "remote" is this code's behaviour, not
+ *          the platform's only one. ADR 0031 §1 carries the consequence; do not
  *          restate this file as "the audio never leaves the browser".
  */
 

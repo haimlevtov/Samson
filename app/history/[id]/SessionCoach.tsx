@@ -271,21 +271,29 @@ export function SessionCoach() {
           <input
             type="checkbox"
             role="switch"
+            className="sr-only"
+            aria-describedby="speak-cost"
             checked={speak}
             onChange={(event) => setSpeak(event.target.checked)}
           />
           <span className="track" aria-hidden="true">
             <span className="knob" />
           </span>
-          <span className="speak-label">
-            Read the answers aloud
-            <span className="muted small block">
-              {speak
-                ? 'On — the coach speaks its answers, which costs the app money.'
-                : 'Off — answers arrive written. Speaking them costs the app money.'}
-            </span>
-          </span>
+          <span className="speak-label">Read the answers aloud</span>
         </label>
+        {/*
+         * OUTSIDE the label, and described rather than named — FOUND IN REVIEW.
+         * Inside it, this sentence became part of the input's accessible name:
+         * `role="switch"` announced the state and then the name said it again,
+         * and because the name changed on every press the whole two-sentence
+         * string was re-announced each time. A description is read once, after
+         * the name and the state, which is the order somebody needs it in.
+         */}
+        <p className="muted small speak-cost" id="speak-cost">
+          {speak
+            ? 'On — the coach speaks its answers, which costs the app money.'
+            : 'Off — answers arrive written. Speaking them costs the app money.'}
+        </p>
 
         {mustType ? (
           /*

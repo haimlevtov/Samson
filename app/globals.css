@@ -2837,29 +2837,28 @@ details.quick-log[open] > summary {
    power switch: it governs what the next press costs, nothing is saved, and the
    control should look like the thing it is.
 
-   Built on the native checkbox, which is clipped rather than hidden — an input
-   with `display: none` leaves the label focusable by nothing and drops it out of
-   the accessibility tree. `.sr-only` is the same treatment used elsewhere in
-   this file, and the painted track is `aria-hidden` because the input carries
-   the state. */
+   Built on the native checkbox, CLIPPED rather than hidden — an input with
+   `display: none` leaves the label focusable by nothing and drops out of the
+   accessibility tree. The clipping is `.sr-only` in the markup rather than
+   repeated here: this block asserted it was "the same treatment used elsewhere"
+   while hand-rolling all eight of that primitive's declarations, which is the
+   mistake `.equipment-set` and the progression rung both record — FOUND IN
+   REVIEW. The painted track is `aria-hidden` because the input carries the
+   state. */
 .speak-toggle {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  /* The pair is the target, not the 40px track — mobile-interface.md §3. */
+  /* The pair is the target, not the 42px track — mobile-interface.md §3. */
   min-height: var(--tap);
   cursor: pointer;
 }
 .speak-toggle input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
+  /* The one thing `.sr-only` does not do: the base `input` rule sets
+     `min-height: var(--tap)`, so without this the clipped box is 1x44 rather
+     than 1x1. Every other shrunk input in this file resets it — .theme-choice,
+     .humor-choice, .check-row. FOUND IN REVIEW. */
+  min-height: 0;
 }
 .speak-toggle .track {
   flex: none;
@@ -2893,7 +2892,10 @@ details.quick-log[open] > summary {
 }
 .speak-toggle input:checked + .track {
   background: var(--accent);
-  border-color: var(--accent);
+  /* NOT `--accent` for the border: in dark that token is nearly the ground
+     (#4c31c9 on #17161f is about 2.2:1) and the switch would lose its outline
+     entirely. The same trap this file already records for `--accent-text`. */
+  border-color: var(--border-strong);
 }
 .speak-toggle input:checked + .track .knob {
   background: #fff;
@@ -2909,6 +2911,11 @@ details.quick-log[open] > summary {
 }
 .speak-toggle .speak-label {
   flex: 1 1 auto;
+}
+/* The cost sentence sits below the switch rather than inside its label — it is
+   the input's DESCRIPTION, not part of its name. See SessionCoach.tsx. */
+.speak-cost {
+  margin: 0;
 }
 .session-coach .grow {
   flex: 1 1 12rem;

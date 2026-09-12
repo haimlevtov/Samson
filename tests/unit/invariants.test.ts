@@ -278,3 +278,58 @@ describe('ADR 0028 — what a failed action may tell the user, and what it may l
     expect(offenders, 'log logLine(cause), never the object — ADR 0028').toEqual([]);
   });
 });
+
+describe('the voice switch is wired end to end', () => {
+  /*
+   * WHY a source scan, the same reasoning `the popover clamp` gives above: the
+   * painted switch is a sibling selector over a clipped input, and nothing fails
+   * when somebody reorders the two spans. The ON state silently stops painting,
+   * every check stays green, and the control still toggles — so the bug is
+   * invisible to the type system, the linter and the test suite at once.
+   *
+   * FOUND IN REVIEW of PR #62, which shipped the coupling with no test.
+   *
+   * AI-NOTE: if the switch ever stops being an adjacent-sibling paint, this is
+   *          what tells you to update it — re-point it rather than delete it.
+   */
+  const css = () => readFileSync(join(ROOT, 'app', 'globals.css'), 'utf8');
+  const component = () =>
+    readFileSync(join(ROOT, 'app', 'history', '[id]', 'SessionCoach.tsx'), 'utf8');
+
+  it('paints the checked state from the input that carries it', () => {
+    expect(css(), 'the switch no longer paints its ON state').toContain('input:checked + .track');
+  });
+
+  it('keeps the input immediately before the track it paints', () => {
+    /*
+     * `+` is adjacent-sibling, so an element between the two breaks it. JSX
+     * comments emit no DOM node and CSS ignores text nodes, so what matters is
+     * that no ELEMENT is introduced between them.
+     */
+    const text = component();
+    const role = text.indexOf('role="switch"');
+    const track = text.indexOf('className="track"');
+    expect(role, 'the switch input is gone').toBeGreaterThan(-1);
+    expect(track, 'the painted track is gone').toBeGreaterThan(role);
+
+    /*
+     * The first version of this matched the whole span with one lazy regex,
+     * and a lazy quantifier BACKTRACKS: inserting a `<span />` between the two
+     * let `[\s\S]*?` swallow it and the test passed. Slicing is not clever
+     * enough to do that.
+     */
+    const gap = text
+      .slice(text.indexOf('/>', role) + 2, track)
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .trim();
+    expect(gap, 'an element sits between the switch input and its track').toBe('<span');
+  });
+
+  it('keeps the cost sentence out of the label and attached as a description', () => {
+    // Inside the label it became part of the accessible name and was announced
+    // twice, changing on every press — FOUND IN REVIEW.
+    const text = component();
+    expect(text).toContain('aria-describedby="speak-cost"');
+    expect(text).toContain('id="speak-cost"');
+  });
+});
