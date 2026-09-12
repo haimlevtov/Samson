@@ -118,6 +118,12 @@ so every user who is not one of the five seeded archetypes has none. A picker is
 a separate piece of work — the plan says so — and this refusal is what keeps the
 gap from presenting as a failed plan.
 
+> **Amended 2026-09-12:** the picker shipped, on `/settings` —
+> [ADR 0029](0029-equipment-is-a-settings-question.md). The refusal stays exactly
+> as decided, because a user can still have saved nothing and that is a real
+> answer. What changed is that it is no longer a dead end: the card names
+> `/settings` instead of saying the app does not collect an equipment list.
+
 ### 6. No queue
 
 `CLAUDE.md` puts queues out of scope and that is unchanged. A queue is the
