@@ -79,13 +79,26 @@ export interface CoachState {
    * again under a question it did not answer.
    *
    * The `Uint8Array` as the gateway returned it: React serialises one in an
-   * action's result unchanged, and converting it would inflate a long clip past
-   * the ~4.5 MB response ceiling — `src/speech/perform.ts` records the measure.
+   * action's result as a binary chunk, and converting it to a number array
+   * would inflate a long clip several times over against the response ceiling.
+   * `src/speech/player.ts` carries that reasoning for the Try button.
+   *
+   * NEVER SENT BACK. `CoachBox`'s `ask` wrapper nulls it before the next
+   * submission, because `useActionState` passes the previous state as an
+   * argument and a long clip exceeded the 1 MB action body limit — FOUND IN
+   * REVIEW, and it broke every later submission until a reload.
    */
   audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
-  /** Why the newest reply has no clip, or null when it has one or nobody asked. */
+  /**
+   * Why the newest reply has no clip. `not-asked` when the switch was off;
+   * null when a clip arrived, when a supplement ROW was the answer, and on the
+   * returns that never reach a reply at all — a goal change, Clear, an error.
+   */
   silent: SilentReason | null;
-  /** Whose voice the newest reply was spoken in, for the card to name. */
+  /**
+   * The coach whose voice the reply was, or would have been, spoken in — also
+   * set on `too-long` and `failed`, where nothing was heard.
+   */
   coach: string | null;
   error: string | null;
 }

@@ -76,7 +76,9 @@ export function SessionCoach() {
   const listener = useRef<Listener | null>(null);
   /*
    * The clip's playback — `src/ui/reply-voice.ts`, which the Coach tab's chat
-   * now shares. It moved there verbatim: the pause-before-return, the rejection
+   * now shares. It MOVED — not verbatim: its generation guard changed shape, and
+   * `src/speech/reply-player.ts` says how and why that is the same or better.
+   * What went with it: the pause-before-return, the rejection
    * guard and the NotAllowedError replay were each found in review on THIS
    * card, and a second copy would have had to find them again.
    */

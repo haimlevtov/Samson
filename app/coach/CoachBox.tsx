@@ -1,12 +1,12 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
+import { useActionState, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
 import { DIET_GOALS, type DietGoal } from '@/src/diet/energy';
 import { EvidenceBody } from '@/src/ui/EvidenceCard';
 import { askTheCoach } from './actions';
 import { EMPTY_COACH, type CoachState } from './coach-state';
-import { SILENT_TEXT, useReplyVoice } from '@/src/ui/reply-voice';
+import { BLOCKED_TEXT, SILENT_TEXT, useReplyVoice } from '@/src/ui/reply-voice';
 import { SpeakSwitch } from '@/src/ui/SpeakSwitch';
 
 /**
@@ -133,7 +133,38 @@ function Refusal({ state }: { state: CoachState }) {
  * Everything that constrains the coach is on the server. Nothing here is a
  * control.
  */
-export function CoachBox({ goal }: { goal: DietGoal }) {
+/**
+ * The action as this form calls it — two guards the server cannot give itself.
+ *
+ * **The clip is never sent back.** FOUND IN REVIEW, and it broke the tab.
+ * `useActionState` passes the previous state as the action's first argument,
+ * and a server action serialises every argument into the POST body — so the
+ * last reply's audio rode along on the NEXT submission. Next rejects an action
+ * body over 1 MB, and uncompressed speech is about 48 kB a second, so after any
+ * spoken reply longer than about twenty seconds every later Send, goal change
+ * and Clear failed with a 413 before the action ran. The state never changed,
+ * so it stayed broken until a reload. Nothing on the server reads
+ * `previous.audio` either; it is sent as `null`.
+ *
+ * **A failed request becomes an inline error, not a replaced page.** The
+ * action's own try cannot see a request that never arrived — offline, a 502, a
+ * function the platform killed at its ceiling. React rethrows a rejected action
+ * during render, the nearest boundary is the route's, and the transcript lives
+ * only in this state. `SessionCoach.tsx` carries the identical guard, rated
+ * critical in its own review.
+ */
+async function ask(previous: CoachState, formData: FormData): Promise<CoachState> {
+  const sent: CoachState = { ...previous, audio: null };
+  return askTheCoach(sent, formData).catch((): CoachState => ({
+    ...previous,
+    audio: null,
+    silent: null,
+    coach: null,
+    error: 'That did not get through. Try again in a moment.',
+  }));
+}
+
+export function CoachBox({ goal, voiceName }: { goal: DietGoal; voiceName: string | null }) {
   /*
    * The STORED goal is the initial state — ADR 0032 §3, and until it existed
    * this opened on 'maintain' every time regardless of what the user had said.
@@ -141,7 +172,7 @@ export function CoachBox({ goal }: { goal: DietGoal }) {
    * to fix, and reading it here is the half that makes the column real rather
    * than write-only.
    */
-  const [state, formAction, pending] = useActionState<CoachState, FormData>(askTheCoach, {
+  const [state, formAction, pending] = useActionState<CoachState, FormData>(ask, {
     ...EMPTY_COACH,
     goal,
   });
@@ -174,11 +205,22 @@ export function CoachBox({ goal }: { goal: DietGoal }) {
    * A text-only answer still calls `play(null)`, which STOPS the previous clip:
    * a spoken reply must not carry on talking over the next one's words.
    */
-  useEffect(() => {
+  /*
+   * A LAYOUT effect, not a passive one — FOUND IN REVIEW. A passive effect runs
+   * after paint, so for one frame the new answer showed the PREVIOUS answer's
+   * "tap again to play" or "the voice did not come through". It cleared itself,
+   * but a `role="status"` line announcing the wrong thing for a frame is still
+   * announced.
+   *
+   * Keyed on `state`, which is a new object each time the action resolves and
+   * the same object on every other render — the switch, `pending`, `blocked` —
+   * so a clip plays once per reply. A non-answer submission (a goal change,
+   * Clear, a message too long) returns no audio, so it STOPS the last clip:
+   * intended, and consistent with how `row` behaves.
+   */
+  useLayoutEffect(() => {
     setUnplayable(false);
     play(state.audio, () => setUnplayable(true));
-    // `play` is recreated each render and reads only refs; keying on it would
-    // replay the clip on every keystroke.
   }, [state]);
   const target = state.result?.kind === 'ok' ? state.result : null;
 
@@ -411,23 +453,27 @@ export function CoachBox({ goal }: { goal: DietGoal }) {
             {SILENT_TEXT.failed}
           </p>
         ) : null}
-        {state.audio !== null && state.coach !== null && !unplayable ? (
-          /*
-           * Whose voice it was, said once it has arrived — ADR 0031 §5's
-           * correction: a card that names a voice before one has spoken is
-           * naming a guess.
-           */
-          <p className="muted small">In {state.coach}’s voice.</p>
-        ) : null}
         {blocked ? (
           /*
            * The browser withheld sound after the wait for the reply — the common
-           * case on a phone. The clip is already paid for and cached, and a press
-           * is what the autoplay policy is waiting for.
+           * case on a phone. The clip is paid for and cached, and a press is what
+           * the autoplay policy is waiting for.
+           *
+           * The SENTENCE is the spec's (§4) and the Try button's on the card
+           * above. It replaces the voice name rather than sitting beside it —
+           * FOUND IN REVIEW: naming a voice the user has not heard is the claim
+           * the session card already avoids, and it shows one or the other.
            */
-          <button type="button" className="secondary" onClick={() => void replay()}>
-            Tap to play
-          </button>
+          <>
+            <p className="muted small" role="status">
+              {BLOCKED_TEXT}
+            </p>
+            <button type="button" className="secondary" onClick={() => void replay()}>
+              Tap to play
+            </button>
+          </>
+        ) : state.audio !== null && state.coach !== null && !unplayable ? (
+          <p className="muted small">In {state.coach}’s voice.</p>
         ) : null}
 
         <div className="chat-form">
@@ -440,7 +486,24 @@ export function CoachBox({ goal }: { goal: DietGoal }) {
            * switch checkbox with no `name`, so it cannot post anything a
            * hand-written request could not.
            */}
-          <SpeakSwitch speak={speak} onChange={setSpeak} describedBy="coach-speak-cost" />
+          {/*
+           * WHOSE voice, before it is turned on — what the plan asked for, and the
+           * first version said only after a clip had arrived. The name is known
+           * up front now: it is the stored coach, resolved against the voiced
+           * rows the same way `performReply` resolves it, so the label and the
+           * voice cannot disagree.
+           */}
+          <SpeakSwitch
+            speak={speak}
+            onChange={setSpeak}
+            describedBy="coach-speak-cost"
+            label={
+              voiceName === null
+                ? 'Read the answers aloud'
+                : `Read the answers aloud — ${voiceName}`
+            }
+            next
+          />
           {speak ? <input type="hidden" name="speak" value="on" /> : null}
           <label className="sr-only" htmlFor="chat-message">
             Ask your coach
@@ -456,7 +519,7 @@ export function CoachBox({ goal }: { goal: DietGoal }) {
             disabled={pending}
           />
           <div className="row chat-actions">
-            <button type="submit" disabled={pending}>
+            <button type="submit" name="intent" value="ask" disabled={pending}>
               {pending ? 'Asking…' : 'Send'}
             </button>
             {state.turns.length > 0 ? (

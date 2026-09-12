@@ -156,10 +156,16 @@ export const COACH_VOICE_COOLDOWN_SECONDS = 3;
  *          BOUNDS the damage is the weekly budget, which has an unreserved gap
  *          of its own (ADR 0026 §4). Do not describe this as a rate limit.
  *
- * AI-NOTE: filtered to `stage = 'speech'` deliberately. Without it a chat
+ * AI-NOTE: filtered to `stage = 'speech'` deliberately. Without it every chat
  *          question would silence the Try button, and a preview would silence
- *          the chat — two features taking each other's cooldown, which is the
- *          shape `spokeToCoachRecently`'s own stage filter avoids.
+ *          the chat — two features taking each other's cooldown.
+ *
+ *          SINCE REWORK PR 6 THAT IS ONLY HALF TRUE, and it is said here rather
+ *          than left: a SPOKEN chat reply writes a `speech` row, so on the Coach
+ *          tab it does silence Try — and a preview silences the next spoken
+ *          reply — for `COACH_VOICE_COOLDOWN_SECONDS`. Deliberate: both are the
+ *          same paid call, and a three-second window between two of them on
+ *          one page is the point of the guard, not a side effect of it.
  */
 export async function askedForAVoiceRecently(db: Db, seconds: number): Promise<boolean> {
   const since = new Date(Date.now() - seconds * 1000).toISOString();

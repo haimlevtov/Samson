@@ -319,6 +319,39 @@ cache and in-flight bookkeeping, which is why they belong in a testable module
 rather than in a component. `listen.ts` took that advice; the component did not,
 and `turn`, `blocked` and `mustType` are still untested because of it.
 
+## Amendment 2026-09-12 — a second surface, rework PR 6
+
+The Coach tab's chat speaks its replies too, behind the same switch. Everything
+in §1–§4 applies unchanged; what follows is what a SECOND surface added, most of
+it found in review.
+
+- **One path, not two.** The session card's speech step, playback and switch are
+  shared modules now — `performReply`, `createReplyPlayer` behind
+  `useReplyVoice`, and `SpeakSwitch` — so the sanitiser, the transcript bound and
+  the three playback fixes live once.
+- **A failure to speak never costs the written answer,** on BOTH surfaces.
+  `speakIfAsked` always resolves. Review found the session card had regressed in
+  the same PR: it awaited speech inside the outer try, so a speech failure
+  returned an empty reply for a chat call already paid for.
+- **Speech has a deadline.** The Coach tab's route caps functions at 60 seconds
+  and the gateway's default retry is 40.5 seconds of speech alone; a slow chat
+  plus one timed-out attempt got the function killed mid-retry, the page replaced
+  and the transcript lost. `speechWindow` gives one attempt sized to what is left.
+- **§3's recency reasoning applies here too.** Review found the Coach tab path
+  shipped a paid speech call with no guard, on the credential-free demo account.
+  It guards the SPEECH; the chat on that tab was unguarded before this and still
+  is — a gap recorded, not widened.
+- **The previous clip is never uploaded back.** `useActionState` passes the prior
+  state to the action, and a long clip exceeded the 1 MB action body limit, which
+  broke every later submission until a reload.
+- **The switch names its voice BEFORE it is turned on**, and says it governs the
+  next answer only.
+
+**What §5 said would ship with this, and did not:** persisting the Coach tab's
+persona PICKER. §5 and PR 8's outcome both called it "PR 6's". It is not done. The
+picker still resets with the page; the chat's switch names the voice that will
+actually speak, so the difference is visible rather than silent.
+
 ## Consequences
 
 - The session screen gains a client component and one server action. No new

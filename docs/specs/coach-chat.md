@@ -69,7 +69,10 @@ reader navigable without work, and it degrades to an open section with CSS off �
 `docs/specs/workout-templates.md` §6. It exists only where there is a plan, so
 it is not a control on the page so much as a control on the block.
 
-**The box is below both.** One text field, a send button, and the transcript.
+**The box is below both.** One text field, a send button, and the transcript —
+and, since rework PR 6, a voice switch above the field: off by default, for that
+page only, naming whose voice the reply would be spoken in, and governing the NEXT
+answer only. ADR 0031 carries the decision; its amendment carries this surface.
 Empty state names the boundary before the user hits it: this coach talks about
 your training, what to eat for it, and what the evidence table says about a
 supplement. The empty state also says what the conversation does and does not

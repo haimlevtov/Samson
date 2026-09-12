@@ -335,7 +335,8 @@ describe('the voice switch is wired end to end', () => {
     // Inside the label it became part of the accessible name and was announced
     // twice, changing on every press — FOUND IN REVIEW.
     //
-    // The id is a PROP now, because two surfaces render the switch on one page
+    // The id is a PROP now, because two surfaces render the switch — on
+    // different routes, so they never collide, but each names its own sentence
     // at most once each and must not collide. So what is asserted is that the
     // description and the sentence are wired to the SAME prop.
     const text = component();

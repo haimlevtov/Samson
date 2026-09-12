@@ -14,10 +14,11 @@
  *            persona row (`coachVoice` in src/db/personas.ts) and nothing a user
  *            can write reaches it.
  * INVARIANT: the TRANSCRIPT is no longer known text, as of ADR 0031. A coach's
- *            sample line still comes from a shared row, but a mid-session reply
- *            is model-written prose answering a question the user spoke — so
- *            everything that reaches the transcript through that path goes
- *            through `spokenLine` first. Calling `speechScript` with raw model
+ *            sample line still comes from a shared row, but a spoken REPLY is
+ *            model-written prose answering a question a user asked — so it goes
+ *            through `spokenLine` first. There is ONE path for that now,
+ *            `performReply` in `src/speech/perform.ts`, which both the session
+ *            card and the Coach tab's chat call. Calling `speechScript` with raw model
  *            output is the bug the AI-NOTE below was written to prevent, and it
  *            was made once already.
  *
@@ -228,9 +229,26 @@ export function spokenLine(text: string): string {
       // The whole bracketed SPAN: removing only the delimiters left the tag
       // WORD to be read aloud. NFKC has already folded the fullwidth forms;
       // the CJK pair is not NFKC-equivalent to anything, so it is named.
-      .replace(/[[【〔][^\]】〕]*[\]】〕]?/gu, ' ')
-      .replace(/[[\]【】〔〕]/gu, ' ')
-      .replace(/director[\u2019'\u02bc]?s\s+notes/giu, ' ')
+      /*
+       * FOUND IN REVIEW of rework PR 6, which gave this function a second caller
+       * whose input is shaped by a client-held chat history. Measured through
+       * this function and reaching the speech model unchanged: the bracket pairs
+       * ⟦⟧, 〚〛 and 「」, and the label spelled `DIRECTORS' NOTES`,
+       * `DIRECTOR S NOTES` and with a backtick for an apostrophe.
+       *
+       * So the brackets are every pair a model might use for a performance tag,
+       * and the label tolerates any run of non-letters between its two words.
+       *
+       * NOT CLOSED, and said so: a homoglyph — a Cyrillic Е inside DIRECTOR —
+       * survives. NFKC does not map one script's letters onto another's, and a
+       * confusables table is a larger change than this pass. What bounds it:
+       * every newline collapses, so a surviving label sits INSIDE the transcript
+       * rather than opening a second notes block; the line is capped at
+       * `MAX_TRANSCRIPT_CHARS`; and only the person who crafted it hears it.
+       */
+      .replace(/[[【〔⟦〚「][^\]】〕⟧〛」]*[\]】〕⟧〛」]?/gu, ' ')
+      .replace(/[[\]【】〔〕⟦⟧〚〛「」]/gu, ' ')
+      .replace(/director[^\p{L}]{0,3}s[^\p{L}]{0,3}notes/giu, ' ')
       // Anchored, unlike the first version, which deleted the word "transcript"
       // out of ordinary prose — "the transcript is fine" became "the is fine".
       // A guard that fires on normal language is one somebody switches off;

@@ -6,13 +6,17 @@
  * would have been copied is the most safety-sensitive stretch of code in the
  * project: the sanitiser that stands between model-written prose and the speech
  * model's instruction channel, the bound that keeps the cost assumption honest,
- * and the four refusals a card can explain. `src/speech/script.ts`'s own AI-NOTE
+ * and the refusals a card can explain. `src/speech/script.ts`'s own AI-NOTE
  * says to use `spokenLine` "for anything that is not a shared row's own column",
  * and a second hand-written copy is how that instruction gets missed once.
  *
- * INVARIANT: the server never speaks text the browser sent — ADR 0025 §4. What
- *            is performed is the REPLY this request generated, never the
- *            question, and never anything the client supplied.
+ * INVARIANT: what is performed is the REPLY this request generated — never the
+ *            question. ADR 0025 §4 says the server never speaks text the browser
+ *            sent, and ADR 0031 §2 records that phrasing as literally true and
+ *            substantively false once a reply answers a user's question: the
+ *            user shapes it. That is why it goes through `spokenLine`, and why
+ *            this module cannot, on its own, promise more than "not the
+ *            question".
  *
  * INVARIANT: the direction and the voice come from a SHARED persona row
  *            (`user_id is null`), so no row a user can write is ever performed.
@@ -51,9 +55,10 @@ export type SilentReason =
 export interface Performance {
   /*
    * `Uint8Array<ArrayBuffer>`, not the default `ArrayBufferLike` — the type the
-   * session card already declares. A `SharedArrayBuffer`-backed view does not
-   * cross a server-action boundary, and the narrower type is what makes that a
-   * compile error rather than a runtime surprise.
+   * session card already declared, and what `new Blob([bytes])` in the browser
+   * accepts without a copy. (An earlier comment here claimed a
+   * `SharedArrayBuffer`-backed view would not cross the action boundary; nothing
+   * supports that, and React serialises any `Uint8Array` the same way.)
    */
   audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
   /**
@@ -85,7 +90,18 @@ export interface Performance {
  */
 export async function performReply(
   db: Db,
-  input: { userId: string; reply: string; personaSlug: string | null }
+  input: {
+    userId: string;
+    reply: string;
+    personaSlug: string | null;
+    /**
+     * The speech call's own bounds, when the caller is inside a function with a
+     * ceiling. Absent, the gateway's defaults apply — up to two attempts at 20s
+     * each, which is 40.5s of speech alone and does not fit after a chat call on
+     * a 60-second route. See `speechWindow`.
+     */
+    bounds?: { maxAttempts: number; timeoutMs: number };
+  }
 ): Promise<Performance> {
   const personas = await listPersonas(db);
   const voicedSlugs = personas.filter((persona) => persona.voiced).map((persona) => persona.slug);
@@ -133,6 +149,7 @@ export async function performReply(
       // The sanitised REPLY, which the caller generated. Never the question.
       input: speechScript(coach.direction, line),
       voice: coach.voice,
+      ...input.bounds,
     },
     createGatewayDeps(createSupabaseLedger(db))
   );
@@ -194,7 +211,48 @@ export async function speakIfAsked(
   } catch (cause) {
     if (cause instanceof MissingApiKeyError) return { audio: null, silent: 'no-key', coach: null };
     if (cause instanceof BudgetExceededError) return { audio: null, silent: 'budget', coach: null };
-    onFailure(cause);
+    /*
+     * Guarded, because it is the caller's code running inside the one catch that
+     * exists to make this function total. FOUND IN REVIEW: `logLine` reads
+     * `cause.message`, and an Error whose message is not a string makes it
+     * throw — which would have turned "always resolves" into a rejection from
+     * the logging line of the error path.
+     */
+    try {
+      onFailure(cause);
+    } catch {
+      // Nothing to do: the reply is kept either way, which is the point.
+    }
     return { audio: null, silent: 'failed', coach: null };
   }
+}
+
+/**
+ * How long a speech call may take, given how long the request has already run —
+ * or null when there is too little left to start a paid call at all.
+ *
+ * FOUND IN REVIEW of rework PR 6. The Coach tab's route caps its functions at 60
+ * seconds, the chat call runs first, and `callSpeech` retries a timeout by
+ * default: two 20-second attempts and a backoff is 40.5 seconds of speech on its
+ * own. A slow chat followed by one timed-out attempt got the function KILLED
+ * mid-retry — so `speakIfAsked`'s catch never ran, the failure reached the error
+ * boundary, and the page was replaced with the transcript lost. The written
+ * answer the whole speech path is built to protect was lost to the likeliest
+ * speech failure there is.
+ *
+ * So speech gets ONE attempt, sized to what is left before a deadline that sits
+ * inside the function's ceiling — the gap `WEB_PLAN_DEADLINE_MS` keeps for the
+ * same reason on the same route. Below `minMs` it does not start: a call that
+ * cannot finish is a charge for nothing, and a refusal the card can explain is
+ * better than a page that dies.
+ */
+export function speechWindow(input: {
+  elapsedMs: number;
+  deadlineMs: number;
+  minMs: number;
+  maxMs: number;
+}): { maxAttempts: number; timeoutMs: number } | null {
+  const left = input.deadlineMs - input.elapsedMs;
+  if (left < input.minMs) return null;
+  return { maxAttempts: 1, timeoutMs: Math.min(input.maxMs, left) };
 }

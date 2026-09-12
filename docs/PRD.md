@@ -192,10 +192,13 @@ characters — on one machine the Sergeant spoke in a light female voice — and
 voice that does not fit its coach is worse than none. Each coach's row now holds
 a voice and a written direction ("an old samurai sword master: deep, grave,
 unhurried"), spoken by a steerable TTS model through OpenRouter and the gateway.
-Without the key, the coach's words are shown and nothing speaks. Only the
-coach's sample line is spoken so far: the delivered plan is no longer read
-aloud, and comes back in the coach's voice once deliveries are stored
-server-side (ADR 0025 §4). The paragraph below is the history.
+Without the key, the coach's words are shown and nothing speaks. Three
+things are spoken: a coach's sample line on a Try button, and — behind an
+off-by-default switch — the coach's REPLY on the session card (ADR 0031) and on
+the Coach tab's chat (rework PR 6). The delivered plan is still not read aloud,
+and comes back in the coach's voice once deliveries are stored server-side (ADR
+0025 §4). _This said "only the sample line is spoken so far" until 2026-09-12,
+which had been false since the session card learned to talk._ The paragraph below is the history.
 
 **Corrected 2026-09-07.** This said "TTS voice", which promised something the
 project does not have: there is no TTS provider and the only key here is for

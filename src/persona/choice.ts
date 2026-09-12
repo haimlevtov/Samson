@@ -7,11 +7,14 @@
  *
  * WHAT THE FALLBACK IS, precisely, because §5 records a review correcting this
  * exact conflation: it is **the first coach the CALLER listed**, and nothing
- * more. The session card passes the shared voiced coaches, so there it is §5's
- * "first shared, voiced coach alphabetically". The Coach tab passes every active
- * persona, a user's own and unvoiced rows included, so there it is not. This
- * function does not know the difference and must not pretend to: who is
- * eligible is the surface's decision, which is what §5 is about.
+ * more. `performReply` passes the shared voiced coaches, so for BOTH spoken
+ * surfaces — the session card and the Coach tab's chat — it is §5's "first
+ * shared, voiced coach alphabetically". The Coach tab's PICKER passes every
+ * active persona, a user's own and unvoiced rows included, so there it is not.
+ * So on one page the picker and the chat voice can open on different coaches;
+ * the chat's switch names its voice so that is visible. This function does not
+ * know the difference and must not pretend to: who is eligible is the caller's
+ * decision, which is what §5 is about.
  *
  * Pure, and here rather than inline in the component, because the interesting
  * case is the one a component cannot be asked about: a stored slug that names no

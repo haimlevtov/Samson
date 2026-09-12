@@ -6,13 +6,19 @@ import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { loadXpSummary } from '@/src/db/gamification';
 import { coachVoice, latestAcceptedPlan, listPersonas } from '@/src/db/personas';
-import { performReply, speakIfAsked } from '@/src/speech/perform';
+import { performReply, speakIfAsked, speechWindow } from '@/src/speech/perform';
 import { listWorkouts, loadHistory } from '@/src/db/training';
 import { callLLM, callSpeech, createGatewayDeps } from '@/src/llm/gateway';
 import { speechScript } from '@/src/speech/script';
 import { refusalFor } from '@/src/speech/refusal';
 import type { VoiceResult } from '@/src/speech/player';
-import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  MissingApiKeyError,
+  SPEECH_TIMEOUT_MS,
+  SPOKEN_REPLY_DEADLINE_MS,
+  SPOKEN_REPLY_MIN_WINDOW_MS,
+} from '@/src/llm/config';
 import { z } from 'zod';
 import { DIET_GOALS, computeEnergy, dietFacts } from '@/src/diet/energy';
 import { loadEvidence } from '@/src/db/evidence';
@@ -94,8 +100,13 @@ function sayable(result: {
  * One turn of the coach box — ADR 0015 §6, docs/specs/coach-chat.md.
  *
  * Replaces `sendChatMessage`, `askDietAdvisor` and `askAboutSupplement`. One
- * form, one action, one call: the route is the model's and the guard that runs
- * is the one belonging to the route it named.
+ * form, one action, one CHAT call: the route is the model's and the guard that
+ * runs is the one belonging to the route it named.
+ *
+ * _And, since rework PR 6, up to one SPEECH call after it, when the voice switch
+ * is on and the reply is the coach's own prose. It said "one call" before; with
+ * the switch on it is two stages, and the second is bounded, guarded and
+ * incapable of costing the first — see `speakIfAsked` and `speechWindow`._
  *
  * INVARIANT: this action has no write path to the user's TRAINING data, and
  *            adding one would break the guarantees in ADR 0015's table. It
@@ -125,6 +136,8 @@ function sayable(result: {
  *            carries a goal, a message and an intent, and nothing else.
  */
 export async function askTheCoach(previous: CoachState, formData: FormData): Promise<CoachState> {
+  // For the speech deadline — the platform's clock started when the request did.
+  const started = Date.now();
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
@@ -184,7 +197,13 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
    * Exactly `'on'` and nothing else: a hand-written POST should not turn on a
    * paid feature by sending something truthy.
    */
-  const speak = formData.get('speak') === 'on';
+  /*
+   * AND only from the Send button — FOUND IN REVIEW. "Work out my target"
+   * submits this same form, and with a draft in the box and the switch on it
+   * sent a chat call and a paid speech call from a button that promises neither.
+   * The Send button carries `intent=ask`; nothing else speaks.
+   */
+  const speak = formData.get('speak') === 'on' && formData.get('intent') === 'ask';
 
   const today = localDateFor(user.timezone);
   const [history, xp] = await Promise.all([loadHistory(db), loadXpSummary(db, today)]);
@@ -311,12 +330,60 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * REPLY this request generated — never the message, never anything the
      * client sent (ADR 0025 §4).
      */
+    /*
+     * NEVER a substituted reply — FOUND IN REVIEW. An off-topic question, a
+     * supplement no row covers and an unverified number all come back as the
+     * APP's own sentence, not the coach's. Speaking one would put code-owned
+     * words in a coach's voice, and charge for it: a loop of off-topic questions
+     * with the switch on paid two cents per refusal.
+     */
+    const speakable = answer.substituted ? null : answer.text;
+
+    /*
+     * One attempt, sized to what is left before `SPOKEN_REPLY_DEADLINE_MS` —
+     * `speechWindow` carries why. Null when there is no time to start: the card
+     * says the voice did not come through, and the written answer is kept.
+     */
+    const window = speechWindow({
+      elapsedMs: Date.now() - started,
+      deadlineMs: SPOKEN_REPLY_DEADLINE_MS,
+      minMs: SPOKEN_REPLY_MIN_WINDOW_MS,
+      maxMs: SPEECH_TIMEOUT_MS,
+    });
+
+    /*
+     * The recency guard its paid siblings have — FOUND IN REVIEW. `hearCoach`,
+     * `askDuringSession` and `requestPlan` each refuse a press that follows the
+     * last too closely; this path added a paid speech call without one, so a
+     * scripted loop on the credential-free demo account could spend its week.
+     * It guards the SPEECH only: skipping the voice keeps the written answer,
+     * and the chat itself was unguarded before this PR — a gap recorded, not
+     * widened here.
+     */
+    const tooSoon = speak && (await askedForAVoiceRecently(db, COACH_VOICE_COOLDOWN_SECONDS));
+
     const speech = await speakIfAsked(
-      { wanted: speak, reply: answer.text },
-      (reply) => performReply(db, { userId: user.id, reply, personaSlug: user.personaSlug }),
+      { wanted: speak, reply: tooSoon || window === null ? null : speakable },
+      (reply) =>
+        performReply(db, {
+          userId: user.id,
+          reply,
+          personaSlug: user.personaSlug,
+          bounds: window ?? undefined,
+        }),
       // The name and a bounded message, never the object — ADR 0028.
       (cause) => console.error('coach reply not spoken', logLine(cause))
     );
+
+    /*
+     * `speakIfAsked` reads a null reply as "nothing to speak" and says nothing.
+     * When the reply existed and was withheld for TIME or RECENCY, the card
+     * should say the voice did not come through rather than go quiet.
+     */
+    const withheld =
+      speak && speakable !== null && (tooSoon || window === null)
+        ? ({ audio: null, silent: 'failed', coach: null } as const)
+        : speech;
 
     return {
       turns: trim([...withUser, { role: 'coach', text: spoken }]),
@@ -327,7 +394,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       // `/evidence` link from this rather than by recognising the constant's
       // text, which a user could type themselves — see `coach-state.ts`.
       supplementMiss: answer.route === 'supplement' && answer.row === null,
-      ...speech,
+      ...withheld,
       error: null,
     };
   } catch (cause) {

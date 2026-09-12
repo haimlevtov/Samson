@@ -397,6 +397,21 @@ to be wrong in two rows.
 Coach tab, where people actually hold a conversation, still answers in silence.
 The same control, on the surface it was arguably for in the first place.
 
+> **What shipped differs from this entry.** Recorded where a reader meets it.
+>
+> - **The session card's speech path was extracted, not copied** — into
+>   `src/speech/perform.ts`, `src/speech/reply-player.ts`, `src/ui/reply-voice.ts`
+>   and `src/ui/SpeakSwitch.tsx` — and the session card rewritten onto it. The
+>   file list below names none of those, and `globals.css` was not touched.
+> - **The picker is NOT persisted.** This entry, ADR 0031 §5 and PR 8's outcome
+>   all said it would be. The chat speaks in the STORED coach, and its switch
+>   names that voice, so a picker changed on the page and a voice that did not
+>   follow it are visible rather than silent. Persisting the picker is still open.
+> - **Review added four guards this entry did not foresee:** a speech-stage
+>   recency guard, a deadline so speech cannot outlive the route's ceiling, never
+>   uploading the previous clip back, and never speaking a reply the app
+>   substituted. ADR 0031's amendment records them.
+
 **No new ADR.** [ADR 0031](../adr/0031-talking-during-a-session.md) already
 decided everything this needs and its reasoning is surface-independent:
 

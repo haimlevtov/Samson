@@ -197,7 +197,9 @@ the cheapest call in the pipeline by design: a small model, a small
 Two limits on what that buys, stated rather than implied. The budget gate reads
 the spend total and then calls, with no reservation between the two, so it
 bounds **sequential** spend and concurrent messages can all pass the same check.
-And one submitted message can drive up to six upstream completions —
+And one submitted message can drive up to six upstream completions — plus, since
+rework PR 6 and only with the voice switch on, ONE speech attempt after them,
+bounded by `speechWindow` and a speech-stage recency guard —
 `MAX_CHAT_ATTEMPTS` (2) nesting inside the gateway's `DEFAULT_MAX_ATTEMPTS` (3)
 — both of which an attacker can steer, one by reliably provoking an unauthorised
 numeral and the other by tripping `scanOutput`. Rate limiting is out of scope

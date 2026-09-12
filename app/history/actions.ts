@@ -13,14 +13,19 @@ import { loadXpSummary } from '@/src/db/gamification';
 import { loadHistory } from '@/src/db/training';
 import { loadEvidence } from '@/src/db/evidence';
 import { loadNotes, rememberNote } from '@/src/db/notes';
-import { performReply } from '@/src/speech/perform';
+import { performReply, speakIfAsked, speechWindow } from '@/src/speech/perform';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { computeEnergy, dietFacts } from '@/src/diet/energy';
 import { stripInvisible } from '@/src/llm/safety';
 import { spokeToCoachRecently, SESSION_COACH_COOLDOWN_SECONDS } from '@/src/db/plans';
 import { refusalFor } from '@/src/speech/refusal';
-import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  SPEECH_TIMEOUT_MS,
+  SPOKEN_REPLY_DEADLINE_MS,
+  SPOKEN_REPLY_MIN_WINDOW_MS,
+} from '@/src/llm/config';
 import type { SessionAnswer } from './session-coach';
 import { isUserFacing, logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
@@ -291,6 +296,8 @@ export async function askDuringSession(
   spoken: unknown,
   wantsVoice: unknown
 ): Promise<SessionAnswer> {
+  // For the speech deadline — see `speechWindow`.
+  const started = Date.now();
   /*
    * Trimmed BEFORE the length check — FOUND IN REVIEW. `min(1)` on an untrimmed
    * string admits a whitespace-only POST, which buys a whole chat call for a
@@ -448,21 +455,55 @@ export async function askDuringSession(
      * moved rather than being copied: what a copy would have duplicated is the
      * sanitiser that stands between model prose and an instruction channel.
      */
-    if (!speak) {
-      return { asked, reply, audio: null, silent: 'not-asked', coach: null, error: null };
-    }
-
-    const spokenReply = await performReply(db, {
-      userId: user.id,
-      reply,
-      personaSlug: user.personaSlug,
+    /*
+     * THROUGH `speakIfAsked`, FOUND IN REVIEW of rework PR 6 — and it was a
+     * regression that PR introduced on this card while fixing the same fault on
+     * the Coach tab.
+     *
+     * This awaited `performReply` directly inside the outer try, so a speech
+     * failure — a timeout, a 502, a spent budget — reached the catch below, which
+     * returns `reply: ''`. The chat had succeeded and been paid for; the user
+     * saw "the coach could not answer that one". Worse, moving the persona read
+     * into `performReply` put it AFTER the chat call, so even a failed read of the
+     * persona table now discarded a paid answer.
+     *
+     * `speakIfAsked` always resolves. The written reply is kept whatever happens
+     * to the voice, and the card already has a sentence for every reason.
+     *
+     * NOT a substituted reply, for the reason the Coach tab gives: an off-topic
+     * question or a supplement miss comes back as the app's own sentence, and
+     * speaking it puts code-owned words in a coach's voice and charges for them.
+     */
+    const window = speechWindow({
+      elapsedMs: Date.now() - started,
+      deadlineMs: SPOKEN_REPLY_DEADLINE_MS,
+      minMs: SPOKEN_REPLY_MIN_WINDOW_MS,
+      maxMs: SPEECH_TIMEOUT_MS,
     });
+    const speakable = answer.substituted ? null : reply;
+
+    const spokenReply = await speakIfAsked(
+      { wanted: speak, reply: window === null ? null : speakable },
+      (text) =>
+        performReply(db, {
+          userId: user.id,
+          reply: text,
+          personaSlug: user.personaSlug,
+          bounds: window ?? undefined,
+        }),
+      // The name and a bounded message, never the object — ADR 0028.
+      (cause) => console.error('session reply not spoken', logLine(cause))
+    );
+
+    // Out of time with a reply worth speaking: say the voice did not come
+    // through, rather than going quiet as though nobody had asked.
+    const silent = speak && speakable !== null && window === null ? 'failed' : spokenReply.silent;
 
     return {
       asked,
       reply,
       audio: spokenReply.audio,
-      silent: spokenReply.silent,
+      silent,
       coach: spokenReply.coach,
       error: null,
     };

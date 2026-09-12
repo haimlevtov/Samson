@@ -174,6 +174,16 @@ call until it is), and pre-rendered clips.
 > What is NOT done: previews are still not cached server-side, so the same coach
 > re-fetches on a fresh page. That was an open item before this PR and it is a
 > larger one now.
+>
+> **And a THIRD paid speech path, since rework PR 6: the Coach tab's chat reply.**
+> The count above says two preview surfaces; a spoken chat reply is not a preview
+> and neither of the first two bounds covered it. It has its own: off by default
+> and per page, the same `askedForAVoiceRecently` guard (which means a spoken
+> reply and a Try press on one page share its three-second window, deliberately),
+> ONE attempt sized by `speechWindow` to fit the route's 60-second ceiling, and
+> never a reply the app substituted for the coach's. The Cost section's "none
+> left for a plan or the chat" is sharper now — the chat can spend on speech
+> itself.
 
 ## Consequences
 

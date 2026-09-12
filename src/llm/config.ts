@@ -259,6 +259,25 @@ export function modelOverrideFromEnv(env: Env = process.env): string[] | undefin
 export const WEB_PLAN_DEADLINE_MS = 45_000;
 
 /**
+ * When a spoken chat reply must have finished, measured from the start of the
+ * request — rework PR 6.
+ *
+ * AI-NOTE: the same arithmetic as `WEB_PLAN_DEADLINE_MS` above, on the same
+ *          60-second route: the gap to `maxDuration` is the bookkeeping's. A
+ *          request that reaches this having spent it on the chat call is told
+ *          the voice did not come through, rather than being killed by the
+ *          platform with the transcript on it. Change both together.
+ */
+export const SPOKEN_REPLY_DEADLINE_MS = 45_000;
+
+/**
+ * The least time worth starting a paid speech call with. Below it the call
+ * would almost certainly not finish, and a charge for a clip nobody hears is
+ * worse than a sentence saying there was no time.
+ */
+export const SPOKEN_REPLY_MIN_WINDOW_MS = 6_000;
+
+/**
  * One planner+critic round from the web, not three.
  *
  * WHY: three cannot fit, and the honest consequence is in ADR 0027 §2 — a block
