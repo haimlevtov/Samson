@@ -255,15 +255,45 @@ export function SessionCoach() {
          * what it costs in words: the money is the project's, and a figure would
          * be asking the user to budget something that is not theirs.
          */}
-        <label className="row speak-toggle">
-          <input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} />
-          <span>
-            Read the answers aloud
-            <span className="muted small block">
-              Off by default — a spoken answer costs the app money, and a chatty session adds up.
-            </span>
+        <label className="speak-toggle">
+          {/*
+           * A switch, not a tickbox — and it is still an `<input type="checkbox">`
+           * underneath. `role="switch"` is the ARIA name for a control that is
+           * ON or OFF right now rather than one that will be submitted with a
+           * form, which is exactly what this is: nothing is saved, the toggle
+           * governs the next press.
+           *
+           * Building it on the native input rather than a styled `<div>` keeps
+           * the keyboard (space toggles), the label association, the focus ring
+           * and the disabled semantics for free. A hand-rolled switch has to
+           * reimplement all four and usually reimplements three.
+           */}
+          <input
+            type="checkbox"
+            role="switch"
+            className="sr-only"
+            aria-describedby="speak-cost"
+            checked={speak}
+            onChange={(event) => setSpeak(event.target.checked)}
+          />
+          <span className="track" aria-hidden="true">
+            <span className="knob" />
           </span>
+          <span className="speak-label">Read the answers aloud</span>
         </label>
+        {/*
+         * OUTSIDE the label, and described rather than named — FOUND IN REVIEW.
+         * Inside it, this sentence became part of the input's accessible name:
+         * `role="switch"` announced the state and then the name said it again,
+         * and because the name changed on every press the whole two-sentence
+         * string was re-announced each time. A description is read once, after
+         * the name and the state, which is the order somebody needs it in.
+         */}
+        <p className="muted small speak-cost" id="speak-cost">
+          {speak
+            ? 'On — the coach speaks its answers, which costs the app money.'
+            : 'Off — answers arrive written. Speaking them costs the app money.'}
+        </p>
 
         {mustType ? (
           /*

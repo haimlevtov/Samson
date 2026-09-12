@@ -451,6 +451,19 @@ policies scoped to a group the viewer belongs to, or `SECURITY DEFINER`
 aggregate views that expose a ranking without exposing the rows behind it.
 Invariant #10 survives either way; the effort is in choosing which.
 
+**Speech-to-text is the browser's, and a stage would buy two things.** ADR 0031
+chose `SpeechRecognition` and the reasoning holds for a demo on a $5 key: free,
+no stage, no migration. What it costs is written there — **a browser-support hole
+whose size is unmeasured** (ADR 0031 §1 records that the iOS Safari claim
+contradicts this project's own fallback and is the browser pass's question), and
+**the audio goes to the browser's own provider by default**, Google in Chrome's
+case, which is a company none of these documents otherwise mention. A paid stage would answer both: it works everywhere,
+and the transcript's route becomes one this project chose and can describe. It
+would need a `llm_calls.stage` value, a migration, a cost assumption that scales
+with seconds rather than characters, and a budget the current key does not have.
+Deliberately not scheduled; recorded so the browser API is not mistaken for a
+decision nobody revisits.
+
 **Re-engagement has no channel.** Push notifications are on the out-of-scope
 list above, which is right for one demo. But XP is the retention mechanism, and
 without notifications it only fires once the user has already decided to open

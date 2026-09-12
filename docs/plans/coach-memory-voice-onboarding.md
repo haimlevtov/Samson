@@ -520,4 +520,7 @@ sentence held.
 
 **Not opened in a browser** — and `SpeechRecognition` is the one part no test
 here reaches. The state machine is proved; what Chrome does with a held button is
-not.
+not. _Partially discharged on 2026-09-12: the voice switch was rendered against
+the real stylesheet at 375x812 in both themes and its tap target, role and focus
+ring measured. That is the CONTROL, not the feature — nothing signed in, and no
+microphone held._

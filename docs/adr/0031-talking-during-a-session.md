@@ -1,6 +1,7 @@
 # ADR 0031 — Talking to the coach mid-session, and what it is allowed to cost
 
-**Status:** accepted, rework
+**Status:** accepted, rework — amended 2026-09-12: §1 was wrong about where the
+audio goes, and about iOS Safari; see the subsection in §1
 **Date:** 2026-09-12
 
 ## Context
@@ -18,20 +19,62 @@ project's whole weekly key in one session.
 
 ## Decision
 
-### 1. Recognition is the browser's, not a provider's
+### 1. Recognition is the browser's provider, not ours
 
 The owner chose `SpeechRecognition` over a paid speech-to-text stage.
 
-- Free, no key, no new `llm_calls.stage`, no migration, no budget assumption —
-  which matters against a key funded in single dollars.
+- Free **to this project**, no key, no new `llm_calls.stage`, no migration, no
+  budget assumption — which matters against a key funded in single dollars.
 - It is the mirror image of [ADR 0025](0025-coach-voices.md), and deliberately
   so: that ADR killed device speech for OUTPUT because **a device voice cannot
   be a character**, and character is the whole product. Recognition has no
   character to get wrong. The argument that applied to output does not apply to
   input.
 
-**It does not exist in iOS Safari.** This is a phone-first product, so that is a
-real hole rather than a footnote.
+#### Amended 2026-09-12 — the audio leaves the device, and §1 did not say so
+
+This section was titled _"Recognition is the browser's, not a provider's"_ and
+listed the choice as free with no provider attached. **Free is true of the money
+and false of the data.** The Web Speech API permits an implementation to
+recognise on-device or remotely, and **Chrome's default is remote**: it streams
+the captured audio to Google's speech service. _Chrome has since added an
+on-device path — `SpeechRecognition.available()`, `installOnDevice()`,
+`processLocally` — which is OPT-IN and which `src/speech/listen.ts` does not ask
+for. So "remote" is this code's behaviour rather than the platform's only one,
+and asking for the local path is a change somebody could make._ There is a
+provider. It is not ours, we do not pay it, and it is not in any other ADR —
+which is exactly why it belongs in this one.
+
+It matters more here than it would in most apps. The questions this feature is
+built for are _"my shoulder feels off on presses"_ — **the user's own voice,
+saying something about their body, going to a company none of our documents
+mention.** This project wrote a careful control for the REPLY reaching a
+text-to-speech provider ([ADR 0025](0025-coach-voices.md) §4, and §2 below) and
+said nothing about the QUESTION reaching a recognition one.
+
+**Nothing changes in the code because of this**, and that is a decision rather
+than an omission: the alternative is a paid speech-to-text stage, which the owner
+declined for the budget reasons above and which would send the same audio to a
+provider we pay instead of one we do not. What changes is that it is written
+down, and that a report describing this feature must say where the audio goes.
+
+_Not measured here — it is Chrome's documented behaviour rather than something
+this project observed, because no browser pass has happened yet. Worth confirming
+in the one that is owed._
+
+**iOS Safari is the hole this plan assumed, and the assumption is not verified.**
+The plan that led here says recognition "does not work in iOS Safari", and this
+ADR repeated it — while `makeRecogniser` falls back to `webkitSpeechRecognition`,
+which is Safari's own prefixed name for this API. Safari has shipped that name
+since 14.1. **Both cannot be right**, and a reviewer caught the contradiction.
+
+What is true either way: the code renders a text box wherever the constructor is
+missing or unusable, so no browser gets a control that cannot work. What is NOT
+established is how large that population is, or whether Safari's implementation
+is usable in a gym. _This is the browser pass's question, and it is the clearest
+single thing that pass is for._ If Safari does have it, the privacy paragraph
+above applies there too — Safari's recognition is also remote in most
+configurations — rather than being sidestepped.
 
 **Where it is missing, the button is not rendered and a text box is.** A control
 that does nothing is worse than an absent one, and
@@ -119,6 +162,18 @@ attached"; **this action shipped without one and a review added it.** A client-s
 **The button works with the toggle off.** You still get the answer, in the chat,
 for the price of a chat call. Only the audio is behind it.
 
+**The control is a switch, not a tickbox — decided 2026-09-12.** This is the
+first clipped-input-plus-painted-surrogate in `app/globals.css`; every other
+boolean in this project keeps the native box visible and platform-sized, and
+`docs/specs/mobile-interface.md` §3 says an exemption is argued in a document
+rather than in a comment beside the code. The argument: a tickbox reads as a form
+field you are filling in, and this is a power switch — nothing is saved, and what
+it governs is what the NEXT press costs. It stays a native
+`input[type="checkbox"]` with `role="switch"`, so the keyboard, the label
+association, the focus ring and the disabled semantics are the platform's; the
+surrogate is painted and `aria-hidden`, and the state is carried by the knob's
+POSITION as well as its colour.
+
 ### 4. Only a reply that fits the existing bound is spoken
 
 `SPEECH_ASSUMED_COST_USD`'s own AI-NOTE says it is _"sized for a sample line and
@@ -202,9 +257,11 @@ through: a session screen is not where somebody reads a citation.
   and say it again when it was wrong. Showing it for confirmation BEFORE sending
   was considered and rejected — a confirm step between every question and every
   answer is most of the reason not to type in the first place.
-- **That anyone hears a coach at all.** Opt-in plus iOS Safari means the default
-  experience of this feature is a text box and a silent answer. That is the
-  trade the budget forced, written down rather than discovered.
+- **That anyone hears a coach at all.** Opt-in means the default experience of
+  this feature is a silent answer, and on any browser without a usable recogniser
+  it is a text box as well. That is the trade the budget forced, written down
+  rather than discovered. _How many browsers that is remains unmeasured — see the
+  iOS Safari note in §1._
 - **That the cost estimate is right.** It is an assumption, not a measurement —
   the provider returns no price. §4 keeps it honest by bounding what is spoken
   rather than by improving the estimate.
