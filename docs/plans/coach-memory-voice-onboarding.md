@@ -12,6 +12,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                              |
 | 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                              |
 | 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                              |
+| 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | planned                                                              |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -466,6 +467,77 @@ a policy change, and if it seems to, the design is wrong rather than the policy.
 **Files:** `src/db/gamification.ts`, a Profile panel, `app/globals.css`,
 `tests/db/achievements.test.ts` (a hidden, unearned row returns no description to
 its non-holder), tests.
+
+---
+
+## PR 8 — the welcome flow, after somebody used it
+
+**Branch `welcome-second-pass`.** The owner opened PR 4, used it, and came back
+with five things. Four are small; one is a control that cannot be reached at all.
+
+### The reset button is unreachable, which is a design fault rather than a bug
+
+**Hub redirects a user whose `onboarded_at` is null to `/welcome`.** The demo
+account's `onboarded_at` IS null — that is the whole fixture — so it never sees
+Hub, and the reset lives on Hub. **The control that exists to restart the demo
+can only be reached by somebody who has already finished the demo.**
+
+Nothing about the gate is wrong; the placement is. It goes on `/welcome` as well,
+for the same marked account, because for that account `/welcome` IS the main
+page until the flow is done. The Hub copy stays, for the case after onboarding.
+
+### Days a week becomes 1–7, and a false comment gets corrected
+
+`PLAN_DAYS_PER_WEEK` is `[2,3,4,5,6]` and its comment says seven "leaves no rest
+day, **which the rules reject anyway**". **That is false** — `src/planner/rules.ts`
+has six rules (weekly volume increase, ACWR band, deload cadence, equipment
+available, load ceiling, injured joint) and not one of them mentions rest.
+Nothing rejects a seven-day week; it simply gets planned.
+
+So the owner's request is buildable, and the comment that made it look
+impossible is the thing to fix first.
+
+**One reservation, recorded rather than acted on:** `docs/FRAMING.md` says the
+user's body is a stakeholder that cannot complain, and every persona bans "no
+pain no gain". Seven days with no rest day is the kind of plan this project has
+been careful about. The ACWR and volume rules still bound how fast load climbs,
+so it is unwise rather than unsafe — and it is the user's own choice about their
+own training. It ships, and the control says plainly what seven means.
+
+### Three smaller ones
+
+- **Sex is male or female** on the welcome step. `SEXES` keeps `unspecified` for
+  the settings form and the schema; the welcome control offers the two, and the
+  step stays skippable, which is what "prefer not to say" already means here.
+- **Equipment gets a select-all.** It goes in the shared form, so Settings gets
+  it too — one control, both surfaces.
+- **A coach personality step**, which is the interesting one — see below.
+
+### Choosing a coach, and the column three things have been waiting for
+
+Onboarding asks which coach you want. That needs somewhere to put the answer,
+and **`users.persona_slug` is a column three separate pieces of work have
+already gone without**:
+
+- [ADR 0031](../adr/0031-talking-during-a-session.md) §5 settles for "the first
+  shared, voiced coach alphabetically" for the session voice, and says in as
+  many words that persisting the choice "is a column and a settings control, and
+  it belongs with whatever change wants it on more than one screen". This is
+  that change.
+- PR 6 wants it, for the same reason.
+- The Coach tab's own picker dies with the page.
+
+**Nullable**, like `diet_goal`, and for the same reason: "has not chosen" is not
+"chose the first one". Readers fall back to the existing default, so nothing
+changes behaviour by the column merely existing.
+
+**It is a FOREIGN KEY to `personas(slug)`, not free text** — a persona is a row
+(CLAUDE.md #7), and a dangling slug would render a picker with nothing selected.
+On delete it sets null, which is the honest behaviour if a coach is ever retired.
+
+**Files:** a migration and the `src/db/types.ts` regeneration it forces,
+`src/planner/request.ts`, `app/welcome/`, the equipment form, `app/hub/`,
+`src/db/server.ts`, tests.
 
 ---
 
