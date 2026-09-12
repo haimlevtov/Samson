@@ -2772,19 +2772,18 @@ details.quick-log[open] > summary {
  * flex row shrinks to its content otherwise, and five coach names of different
  * lengths would make the control change width every time the choice changed.
  *
- * `align-items: end` on the row rather than `center`, because the label sits
- * above the select and centring would float the button against the label instead
- * of against the control it belongs to.
+ * `align-items: flex-end` on the row rather than `center`, because the label
+ * sits above the select and centring would float the button against the label
+ * instead of against the control it belongs to. `flex-end` rather than `end`:
+ * the two `end` uses in this file are grid containers, and `.set-more` is what
+ * a flex container spells it as here.
  */
 .persona-picker {
-  align-items: end;
+  align-items: flex-end;
 }
 .persona-choice {
   flex: 1 1 auto;
   /* Below this the menu and the button stop sharing a line and wrap, which is
      better than a select too narrow to read a coach's name in. */
   min-width: 11rem;
-}
-.persona-choice select {
-  width: 100%;
 }

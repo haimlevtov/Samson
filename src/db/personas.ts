@@ -24,7 +24,7 @@ export interface ListedPersona extends Persona {
   sampleLine: string | null;
   /**
    * Whether `coachVoice` would speak this coach: a shared row with a voice, a
-   * direction and a line. The Voice card offers Hear only when this is true —
+   * direction and a line. The Voice card offers Try only when this is true —
    * a button that cannot speak is not shown (docs/specs/mobile-interface.md §4).
    *
    * AI-NOTE: the same three conditions and the same `user_id is null` as

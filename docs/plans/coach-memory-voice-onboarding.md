@@ -91,8 +91,12 @@ choice made once.
 - The button stays enabled while fetching, because disabling the focused control
   drops keyboard focus and a second press joins the call rather than paying twice.
 
-**Files:** `app/coach/CoachConsole.tsx`, `app/globals.css`, and the persona spec
-if it names the chips.
+**Files:** `app/coach/CoachConsole.tsx`, `app/globals.css`, and the two docs
+that name the control: `docs/specs/mobile-interface.md` §4's state table (three
+rows of it — the button, its loading label and its refusals) and
+`.claude/skills/add-persona/SKILL.md`, which tells the next author what `name`
+is rendered as. _There is no persona spec; this line said there was, and both
+docs above were missed on the first pass because of it._
 
 ---
 

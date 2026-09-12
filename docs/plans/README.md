@@ -1,7 +1,7 @@
 # Plans — what each one is, and which to open
 
-Ten documents, written over sixteen days, in four different genres. This file
-is the way in.
+Eleven documents, written over nineteen days, in four different genres. This
+file is the way in.
 
 It exists because phase 5 alone is three files whose names do not say how they
 relate, and because `docs/plans/` had no index at all — you had to already know
@@ -17,12 +17,12 @@ committed alongside its implementation cannot show it came first. So these
 documents are not interchangeable, and merging them into one file would destroy
 the distinction each of them spends its opening paragraph establishing:
 
-| Genre                             | Written                                        | Documents                                                                   |
-| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md` |
-| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                 |
-| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                               |
-| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                |
+| Genre                             | Written                                        | Documents                                                                                                       |
+| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md`; `coach-memory-voice-onboarding.md` |
+| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                                                     |
+| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                                                                   |
+| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                                                    |
 
 **The second row is a finding rather than a category anyone chose**, and it came
 out of checking this table instead of writing it from the filenames. `phase-0.md`

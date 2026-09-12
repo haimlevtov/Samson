@@ -21,7 +21,15 @@ const SHOWN_TEXT: Record<ShownReason, string> = {
   'no-key': 'The coach voices are not set up here.',
   budget: "This week's coaching budget is spent, so the coach cannot speak until it resets.",
   'no-voice': 'This coach has no voice yet.',
-  failed: 'The voice did not come through. Try again in a moment.',
+  /*
+   * "Try again in a moment" was here until the button became Try — FOUND IN
+   * REVIEW. Under a control with that word on it, the sentence stopped being a
+   * reassurance and became an instruction to press the thing that just failed.
+   * The button is right there and is still pressable, so the affordance did not
+   * need a sentence; ADR 0025's open item is that this wording is wrong for a
+   * provider REFUSAL, and saying less is the smaller claim.
+   */
+  failed: 'The voice did not come through.',
   blocked: 'This browser held the sound back. Tap again to play.',
 };
 
@@ -84,9 +92,12 @@ export function CoachConsole({
     EMPTY_DELIVERY
   );
 
+  /*
+   * A native `<select>` fires `change` only when the value actually changes, so
+   * there is no same-slug case to short-circuit — the guard that used to sit
+   * here existed for the chips, where pressing the lit one was a real event.
+   */
   const choose = (slug: string) => {
-    // The lit chip changes nothing, so it supersedes nothing either.
-    if (slug === selected) return;
     player.current?.select();
     setSelected(slug);
   };
@@ -116,11 +127,18 @@ export function CoachConsole({
         <div className="row persona-picker">
           <label className="persona-choice">
             <span className="label">Change persona</span>
-            <select
-              value={selected}
-              onChange={(event) => choose(event.target.value)}
-              disabled={pending}
-            >
+            {/*
+             * NOT disabled during a delivery, and it was on the first pass —
+             * FOUND IN REVIEW. React serialises the form at submit, so a later
+             * choice cannot reach a request already in flight; the hidden field
+             * below was never at risk. And it contradicted the button's own
+             * reason for staying live: disabling the focused control drops
+             * keyboard focus. The mismatch it looked like it prevented — a plan
+             * rendered under a coach who did not deliver it — is not prevented
+             * by it either, since the choice is free again the moment the
+             * delivery lands.
+             */}
+            <select value={selected} onChange={(event) => choose(event.target.value)}>
               {personas.map((p) => (
                 <option key={p.slug} value={p.slug}>
                   {p.name}
@@ -152,26 +170,35 @@ export function CoachConsole({
               <button
                 type="button"
                 aria-busy={fetching}
-                aria-label={`Try ${chosen.name}'s voice`}
                 onClick={() => void player.current?.hear(chosen.slug)}
               >
                 {fetching ? 'Finding…' : 'Try'}
+                {/*
+                 * FOUND IN REVIEW, and this was an `aria-label` until it was.
+                 * A constant label is a name that does not change when the
+                 * button is pressed, and `aria-busy` announces nothing on a
+                 * button — so a screen-reader user got silence for the whole
+                 * fetch, which ADR 0025 measured at about eight seconds. The
+                 * name is in the content instead: it changes with the state, so
+                 * the press is audible, and the visible word is contained in it,
+                 * which an overriding `aria-label` was not (WCAG 2.5.3).
+                 *
+                 * Clipped rather than shortened, because the button's width is
+                 * why the name left the label in the first place.
+                 */}
+                <span className="sr-only"> {chosen.name}’s voice</span>
               </button>
             )
           ) : null}
         </div>
 
-        {chosen ? (
-          <>
-            {why !== null ? (
-              // A coach with no line still says why it is silent — every
-              // state renders something, docs/specs/mobile-interface.md §4.
-              <p className="muted small" role="status">
-                {SHOWN_TEXT[why]}
-                {line !== '' ? ` ${chosen.name}: “${line}”` : null}
-              </p>
-            ) : null}
-          </>
+        {chosen && why !== null ? (
+          // A coach with no line still says why it is silent — every state
+          // renders something, docs/specs/mobile-interface.md §4.
+          <p className="muted small" role="status">
+            {SHOWN_TEXT[why]}
+            {line !== '' ? ` ${chosen.name}: “${line}”` : null}
+          </p>
         ) : null}
 
         <form action={formAction} className="coach-actions">
