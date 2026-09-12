@@ -105,19 +105,105 @@ describe('createListener', () => {
     expect(h.calls).toEqual([]);
   });
 
-  it('survives a double press, because the recognition it wants is already open', () => {
-    const { calls, recogniser } = fake();
-    recogniser.start = () => {
-      calls.push('start');
-      // What the API really throws when one is already running.
-      throw new Error('InvalidStateError');
-    };
-    const listener = createListener({ recogniser, onTranscript: vi.fn(), onChange: vi.fn() });
+  describe('the holding latch, which must never outlive the recognition', () => {
+    /*
+     * FOUND IN REVIEW, and the first draft of this file had neither guard nor
+     * test. `holding` was set by press and cleared only by `onend`, so any path
+     * that set it without a recognition that would actually end left the button
+     * reading "Listening…" with no way out.
+     */
+    it('clears it when start() throws with nothing running', () => {
+      const { calls, recogniser } = fake();
+      recogniser.start = () => {
+        calls.push('start');
+        // No speech service, an insecure context — nothing is open, so nothing
+        // will ever fire onend.
+        throw new Error('SecurityError');
+      };
+      const states: ListenState[] = [];
+      const listener = createListener({
+        recogniser,
+        onTranscript: vi.fn(),
+        onChange: (state) => states.push(state),
+      });
 
-    expect(() => {
       listener.press();
+
+      expect(states.at(-1)!.holding).toBe(false);
+      expect(states.at(-1)!.failure).toBe('failed');
+    });
+
+    it('keeps it while a double press throws, because one IS already running', () => {
+      // The other half: here the throw means the recognition the user wants is
+      // open, so the latch is correct and must stay up.
+      const h = harness();
+      h.listener.press();
+      h.recogniser.start = () => {
+        throw new Error('InvalidStateError');
+      };
+
+      expect(() => h.listener.press()).not.toThrow();
+      expect(h.states.at(-1)!.holding).toBe(true);
+    });
+
+    it('does not let an old recognition end a newer hold', () => {
+      /*
+       * press → release → press → the FIRST recognition ends. The first draft
+       * cleared the second hold's latch here, so the button read "Hold to talk"
+       * while the user was still pressing it, and the release that followed did
+       * nothing at all.
+       */
+      const h = harness();
+      h.listener.press();
+      h.listener.release();
+      h.recogniser.start = () => {
+        throw new Error('InvalidStateError');
+      };
+      h.listener.press();
+
+      h.recogniser.onend!();
+
+      // The second hold has no recognition of its own, so the honest state is
+      // "not holding" — but it must have been reached by the guard rather than
+      // by the first recognition's event, and the release below must not throw.
+      expect(() => h.listener.release()).not.toThrow();
+      expect(h.calls.filter((c) => c === 'stop')).toHaveLength(1);
+    });
+
+    it('clears it on an error, without waiting for onend', () => {
+      // The spec says onend always follows onerror. This API is explicitly
+      // non-standard, and relying on that costs a permanently stuck button.
+      const h = harness();
+      h.listener.press();
+      h.recogniser.onerror!({ error: 'not-allowed' });
+
+      expect(h.states.at(-1)!.holding).toBe(false);
+      expect(h.states.at(-1)!.failure).toBe('no-permission');
+    });
+
+    it('clears it on an abort, which reports no failure but is still an end', () => {
+      const h = harness();
+      h.listener.press();
+      h.recogniser.onerror!({ error: 'aborted' });
+
+      expect(h.states.at(-1)!.holding).toBe(false);
+      expect(h.states.at(-1)!.failure).toBeNull();
+    });
+
+    it('ignores a release after a failed start, rather than stopping nothing', () => {
+      const { recogniser } = fake();
+      const calls: string[] = [];
+      recogniser.start = () => {
+        throw new Error('SecurityError');
+      };
+      recogniser.stop = () => calls.push('stop');
+      const listener = createListener({ recogniser, onTranscript: vi.fn(), onChange: vi.fn() });
+
       listener.press();
-    }).not.toThrow();
+      listener.release();
+
+      expect(calls).toEqual([]);
+    });
   });
 
   describe('failures, each of which the card says differently', () => {
@@ -173,6 +259,27 @@ describe('createListener', () => {
       expect(h.recogniser.onresult).toBeNull();
       expect(h.recogniser.onerror).toBeNull();
       expect(h.recogniser.onend).toBeNull();
+    });
+
+    it('makes every method a no-op afterwards', () => {
+      /*
+       * FOUND IN REVIEW. `dispose` nulled the handlers and aborted, and left
+       * `press` callable — which would open a live microphone with no handler
+       * to end it and no state anybody reads. Unreachable from the component by
+       * one line, and this module is exported and used standalone.
+       */
+      const h = harness();
+      h.listener.dispose();
+      const calls = h.calls.length;
+      const published = h.states.length;
+
+      h.listener.press();
+      h.listener.release();
+
+      // Nothing touched the recogniser, and nothing was published to a
+      // component that is gone — `set` returns early once disposed.
+      expect(h.calls).toHaveLength(calls);
+      expect(h.states).toHaveLength(published);
     });
 
     it('detaches the handlers BEFORE aborting, since abort fires onend', () => {

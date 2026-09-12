@@ -81,12 +81,25 @@ export function transcriptOf(event: RecognitionEvent): string {
 /**
  * Builds a hold-to-talk listener over an injected recogniser.
  *
- * WHY there is NO press counter, unlike `player.ts`: the two races are not the
- * same shape. There, a clip arriving late must not play over a newer one, so a
- * generation is the only answer. Here the late arrival is a TRANSCRIPT — words
- * the user really did say — and the only case where it must not be delivered is
- * unmount, which `dispose` handles by nulling the handlers before aborting. A
- * counter would have been a guard against a thing that is not wrong.
+ * WHY an `open` flag rather than a press counter — and the first draft had
+ * NEITHER, which was the bug.
+ *
+ * That draft argued a counter was unnecessary because a late TRANSCRIPT is words
+ * the user really did say. True, and not the race. The race is on the LIFECYCLE
+ * events: `holding` was set by `press` and cleared only by `onend`, so any path
+ * that set it without a recognition that would actually end left the button
+ * reading "Listening…" with no way out. FOUND IN REVIEW, with two paths:
+ *
+ * - `start()` throwing for a reason that is NOT "one is already running" — no
+ *   speech service, an insecure context — so nothing was open to end.
+ * - press → release → press: the second `start()` throws (the first recognition
+ *   is still settling), then the FIRST recognition's `onend` clears the second
+ *   hold's latch. The user is mid-press and the button says "Hold to talk".
+ *
+ * So `open` tracks whether a recognition is actually running, and `holding` is
+ * never left true without one. `player.ts` needed two counters for its own
+ * version of this; this needs one flag, because there is one recogniser and it
+ * can only be open once.
  */
 export function createListener(deps: {
   recogniser: Recogniser;
@@ -96,8 +109,13 @@ export function createListener(deps: {
   const { recogniser, onTranscript, onChange } = deps;
 
   let state: ListenState = EMPTY_LISTEN;
+  /** Whether a recognition is running. The only thing that may hold `holding`. */
+  let open = false;
+  /** After this, every method is a no-op — the same latch `player.ts` carries. */
+  let disposed = false;
 
   const set = (next: Partial<ListenState>): void => {
+    if (disposed) return;
     state = { ...state, ...next };
     onChange(state);
   };
@@ -114,32 +132,49 @@ export function createListener(deps: {
   };
 
   recogniser.onerror = (event) => {
-    const failure = failureFor(event.error);
-    if (failure !== null) set({ failure });
+    /*
+     * `holding` is cleared HERE as well as in `onend` — FOUND IN REVIEW. The
+     * spec says `onend` always follows `onerror`, and this API is explicitly
+     * non-standard (see `Recogniser` above), so relying on that ordering costs
+     * a stuck button and saves one word. `aborted` clears it too, which the
+     * first draft skipped by returning before the state write.
+     */
+    open = false;
+    set({ holding: false, failure: failureFor(event.error) ?? state.failure });
   };
 
   recogniser.onend = () => {
+    open = false;
     set({ holding: false });
   };
 
   return {
     press: () => {
+      if (disposed) return;
       // The previous failure is cleared on press rather than on success: a
       // sentence about the last attempt must not sit beside a live one.
       set({ holding: true, failure: null });
       try {
         recogniser.start();
+        open = true;
       } catch {
         /*
-         * `start()` throws InvalidStateError if a recognition is already
-         * running — which happens on a fast double press, and is not a failure
-         * worth a sentence: the recognition the user wants is already open.
+         * `start()` throws InvalidStateError when a recognition is already
+         * running, which a fast double press causes and which is not a failure:
+         * the recognition the user wants is open. Every OTHER throw means
+         * nothing is open, nothing will fire `onend`, and the latch would stay
+         * set forever — so `open` decides which of the two this was.
          */
+        if (!open) set({ holding: false, failure: 'failed' });
       }
     },
 
     release: () => {
-      if (!state.holding) return;
+      if (disposed) return;
+      // Gated on `open` rather than on `holding`: after a failed start the
+      // latch is already down, and `stop()` on a recogniser that never started
+      // is a no-op that would produce no `onend` to clear anything.
+      if (!open) return;
       // `stop` asks for the final result; `abort` would throw it away. The
       // state stays `holding` until `onend`, because the transcript has not
       // arrived yet and a button that says "ready" while still listening is
@@ -156,6 +191,8 @@ export function createListener(deps: {
       // `abort` rather than `stop`: on unmount there is nobody to deliver a
       // transcript to, and `stop` would produce one.
       recogniser.abort();
+      open = false;
+      disposed = true;
       state = EMPTY_LISTEN;
     },
   };

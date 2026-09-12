@@ -25,7 +25,13 @@ export interface SessionAnswer {
   /** What the coach said. Never null: the supplement route's constant fills in. */
   reply: string;
   /** The clip, when there is one. */
-  audio: { bytes: number[]; contentType: string } | null;
+  /*
+   * The clip as the gateway returned it. React serialises a `Uint8Array` in a
+   * server action result unchanged — measured, and recorded in
+   * `src/speech/player.ts` — so converting it to a number array would inflate a
+   * 1.4 MB clip several times over against a ~4.5 MB response ceiling.
+   */
+  audio: { bytes: Uint8Array<ArrayBuffer>; contentType: string } | null;
   /** Why there is no clip. Null when there is one. */
   silent: SilentReason | null;
   /** Whose voice it was, for the card to name. */

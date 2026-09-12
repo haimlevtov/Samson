@@ -48,18 +48,61 @@ project's key say anything, bounded only by the budget.
 So the reply is generated and spoken **in one request**: the action calls
 `askCoach`, takes the answer it returns, and passes **that** — server-side text,
 never round-tripped — to `callSpeech`. The browser receives audio and a
-transcript together. There is no path where the browser hands the server words to
-say.
+transcript together.
 
 The slug naming the VOICE may come from the browser, exactly as `hearCoach`
 allows, because it selects among shared rows and cannot change what is said.
+
+### And that is not sufficient, which the first draft of this ADR got wrong
+
+This section used to end _"there is no path where the browser hands the server
+words to say"_, and shipped on it. **Literally true, substantively false**, and a
+review caught it before merge.
+
+The words are the chat model's, not the browser's — but they ANSWER a question
+the browser supplied, and the speech model's input is an instruction channel
+rather than a string. `src/speech/script.ts` had already written the
+consequence down, in an AI-NOTE naming this PR:
+
+> square brackets in a transcript are audio tags to this model … The later PR
+> that speaks model-written prose … makes the transcript untrusted (CLAUDE.md
+> #11) and must strip the brackets AND this file's own label text … first
+
+None of that was done. So a user could hold the button, ask the coach to repeat
+something back, and have the project's key perform it — `[shouting]` included,
+or a second `### DIRECTOR'S NOTES` block overriding the cast character.
+"The chat model probably will not comply" is defence in depth, which
+[ADR 0005](0005-llm-safety.md) §3 says in as many words is **not** the control.
+
+**`spokenLine` is the control.** Everything that is not a shared row's own column
+goes through it before it is performed: bracketed spans removed whole, headings
+and this script's own labels removed, then the sanitising every other untrusted
+string in the project gets. A reply that sanitises to nothing is not spoken, and
+a reply too long to sanitise without truncating is not spoken either — §4's rule,
+applied to the same string twice.
+
+_[ADR 0025](0025-coach-voices.md) §4's "only stored text from a shared row is
+spoken" stopped being true here, and its exemption of the speech stage from
+`scanOutput` rested on it. The transcript is now sanitised in code instead;
+extending the output scan to the speech input is the alternative and is not what
+was chosen, because what matters is the FORMAT — brackets and labels — which
+`scanOutput` does not read._
 
 ### 3. Speaking is opt-in, per session
 
 **Chosen by the owner, and the reason is arithmetic.** A spoken reply is one
 speech call at `SPEECH_ASSUMED_COST_USD` — $0.02 — against a default budget of
-$0.50 a week. **Twenty-five spoken replies spend a week.** A chatty session is
-twenty-five presses.
+$0.50 a week. **Twenty-five spoken replies spend a week**, and fewer than that in
+fact: every press is also a chat call, which this figure does not count. A chatty
+session is twenty-five presses.
+
+**And a press is bounded but not cheap.** `askCoach` loops twice over a gateway
+that retries three times, so one press is up to six chat calls plus two speech
+attempts. The budget gate reads spend and then allows, so concurrent presses all
+pass on one stale figure — the unreserved gap ADR 0025 names. `requestPlan`
+carries a cooldown for exactly this reason and calls it "the finding with money
+attached"; **this action shipped without one and a review added it.** A client-side
+`disabled` is one tab and stops nobody scripting a POST.
 
 - The toggle is **off by default**, and a feature that can spend the entire key
   in one session is not a default.
@@ -90,9 +133,16 @@ cheaper of the two answers is taken:
 assumption was calibrated against.** Longer replies are shown and not spoken, and
 the card says so.
 
-- The assumption stays **exactly true by construction** rather than being
+- The assumption is kept **within the shape it was calibrated for** rather than
   re-derived, and no migration, no per-row length column and no change to
-  `llm_spend_summary` is needed.
+  `llm_spend_summary` is needed. _The first draft said "exactly true by
+  construction", which a review falsified: the figure is calibrated on DURATION —
+  "280 characters spoken slowly is about thirty seconds" — and characters bound
+  duration only for text a coach actually says. `[very slowly]` in a
+  280-character line is minutes at the same flat charge. That is now unreachable
+  because §2's `spokenLine` removes the tags, so the two halves depend on each
+  other: **deleting the sanitiser reopens a budget hole, not only a content
+  one.**_
 - It costs little in practice: `CHAT_SYSTEM` already instructs "two or three
   sentences", which is 150–250 characters. The bound bites on the replies that
   were already too long to want read aloud between sets.
@@ -108,9 +158,15 @@ a different PR and it needs a column._
 
 There is **no stored persona choice** — `users` has no such column, and the Coach
 tab's picker is component state that dies with the page. So the session coach
-speaks as the first persona alphabetically, which is the same coach the Coach tab
-opens with, and the card says whose voice it is rather than leaving the user to
-wonder.
+speaks as the first **shared, voiced** persona alphabetically.
+
+_Two corrections a review made to this paragraph. It said "the same coach the
+Coach tab opens with", and that tab defaults to `personas[0]`, which includes a
+user's own rows — so somebody with a private persona named earlier gets two
+different coaches on two surfaces. And it said "the card says whose voice it is",
+which the card only does once a clip has arrived: with the toggle off, before the
+first question, or on a reply too long to speak, it says nothing. Both are the
+same underlying gap — there is no persona to name until one has spoken._
 
 _Persisting the choice is a column and a settings control, and it belongs with
 whatever change wants it on more than one screen. Guessing here would have been
@@ -123,6 +179,14 @@ by whichever route the model names — [ADR 0015](0015-coach-chat.md) end to end
 The `off_topic` constant answers a question about the weather here exactly as it
 does on the Coach tab. Memory applies too: a session turn may leave a note, under
 [ADR 0030](0030-what-the-coach-remembers.md)'s rules and no others.
+
+**One route is NOT end to end, and saying "ADR 0015 end to end" was wrong.** On
+the `supplement` route the answer is the ROW, and this surface has nowhere to
+render one — the Coach tab shows the claim, grade, dose and citation beneath the
+constant. So a supplement question asked mid-session returns a sentence pointing
+at a table that is not there. The card now says to open the Coach tab instead of
+announcing something it cannot show, and the row is deliberately not carried
+through: a session screen is not where somebody reads a citation.
 
 ## What this does not guarantee
 

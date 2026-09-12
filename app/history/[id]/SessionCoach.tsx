@@ -56,11 +56,26 @@ function makeRecogniser(): Recogniser | null {
     webkitSpeechRecognition?: new () => Recogniser;
   };
   const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  return Ctor ? new Ctor() : null;
+  if (!Ctor) return null;
+  try {
+    return new Ctor();
+  } catch {
+    /*
+     * FOUND IN REVIEW. An unguarded `new Ctor()` that throws took the effect
+     * down with it, which left `canListen` at null forever — a permanently
+     * disabled button, no fallback (it is gated on `false`, not `null`), and no
+     * cleanup registered because the effect never returned one. Null routes
+     * into the text box, which is the right answer for "this browser has the
+     * constructor and cannot use it".
+     */
+    return null;
+  }
 }
 
 export function SessionCoach() {
   const [answer, setAnswer] = useState<SessionAnswer | null>(null);
+  /** Set when the browser refused to autoplay a clip we already paid for. */
+  const [blocked, setBlocked] = useState(false);
   const [listen, setListen] = useState<ListenState>(EMPTY_LISTEN);
   const [speak, setSpeak] = useState(false);
   const [typed, setTyped] = useState('');
@@ -70,6 +85,16 @@ export function SessionCoach() {
   const listener = useRef<Listener | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const clipUrl = useRef<string | null>(null);
+  /*
+   * Which question the rendered answer belongs to — FOUND IN REVIEW.
+   *
+   * `disabled={pending}` guards the BUTTON, and `ask` is not called by the
+   * button: it is called by the recogniser, which knows nothing about pending
+   * and which Chrome can fire more than once for a single hold. So two requests
+   * can overlap, and a text-only answer routinely beats a spoken one by seconds
+   * — which without this would publish the OLDER answer last.
+   */
+  const turn = useRef(0);
 
   /*
    * `speak` is read through a ref inside the listener's callback, because the
@@ -79,27 +104,74 @@ export function SessionCoach() {
   const wantsVoice = useRef(speak);
   wantsVoice.current = speak;
 
+  /*
+   * FOUND IN REVIEW, and it was a permanent dead end. A denied microphone is
+   * remembered by the browser FOR THE ORIGIN, so every later press fires
+   * `not-allowed` forever — with `canListen` still true, because the constructor
+   * worked. The user was left with a button that could never work and the
+   * working alternative ten lines above it, which is exactly what
+   * docs/specs/mobile-interface.md §4 forbids and what ADR 0031 §1 says the
+   * design is for.
+   */
+  const mustType = canListen === false || listen.failure === 'no-permission';
+
   const ask = (text: string): void => {
     const question = text.trim();
     if (question === '') return;
+    const mine = ++turn.current;
     startTransition(async () => {
       const result = await askDuringSession(question, wantsVoice.current);
+      // Superseded, or unmounted: publish nothing. The cleanup bumps this too,
+      // so a continuation crossing teardown cannot touch the refs either.
+      if (mine !== turn.current) return;
       setAnswer(result);
       play(result);
     });
   };
 
   const play = (result: SessionAnswer): void => {
-    if (result.audio === null || audio.current === null) return;
+    if (audio.current === null) return;
+    /*
+     * Stopped BEFORE the early return — FOUND IN REVIEW. A new text-only answer
+     * used to leave the previous clip talking underneath it: ask with the toggle
+     * on, get fifteen seconds of coach, ask again with it off, and the old voice
+     * carries on over the new words. `player.ts` pauses before every load for
+     * the same reason.
+     */
+    audio.current.pause();
+    setBlocked(false);
+    if (result.audio === null) return;
+
     // The previous clip's URL is revoked before the next is made: a session is
     // many questions, and a leaked blob per answer is a leak per question.
     if (clipUrl.current !== null) URL.revokeObjectURL(clipUrl.current);
-    const blob = new Blob([new Uint8Array(result.audio.bytes)], { type: result.audio.contentType });
+    const blob = new Blob([result.audio.bytes], { type: result.audio.contentType });
     clipUrl.current = URL.createObjectURL(blob);
     audio.current.src = clipUrl.current;
-    // A rejected play() is the browser's autoplay policy, not a failure worth a
-    // sentence: the text is on screen either way.
-    void audio.current.play().catch(() => {});
+    void audio.current.play().catch((cause: unknown) => {
+      /*
+       * NotAllowedError is the browser withholding sound after a multi-second
+       * network wait, and it is the common one — `src/speech/player.ts` handles
+       * it and `docs/specs/mobile-interface.md` §4 has a row for it. The first
+       * draft swallowed every rejection, so a clip the project had PAID FOR was
+       * unreachable and the card still said whose voice it was. FOUND IN REVIEW.
+       *
+       * The URL stays: the replay button below plays it from the cache, inside
+       * the tap, which is what the policy is waiting for.
+       */
+      if (cause instanceof DOMException && cause.name === 'NotAllowedError') setBlocked(true);
+    });
+  };
+
+  const replay = async (): Promise<void> => {
+    if (audio.current === null) return;
+    try {
+      await audio.current.play();
+      setBlocked(false);
+    } catch {
+      // Still refused. The text is on screen and the button stays, which is the
+      // honest state — nothing here can force sound out of a browser.
+    }
   };
 
   useEffect(() => {
@@ -116,6 +188,8 @@ export function SessionCoach() {
     }
 
     return () => {
+      // Bumped so a request still in flight publishes nothing after unmount.
+      turn.current += 1;
       listener.current?.dispose();
       listener.current = null;
       audio.current?.pause();
@@ -153,7 +227,7 @@ export function SessionCoach() {
           </span>
         </label>
 
-        {canListen === false ? (
+        {mustType ? (
           /*
            * No `SpeechRecognition` — iOS Safari, notably. Every state renders
            * something (docs/specs/mobile-interface.md §4), and what this one
@@ -168,7 +242,11 @@ export function SessionCoach() {
             }}
           >
             <label className="grow">
-              <span className="label">This browser cannot listen — type instead</span>
+              <span className="label">
+                {canListen === false
+                  ? 'This browser cannot listen — type instead'
+                  : 'The microphone is blocked — type instead'}
+              </span>
               <input
                 type="text"
                 value={typed}
@@ -225,7 +303,12 @@ export function SessionCoach() {
             {answer.silent !== null && answer.silent !== 'not-asked' && answer.error === null ? (
               <p className="muted small">{SILENT_TEXT[answer.silent]}</p>
             ) : null}
-            {answer.coach !== null && answer.audio !== null ? (
+            {blocked ? (
+              // The clip exists and is paid for; the browser wants a tap.
+              <button type="button" className="secondary" onClick={() => void replay()}>
+                Tap to play
+              </button>
+            ) : answer.coach !== null && answer.audio !== null ? (
               <p className="muted small">In {answer.coach}&rsquo;s voice.</p>
             ) : null}
           </div>
