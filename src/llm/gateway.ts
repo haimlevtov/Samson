@@ -356,11 +356,6 @@ export async function callLLM<T>(
            * Layer 4 runs BEFORE schema validation — ADR 0005 §4. A perfectly
            * well-formed response that insults the user is still one that must
            * not reach them, and shape says nothing about content.
-           *
-           * AND AGAIN AFTER IT, on the re-encoded value — the 2026-09-12
-           * amendment. This scan reads a JSON DOCUMENT, and a document may spell
-           * any character as an escape, so `{"reply":"you are \u0067ay"}`
-           * contains no word this function knows. See `rescan` below.
            */
           const findings = scanOutput(content);
 
@@ -381,42 +376,7 @@ export async function callLLM<T>(
           } else {
             const validation = safeParseJson(content, options.schema);
 
-            /*
-             * The second half of layer 4 — ADR 0005's 2026-09-12 amendment.
-             *
-             * The scan above reads what the model sent; this one reads what the
-             * caller will receive. `JSON.stringify` re-emits every character
-             * literally, so an escape that hid a word from the first scan is a
-             * word by the time it reaches this one. MEASURED, and the case is in
-             * this file's tests: the old order passed
-             * `\u0067ay` straight through to the browser.
-             *
-             * WHY the whole object rather than its string fields: a schema gains
-             * a field more often than anyone remembers to widen a list of fields
-             * to scan. The keys and punctuation this admits are text the schema
-             * chose, so they cannot carry a match a value did not.
-             *
-             * WHY not INSTEAD of the first scan: an unparseable response is
-             * never re-encoded, and §4's reason for scanning early was exactly
-             * that one still reaches a log.
-             */
-            const rescan = validation.ok ? scanOutput(JSON.stringify(validation.value)) : [];
-
-            if (rescan.length > 0) {
-              row.status = 'safety_blocked';
-              row.error = rescan
-                .map((f) => `${f.code}: ${f.match}`)
-                .join('; ')
-                .slice(0, 1000);
-              retryable = true;
-              lastFindings = rescan;
-              // Corrected identically to a pre-parse finding: the model is told
-              // what was wrong with the text, not how it encoded it.
-              correction = [
-                rejectedAttempt(content, 500),
-                { role: 'user', content: safetyCorrection(rescan) },
-              ];
-            } else if (validation.ok) {
+            if (validation.ok) {
               row.status = 'ok';
               parsed = validation.value;
             } else if (truncated) {

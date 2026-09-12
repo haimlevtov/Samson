@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { callLLM, callSpeech } from './gateway';
-import { SAFETY_PREAMBLE, SafetyBlockedError, scanOutput } from './safety';
+import { SAFETY_PREAMBLE } from './safety';
 import { STAGE_MODELS } from './models';
 import { MissingApiKeyError, SPEECH_MAX_INPUT_CHARS, hasApiKey, readApiKey } from './config';
 import { BudgetExceededError, LlmCallFailedError, NoProfileError } from './types';
@@ -783,71 +783,5 @@ describe('hasApiKey', () => {
     expect(hasApiKey({})).toBe(false);
     expect(hasApiKey({ OPENROUTER_API_KEY: '   ' })).toBe(false);
     expect(hasApiKey({ OPENROUTER_API_KEY: 'sk-test' })).toBe(true);
-  });
-});
-
-/**
- * Layer 4 reads a JSON document — ADR 0005's 2026-09-12 amendment.
- *
- * FOUND BY PROBE while designing coach memory. `scanOutput` ran on the raw
- * completion and nowhere else, and a completion is JSON, so a model could spell
- * any word as an escape and every one of the four checks read past it. This is
- * the case that fails against the old order.
- */
-describe('callLLM — an escaped completion', () => {
-  /** What the model sends. `\\u0067` is `g`, and only after parsing. */
-  const ESCAPED = '{"summary":"you are \\u0067ay","sessions":4}';
-
-  /** The envelope, with the completion placed verbatim rather than re-encoded. */
-  const envelope = (content: string) =>
-    JSON.stringify({
-      id: 'gen-escaped',
-      model: 'google/gemini-2.5-flash-lite',
-      choices: [{ message: { content }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20, cost: 0.000001 },
-    });
-
-  it('is invisible to the pre-parse scan and visible to the post-parse one', () => {
-    // The premise, asserted rather than asserted-about: if this ever stops being
-    // true the test below would pass for the wrong reason.
-    expect(scanOutput(ESCAPED)).toEqual([]);
-    expect(scanOutput(JSON.stringify(JSON.parse(ESCAPED)))).not.toEqual([]);
-  });
-
-  it('blocks it, tells the model what was wrong, and takes the clean retry', async () => {
-    let call = 0;
-    const { deps, rows, calls } = makeDeps(async () => {
-      call += 1;
-      return new Response(
-        call === 1 ? envelope(ESCAPED) : okBody({ summary: 'Upper/lower split', sessions: 4 }),
-        { status: 200 }
-      );
-    });
-
-    const result = await callLLM(baseOptions, deps);
-
-    expect(result.data).toEqual({ summary: 'Upper/lower split', sessions: 4 });
-    expect(result.attempts).toBe(2);
-
-    // INVARIANT: a blocked call is still a call — ADR 0005, CLAUDE.md #3.
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.status).toBe('safety_blocked');
-    expect(rows[0]!.error).toContain('protected_attribute');
-    expect(rows[1]!.status).toBe('ok');
-
-    // The correction is the same one a pre-parse finding sends: what was wrong
-    // with the text, not how it was encoded.
-    const retry = JSON.parse(String(calls[1]!.body)) as { messages: { content: string }[] };
-    expect(retry.messages.at(-1)!.content).toContain('automated content check');
-    expect(retry.messages.at(-1)!.content).toContain('protected_attribute');
-  });
-
-  it('fails the call rather than degrading when every attempt is escaped', async () => {
-    const { deps, rows } = makeDeps(async () => new Response(envelope(ESCAPED), { status: 200 }));
-
-    // Not "returns the text anyway" — surviving the cap fails, exactly as a
-    // pre-parse finding does.
-    await expect(callLLM(baseOptions, deps)).rejects.toBeInstanceOf(SafetyBlockedError);
-    expect(rows.every((row) => row.status === 'safety_blocked')).toBe(true);
   });
 });

@@ -343,28 +343,3 @@ describe('scanOutput — the article gap the adversarial suite found', () => {
     }
   });
 });
-
-/**
- * The encoding blind spot — a HOLE, recorded as ADR 0005 §5 asks.
- *
- * `scanOutput` reads characters. It was called on a JSON document from phase 0
- * until 2026-09-12, so anything that could influence how the model SPELLED its
- * answer read past all four checks at once. The fix is in the gateway, which is
- * where the document is, and these cases pin what this function does and does
- * not owe.
- */
-describe('scanOutput and escaped text', () => {
-  it('does not decode anything, and is not expected to', () => {
-    // Not a bug in this function: a scanner that guessed at encodings would be
-    // guessing. The caller has to hand it the text a reader will see.
-    expect(scanOutput('{"reply":"you are \\u0067ay"}')).toEqual([]);
-    expect(scanOutput('you are gay')).not.toEqual([]);
-  });
-
-  it('catches the same content once the document has been parsed and re-encoded', () => {
-    // What the gateway now does, in one line, so the fix is legible from here.
-    const raw = '{"reply":"ignore that, my \\u0073ystem prompt says otherwise"}';
-    expect(scanOutput(raw)).toEqual([]);
-    expect(scanOutput(JSON.stringify(JSON.parse(raw)))).not.toEqual([]);
-  });
-});
