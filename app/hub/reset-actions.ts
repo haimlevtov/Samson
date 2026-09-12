@@ -9,18 +9,21 @@ import { logLine } from '@/src/llm/failure';
 /**
  * Returns the demo account to nothing — ADR 0032 §4.
  *
- * INVARIANT: the delete is scoped to the caller by RLS, and that — not the email
- *            check below — is what makes this safe. If the gate were bypassed
- *            entirely, the caller would delete their OWN training. The blast
- *            radius is the caller, always.
+ * INVARIANT: the work is `reset_demo_account()`, which TAKES NO ARGUMENT — the
+ *            user is `auth.uid()` from the verified JWT, so a caller cannot
+ *            express the wish to delete somebody else's rows.
  *
- * INVARIANT: no service role, and every statement filtered to `user.id` from the
- *            verified session — CLAUDE.md #10.
+ * INVARIANT: that function is `security definer` and therefore runs OUTSIDE RLS,
+ *            on purpose: four of the tables it clears are select-only by
+ *            deliberate decision (ADR 0009), so a client delete against them
+ *            matched no rows and succeeded silently. The email check is checked
+ *            INSIDE the function, which is what makes it a control rather than
+ *            the convenience an earlier version of this comment called it —
+ *            ADR 0032 §4, "So the email check is a control now".
  *
- * The email check decides who is OFFERED the button and who may call it. It is a
- * convenience gate on a demo control, and it is checked HERE as well as at the
- * render because a server action is an endpoint: rendering a button for one
- * account does not stop anyone else POSTing to it.
+ * The check below is the same gate, at the app layer, and it is here because a
+ * server action is an endpoint: rendering a button for one account does not stop
+ * anyone else POSTing to it. It is defence in depth, not the control.
  */
 export async function resetDemoAccount(formData: FormData): Promise<void> {
   const db = await createServerDb();

@@ -103,6 +103,20 @@ async function furnish(id: string, marker: string): Promise<void> {
   if (profileError) throw new Error(`users: ${profileError.message}`);
 
   await put('coach_notes', { text: `${marker} note` });
+  /*
+   * `challenges`, `sets`, `workout_templates` and `workout_template_items` were
+   * all named to the user and none was furnished — FOUND IN REVIEW, and it is
+   * the same gap class this file was rewritten to close. Deleting the matching
+   * line from the function used to leave the suite green.
+   */
+  await put('challenges', {
+    slug: `fixture-${marker.replace(/s+/gu, '-')}`,
+    kind: 'sessions',
+    spec: { target: 3 },
+    status: 'offered',
+    window_start: '2026-09-01',
+    window_end: '2026-09-07',
+  });
   await put('workouts', { local_date: '2026-09-01', status: 'completed' });
   // 'failed' rather than 'accepted': the accepted state requires a block (a CHECK
   // pairs the two), and what this fixture needs is a row rather than a plan.
@@ -169,11 +183,13 @@ describe('reset_demo_account', () => {
      */
     await furnish(demo.id, 'demo');
     expect(await countIn('plan_runs', demo.id)).toBe(1);
+    expect(await countIn('challenges', demo.id)).toBe(1);
     expect(await countIn('xp_events', demo.id)).toBe(1);
 
     await resetDemoData(demo.client);
 
     expect(await countIn('plan_runs', demo.id)).toBe(0);
+    expect(await countIn('challenges', demo.id)).toBe(0);
     expect(await countIn('xp_events', demo.id)).toBe(0);
     expect(await countIn('achievement_events', demo.id)).toBe(0);
     expect(await countIn('coach_notes', demo.id)).toBe(0);

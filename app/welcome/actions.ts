@@ -208,6 +208,12 @@ export async function finishOnboarding(): Promise<void> {
   // which is where they already are and which costs them one press.
   if (error) console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
 
-  revalidatePath('/', 'layout');
+  /*
+   * NO `revalidatePath` — FOUND IN REVIEW, and it was a runtime error rather
+   * than a tidiness point. The welcome page awaits this function during RENDER
+   * on the everything-already-answered path, and Next refuses a revalidate
+   * there. It is not needed either: /hub is `force-dynamic`, so the redirect
+   * re-reads the row this just wrote.
+   */
   redirect('/hub');
 }

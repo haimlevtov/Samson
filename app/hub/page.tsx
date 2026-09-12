@@ -313,12 +313,12 @@ export default async function HubPage({
        * a control you have to navigate to mid-demo is friction in exactly the
        * moment it was added to remove.
        *
-       * It renders for ONE account. That is a convenience gate rather than a
-       * control — the action checks the same thing, because a server action is
-       * an endpoint and rendering a button for one account stops nobody else
-       * POSTing to it. What makes it safe is RLS: the deletes are scoped to the
-       * caller, so the worst a bypass achieves is somebody emptying their own
-       * training.
+       * It renders for ONE account, and the same check runs in the action and
+       * again inside `reset_demo_account()` — which is where it is a CONTROL
+       * rather than a convenience, because that function is `security definer`
+       * and runs outside RLS. ADR 0032 §4 carries the correction; an earlier
+       * version of this comment claimed RLS was what made it safe, which stopped
+       * being true when the deletes moved into the function.
        *
        * LAST on the page, deliberately. The first screen of the app is not where
        * an irreversible control should meet a thumb first.

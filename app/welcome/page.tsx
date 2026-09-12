@@ -145,7 +145,11 @@ export default async function WelcomePage({
                 Continue
               </button>
             </form>
-            <p className="muted small">{SKIP_COST.equipment}</p>
+            {/* Only while there is nothing saved — `steps.ts`'s INVARIANT is
+                that every SKIP_COST string describes a state the app really
+                renders, and it does not render this one for somebody who just
+                ticked five tags above. */}
+            {owned.length === 0 ? <p className="muted small">{SKIP_COST.equipment}</p> : null}
           </div>
         </>
       ) : null}

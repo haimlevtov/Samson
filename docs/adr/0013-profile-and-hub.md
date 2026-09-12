@@ -134,6 +134,16 @@ it is the classic failure here, and it is a test rather than a hope.
 
 ## Consequences
 
+> **Amended 2026-09-12 by [ADR 0032](0032-a-user-who-starts-from-nothing.md).**
+> Hub carries one control this table does not give it: **Reset this demo
+> account**, which renders for a single seeded address and for nobody else. It is
+> an account action, and by the boundary above it belongs on Profile — the
+> owner asked for it on the main page because it exists to be pressed between
+> demo runs, and one you have to navigate to mid-demo is friction in the moment
+> it was added to remove. Recorded here rather than only beside the code, because
+> `docs/specs/mobile-interface.md` §4 says an exception argued in a comment has
+> stopped being an exception.
+
 **Hub is briefly emptier than before.** Between this change and the challenge
 and leaderboard work that follows, Hub holds challenges and a placeholder. That
 is a deliberate ordering: moving the ownership boundary first means the

@@ -245,7 +245,7 @@ question is one the app genuinely cannot infer:
 1. **Name** — what the coach calls you.
 2. **Age, weight, height, sex** — the four biometrics the diet engine needs, with
    the same grammar and bounds `src/diet/biometrics.ts` already enforces.
-3. **Diet goal** — maintain, lose, gain.
+3. **Diet goal** — cut, maintain or gain, which is what `DIET_GOALS` holds.
 4. **Equipment** — the ADR 0029 picker, reused rather than rebuilt.
 5. **Days a week, weeks, anything sore** — the plan request, reusing 8b's schema.
 
@@ -269,10 +269,16 @@ Then it offers to generate the plan, which is 8b's action unchanged.
 
 A **Reset this demo account** control that returns the fresh user to empty.
 
-- **Only for that account.** It renders for nobody else, and it deletes only rows
-  the caller owns, through their own session under RLS — never the service role.
-  A demo convenience that could touch another user's data would be the worst bug
-  in the project.
+- **Only for that account.** It renders for nobody else, and never the service
+  role. A demo convenience that could touch another user's data would be the
+  worst bug in the project.
+
+  _Shipped differently from this sentence, and ADR 0032 §4 says why: "through
+  their own session under RLS" could not work, because four of the tables are
+  select-only and a client delete against them succeeded while removing nothing.
+  It is a `security definer` function that takes no argument and checks the
+  account itself._
+
 - **Confirmed, not a single tap**, and it says exactly what it removes.
 - On Profile rather than the main page as asked: Profile is where "who you are"
   lives (ADR 0013), and an irreversible control belongs beside the other account
