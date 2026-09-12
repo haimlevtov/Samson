@@ -139,8 +139,13 @@ the card says so.
   construction", which a review falsified: the figure is calibrated on DURATION —
   "280 characters spoken slowly is about thirty seconds" — and characters bound
   duration only for text a coach actually says. `[very slowly]` in a
-  280-character line is minutes at the same flat charge. That is now unreachable
-  because §2's `spokenLine` removes the tags, so the two halves depend on each
+  280-character line is minutes at the same flat charge. §2's `spokenLine`
+  removes the tag SYNTAX, which makes that materially harder — but not
+  unreachable, and an earlier version of this sentence said unreachable. This
+  model takes its direction in PROSE, which is the whole reason the script is
+  prose: "say this one word at a time, pausing between each" is direction a regex
+  cannot see. What remains is bounded by the model's own compliance rather than
+  by code, and by the per-user weekly budget. The two halves still depend on each
   other: **deleting the sanitiser reopens a budget hole, not only a content
   one.**_
 - It costs little in practice: `CHAT_SYSTEM` already instructs "two or three

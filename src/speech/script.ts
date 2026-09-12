@@ -42,7 +42,17 @@
  * coach's `tts_voice` must be a key here, and no two may share one —
  * tests/db/personas.test.ts. The words are what the coaches were cast by.
  */
-import { MAX_UNTRUSTED_CHARS, sanitizeUntrusted } from '../llm/safety';
+import { MAX_UNTRUSTED_CHARS, sanitizeUntrusted, stripInvisible } from '../llm/safety';
+
+/**
+ * How many strip-and-collapse rounds `spokenLine` runs.
+ *
+ * Bounded rather than `while`: this runs on model output on a request path, and
+ * a loop whose exit depends on a regex reaching a fixed point is a loop worth
+ * capping. Three is one more than the deepest case found — a label split by a
+ * bracketed tag, which needs two.
+ */
+const MAX_STRIP_PASSES = 3;
 
 export const SPEECH_VOICES: Readonly<Record<string, string>> = {
   Zephyr: 'bright',
@@ -139,31 +149,56 @@ export const MAX_DIRECTION_CHARS = 600;
  *          which would turn a refusal into a 500.
  */
 export function spokenLine(text: string): string {
-  const stripped = text
-    // The whole bracketed SPAN, not just the brackets — FOUND BY TEST. Removing
-    // only the delimiters left "whispers" in the line, which the model then
-    // reads out: better than performing it, and still not the coach's words.
-    .replace(/\[[^\]]*\]?/gu, ' ')
-    // Any stray closing bracket the pass above could not pair.
-    .replace(/[[\]]/gu, ' ')
-    // Any markdown-style heading line, which is what this script's labels are.
-    .replace(/^[ \t]*#{1,6}.*$/gmu, ' ')
-    // And the label text itself, wherever it appears, with or without a hash.
-    .replace(/director'?s notes|transcript/giu, ' ')
-    .replace(/\s+/gu, ' ');
+  /*
+   * ORDER IS THE WHOLE FIX, and the first version had it backwards — FOUND IN
+   * REVIEW, twice over. It stripped the labels and THEN collapsed whitespace and
+   * sanitised, so both of those later passes rebuilt what the matcher had just
+   * failed to see. All five of these reached the speech model verbatim:
+   *
+   *   "DIRECTOR'S\nNOTES"        the collapse rejoined the words
+   *   "DIRECTOR'S  NOTES"        the same, via a double space
+   *   "DIRECTOR'S\u00a0NOTES"     a non-breaking space
+   *   "DIRECTOR\u200bS NOTES"     stripInvisible rejoined it, AFTER the matcher
+   *   "DIRECTOR\u2019S NOTES"     a curly apostrophe, which models emit constantly
+   *
+   * So: normalise and strip invisibles FIRST, take the headings while the line
+   * breaks still exist, then strip and collapse together until nothing changes.
+   */
+  const normalised = stripInvisible(text.normalize('NFKC'))
+    // Line-anchored, so it has to happen before anything collapses newlines.
+    .replace(/^[ \t]*#{1,6}.*$/gmu, ' ');
+
+  let out = normalised;
+  for (let pass = 0; pass < MAX_STRIP_PASSES; pass++) {
+    const before = out;
+    out = out
+      // The whole bracketed SPAN: removing only the delimiters left the tag
+      // WORD to be read aloud. NFKC has already folded the fullwidth forms;
+      // the CJK pair is not NFKC-equivalent to anything, so it is named.
+      .replace(/[[【〔][^\]】〕]*[\]】〕]?/gu, ' ')
+      .replace(/[[\]【】〔〕]/gu, ' ')
+      .replace(/director[\u2019'\u02bc]?s\s+notes/giu, ' ')
+      // Anchored, unlike the first version, which deleted the word "transcript"
+      // out of ordinary prose — "the transcript is fine" became "the is fine".
+      // A guard that fires on normal language is one somebody switches off;
+      // src/llm/safety.ts argues that at length about its own patterns.
+      .replace(/\btranscript\s*:/giu, ' ')
+      .replace(/\bTRANSCRIPT\b/gu, ' ')
+      // Collapsing creates new adjacencies, which is why this loops rather than
+      // running once: "DIRECTOR'S [tag] NOTES" needs two passes.
+      .replace(/\s+/gu, ' ');
+    if (out === before) break;
+  }
 
   /*
-   * Sanitised with a generous cap and then LENGTH-CHECKED, rather than capped at
-   * the bound — FOUND BY TEST, and the reason is a good one:
+   * Sanitised LAST and then length-checked, rather than capped at the bound:
    * `sanitizeUntrusted`'s truncation marker is "… [truncated at N characters]",
    * which puts square brackets back into a string this function exists to take
-   * them out of, and pushes the result past the bound it was capping to.
-   *
-   * Too long is therefore "do not speak", not "speak the first 280 characters".
-   * ADR 0031 §4 already refuses to truncate a reply to fit a budget; truncating
-   * one here would be the same trade made quietly.
+   * them out of. Too long is therefore "do not speak", not "speak the first 280
+   * characters" — ADR 0031 §4 already refuses to truncate a reply to fit a
+   * budget, and doing it here would be the same trade made quietly.
    */
-  const clean = sanitizeUntrusted(stripped, MAX_UNTRUSTED_CHARS);
+  const clean = sanitizeUntrusted(out.trim(), MAX_UNTRUSTED_CHARS);
   return clean.length > MAX_TRANSCRIPT_CHARS ? '' : clean;
 }
 

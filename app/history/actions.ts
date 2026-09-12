@@ -18,6 +18,7 @@ import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { computeEnergy, dietFacts } from '@/src/diet/energy';
 import { speechScript, spokenLine, MAX_TRANSCRIPT_CHARS } from '@/src/speech/script';
+import { stripInvisible } from '@/src/llm/safety';
 import { spokeToCoachRecently, SESSION_COACH_COOLDOWN_SECONDS } from '@/src/db/plans';
 import { refusalFor } from '@/src/speech/refusal';
 import { MAX_CHAT_MESSAGE_CHARS } from '@/src/llm/config';
@@ -311,7 +312,10 @@ export async function askDuringSession(
       // Echoed even here — FOUND IN REVIEW. A transcript that failed the LENGTH
       // check is a recogniser that ran away, which is precisely the state where
       // the user most needs to see what was heard. ADR 0031 promises it.
-      asked: typeof spoken === 'string' ? spoken.slice(0, 120) : '',
+      // `stripInvisible` for the same reason the leaderboard's display-name
+      // clamp uses it: a bidi override in a pasted string scrambles the card for
+      // the person reading it. Their own text, so nothing else is at stake.
+      asked: typeof spoken === 'string' ? stripInvisible(spoken).slice(0, 120) : '',
       reply: '',
       audio: null,
       silent: 'not-asked',
@@ -424,9 +428,13 @@ export async function askDuringSession(
         : (answer.text ?? SUPPLEMENT_ANSWER_TURN);
 
     /*
-     * The first persona alphabetically — ADR 0031 §5. There is no stored choice
-     * anywhere, and `listPersonas` orders by name, so this is the coach the
-     * Coach tab opens with rather than an arbitrary one.
+     * The first SHARED, VOICED persona alphabetically — ADR 0031 §5.
+     * `listPersonas` orders by name and `voiced` requires `user_id is null`.
+     *
+     * This comment used to end "so this is the coach the Coach tab opens with",
+     * which ADR 0031 §5 itself records as a claim a review falsified: that tab
+     * defaults to `personas[0]`, which includes a user's own rows and unvoiced
+     * ones. There is no stored persona choice anywhere to make the two agree.
      */
     const voiced = personas.find((p) => p.voiced) ?? null;
 

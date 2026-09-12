@@ -107,6 +107,20 @@ export const SESSION_COACH_COOLDOWN_SECONDS = 8;
  * Thrown rather than swallowed into `false`, for the same reason as the sibling:
  * a read that failed says nothing about whether a call is in flight, and
  * guessing "no" is the guess that spends.
+ *
+ * AI-NOTE: read-then-act, so two requests in the same instant still race — the
+ *          caveat `startedPlanRunRecently` carries and which an earlier draft of
+ *          this comment dropped while claiming a scripted loop is not free. It
+ *          raises the cost of a loop; what BOUNDS the damage is the per-user
+ *          weekly budget, and that gate has an unreserved gap of its own
+ *          (ADR 0025). Do not describe this as a rate limit.
+ *
+ * AI-NOTE: a `budget_denied` row is a `chat` row too — CLAUDE.md #3 — so once
+ *          the week is spent, the first press writes one and the next few
+ *          seconds of presses say "one question at a time" instead of the budget
+ *          sentence the card has a state for. Cosmetic, and it hides the only
+ *          actionable message; worth filtering on `status` if it ever annoys
+ *          somebody.
  */
 export async function spokeToCoachRecently(db: Db, seconds: number): Promise<boolean> {
   const since = new Date(Date.now() - seconds * 1000).toISOString();
