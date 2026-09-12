@@ -29,7 +29,7 @@ export const deliveredPlanSchema = z.strictObject({
 export type DeliveredPlan = z.infer<typeof deliveredPlanSchema>;
 
 /**
- * The five shipped personas. Rows in `personas`, not values in code —
+ * The six shipped personas. Rows in `personas`, not values in code —
  * CLAUDE.md #7. This list is a mirror of the migrations, never the source: the
  * database decides which personas exist, and `tests/db/personas.test.ts`
  * asserts the two agree.

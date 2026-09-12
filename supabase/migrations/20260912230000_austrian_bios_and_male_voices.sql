@@ -79,8 +79,8 @@ values
     'austrian',
     'The Austrian',
 
-    -- A character, not instructions. Second person because that is how the
-    -- other five are written and how the delivery stage reads them.
+    -- A character, not instructions — and third person, as all five shipped
+    -- prompts are ("A training partner who…", "An old coach who…").
     'A former champion from a farming village in Styria who won everything there was to win and now coaches, with undimmed enthusiasm and a heavy Austrian accent. Enormous, genial, completely certain. Talks about training the way other people talk about a good meal: the pump, the blood filling the muscle, the last hard repetition that is the only one that really counts. Never doubts the lifter in front of him, out loud or otherwise. Treats a hard set as a gift rather than a punishment, and says so every time. Calls people my friend. Coarse about nothing; the enthusiasm is the whole personality, and it does not curdle when somebody misses a session — he simply expects them back.',
 
     4,
@@ -88,8 +88,19 @@ values
 
     -- AI-NOTE: matched by `phraseUsed` in src/persona/deliver.ts — whole words
     --          plus the plural, after lowercasing and clearing punctuation
-    --          (ADR 0019). So "I'll be back" has to be listed as "ill be back",
-    --          which is what the matcher sees.
+    --          (ADR 0019).
+    --
+    --          **Clearing punctuation erases SENTENCE BOUNDARIES**, and that is
+    --          the trap this list fell into twice before review. "You moved that
+    --          like a man. Up you get" normalises to "…like a man up you get"
+    --          and fires `man up`. "If you are ill, be back when you feel able"
+    --          fires `ill be back`. Both are ordinary coaching prose, and
+    --          `deliverPlan` has NO FALLBACK (ADR 0006) — a hit costs the user
+    --          their block, which is the `weak`/"weakness" outage exactly.
+    --
+    --          So a phrase built from common words is only safe when the WHOLE
+    --          SEQUENCE is implausible across any sentence break, not just
+    --          within one.
     --
     -- The two universals, because the user's body is a stakeholder that cannot
     -- complain (docs/FRAMING.md). Then the film lines, which is what keeps this
@@ -98,14 +109,18 @@ values
     -- second-person targeting like "you're pathetic" and would not catch any of
     -- these, which is exactly what banned_phrases is for.
     --
-    -- TRIMMED DELIBERATELY to the quotes a model might actually reach for while
-    -- playing this archetype. "Get to the choppa" and "come with me if you want
-    -- to live" are absurd in a gym and were dropped; "I will be back", the
-    -- expansion, was dropped because it is a sentence somebody could write by
-    -- accident and a banned phrase has no fallback — `deliverPlan` rejects,
-    -- retries and then errors (ADR 0006), which is what the `weak`/"weakness"
-    -- bug did to real deliveries. A ban that can fire on ordinary prose costs
-    -- more than the quote it prevents.
+    -- TRIMMED to the quotes a model might actually reach for while playing this
+    -- archetype: "get to the choppa" and "come with me if you want to live" are
+    -- absurd in a gym, and "I will be back" is a sentence somebody could write
+    -- by accident.
+    --
+    -- AI-NOTE: **TWO OF THESE WERE WRONG AND ARE REMOVED BY 20260912240000** —
+    --          `man up` and `ill be back`. Both were measured firing on ordinary
+    --          coaching prose, for the sentence-boundary reason above. This file
+    --          is left as it was APPLIED: an applied migration is never re-run,
+    --          so editing the array here would fix every fresh build and leave
+    --          the deployed database wrong forever. Read the next migration for
+    --          what the row actually carries.
     array[
       'no pain no gain',
       'push through the pain',

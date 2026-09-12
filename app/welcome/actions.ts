@@ -216,7 +216,7 @@ export async function saveCoach(
    * Echoed back on every refusal — mobile-interface.md §4, and the INVARIANT
    * `welcome-state.ts` states. FOUND IN REVIEW: this returned `values: {}` and
    * the radios carried no `defaultChecked`, so a transient failure cleared the
-   * pick and left five sample lines to read again. The other three steps in
+   * pick and left six bios and six lines to read again. The other three steps in
    * this file have echoed since they shipped; this one did not.
    */
   const typed = { personaSlug: chosen };

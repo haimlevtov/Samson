@@ -49,7 +49,8 @@ export default async function WelcomePage({
   ]);
 
   /*
-   * Three fields of each row, not the row. `systemPrompt` is the character
+   * FIVE fields of each row, not the row. (It said "three" until review
+   * counted them, and the count is the part a future reader would trust.) `systemPrompt` is the character
    * description ADR 0006 fences into a message, and a client component has no
    * use for it — so it does not cross into one.
    */

@@ -305,6 +305,26 @@ its steps, a reset action, tests.
 (CLAUDE.md #7), and `.claude/skills/add-persona` is the procedure. Three things
 the owner asked for, in one PR because they are all the same surface.
 
+> **What shipped differs from this entry in five places.** Recorded here so a
+> reader of the plan is not misled; each is argued where the decision was taken.
+>
+> - **A fourth thing shipped: a Try button on the welcome coach step**, asked for
+>   by the owner after this entry was written. It is a second paid speech
+>   surface, so [ADR 0025](../adr/0025-coach-voices.md) carries an amendment for
+>   it — including the recency guard `hearCoach` never had, and the sentence the
+>   step now says about what a press costs.
+> - **The coach is "a former champion", not "a former Mr Olympia".** The title is
+>   a trademark, and it went for the same reason the name did.
+> - **The banned list is shorter than this entry promised.** `man up` and
+>   `ill be back` were both measured firing on ordinary coaching prose, because
+>   `phraseUsed` clears punctuation before matching — so a sentence boundary is
+>   not a word boundary, and a hit costs the user their whole block.
+> - **The bio renders under BOTH pickers**, not only the Coach tab's menu.
+> - **The recast brought a constant with it.** This entry asked only that the
+>   cast be checked against Google's table; it is `SPEECH_VOICE_GENDER` now, so
+>   "a male voice" is a property a test asserts rather than a name somebody
+>   remembered.
+
 ### The Austrian
 
 A sixth coach: a former Mr Olympia from a village in Styria, who won everything

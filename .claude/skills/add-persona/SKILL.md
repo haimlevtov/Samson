@@ -1,6 +1,6 @@
 ---
 name: add-persona
-description: Add or change a coach persona in Samson. Use when adding a sixth coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or giving it a voice. Covers the migration, the voice direction a coach speaks with, and the tests that must ship with it.
+description: Add or change a coach persona in Samson. Use when adding a coach, editing a shipped one's character, changing its banned phrases, intensity, humour tier or preview line, or giving it a voice. Covers the migration, the voice direction a coach speaks with, and the tests that must ship with it.
 ---
 
 # Adding a persona
@@ -27,15 +27,17 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `intensity` | 1–5, drives how hard delivery pushes |
 | `humor_level` | `clean`, `cheeky`, `crude` — a ceiling, clamped by the user's own setting |
 | `banned_phrases` | text[], enforced in code, not by the prompt |
-| `sample_line` | what the Coach tab's Voice card speaks when a coach is previewed. See below |
+| `sample_line` | what a Try button speaks when a coach is previewed — on the Coach tab's Voice card AND the welcome flow's coach step. See below |
 | `bio` | two sentences IN THE THIRD PERSON, shown under both pickers — what this coach is like to be coached by. 240 characters at most. **Not `system_prompt`**: that one is written for a model and fenced into a message, and making it double as UI copy ties how a coach behaves to what the picker says |
 
 ### `sample_line` is the coach's first impression
 
 _Since rework PR 8 it is **read as well as heard**: the welcome flow's coach step
 renders it as text under each coach's name, which is the first screen a new user
-sees. Write it to work both ways — a line that only lands when performed will sit
-flat on that list._
+sees. Since rework PR 5 that step also **speaks** it — six Try buttons, one per
+coach. Write it to work both ways: a line that only lands when performed sits
+flat on the list, and one that only reads well is the first thing a new user
+hears._
 
 A few short sentences, 280 characters at most, in the character's own voice —
 it is spoken, so write it to be heard. The same rules bind it as bind every
@@ -152,6 +154,26 @@ So `banned_phrases` is for what that construction misses: the idiom **this
 character** would reach for, and advice that is dangerous rather than rude. The
 Sergeant's list is the longest in the table for exactly that reason.
 
+### Clearing punctuation erases SENTENCE boundaries
+
+The most expensive trap in this file, and it caught a shipped list in review.
+
+`phraseUsed` replaces every run of non-alphanumerics with a space **before**
+matching, so a full stop is not a boundary — a banned phrase can be assembled
+out of the end of one sentence and the start of the next:
+
+> "You moved that like a man. Up you get" fires `man up`.
+> "If you are ill, be back when you feel able" fires `ill be back`.
+
+Both are ordinary coaching prose. `deliverPlan` has **no fallback** (ADR 0006),
+so a hit costs the user their block — the `weak`/"weakness" outage below, in a
+new form. Both phrases were on the Austrian's first list and both are gone.
+
+**So a phrase built from common words is safe only when the WHOLE SEQUENCE is
+implausible across any sentence break**, not merely within one. Add the sentence
+that would fire it to `tests/db/personas.test.ts`'s VOCABULARY paragraph, which
+is what measures this from the outside.
+
 ### The matcher matches whole words — and it did not always
 
 A phrase matches on whole words **plus its plural**, after both sides are
@@ -238,8 +260,14 @@ been evaluated for drift — it has not.
 - `docs/adr/0025-coach-voices.md` — how a coach is voiced, and why not on the
   device
 - `docs/adr/0005-llm-safety.md` §1 — why a column is fenced, not concatenated
-- `supabase/migrations/20260908110000_remaining_personas.sql` — the most recent
-  pair, and the closest model to copy. Its insert predates `sample_line`,
+- `supabase/migrations/20260912230000_austrian_bios_and_male_voices.sql` — the
+  most recent row and **the closest model to copy**: a complete insert carrying
+  every column a coach needs, including `bio`, `tts_voice` and
+  `tts_instructions`, plus the count guard that makes a mistyped slug fail the
+  migration instead of shipping a blank picker entry
+- `supabase/migrations/20260908110000_remaining_personas.sql` — the Sergeant and
+  the Physio. Predates `sample_line`, `tts_voice`, `tts_instructions` and `bio`,
+  so copy the one above instead. Its insert predates `sample_line`,
   `tts_voice` and `tts_instructions`; add all three, and leave out its
   `tts_voice_id` and `tts_voice_variant`, which no longer exist
 - `supabase/migrations/20260911140100_persona_voice_direction.sql` — the five

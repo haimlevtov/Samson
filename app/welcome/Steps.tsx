@@ -2,8 +2,8 @@
 
 import { useActionState } from 'react';
 import { DIET_GOALS } from '@/src/diet/energy';
-import { whyShown } from '@/src/speech/player';
-import { SHOWN_TEXT, useCoachVoice } from '../coach/coach-voice';
+import { canHear, whyShown } from '@/src/speech/player';
+import { CoachTryButton, SHOWN_TEXT, useCoachVoice } from '../coach/CoachTry';
 import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
 import { saveBiometrics, saveCoach, saveGoal, saveName } from './actions';
 import { EMPTY_WELCOME, type WelcomeState } from './welcome-state';
@@ -181,10 +181,15 @@ export function CoachStep({
 
   /*
    * ONE player for the whole list, from the same hook the Coach tab uses. It
-   * keys everything by slug — `fetching`, `playing` and `shown` all name a
-   * coach — so six buttons share it, a second press joins the call already in
-   * flight rather than paying twice, and changing coach supersedes a press that
-   * has not landed.
+   * keys everything by slug, so six buttons share it and a second press joins
+   * the call already in flight rather than paying twice.
+   *
+   * FOUND IN REVIEW: this comment used to add "and changing coach supersedes a
+   * press that has not landed", which describes `select()` — a call the Coach
+   * tab makes on its picker and this component deliberately does not make.
+   * Picking a radio here is independent of the audio: the Try button owns
+   * playback, and somebody choosing their coach while listening to another
+   * should not be cut off mid-sentence. Superseding happens between PRESSES.
    */
   const { voice, hear, stop } = useCoachVoice();
 
@@ -195,19 +200,19 @@ export function CoachStep({
         <fieldset className="coach-set">
           <legend className="label">Pick a coach</legend>
           {coaches.map((coach) => {
-            const canHear = voiceAvailable && coach.voiced && (coach.sampleLine ?? '') !== '';
             const why = whyShown(voice, coach, voiceAvailable);
-            const fetching = voice.fetching === coach.slug;
 
             return (
               /*
-               * A row, with the label around the radio and its text and the Try
-               * button OUTSIDE it. A button inside a label activates the label's
-               * control, so pressing Try would also pick that coach — a side
-               * effect nobody asked for, and a nested interactive element a
-               * screen reader has to guess at.
+               * A row, with the label around the radio and its text and
+               * everything else OUTSIDE it. A button inside a label activates
+               * the label's control, so pressing Try would also pick that coach;
+               * and a `role="status"` sentence inside one joins the radio's
+               * ACCESSIBLE NAME, so with no key configured all six radios would
+               * be announced with "The coach voices are not set up here" on the
+               * end of them. Both found in review, one after the other.
                */
-              <div key={coach.slug} className="coach-row">
+              <div key={coach.slug} className="row coach-row">
                 <label className="choice-row coach-choice">
                   {/* Keeps the pick through a refusal — mobile-interface.md §4.
                       React 19 resets an uncontrolled form once a function action
@@ -229,46 +234,43 @@ export function CoachStep({
                     {coach.sampleLine === null ? null : (
                       <span className="muted small coach-line">“{coach.sampleLine}”</span>
                     )}
-                    {why === null ? null : (
-                      // Every state renders something — mobile-interface.md §4.
-                      <span className="muted small" role="status">
-                        {SHOWN_TEXT[why]}
-                      </span>
-                    )}
                   </span>
                 </label>
 
-                {canHear ? (
-                  voice.playing === coach.slug ? (
-                    <button type="button" className="secondary" onClick={stop}>
-                      Stop
-                    </button>
-                  ) : (
-                    /*
-                     * Stays enabled while fetching, like the Coach tab's:
-                     * disabling the focused button drops keyboard focus, and a
-                     * second press joins the call in flight rather than paying
-                     * twice. The name is in the content rather than an
-                     * `aria-label`, so the press is audible to a screen reader
-                     * and the visible word is contained in the accessible name
-                     * (WCAG 2.5.3) — six buttons reading "Try" would otherwise
-                     * be six identical names.
-                     */
-                    <button
-                      type="button"
-                      className="secondary"
-                      aria-busy={fetching}
-                      onClick={() => hear(coach.slug)}
-                    >
-                      {fetching ? 'Finding…' : 'Try'}
-                      <span className="sr-only"> {coach.name}’s voice</span>
-                    </button>
-                  )
-                ) : null}
+                {/*
+                 * A button or a sentence, never both and never neither —
+                 * `canHear` and `whyShown` are complements, which is why they
+                 * live together in src/speech/player.ts rather than being
+                 * written out per surface.
+                 */}
+                {canHear(coach, voiceAvailable) ? (
+                  <CoachTryButton
+                    slug={coach.slug}
+                    name={coach.name}
+                    voice={voice}
+                    hear={hear}
+                    stop={stop}
+                    className="secondary"
+                  />
+                ) : why === null ? null : (
+                  <span className="muted small coach-why" role="status">
+                    {SHOWN_TEXT[why]}
+                  </span>
+                )}
               </div>
             );
           })}
         </fieldset>
+        {/*
+         * What pressing Try costs, said before it is pressed — ADR 0025's budget
+         * section, and ADR 0031 §3's rule that a feature able to spend the key
+         * in one session is not something to offer silently. Six buttons on the
+         * first screen a new user sees is the most exposed this has ever been.
+         */}
+        <p className="muted small">
+          Hearing a coach uses a little of the week&apos;s coaching budget, which is shared with
+          your plans and your questions. Try the one or two you are choosing between.
+        </p>
         <input type="hidden" name="skipped" value={carried} />
         <button type="submit" disabled={pending}>
           {pending ? 'Saving…' : 'Continue'}

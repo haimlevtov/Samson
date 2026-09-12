@@ -3,10 +3,10 @@
 import { useActionState, useState } from 'react';
 import { deliverForPersona } from './actions';
 import { EMPTY_DELIVERY, type DeliveryState } from './state';
-import { whyShown } from '@/src/speech/player';
+import { canHear as hearable, whyShown } from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
 import { openingCoach } from '@/src/persona/choice';
-import { SHOWN_TEXT, useCoachVoice } from './coach-voice';
+import { CoachTryButton, SHOWN_TEXT, useCoachVoice } from './CoachTry';
 
 /**
  * The plan and the voice, side by side.
@@ -89,9 +89,12 @@ export function CoachConsole({
     setSelected(slug);
   };
 
-  const canHear = voiceAvailable && chosen?.voiced === true && line !== '';
+  // The shared predicate — src/speech/player.ts, where it sits beside
+  // `whyShown` because the two are complements: exactly one of a button and a
+  // sentence should show. Written out here AND on the welcome step until review
+  // found the two spellings disagreeing about a whitespace-only line.
+  const canHear = hearable(chosen, voiceAvailable);
   const why = whyShown(voice, chosen, voiceAvailable);
-  const fetching = chosen !== null && voice.fetching === chosen.slug;
 
   return (
     <>
@@ -149,29 +152,13 @@ export function CoachConsole({
            * joins the call already in flight rather than paying twice.
            */}
           {chosen && canHear ? (
-            voice.playing === chosen.slug ? (
-              <button type="button" className="secondary" onClick={stop}>
-                Stop
-              </button>
-            ) : (
-              <button type="button" aria-busy={fetching} onClick={() => hear(chosen.slug)}>
-                {fetching ? 'Finding…' : 'Try'}
-                {/*
-                 * FOUND IN REVIEW, and this was an `aria-label` until it was.
-                 * A constant label is a name that does not change when the
-                 * button is pressed, and `aria-busy` announces nothing on a
-                 * button — so a screen-reader user got silence for the whole
-                 * fetch, which ADR 0025 measured at about eight seconds. The
-                 * name is in the content instead: it changes with the state, so
-                 * the press is audible, and the visible word is contained in it,
-                 * which an overriding `aria-label` was not (WCAG 2.5.3).
-                 *
-                 * Clipped rather than shortened, because the button's width is
-                 * why the name left the label in the first place.
-                 */}
-                <span className="sr-only"> {chosen.name}’s voice</span>
-              </button>
-            )
+            <CoachTryButton
+              slug={chosen.slug}
+              name={chosen.name}
+              voice={voice}
+              hear={hear}
+              stop={stop}
+            />
           ) : null}
         </div>
 

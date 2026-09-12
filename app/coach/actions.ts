@@ -26,6 +26,8 @@ import { EMPTY_PLAN, type PlanState } from './plan-state';
 import { availableExercises } from '@/src/db/exercises';
 import {
   PLAN_RUN_COOLDOWN_SECONDS,
+  COACH_VOICE_COOLDOWN_SECONDS,
+  askedForAVoiceRecently,
   createSupabasePlanStore,
   startedPlanRunRecently,
 } from '@/src/db/plans';
@@ -432,6 +434,21 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
   if (!parsed.success) return { ok: false, reason: 'no-voice' };
 
   try {
+    /*
+     * FOUND IN REVIEW of rework PR 5, and it is the guard both paid siblings
+     * already had. `disabled={pending}` is client state; this is a plain server
+     * action, and the budget gate reads spend before it allows, so concurrent
+     * presses all pass on one stale figure.
+     *
+     * It answers 'failed' rather than a reason of its own: the card has five
+     * states and none of them is "too fast", the button stays pressable, and a
+     * sixth sentence for a three-second window would be a state nobody reaches
+     * on purpose. `src/db/plans.ts` carries what this is and is not.
+     */
+    if (await askedForAVoiceRecently(db, COACH_VOICE_COOLDOWN_SECONDS)) {
+      return { ok: false, reason: 'failed' };
+    }
+
     const coach = await coachVoice(db, parsed.data);
     if (!coach) return { ok: false, reason: 'no-voice' };
 

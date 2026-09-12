@@ -122,6 +122,60 @@ export const SESSION_COACH_COOLDOWN_SECONDS = 8;
  *          actionable message; worth filtering on `status` if it ever annoys
  *          somebody.
  */
+/**
+ * How close together two voice previews may be.
+ *
+ * Shorter than `SESSION_COACH_COOLDOWN_SECONDS` because this guards ONE speech
+ * attempt rather than up to six chat calls plus two — and because the control it
+ * sits behind is a row of six buttons somebody is meant to compare. A window
+ * that made comparing them feel broken would be a guard the product pays for.
+ */
+export const COACH_VOICE_COOLDOWN_SECONDS = 3;
+
+/**
+ * Whether this user asked for a spoken line within the window.
+ *
+ * INVARIANT: RLS scopes the read to the caller — CLAUDE.md #10. `llm_calls` is
+ *            own-row, so this counts nobody else's presses.
+ *
+ * FOUND IN REVIEW of rework PR 5. `hearCoach` was the only paid action in the
+ * app without this guard, and that was survivable while its one button lived
+ * behind an accepted plan on the Coach tab. That PR put SIX of them on the
+ * onboarding coach step — which is where `/sign-in`'s credential-free demo
+ * button lands you, since the fixture's password is printed on the page. Each
+ * press is `SPEECH_ASSUMED_COST_USD` against a $0.50 week shared with the
+ * planner and the chat, so a scripted loop silences the demo account for the
+ * rest of the window: an availability problem on the account the demo runs on.
+ *
+ * Thrown rather than swallowed into `false`, like its siblings: a read that
+ * failed says nothing about whether a call is in flight, and guessing "no" is
+ * the guess that spends.
+ *
+ * AI-NOTE: read-then-act, so two requests in the same instant still race — the
+ *          caveat both siblings carry. It raises the cost of a loop; what
+ *          BOUNDS the damage is the weekly budget, which has an unreserved gap
+ *          of its own (ADR 0026 §4). Do not describe this as a rate limit.
+ *
+ * AI-NOTE: filtered to `stage = 'speech'` deliberately. Without it a chat
+ *          question would silence the Try button, and a preview would silence
+ *          the chat — two features taking each other's cooldown, which is the
+ *          shape `spokeToCoachRecently`'s own stage filter avoids.
+ */
+export async function askedForAVoiceRecently(db: Db, seconds: number): Promise<boolean> {
+  const since = new Date(Date.now() - seconds * 1000).toISOString();
+
+  const { data, error } = await db
+    .from('llm_calls')
+    .select('id')
+    .eq('stage', 'speech')
+    .gte('created_at', since)
+    .limit(1);
+
+  if (error) throw new Error(`llm_calls recency check failed: ${error.message}`);
+
+  return (data ?? []).length > 0;
+}
+
 export async function spokeToCoachRecently(db: Db, seconds: number): Promise<boolean> {
   const since = new Date(Date.now() - seconds * 1000).toISOString();
 

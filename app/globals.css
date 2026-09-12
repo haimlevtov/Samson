@@ -3038,9 +3038,6 @@ label.coach-choice {
   padding: 6px 0;
   cursor: pointer;
 }
-label.coach-choice + label.coach-choice {
-  border-top: 1px solid var(--border);
-}
 .coach-choice input[type='radio'] {
   /* `label.choice-row input` above already resets the base 44px min-height and
      sets the accent — the same reset `.check-row` needed. Only the nudge that
@@ -3072,12 +3069,13 @@ label.coach-choice + label.coach-choice {
 
 /* A coach and its Try button on one line — rework PR 5, the welcome step.
    The button sits OUTSIDE the label (a button inside one activates the label's
-   control), so the row is what holds them together. */
-.coach-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+   control, and a status sentence inside one joins its accessible name), so the
+   row is what holds them together.
+
+   `.row` already gives flex, a gap and wrapping — the same sharing `.humor`,
+   `.persona-picker` and `.check-all` all record, and which this rule did not do
+   until review. Only the rule between rows and the two flex behaviours are
+   here. */
 .coach-row + .coach-row {
   border-top: 1px solid var(--border);
 }

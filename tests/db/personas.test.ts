@@ -84,6 +84,15 @@ describe('the shipped roster', () => {
       'Repetition quality beats repetition count on a transverse plane movement.',
       'This is a deload, which is a decision rather than a failure.',
       'Progression on the hamstring work has been steady for three weeks.',
+      /*
+       * The two that FOUND THE AUSTRIAN'S LIST IN REVIEW, and they are here
+       * rather than in a comment because `phraseUsed` clears punctuation before
+       * matching — so a sentence BOUNDARY is not a word boundary, and a banned
+       * phrase can be assembled out of the end of one sentence and the start of
+       * the next. Both of these fired against a shipped list.
+       */
+      'You moved that like a man. Up you get, my friend, and we go again.',
+      'If you are ill, be back when you feel able and we will pick it up.',
     ].join(' ');
 
     // Through the shipped matcher, not a copy of it: a re-implementation here
