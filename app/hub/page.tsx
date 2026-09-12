@@ -9,7 +9,6 @@ import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { acceptChallengeAction } from './actions';
-import { DemoResetCard } from './DemoResetCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,15 +28,9 @@ export const dynamic = 'force-dynamic';
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
  */
-export default async function HubPage({
-  searchParams,
-}: {
-  // The reset redirects back with these — see app/hub/reset-actions.ts.
-  searchParams: Promise<{ reset?: string }>;
-}) {
+export default async function HubPage() {
   const db = await createServerDb();
   const user = await currentUser(db);
-  const { reset } = await searchParams;
 
   /*
    * A user who has never finished the welcome flow goes to it — ADR 0032 §2.
@@ -307,16 +300,12 @@ export default async function HubPage({
         </div>
       )}
       {/*
-       * The demo reset — ADR 0032 §4. LAST on the page, deliberately: the first
-       * screen of the app is not where an irreversible control should meet a
-       * thumb first.
-       *
-       * It is a component rather than markup because it is on `/welcome` too,
-       * and that is not a nicety — the demo account is redirected out of this
-       * page by the check at the top of it, so until PR 8 the reset lived only
-       * where its own account could not go. `DemoResetCard` carries that.
+       * The demo reset WAS HERE, and is now one button on `/sign-in` — ADR 0032
+       * §4 as amended twice. It could not be reached from this page by the only
+       * account that has it: the check at the top redirects a user whose
+       * `onboarded_at` is null to `/welcome`, and that account's is null by
+       * design.
        */}
-      <DemoResetCard email={user.email} from="/hub" reset={reset} />
     </>
   );
 }

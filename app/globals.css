@@ -3044,18 +3044,11 @@ label.coach-choice + label.coach-choice {
   gap: 2px;
 }
 
-/* The demo reset — ADR 0032 §4. The only irreversible control on a tab, so it
-   says so with a border rather than relying on the copy alone. */
-.danger-card {
-  border-color: var(--bad);
-}
-.danger-card p {
-  margin: 0 0 10px;
-}
-.reset-form {
-  align-items: flex-end;
-  gap: 10px;
-}
-.reset-form .grow {
-  flex: 1 1 10rem;
-}
+/* The demo reset's card WAS HERE — `.danger-card`, `.reset-form` and its
+   `.grow` label, for a bordered card with a typed confirmation in it.
+
+   ADR 0032's second amendment replaced all of that with one button in the
+   fixture table on `/sign-in`, which needs no rule of its own: it is a
+   `.secondary` button in a table cell. Deleted rather than left, because an
+   unused selector in a hand-written sheet is a rule the next person has to
+   prove nothing uses. */

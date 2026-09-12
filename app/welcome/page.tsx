@@ -12,7 +12,6 @@ import {
 } from '@/src/onboarding/steps';
 import { EquipmentForm } from '../settings/EquipmentForm';
 import { PlanRequestForm } from '../coach/PlanRequestForm';
-import { DemoResetCard } from '../hub/DemoResetCard';
 import { finishOnboarding, skipStep } from './actions';
 import { BodyStep, CoachStep, GoalStep, NameStep } from './Steps';
 
@@ -32,15 +31,13 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  // `reset` is the demo card's own refusal, sent back here rather than to /hub
-  // — the demo account cannot reach /hub. See app/hub/reset-actions.ts.
-  searchParams: Promise<{ skip?: string; reset?: string }>;
+  searchParams: Promise<{ skip?: string }>;
 }) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const { skip, reset } = await searchParams;
+  const { skip } = await searchParams;
 
   const [tags, owned, plan, personas] = await Promise.all([
     equipmentCatalogue(db),
@@ -214,20 +211,6 @@ export default async function WelcomePage({
           </div>
         </>
       ) : null}
-
-      {/*
-       * The reset, and the reason PR 8 exists — ADR 0032 §4.
-       *
-       * It was on Hub only, and `app/hub/page.tsx` redirects a user whose
-       * `onboarded_at` is null to THIS page. The demo account's `onboarded_at`
-       * is null by design, so the control that exists to restart the demo could
-       * only be reached by somebody who had finished it. `DemoResetCard` renders
-       * for that one account, and here it is where the account actually is.
-       *
-       * Below the question, for the same reason it is last on Hub: an
-       * irreversible control is not what a thumb should meet first.
-       */}
-      <DemoResetCard email={user.email} from="/welcome" reset={reset} />
     </>
   );
 }
