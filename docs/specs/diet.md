@@ -21,7 +21,7 @@ and none of which anything read or wrote before phase 6.
 | --------------- | --------------- | --------------------------------------- | -------------------- |
 | `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms            |
 | `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres          |
-| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date               |
+| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | see below            |
 | `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select — see below |
 
 **`sex` is asked for differently on the two surfaces**, and the column is the
@@ -35,6 +35,16 @@ same on both.
   the BMR constant is selected by sex, so a target computed from `unspecified`
   is derived from a value nobody stated. Safe — it takes the higher constant —
   and not an answer. Declining is the Skip button, not a value.
+
+**`birth_date` is asked for differently on the two surfaces too**, since rework
+PR 9. Settings keeps `<input type="date">` with `min` and `max`, exact to the
+day. `/welcome` asks with three selects — day, month, year — composed by
+`composeBirthDate` in `src/onboarding/schema.ts`, because the owner reported
+that the native widget there would not take a year ending in zero. That was not
+reproduced; the welcome input carried no `min` or `max`, which is the one
+difference found, and the selects remove the widget whatever the cause. Three
+selects reach two states one input could not — a partial date, and a day the
+month does not have — and each has its own sentence.
 
 Labels live in `src/ui/sex.ts`; the welcome step used to render the raw column
 values, which showed somebody the word "unspecified".

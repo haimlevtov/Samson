@@ -581,6 +581,26 @@ On delete it sets null, which is the honest behaviour if a coach is ever retired
 of birth will not take a year ending in zero — 1990, 2000 — and asked for it to
 be split into dropdown menus.
 
+> **What shipped differs from this entry in four places.** Recorded so a reader
+> of the plan is not misled.
+>
+> - **A fifth thing shipped: every select on the step now keeps its value
+>   through a refusal.** `defaultValue` on a `<select>` is read once at mount;
+>   the sex select had been losing the user's pick since PR 4. Found in the
+>   browser.
+> - **31 February has its own sentence.** This entry said `isRealDate` refuses
+>   it "with a message that already exists". The action discarded that message
+>   for a generic one under four controls, and review caught the loop.
+> - **Every control is disabled while a submit is in flight**, so a pick made
+>   during "Saving…" cannot be silently reverted by the refusal's echo.
+> - **The year list is bounded by the YEAR, not the day**, and says so. This
+>   entry claimed a picker that offers nothing the save refuses; a later day in
+>   the current year is offered and then refused with its own sentence.
+>
+> **Settings is untouched, and has two known gaps** recorded rather than fixed
+> here: its date of birth is still the native input, and its sex select has the
+> same keep-the-value bug the welcome step just had.
+
 ### What is known, and what is not
 
 **I could not reproduce the year behaviour, and this plan does not pretend to
@@ -954,10 +974,17 @@ defects rather than untidiness, and every one of them was mine:
 `isCompleteBody` and `openingCoach` were both extracted to `src/` with the
 reasoning that nothing under `app/` is in the unit suite, so a rule written there
 is one no test can fail on. The select-all shipped as three decisions inside a
-component. It is `src/catalogue/selection.ts` now. The coach step was the one
-refused form in `Steps.tsx` that dropped what the user had picked, in a file
-whose header says keeping values is the entire reason those components are
-clients.
+component. It is `src/catalogue/selection.ts` now. The coach step dropped what the user had picked on a refusal, in a file whose
+header says keeping values is the entire reason those components are clients.
+
+_Corrected by rework PR 9. This said the coach step was "the one refused form"
+that dropped a pick. It was not: **the sex select did too, and it shipped that
+way.** `defaultValue` on a `<select>` is read once at mount, so React 19's
+post-action form reset restored it to nothing chosen while the text fields beside
+it came back filled. The bug landed in PR 4 and survived PR 8 reworking that very
+control — so PR 8 shipped a live violation of a documented invariant, which this
+entry recorded five merely-false comments and missed. PR 9 found it in a browser,
+where no unit test and no reviewer could have._
 
 **The browser found something nobody had looked at.** The sign-in fixture table
 has been scrolling the page sideways since it was written — 536px of columns

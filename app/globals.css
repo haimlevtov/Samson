@@ -3086,3 +3086,37 @@ label.coach-choice {
 .coach-row > button {
   flex: none;
 }
+
+/* Day, month and year as three selects — rework PR 9, replacing the native date
+   input. They share a row and each takes what it needs: the month name is the
+   longest, the year is four digits, the day is two. `minmax(0, …)` so a long
+   month name cannot push the row past 375px.
+
+   Not `.theme-choices`, which is also three `minmax(0, …)` columns — an argued
+   exception to the sheet's share-the-primitive rule rather than an oversight.
+   Those columns are EQUAL because the three themes are peers; these are
+   deliberately unequal, and a shared rule would have to be overridden on every
+   property that matters. The fieldset reset is the other half of what differs. */
+.birth-date {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.birth-date legend {
+  padding: 0;
+}
+/* Only `min-width: 0` is load-bearing: a grid item's automatic minimum is its
+   content, so a long month name would otherwise push its track wide. `display`
+   is not set because grid items are blockified anyway.
+
+   FOUND IN REVIEW: this was `.welcome-form .birth-date label { display: block }`
+   under a comment claiming to outrank `.settings-form label`. That rule declares
+   the same two properties, so there was nothing to outrank — and the
+   `.welcome-form` prefix meant the control could never have been reused on a
+   Settings surface, which was the stated reason for the scope. Unscoped now. */
+.birth-date label {
+  min-width: 0;
+}

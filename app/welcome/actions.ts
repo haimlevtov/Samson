@@ -8,9 +8,14 @@ import { logLine } from '@/src/llm/failure';
 import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import {
+  IMPOSSIBLE_DATE_MESSAGE,
   INCOMPLETE_BODY_MESSAGE,
+  PARTIAL_BIRTH_DATE_MESSAGE,
+  composeBirthDate,
   isCompleteBody,
+  namesARealDate,
   onboardingBodySchema,
+  readBirthDateParts,
   readBodyForm,
 } from '@/src/onboarding/schema';
 import { listPersonas } from '@/src/db/personas';
@@ -101,12 +106,45 @@ export async function saveBiometrics(
    * this rule earns its keep: one out-of-range height used to cost the user
    * their weight, height, date of birth and sex.
    */
+  const parts = readBirthDateParts(formData);
   const typed: Record<string, string> = {
     bodyweightKg: String(formData.get('bodyweightKg') ?? ''),
     heightCm: String(formData.get('heightCm') ?? ''),
-    birthDate: String(formData.get('birthDate') ?? ''),
+    // The three selects echo back separately — rework PR 9. Echoing the composed
+    // ISO date would put nothing back in the controls the user actually used.
+    // `?? ''` because a part the form did not send at all is `undefined`, and
+    // what goes back in a control is a string.
+    birthDay: parts.day ?? '',
+    birthMonth: parts.month ?? '',
+    birthYear: parts.year ?? '',
     sex: String(formData.get('sex') ?? ''),
   };
+
+  /*
+   * A date that is two thirds answered, which a single input could not produce.
+   * Its own sentence rather than the four-or-none one: "fill in the rest" is
+   * true of the whole step, and this is about one control. Treating it as blank
+   * would silently discard two answers the user gave.
+   */
+  if (composeBirthDate(parts).partial) {
+    return { error: PARTIAL_BIRTH_DATE_MESSAGE, values: typed };
+  }
+
+  /*
+   * 31 February, and the states the control this replaced could not reach: the
+   * browser's date widget clamps the day to the month, and a list of 1–31 does
+   * not. FOUND IN REVIEW.
+   *
+   * Its own sentence, naming the control. The schema refuses it too — `isRealDate`
+   * — but that refusal arrives as `INVALID_MESSAGE`, "that did not look right",
+   * under four controls of which three are fine and with the selects showing
+   * exactly what the user picked. Nothing said which one to change, and pressing
+   * Continue again reproduced it: a loop, which is the shape §4 exists to
+   * prevent. Two comments in this PR claimed the existing message covered it.
+   */
+  if (!namesARealDate(parts)) {
+    return { error: IMPOSSIBLE_DATE_MESSAGE, values: typed };
+  }
 
   const parsed = onboardingBodySchema.safeParse(readBodyForm(formData));
   if (!parsed.success) return { error: INVALID_MESSAGE, values: typed };
