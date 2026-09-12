@@ -1,9 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
-import { SEXES } from '@/src/diet/biometrics';
 import { DIET_GOALS } from '@/src/diet/energy';
-import { SEX_LABEL } from '@/src/ui/sex';
+import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
 import { saveBiometrics, saveCoach, saveGoal, saveName } from './actions';
 import { EMPTY_WELCOME, type WelcomeState } from './welcome-state';
 
@@ -95,20 +94,21 @@ export function BodyStep({ carried }: { carried: string }) {
         <label>
           <span className="label">Sex</span>
           {/*
-           * The owner asked for "male or female only", and what was here was
-           * worse than either reading of that: a blank "Prefer not to say" on
-           * top of SEXES rendered raw, so the list read Prefer not to say /
-           * male / female / unspecified. Two of those four mean the same thing,
-           * and only one of the two counts as an answer — blank writes null,
-           * which leaves the step unanswered and re-renders it with no message.
+           * TWO OPTIONS — the owner's instruction, and `src/ui/sex.ts` carries
+           * why it is right: the BMR constant is selected by sex, so the number
+           * the diet block shows is only as honest as the answer behind it.
            *
-           * So: the two sexes, labelled, and `unspecified` offered as the
-           * declining it is rather than as a word from the schema. No blank
-           * option — declining to say is a value here, and Skip is the way past
-           * the step entirely.
+           * The empty option is a PLACEHOLDER, not a third answer. A two-option
+           * select with no placeholder preselects the first, so a user who never
+           * looked at this field would be recorded as male; `required` plus an
+           * empty first option means the two values are the only two that can be
+           * submitted, and neither can be submitted by accident. The server
+           * refuses a blank anyway — `isCompleteBody` — because a required
+           * attribute is a convenience, never a control.
            */}
-          <select name="sex" defaultValue={value('sex') === '' ? 'unspecified' : value('sex')}>
-            {SEXES.map((option) => (
+          <select name="sex" defaultValue={value('sex')} required>
+            <option value="">Choose one</option>
+            {WELCOME_SEXES.map((option) => (
               <option key={option} value={option}>
                 {SEX_LABEL[option]}
               </option>
@@ -161,11 +161,16 @@ export function CoachStep({ coaches, carried }: { coaches: CoachChoice[]; carrie
         <fieldset className="coach-set">
           <legend className="label">Pick a coach</legend>
           {coaches.map((coach) => (
-            <label key={coach.slug} className="coach-choice">
+            <label key={coach.slug} className="choice-row coach-choice">
+              {/* Keeps the pick through a refusal — mobile-interface.md §4.
+                  React 19 resets an uncontrolled form once a function action
+                  resolves, so without this a transient save failure clears the
+                  choice and the five sample lines have to be read again. */}
               <input
                 type="radio"
                 name="personaSlug"
                 value={coach.slug}
+                defaultChecked={state.values['personaSlug'] === coach.slug}
                 required
                 disabled={pending}
               />

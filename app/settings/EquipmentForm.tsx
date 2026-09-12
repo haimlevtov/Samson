@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import type { EquipmentTag } from '@/src/db/equipment';
+import { nextSelectAll, selectAllState } from '@/src/catalogue/selection';
 import type { OwnedEquipment } from './equipment-props';
 import { saveEquipment } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
@@ -59,16 +60,21 @@ export function EquipmentForm({ tags, owned }: { tags: EquipmentTag[]; owned: Ow
    * It carries NO `name`, so it is not part of the submission: it drives the
    * real checkboxes, which are what the server reads. A control that posted its
    * own value would be a second, wider answer to the same question.
+   *
+   * The two decisions behind it — what partial means, and what an empty
+   * catalogue shows — live in `src/catalogue/selection.ts` with their tests.
+   * Nothing under `app/` is in the unit suite, so a rule written here is a rule
+   * nothing can fail on. FOUND IN REVIEW, against this PR's own argument for
+   * `isCompleteBody` and `openingCoach`.
    */
-  const allChecked = tags.length > 0 && checked.size === tags.length;
-  const someChecked = checked.size > 0 && !allChecked;
+  const boxState = selectAllState(tags.length, checked.size);
 
   const toggleAll = () =>
     setChecked((current) =>
-      // Partial counts as "not all", so the first press fills in the rest rather
-      // than clearing what was already ticked. Undoing somebody's selection is
-      // not what they asked for by pressing a box labelled "all".
-      current.size === tags.length ? new Set<string>() : new Set(tags.map((t) => t.slug))
+      nextSelectAll(
+        tags.map((t) => t.slug),
+        current
+      )
     );
 
   return (
@@ -80,20 +86,26 @@ export function EquipmentForm({ tags, owned }: { tags: EquipmentTag[]; owned: Ow
           <label className="check-row check-all">
             <input
               type="checkbox"
-              checked={allChecked}
+              checked={boxState === 'all'}
               /*
                * The third state, and it has to be set imperatively — there is no
                * `indeterminate` attribute in HTML, only a DOM property. Without
                * it a partial selection renders as an empty box, which reads as
                * "nothing is selected" while five things are.
+               *
+               * AI-NOTE: this arrow must stay INLINE. A fresh identity each
+               *          render is what makes React detach and re-attach the ref,
+               *          which is what keeps `indeterminate` in step with state.
+               *          Hoisting it into a `useCallback` would freeze the third
+               *          state at whatever it was on mount.
                */
               ref={(node) => {
-                if (node) node.indeterminate = someChecked;
+                if (node) node.indeterminate = boxState === 'some';
               }}
               onChange={toggleAll}
               disabled={pending}
             />
-            <span>{allChecked ? 'Clear all' : 'Select all'}</span>
+            <span>{boxState === 'all' ? 'Clear all' : 'Select all'}</span>
           </label>
         ) : null}
 

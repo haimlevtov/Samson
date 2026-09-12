@@ -1,10 +1,17 @@
 /**
  * Which coach a surface opens on — ADR 0031 §5, and the column PR 8 added.
  *
- * §5 settles for "the first shared, voiced coach alphabetically" and says why
- * that is a settle rather than a decision: the choice had nowhere to be stored.
- * `users.persona_slug` is where it lives now, and this is the one place that
- * decides what to do with it.
+ * §5 settles for a default and says why that is a settle rather than a
+ * decision: the choice had nowhere to be stored. `users.persona_slug` is where
+ * it lives now, and this is the one place that decides what to do with it.
+ *
+ * WHAT THE FALLBACK IS, precisely, because §5 records a review correcting this
+ * exact conflation: it is **the first coach the CALLER listed**, and nothing
+ * more. The session card passes the shared voiced coaches, so there it is §5's
+ * "first shared, voiced coach alphabetically". The Coach tab passes every active
+ * persona, a user's own and unvoiced rows included, so there it is not. This
+ * function does not know the difference and must not pretend to: who is
+ * eligible is the surface's decision, which is what §5 is about.
  *
  * Pure, and here rather than inline in the component, because the interesting
  * case is the one a component cannot be asked about: a stored slug that names no

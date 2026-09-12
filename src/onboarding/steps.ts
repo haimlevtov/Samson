@@ -33,11 +33,9 @@ export interface OnboardingState {
   /**
    * The coach they picked, or null — `users.persona_slug`, rework PR 8.
    *
-   * A slug rather than a boolean, because the question is WHICH coach. A slug
-   * naming a coach the picker no longer lists is a real state — `is_active`
-   * retires one without deleting the row — and the question is still answered
-   * in that case. The surface falls back, which is the whole reason the column
-   * carries no foreign key.
+   * A slug rather than a boolean, because the question is WHICH coach. One
+   * naming a coach the picker no longer lists still counts as answered: the
+   * question WAS answered, and the surface falls back (`src/persona/choice.ts`).
    */
   personaSlug: string | null;
   /** True when all four the diet engine needs are present — ADR 0024. */
@@ -60,7 +58,11 @@ export function isAnswered(step: OnboardingStep, state: OnboardingState): boolea
     case 'name':
       return state.displayName !== null && state.displayName.trim() !== '';
     case 'coach':
-      return state.personaSlug !== null;
+      // Trimmed, like `name` above, and FOUND IN REVIEW for not being: an empty
+      // string is what a hand-written POST leaves, every surface would fall back
+      // to the first coach, and the user would be carried past a question they
+      // never answered. This file's own test comment already claimed it did.
+      return state.personaSlug !== null && state.personaSlug.trim() !== '';
     case 'body':
       return state.hasBiometrics;
     case 'goal':

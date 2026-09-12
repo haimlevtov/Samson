@@ -108,7 +108,16 @@ export default async function SignInPage({
                    */}
                   {f.email === DEMO_ACCOUNT_EMAIL ? (
                     <form action={resetDemoAccount}>
-                      <button type="submit" className="secondary">
+                      {/* Six rows and one button: in card mode a screen reader's
+                          button list would otherwise say only "Reset". The spec
+                          sets this precedent for the Voice button — §4, "the
+                          coach's name is in the button's accessible name, not
+                          its visible label". */}
+                      <button
+                        type="submit"
+                        className="secondary"
+                        aria-label={`Reset ${DEMO_ACCOUNT_EMAIL}`}
+                      >
                         Reset
                       </button>
                     </form>

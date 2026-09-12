@@ -78,6 +78,19 @@ export async function resetDemoAccount(): Promise<void> {
   } catch (cause) {
     // The name and a bounded message, never the object — ADR 0028.
     console.error('demo reset failed', logLine(cause));
+    /*
+     * SIGN OUT FIRST, and it is the difference between a rendered failure and a
+     * silent one. FOUND IN REVIEW. The sign-in above has already succeeded by
+     * this point, so the redirect lands on `/sign-in` holding a demo session —
+     * and that page's first act is `if (user) redirect('/hub')`, which for this
+     * account goes on to `/welcome`. The sentence could never be rendered: the
+     * user pressed a destructive control, was carried into the app, and had no
+     * way to learn that nothing had been deleted.
+     *
+     * A destructive control that fails silently reads as success, which is the
+     * wrong direction for the only irreversible button in this project.
+     */
+    await db.auth.signOut();
     redirect(`/sign-in?error=${encodeURIComponent('The reset did not go through. Try again.')}`);
   }
 

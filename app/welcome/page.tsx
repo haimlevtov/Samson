@@ -31,13 +31,14 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ skip?: string }>;
+  // `finish` is the stamp failure's rendered owner — see finishOnboarding.
+  searchParams: Promise<{ skip?: string; finish?: string }>;
 }) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const { skip } = await searchParams;
+  const { skip, finish } = await searchParams;
 
   const [tags, owned, plan, personas] = await Promise.all([
     equipmentCatalogue(db),
@@ -83,6 +84,37 @@ export default async function WelcomePage({
     hasPlan: plan !== null,
     skipped,
   });
+
+  /*
+   * The stamp failed — FOUND IN REVIEW, and it is checked BEFORE the branch
+   * below because that branch is what made it a loop. `/welcome` calls
+   * `finishOnboarding` during render when every question is answered, so a
+   * failing write sent the user to `/hub`, which sent them back here, which
+   * called it again: ERR_TOO_MANY_REDIRECTS, a blank page, and no message.
+   *
+   * A rendered state with a live retry instead. The user's answers are all
+   * still there; the only thing missing is the stamp.
+   */
+  if (finish === 'failed') {
+    return (
+      <>
+        <header className="welcome-head">
+          <h1>Welcome to Samson</h1>
+        </header>
+        <div className="card">
+          <p className="error" role="status">
+            Could not finish setting you up.
+          </p>
+          <p className="muted small">
+            Nothing you answered was lost. This is the last step — press it again.
+          </p>
+          <form action={finishOnboarding} className="welcome-form">
+            <button type="submit">Try again</button>
+          </form>
+        </div>
+      </>
+    );
+  }
 
   // Nothing left to ask. `finishOnboarding` stamps the flow and redirects, so
   // it never returns — arriving here with everything answered is the same thing

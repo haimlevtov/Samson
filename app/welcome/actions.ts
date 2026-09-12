@@ -212,15 +212,24 @@ export async function saveCoach(
    * `listPersonas` throws rather than returning empty on a failure, so a broken
    * read cannot quietly become "no coach matched".
    */
+  /*
+   * Echoed back on every refusal — mobile-interface.md §4, and the INVARIANT
+   * `welcome-state.ts` states. FOUND IN REVIEW: this returned `values: {}` and
+   * the radios carried no `defaultChecked`, so a transient failure cleared the
+   * pick and left five sample lines to read again. The other three steps in
+   * this file have echoed since they shipped; this one did not.
+   */
+  const typed = { personaSlug: chosen };
+
   let offered: string[];
   try {
     offered = (await listPersonas(db)).map((persona) => persona.slug);
   } catch (cause) {
     console.error('onboarding coach list failed', logLine(cause));
-    return { error: SAVE_FAILED_MESSAGE, values: {} };
+    return { error: SAVE_FAILED_MESSAGE, values: typed };
   }
 
-  if (!offered.includes(chosen)) return { error: INVALID_MESSAGE, values: {} };
+  if (!offered.includes(chosen)) return { error: INVALID_MESSAGE, values: typed };
 
   const { error } = await db
     .from('users')
@@ -228,7 +237,7 @@ export async function saveCoach(
 
   if (error) {
     console.error('onboarding coach failed', { code: error.code, hint: error.hint });
-    return { error: SAVE_FAILED_MESSAGE, values: {} };
+    return { error: SAVE_FAILED_MESSAGE, values: typed };
   }
 
   revalidatePath('/', 'layout');
@@ -281,9 +290,26 @@ export async function finishOnboarding(): Promise<void> {
       { onConflict: 'user_id' }
     );
 
-  // Not worth stopping for: the worst case is the welcome flow asking again,
-  // which is where they already are and which costs them one press.
-  if (error) console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
+  /*
+   * FOUND IN REVIEW, and the comment that was here was the bug. It said "not
+   * worth stopping for: the worst case is the welcome flow asking again, which
+   * is where they already are and which costs them one press".
+   *
+   * The worst case is an INFINITE REDIRECT. `/welcome` calls this function
+   * during render when every question is answered, so: stamp fails → `/hub` →
+   * `onboardedAt` is null → `/welcome` → nothing left to ask → stamp fails →
+   * `/hub` → … Both are server redirects, so the browser follows until it gives
+   * up with ERR_TOO_MANY_REDIRECTS: a blank page, no message, no way back, for
+   * a user whose data is perfectly intact.
+   *
+   * So the failure gets a rendered owner. `/welcome` reads this flag BEFORE it
+   * decides there is nothing left to ask, which is what stops the loop
+   * re-entering the same call.
+   */
+  if (error) {
+    console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
+    redirect('/welcome?finish=failed');
+  }
 
   /*
    * NO `revalidatePath` — FOUND IN REVIEW, and it was a runtime error rather

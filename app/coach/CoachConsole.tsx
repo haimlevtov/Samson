@@ -76,9 +76,12 @@ export function CoachConsole({
   voiceAvailable: boolean;
 }) {
   /*
-   * The stored choice first, alphabetical only as a fallback — ADR 0031 §5 calls
-   * that fallback what it is, "the first shared, voiced coach alphabetically",
-   * and says it stands in for a column. This is the column.
+   * The stored choice first, and the first LISTED coach as the fallback — which
+   * on this tab means the first row `listPersonas` returned, user-owned and
+   * unvoiced rows included. That is NOT ADR 0031 §5's "first shared, voiced
+   * coach alphabetically": §5 records a review correcting precisely that
+   * conflation, because the two surfaces then name different coaches. What §5
+   * gives this is the reason the column had to exist at all.
    *
    * Changing it here still lasts one page: persisting the PICKER is PR 6's, and
    * it needs the voice switch beside it to be worth the write. What changes now

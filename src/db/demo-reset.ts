@@ -27,14 +27,20 @@ import type { Db } from './client';
  * A constant rather than a column: it exists for a demo, and a column would
  * invite the question of who may set it.
  *
- * AI-NOTE: THREE copies of one fact, and two of them are held together by a
- *          test. This constant, the gate inside `reset_demo_account()` (held by
- *          `tests/db/demo-reset.test.ts`, which calls it as a user who is not
- *          the demo account and expects a refusal), and `FRESH_ACCOUNT.email`
- *          in `src/seed/archetypes.ts`. A change has to reach all three.
+ * AI-NOTE: TWO copies of one fact, and NOTHING holds them together. This
+ *          constant, and `FRESH_ACCOUNT.email` in `src/seed/archetypes.ts`.
+ *          A change has to reach both.
  *
- *          It was four: the sign-in page had the address typed into its fixture
- *          list, and it imports this now.
+ *          It said three until review recounted it, naming the gate inside
+ *          `reset_demo_account()` as one of them. That function has not gated
+ *          on the address since `20260912200000`, whose own header says "the
+ *          email is no longer load-bearing anywhere in this function" — and
+ *          `tests/db/demo-reset.test.ts` deliberately declines to test the
+ *          address, for the reason written out at its impostor case. A count
+ *          recited rather than rechecked is how this note has been wrong twice.
+ *
+ *          It was four before that: the sign-in page had the address typed into
+ *          its fixture list, and it imports this constant now.
  */
 export const DEMO_ACCOUNT_EMAIL = 'fresh@samson.test';
 
@@ -54,6 +60,34 @@ export const DEMO_ACCOUNT_EMAIL = 'fresh@samson.test';
 export const DEMO_FIXTURE_PASSWORD = 'samson-demo-fixture';
 
 /*
+ * WHAT THE RESET REMOVES, and the note that should never have gone with the
+ * arrays below.
+ *
+ * It clears the nine training tables AND the eight content tables that carry a
+ * `user_id` and a write policy the app never uses — `exercises`,
+ * `equipment_tags`, `exercise_equipment`, `progression_nodes`, `personas`,
+ * `achievements`, `tonnage_comparisons`, `supplement_evidence`. A hand-written
+ * POST can put a row in any of them, and until 20260912220000 the reset left
+ * every one behind.
+ *
+ * FOUND IN REVIEW, and the finding was as much about the note as the gap: the
+ * AI-NOTE on `RESET_KEEPS` had documented this residue precisely, naming
+ * `exercises` as the one that mattered because `exercises_read` admits a
+ * user's own row into the planner's candidate set (CLAUDE.md #5). Deleting the
+ * arrays took the note with it and left the gap recorded nowhere.
+ *
+ * It matters here more than the note implied, because this account is SHARED:
+ * the password is on the sign-in page and the reset is one unauthenticated
+ * button, so a row planted under it greets whoever demos next — and the welcome
+ * flow's coach step renders `listPersonas`, which includes the caller's own.
+ *
+ * AI-NOTE: a new table with a `user_id` and a write policy belongs in that
+ *          function, and a new onboarding question's column belongs in its
+ *          UPDATE. `src/onboarding/steps.ts` reads those columns to decide
+ *          whether a step is answered.
+ *
+ * ---------------------------------------------------------------------------
+ *
  * `RESET_TABLES` and `RESET_KEEPS` WERE HERE, and they are deleted rather than
  * left for a future reader to wire back up.
  *

@@ -77,17 +77,12 @@ export interface SessionUser {
   /** The stored diet goal, or null when the user has not chosen — ADR 0032 §3. */
   dietGoal: string | null;
   /**
-   * The coach the user picked in onboarding, or null — rework PR 8.
+   * The coach the user picked in onboarding, or null — rework PR 8, ADR 0031 §5.
    *
-   * ADR 0031 §5 settles for the first shared voiced coach alphabetically and
-   * says why that is a settle: the choice had no column. It has one now, and
-   * this is the read.
-   *
-   * NOT validated against the persona rows here, deliberately. A slug naming a
-   * coach that has since been deactivated is a state the surfaces already
-   * handle by falling back to the first they list, and a round trip to the
-   * content table on every request to turn a live slug into the same live slug
-   * would be paid by every page.
+   * NOT validated against the persona rows here, deliberately: a round trip to
+   * the content table on every request, to turn a live slug into the same live
+   * slug, would be paid by every page. A slug naming no listed coach is a real
+   * state, and `src/persona/choice.ts` is where it is handled.
    */
   personaSlug: string | null;
   /**

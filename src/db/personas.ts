@@ -11,6 +11,14 @@ import type { HumorLevel, Persona } from '../persona/schema';
 import type { TrainingBlock } from '../planner/schema';
 import { trainingBlockSchema } from '../planner/schema';
 
+/** Named, so a caller's log line says which failure this was — ADR 0028. */
+export class PersonaReadError extends Error {
+  constructor() {
+    super('the persona list could not be read');
+    this.name = 'PersonaReadError';
+  }
+}
+
 /**
  * A persona as the picker lists it: what the delivery stage needs, plus the
  * line the Coach tab's preview speaks.
@@ -46,7 +54,22 @@ export async function listPersonas(db: Db): Promise<ListedPersona[]> {
     .eq('is_active', true)
     .order('name');
 
-  if (error) throw new Error(`reading personas: ${error.message}`);
+  /*
+   * FOUND IN REVIEW. This threw an Error interpolating the upstream message,
+   * so every caller that logged it through `logLine` printed the bare name
+   * `Error` followed by up to 200 characters of raw Postgres wording — the name
+   * carrying no diagnosis and the message not being this project's words. ADR
+   * 0028 says the NAME is the diagnosis. `resetDemoData` in
+   * `src/db/demo-reset.ts` records the identical defect, found in the identical
+   * way, one PR earlier.
+   *
+   * The code and hint are logged HERE, where they exist, and the caller gets a
+   * named error it can log without leaking anything.
+   */
+  if (error) {
+    console.error('reading personas failed', { code: error.code, hint: error.hint });
+    throw new PersonaReadError();
+  }
 
   return (data ?? []).map((row) => ({
     slug: row.slug,

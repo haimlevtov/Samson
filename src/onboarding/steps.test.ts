@@ -52,6 +52,8 @@ describe('nextStep', () => {
      */
     const named = { ...EMPTY, displayName: 'Noa' };
     expect(isAnswered('coach', named)).toBe(false);
+    expect(isAnswered('coach', { ...named, personaSlug: '' })).toBe(false);
+    expect(isAnswered('coach', { ...named, personaSlug: '   ' })).toBe(false);
     expect(isAnswered('coach', { ...named, personaSlug: 'old-master' })).toBe(true);
   });
 

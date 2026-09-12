@@ -2514,14 +2514,16 @@ details.quick-log[open] > summary {
  * the flex row never applied at all, so `gap` and `align-items` did nothing and
  * the box sat above its label rather than beside it.
  */
-.settings-form label.check-row {
+.settings-form label.check-row,
+label.choice-row {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: var(--tap);
 }
 
-.settings-form label.check-row input[type='checkbox'] {
+.settings-form label.check-row input[type='checkbox'],
+label.choice-row input {
   width: auto;
   min-height: 0;
   /* A 44px target for the pair comes from .check-row's min-height; the box
@@ -3015,13 +3017,16 @@ details.quick-log[open] > summary {
  * `label.coach-choice` rather than the bare class: `.welcome-form` has no
  * `label { display: block }` rule to outrank today, but `.settings-form` does
  * (0,1,1), and this component is the kind that gets reused onto that surface.
- * The specificity trap is recorded three times in this file already.
+ * The same trap is recorded twice already in this sheet, at
+ * `.settings-form label.check-row` and `.settings-form label.equipment-load`.
  */
 label.coach-choice {
-  display: flex;
+  /* `.choice-row` above carries the flex row, the gap and the 44px minimum —
+     the sheet's own recorded rule (`.equipment-set` folded into `.humor`) is
+     that a primitive is shared rather than restated. Only what differs is here:
+     the text wraps to several lines, so the control aligns to the first one
+     instead of to the middle of the block. */
   align-items: flex-start;
-  gap: 10px;
-  min-height: var(--tap);
   padding: 6px 0;
   cursor: pointer;
 }
@@ -3029,13 +3034,10 @@ label.coach-choice + label.coach-choice {
   border-top: 1px solid var(--border);
 }
 .coach-choice input[type='radio'] {
-  /* The base `input` rule sets a 44px min-height; without this the radio is a
-     44px-tall column beside its text. The PAIR is the target — the row's own
-     min-height is what mobile-interface.md §3 is satisfied by. */
-  width: auto;
-  min-height: 0;
+  /* `label.choice-row input` above already resets the base 44px min-height and
+     sets the accent — the same reset `.check-row` needed. Only the nudge that
+     lines a radio up with the first line of wrapped text is here. */
   margin-top: 4px;
-  accent-color: var(--accent-text);
 }
 /* Name over line, so the line reads as the coach talking rather than as a
    caption on a control. */
