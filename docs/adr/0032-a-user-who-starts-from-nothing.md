@@ -43,11 +43,12 @@ would have found it the hard way.
 cannot infer:
 
 1. **Name** — what the coach calls you.
-2. **Age, weight, height, sex** — the four the diet engine needs, with the bounds
+2. **Coach** — which persona. Added by rework PR 8; see the amendment below.
+3. **Age, weight, height, sex** — the four the diet engine needs, with the bounds
    `src/diet/biometrics.ts` already enforces.
-3. **Diet goal** — cut, maintain or gain.
-4. **Equipment** — ADR 0029's picker, reused rather than rebuilt.
-5. **Plan** — 8b's questionnaire and 8b's action, unchanged.
+4. **Diet goal** — cut, maintain or gain.
+5. **Equipment** — ADR 0029's picker, reused rather than rebuilt.
+6. **Plan** — 8b's questionnaire and 8b's action, unchanged.
 
 **Each step writes its own table before the next one renders**, which is what
 makes it resumable: a closed tab loses nothing, and the route works out where you
@@ -147,6 +148,57 @@ other user reaching a capability the policies deliberately withhold.
 **Both properties now hold, and they are different.** The function cannot be
 pointed at another user, because it takes no argument. And it cannot be called by
 another user at all, because it checks the caller's own address.
+
+### The main page was the wrong main page — amended 2026-09-12, rework PR 8
+
+§4 above says the reset ships on the main page, and it did: `app/hub/page.tsx`,
+last on the tab. The owner then asked where the reset button was.
+
+**It was unreachable by the only account that has it.** `HubPage` redirects a
+user whose `onboarded_at` is null to `/welcome` — §2's own rule, and correct —
+and the demo account's `onboarded_at` is null by design, because that is what
+makes it the fixture. So the control that exists to restart the demo could only
+be reached by somebody who had already finished the demo.
+
+Neither decision was wrong on its own. The fault is in the pair, and it is the
+kind only a user finds: two rules that each hold, composing into a control with
+no path to it.
+
+**The fix is placement, not the gate.** The card renders on `/welcome` as well —
+for that account `/welcome` IS the main page until the flow is done — and its
+refusals redirect back to whichever page it was pressed on, because sending them
+to `/hub` would bounce straight back here with the message stripped off the URL.
+The Hub copy stays for the case after onboarding. Nothing about the authority
+changes: `reset_demo_account()` still takes no argument and still reads
+`raw_app_meta_data`.
+
+### A sixth question, and the column three things had been waiting for
+
+Onboarding asks which coach you want, and that needs `users.persona_slug`.
+
+[ADR 0031](0031-talking-during-a-session.md) §5 settles for "the first shared,
+voiced coach alphabetically" for the session voice and says in as many words
+that persisting the choice _"is a column and a settings control, and it belongs
+with whatever change wants it on more than one screen"_. This is that change:
+the Coach tab's picker dies with the page, and PR 6 wants the same answer.
+
+**Nullable**, like `diet_goal` and for the same reason — "has not chosen" is not
+"chose the first one" — so nothing changes behaviour by the column existing.
+
+**No foreign key**, which the plan for PR 8 said there would be and which the
+schema does not allow: `personas` is unique on `(user_id, slug)`, so there is no
+unique on `slug` alone to reference, and adding one would forbid a user-owned
+persona from sharing a slug with a shared one. It would not buy much either — a
+coach is retired with `is_active = false` rather than deleted, so a stored slug
+can stop naming anything the picker lists while the constraint is fully
+satisfied. Readers fall back regardless. The integrity is the welcome step's own
+check of the posted slug against the rows `listPersonas` returned.
+
+**It is cleared by the reset**, with the rest of the onboarding answers, and that
+is a rule rather than a detail: every column `src/onboarding/steps.ts` reads to
+decide whether a step is answered must be cleared, or the reset silently
+shortens the flow it exists to restore. A surviving `plan_runs` row did exactly
+that before review caught it.
 
 ## What this does not guarantee
 
