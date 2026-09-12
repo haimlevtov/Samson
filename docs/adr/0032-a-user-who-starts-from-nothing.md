@@ -51,9 +51,18 @@ cannot infer:
 
 **Each step writes its own table before the next one renders**, which is what
 makes it resumable: a closed tab loses nothing, and the route works out where you
-are from what is stored rather than from a cursor it has to keep. There is no
-onboarding state table, deliberately — that would be a second source of truth
-about a thing the real tables already know.
+are from what is stored rather than from a cursor it has to keep.
+
+**One column, and no more — amended after review.** This section originally said
+there was no onboarding state at all, because the real tables already know. That
+is right about WHICH STEP to show and wrong about WHETHER THE FLOW HAS EVER BEEN
+FINISHED. The first version derived the second from the display name being
+absent, and a reviewer showed that is a supported steady state rather than a
+signal: `settingsSchema` turns a blank name into null on purpose — _"empty means
+no name, not an empty name; the headers fall back to email"_ — so a
+long-standing user who cleared their name was bounced into onboarding
+permanently. `users.onboarded_at` is that one fact, and it is not derivable from
+anything else.
 
 **Every step is skippable except the name**, and skipping is explained rather
 than blocked: no biometrics means no calorie target, no equipment means no plan.
@@ -85,23 +94,59 @@ mid-demo is friction in exactly the moment it was added to remove.
 
 What makes that safe is not where it lives:
 
-- **It renders for one account.** The check is the session's own email against a
-  constant, server-side, on both the render and the action. Nobody else sees it
-  and nobody else can call it.
-- **It deletes only rows the caller owns, through their own session, under
-  RLS** — CLAUDE.md #10, no service role. A demo convenience that could reach
-  another user's data would be the worst bug in this project, and the policy is
-  what stops it rather than the email check.
+- **It renders for one account**, and the check is the session's own email
+  against a constant, server-side, on both the render and the action.
+- **The work is a `security definer` function that TAKES NO ARGUMENT** — the user
+  is `auth.uid()` from the verified JWT, so a caller cannot express the wish to
+  delete somebody else's rows. There is nowhere to put the id.
+- **That function checks the account too**, which is the correction review forced
+  and which changes what the email gate IS — see below.
 - **It is confirmed, and it says what it removes**, by name, before it does
   anything.
 - **It does not delete the account.** The auth user survives; what goes is
   everything the app wrote. The next sign-in lands on `/welcome` again, which is
   the whole point.
 
-**The email check is a convenience gate, not a security control**, and the
-difference matters: if it were bypassed, the caller would delete their OWN rows.
-That is the property to hold on to — the blast radius is the caller, always, and
-RLS is what guarantees it.
+### The first version could not delete four of the nine tables it named
+
+FOUND IN REVIEW, by both reviewers, and it is the same mistake this ADR's own
+module diagnosed correctly for `public.users` one paragraph later: **the policies
+were read for one table and assumed for the rest.**
+
+`achievement_events`, `xp_events` and `challenges` are `for select` only;
+`plan_runs` is select and insert. All four are deliberate — [ADR
+0009](0009-gamification-trust.md)'s position is that no completion is granted
+from the client. `authenticated` holds the DELETE grant, so a client delete is
+not rejected: **RLS filters it to zero rows and PostgREST returns success.** The
+app reported a reset while the XP, the badges, the challenges and the accepted
+plan all survived — and the card had named them to the user. Worse, because
+`plan_runs` survived, `latestAcceptedPlan` kept returning a row, so the re-run
+onboarding decided the plan step was answered and never offered it: the last beat
+of the demo, silently skipped.
+
+**The fix is not `..._delete_own` policies.** One of them would be a real cheat:
+`achievement_events` is once-only, so a user who could delete their own rows
+could re-earn every badge and be paid its XP again. ADR 0009 §3's whole position
+is that the client does not write gamification outcomes, and a delete is a write.
+
+So the work moved into `reset_demo_account()`, a `security definer` function —
+the shape `accept_challenge` and `award_session_xp` already use for "the client
+may not write this table, and this specific operation is nonetheless allowed". It
+is also **one transaction**, which the loop was not: a failure partway through
+that loop left an account half reset under a card telling the user to try again.
+
+### So the email check is a control now, and this ADR said otherwise
+
+The first version of this section said the check was _"a convenience gate, not a
+security control"_, on the reasoning that a bypass would only let somebody delete
+their own rows. That reasoning held while the deletes ran on the caller's own
+client. It does not hold for a `security definer` function, which runs as the
+owner — so the account check moved into the function, where it is what stops any
+other user reaching a capability the policies deliberately withhold.
+
+**Both properties now hold, and they are different.** The function cannot be
+pointed at another user, because it takes no argument. And it cannot be called by
+another user at all, because it checks the caller's own address.
 
 ## What this does not guarantee
 
@@ -121,5 +166,14 @@ RLS is what guarantees it.
   from it (ADR 0026), so deleting those rows would turn the reset into a way to
   refill the project's spend limit on demand. The demo account resets its
   training; it does not reset its bill.
-- One migration, one column, and the `src/db/types.ts` regeneration it forces.
+- One migration, two columns and one function, plus the `src/db/types.ts`
+  regeneration they force.
 - A sixth seeded account, which the sign-in page lists like the other five.
+- **`updateSettings` upserts too**, which this ADR claimed in its first version
+  and the code did not do — caught by review. Without it the demo account could
+  open Settings, save, read "Saved" and lose everything, because it has no
+  profile row to update.
+- **The Coach tab now reads and writes `diet_goal`.** Adding the column without a
+  reader would have left it write-only and made this document's own copy false:
+  onboarding tells the user they can change the goal on that tab and it will be
+  remembered.

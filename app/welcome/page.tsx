@@ -3,8 +3,6 @@ import { createServerDb, currentUser } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
 import { userEquipment } from '@/src/db/exercises';
 import { latestAcceptedPlan } from '@/src/db/personas';
-import { DIET_GOALS } from '@/src/diet/energy';
-import { SEXES } from '@/src/diet/biometrics';
 import {
   ONBOARDING_STEPS,
   SKIP_COST,
@@ -14,7 +12,8 @@ import {
 } from '@/src/onboarding/steps';
 import { EquipmentForm } from '../settings/EquipmentForm';
 import { PlanRequestForm } from '../coach/PlanRequestForm';
-import { finishOnboarding, saveBiometrics, saveGoal, saveName, skipStep } from './actions';
+import { finishOnboarding, skipStep } from './actions';
+import { BodyStep, GoalStep, NameStep } from './Steps';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,13 +31,13 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ skip?: string; invalid?: string }>;
+  searchParams: Promise<{ skip?: string }>;
 }) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const { skip, invalid } = await searchParams;
+  const { skip } = await searchParams;
 
   const [tags, owned, plan] = await Promise.all([
     equipmentCatalogue(db),
@@ -72,9 +71,13 @@ export default async function WelcomePage({
     skipped,
   });
 
-  // Nothing left to ask. Somebody who arrives here with a finished profile has
-  // finished onboarding, whether or not they remember doing it.
-  if (step === null) redirect('/hub');
+  // Nothing left to ask. `finishOnboarding` stamps the flow and redirects, so
+  // it never returns — arriving here with everything answered is the same thing
+  // as pressing the last button.
+  if (step === null) {
+    await finishOnboarding();
+    redirect('/hub');
+  }
 
   const { position, total } = progressFor(step);
   const carried = skipped.join(',');
@@ -96,29 +99,11 @@ export default async function WelcomePage({
         </div>
       </header>
 
-      {invalid !== undefined ? (
-        // Every state renders something — docs/specs/mobile-interface.md §4.
-        // The step re-renders with its own question rather than an error page.
-        <p className="card error" role="status">
-          That did not look right. Have another go.
-        </p>
-      ) : null}
-
       {step === 'name' ? (
         <>
           <h2 className="section">What should the coach call you?</h2>
           <div className="card">
-            <form action={saveName} className="welcome-form">
-              <label>
-                <span className="label">Your name</span>
-                <input type="text" name="displayName" maxLength={60} autoFocus required />
-              </label>
-              <input type="hidden" name="skipped" value={carried} />
-              <button type="submit">Continue</button>
-            </form>
-            {/* The only question with no skip — ADR 0032 §2. Said here rather
-                than left to be discovered by looking for a button. */}
-            <p className="muted small">This is the one thing we need.</p>
+            <NameStep carried={carried} />
           </div>
         </>
       ) : null}
@@ -127,33 +112,7 @@ export default async function WelcomePage({
         <>
           <h2 className="section">A few numbers, so the coach can talk about food</h2>
           <div className="card">
-            <form action={saveBiometrics} className="welcome-form">
-              <label>
-                <span className="label">Bodyweight (kg)</span>
-                <input type="text" inputMode="decimal" name="bodyweightKg" defaultValue="" />
-              </label>
-              <label>
-                <span className="label">Height (cm)</span>
-                <input type="text" inputMode="decimal" name="heightCm" defaultValue="" />
-              </label>
-              <label>
-                <span className="label">Date of birth</span>
-                <input type="date" name="birthDate" defaultValue="" />
-              </label>
-              <label>
-                <span className="label">Sex</span>
-                <select name="sex" defaultValue="">
-                  <option value="">Prefer not to say</option>
-                  {SEXES.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input type="hidden" name="skipped" value={carried} />
-              <button type="submit">Continue</button>
-            </form>
+            <BodyStep carried={carried} />
             <SkipButton step="body" carried={carried} />
           </div>
         </>
@@ -163,20 +122,7 @@ export default async function WelcomePage({
         <>
           <h2 className="section">What are you training towards?</h2>
           <div className="card">
-            <form action={saveGoal} className="welcome-form">
-              <label>
-                <span className="label">Diet goal</span>
-                <select name="goal" defaultValue="maintain">
-                  {DIET_GOALS.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <input type="hidden" name="skipped" value={carried} />
-              <button type="submit">Continue</button>
-            </form>
+            <GoalStep carried={carried} />
             <SkipButton step="goal" carried={carried} />
           </div>
         </>

@@ -100,7 +100,7 @@ export function progressFor(step: OnboardingStep): { position: number; total: nu
  */
 export const SKIP_COST: Record<Exclude<OnboardingStep, 'name'>, string> = {
   body: 'Without these the coach cannot work out a calorie target, and the diet answers will say so.',
-  goal: 'The coach will assume you want to maintain, which you can change any time on the Coach tab.',
+  goal: 'The coach will assume you want to maintain. You can change it on the Coach tab, and it will remember.',
   equipment:
     'Without equipment there is nothing for a plan to choose from, so the planner will have nothing to offer.',
   plan: 'You can ask for one any time on the Coach tab.',

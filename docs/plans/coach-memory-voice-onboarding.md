@@ -279,6 +279,12 @@ A **Reset this demo account** control that returns the fresh user to empty.
   actions rather than on the first screen of the demo. _This is a deliberate
   departure from the request and is flagged for the owner to overrule._
 
+  **Overruled, and it shipped on the main page** — [ADR
+  0032](../adr/0032-a-user-who-starts-from-nothing.md) §4 carries the reasoning
+  the owner's version rests on: the control exists to be pressed between demo
+  runs, and one you have to navigate to mid-demo is friction in the moment it was
+  added to remove.
+
 **Files:** `src/seed/archetypes.ts`, `scripts/seed.ts`, an onboarding route and
 its steps, a reset action, tests.
 

@@ -8,6 +8,7 @@ import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { onboardingBodySchema, readBodyForm } from '@/src/onboarding/schema';
 import type { OnboardingStep } from '@/src/onboarding/steps';
+import { INVALID_MESSAGE, SAVE_FAILED_MESSAGE, type WelcomeState } from './welcome-state';
 
 /**
  * Onboarding's writes — ADR 0032 §2.
@@ -41,20 +42,21 @@ function nextUrl(formData: FormData): string {
  * spaces would satisfy `min(1)` and leave `nextStep` asking again forever, which
  * is a loop rather than a validation message.
  */
-export async function saveName(formData: FormData): Promise<void> {
+export async function saveName(_previous: WelcomeState, formData: FormData): Promise<WelcomeState> {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  const typed = String(formData.get('displayName') ?? '');
   const parsed = z
     .string()
     .transform((value) => value.trim())
     .pipe(z.string().min(1).max(60))
-    .safeParse(formData.get('displayName'));
+    .safeParse(typed);
 
-  // Back to the same question rather than an error page: the step renders its
-  // own "that did not look like a name" from the query flag.
-  if (!parsed.success) redirect('/welcome?invalid=name');
+  // The form KEEPS WHAT WAS TYPED — mobile-interface.md §4. This used to
+  // redirect, which threw it away.
+  if (!parsed.success) return { error: INVALID_MESSAGE, values: { displayName: typed } };
 
   const { error } = await db
     .from('users')
@@ -65,7 +67,9 @@ export async function saveName(formData: FormData): Promise<void> {
     // CHECK violation puts the whole failing row in `details`, and for this
     // table that is a health profile joined to an account id.
     console.error('onboarding name failed', { code: error.code, hint: error.hint });
-    redirect('/welcome?invalid=name');
+    // A DIFFERENT sentence — ADR 0028. "Have another go" tells somebody with
+    // valid input to retype it forever.
+    return { error: SAVE_FAILED_MESSAGE, values: { displayName: typed } };
   }
 
   revalidatePath('/', 'layout');
@@ -77,20 +81,35 @@ export async function saveName(formData: FormData): Promise<void> {
  * owns their bounds (ADR 0024). Not re-stated here: two definitions of "a
  * plausible height" is how they come to disagree.
  */
-export async function saveBiometrics(formData: FormData): Promise<void> {
+export async function saveBiometrics(
+  _previous: WelcomeState,
+  formData: FormData
+): Promise<WelcomeState> {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  /*
+   * Echoed back on every refusal — mobile-interface.md §4. Four fields is where
+   * this rule earns its keep: one out-of-range height used to cost the user
+   * their weight, height, date of birth and sex.
+   */
+  const typed: Record<string, string> = {
+    bodyweightKg: String(formData.get('bodyweightKg') ?? ''),
+    heightCm: String(formData.get('heightCm') ?? ''),
+    birthDate: String(formData.get('birthDate') ?? ''),
+    sex: String(formData.get('sex') ?? ''),
+  };
+
   const parsed = onboardingBodySchema.safeParse(readBodyForm(formData));
-  if (!parsed.success) redirect('/welcome?invalid=body');
+  if (!parsed.success) return { error: INVALID_MESSAGE, values: typed };
 
   // INVARIANT: calendar questions use the user's local date — CLAUDE.md #9.
   if (
     parsed.data.birthDate !== null &&
     isFutureBirthDate(parsed.data.birthDate, localDateFor(user.timezone))
   ) {
-    redirect('/welcome?invalid=body');
+    return { error: 'That date has not happened yet.', values: typed };
   }
 
   const { error } = await db.from('users').upsert(
@@ -106,7 +125,7 @@ export async function saveBiometrics(formData: FormData): Promise<void> {
 
   if (error) {
     console.error('onboarding biometrics failed', { code: error.code, hint: error.hint });
-    redirect('/welcome?invalid=body');
+    return { error: SAVE_FAILED_MESSAGE, values: typed };
   }
 
   revalidatePath('/', 'layout');
@@ -119,12 +138,21 @@ export async function saveBiometrics(formData: FormData): Promise<void> {
  * `.catch` rather than a rejection, matching `askTheCoach`: an unrecognised goal
  * is not worth a message, and maintain is the safe direction.
  */
-export async function saveGoal(formData: FormData): Promise<void> {
+export async function saveGoal(_previous: WelcomeState, formData: FormData): Promise<WelcomeState> {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
+  /*
+   * safeParse, NOT `.catch('maintain')` — FOUND IN REVIEW. Swallowing an
+   * unrecognised value writes a goal the user did not choose, and destroys for
+   * them the has-not-said/said-maintain distinction this column exists for
+   * (ADR 0032 §3). The Coach tab's own selector may fall back, because there the
+   * value is carried with the request and nothing is stored.
+   */
+  const parsed = z.enum(DIET_GOALS).safeParse(formData.get('goal'));
+  if (!parsed.success) return { error: INVALID_MESSAGE, values: {} };
+  const goal = parsed.data;
 
   const { error } = await db
     .from('users')
@@ -132,7 +160,7 @@ export async function saveGoal(formData: FormData): Promise<void> {
 
   if (error) {
     console.error('onboarding goal failed', { code: error.code, hint: error.hint });
-    redirect('/welcome?invalid=goal');
+    return { error: SAVE_FAILED_MESSAGE, values: {} };
   }
 
   revalidatePath('/', 'layout');
@@ -156,7 +184,30 @@ export async function skipStep(formData: FormData): Promise<void> {
   redirect(`/welcome?skip=${encodeURIComponent(next)}`);
 }
 
-/** Leaves onboarding for the app, whatever is left unanswered. */
+/**
+ * Leaves onboarding for the app, whatever is left unanswered.
+ *
+ * Stamps `onboarded_at` — the one thing this flow stores that is not derivable
+ * (ADR 0032 §2 as amended). Without it, Hub cannot tell a new user from somebody
+ * who cleared their display name, and used to send the second one back here
+ * forever.
+ */
 export async function finishOnboarding(): Promise<void> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const { error } = await db
+    .from('users')
+    .upsert(
+      { user_id: user.id, onboarded_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+
+  // Not worth stopping for: the worst case is the welcome flow asking again,
+  // which is where they already are and which costs them one press.
+  if (error) console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
+
+  revalidatePath('/', 'layout');
   redirect('/hub');
 }

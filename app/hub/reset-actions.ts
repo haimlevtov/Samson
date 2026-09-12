@@ -43,7 +43,7 @@ export async function resetDemoAccount(formData: FormData): Promise<void> {
   }
 
   try {
-    await resetDemoData(db, user.id);
+    await resetDemoData(db);
   } catch (cause) {
     // Name and bounded message — ADR 0028. The row contents never reach the log:
     // this table is a health profile joined to an account id.

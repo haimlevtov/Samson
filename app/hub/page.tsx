@@ -41,15 +41,22 @@ export default async function HubPage({
   const { reset } = await searchParams;
 
   /*
-   * A user with nothing goes to the welcome questions — ADR 0032 §2.
+   * A user who has never finished the welcome flow goes to it — ADR 0032 §2.
    *
    * Here rather than at `/` because sign-in lands on /hub directly, so the root
-   * redirect is not on the path a new user actually takes. The test is the
-   * DISPLAY NAME: it is the one answer onboarding insists on, so its absence is
-   * exactly "has not been through this".
+   * redirect is not on the path a new user takes.
+   *
+   * FOUND IN REVIEW: this tested the DISPLAY NAME, on the reasoning that its
+   * absence means "has not been through this". It does not. `settingsSchema`
+   * turns a blank name into null deliberately — "empty means no name, not an
+   * empty name; the headers fall back to email" — so a long-standing user who
+   * cleared their name was bounced in here permanently and told to supply one.
+   *
+   * `onboarded_at` is the one thing not derivable from the data, so it is the
+   * one column this flow keeps. Which STEP to show is still derived.
    */
   if (!user) redirect('/sign-in');
-  if (user.displayName === null || user.displayName.trim() === '') redirect('/welcome');
+  if (user.onboardedAt === null) redirect('/welcome');
 
   const today = localDateFor(user.timezone);
   const [history, challenges, board] = await Promise.all([
