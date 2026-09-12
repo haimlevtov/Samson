@@ -9,6 +9,8 @@ import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { acceptChallengeAction } from './actions';
+import { DEMO_ACCOUNT_EMAIL, RESET_KEEPS, RESET_TABLES } from '@/src/db/demo-reset';
+import { resetDemoAccount } from './reset-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +30,33 @@ export const dynamic = 'force-dynamic';
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
  */
-export default async function HubPage() {
+export default async function HubPage({
+  searchParams,
+}: {
+  // The reset redirects back with these — see app/hub/reset-actions.ts.
+  searchParams: Promise<{ reset?: string }>;
+}) {
   const db = await createServerDb();
   const user = await currentUser(db);
+  const { reset } = await searchParams;
+
+  /*
+   * A user who has never finished the welcome flow goes to it — ADR 0032 §2.
+   *
+   * Here rather than at `/` because sign-in lands on /hub directly, so the root
+   * redirect is not on the path a new user takes.
+   *
+   * FOUND IN REVIEW: this tested the DISPLAY NAME, on the reasoning that its
+   * absence means "has not been through this". It does not. `settingsSchema`
+   * turns a blank name into null deliberately — "empty means no name, not an
+   * empty name; the headers fall back to email" — so a long-standing user who
+   * cleared their name was bounced in here permanently and told to supply one.
+   *
+   * `onboarded_at` is the one thing not derivable from the data, so it is the
+   * one column this flow keeps. Which STEP to show is still derived.
+   */
   if (!user) redirect('/sign-in');
+  if (user.onboardedAt === null) redirect('/welcome');
 
   const today = localDateFor(user.timezone);
   const [history, challenges, board] = await Promise.all([
@@ -282,6 +307,55 @@ export default async function HubPage() {
           </table>
         </div>
       )}
+      {/*
+       * The demo reset — ADR 0032 §4, and it is here because the owner asked
+       * for it on the main page: it exists to be pressed between demo runs, and
+       * a control you have to navigate to mid-demo is friction in exactly the
+       * moment it was added to remove.
+       *
+       * It renders for ONE account, and the same check runs in the action and
+       * again inside `reset_demo_account()` — which is where it is a CONTROL
+       * rather than a convenience, because that function is `security definer`
+       * and runs outside RLS. ADR 0032 §4 carries the correction; an earlier
+       * version of this comment claimed RLS was what made it safe, which stopped
+       * being true when the deletes moved into the function.
+       *
+       * LAST on the page, deliberately. The first screen of the app is not where
+       * an irreversible control should meet a thumb first.
+       */}
+      {user.email === DEMO_ACCOUNT_EMAIL ? (
+        <>
+          <h2 className="section">Demo</h2>
+          <div className="card danger-card">
+            <p>
+              This is the empty demo account. Resetting returns it to the state a brand-new user
+              sees — the welcome questions, no history, no plan.
+            </p>
+            <p className="muted small">
+              It deletes your {RESET_TABLES.join(', ')}. It keeps {RESET_KEEPS.join(' and ')}.
+            </p>
+            {reset === 'unconfirmed' ? (
+              <p className="error" role="status">
+                Type RESET to confirm.
+              </p>
+            ) : null}
+            {reset === 'failed' ? (
+              <p className="error" role="status">
+                That did not go through. Nothing may have been removed — try again.
+              </p>
+            ) : null}
+            <form action={resetDemoAccount} className="row reset-form">
+              <label className="grow">
+                <span className="label">Type RESET to confirm</span>
+                <input type="text" name="confirm" autoComplete="off" placeholder="RESET" />
+              </label>
+              <button type="submit" className="secondary">
+                Reset this demo account
+              </button>
+            </form>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

@@ -56,9 +56,17 @@ export async function updateSettings(
     return { error: 'birthDate: that date has not happened yet.', saved: false };
   }
 
-  const { error } = await db
-    .from('users')
-    .update({
+  /*
+   * UPSERT, not update — ADR 0032 §1, and this is the half that PR claimed and
+   * did not ship until review caught it. `public.users` has no row for a user
+   * who was never seeded, and an UPDATE matching no rows is a SILENT SUCCESS:
+   * this action returned `{ saved: true }` and wrote nothing. Reachable today by
+   * the demo account, which has no profile row and can reach /settings by URL
+   * or by the cog on any page.
+   */
+  const { error } = await db.from('users').upsert(
+    {
+      user_id: user.id,
       display_name: parsed.data.displayName,
       timezone: parsed.data.timezone,
       humor_max_level: parsed.data.humorMaxLevel,
@@ -70,8 +78,9 @@ export async function updateSettings(
       height_cm: parsed.data.heightCm,
       birth_date: parsed.data.birthDate,
       sex: parsed.data.sex,
-    })
-    .eq('user_id', user.id);
+    },
+    { onConflict: 'user_id' }
+  );
 
   if (error) {
     /*

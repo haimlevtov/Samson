@@ -347,6 +347,29 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
  */
 export const PLANLESS_ARCHETYPE = 'inconsistent';
 
+/**
+ * The sixth account, and it is not an Archetype — ADR 0032 §1.
+ *
+ * Every field on `Archetype` describes a synthetic history: weeks, adherence, a
+ * programme, four biometrics. This user has none of those, and making them all
+ * optional to fit it here would weaken a type the other five depend on.
+ *
+ * **It gets an auth user and nothing else.** No `users` row, no equipment, no
+ * history, no plan, no XP — which is truer than a row full of nulls, and which
+ * walks the one path nothing else does: the app rendering for somebody the
+ * `users` table has never heard of. `currentUser` reads with `maybeSingle` and
+ * defaults every field, so that path exists; until this account, nothing used it.
+ *
+ * AI-NOTE: do not "tidy" this by giving it a profile row with nulls. The absence
+ *          IS the fixture — it is what proves onboarding works for a real
+ *          sign-up, and a row would quietly test something easier.
+ */
+export const FRESH_ACCOUNT = {
+  key: 'fresh',
+  email: 'fresh@samson.test',
+  summary: 'Nobody yet — the empty account a new user meets',
+} as const;
+
 export const ARCHETYPES: Archetype[] = [
   {
     key: 'beginner',

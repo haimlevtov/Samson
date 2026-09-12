@@ -27,6 +27,7 @@ import {
   type Archetype,
   type EquipmentOf,
   type GeneratedWorkout,
+  FRESH_ACCOUNT,
 } from '../src/seed/archetypes';
 import { createTemplate } from '../src/db/templates';
 import { assignFromPool, type PoolTemplate } from '../src/gamification/assignment';
@@ -266,6 +267,13 @@ async function seedArchetype(
   const { error: profileError } = await admin.from('users').insert({
     user_id: userId,
     display_name: archetype.displayName,
+    /*
+     * Already onboarded — ADR 0032 §2. Without this the five furnished demo
+     * users are sent to `/welcome` on their next sign-in and asked questions
+     * they have twelve weeks of answers to. FOUND IN REVIEW.
+     */
+    onboarded_at: new Date().toISOString(),
+    diet_goal: 'maintain',
     // INVARIANT: UTC plus the user's IANA timezone — CLAUDE.md #9. Each
     // archetype lives somewhere different so calendar logic gets exercised.
     timezone: archetype.timezone,
@@ -840,6 +848,36 @@ async function main(): Promise<void> {
   }));
   if (pool.length === 0) {
     throw new Error('the challenge pool is empty — have the migrations been applied?');
+  }
+
+  /*
+   * The empty account — ADR 0032 §1. Created before the furnished five so that
+   * a failure here is loud rather than buried under five parallel successes.
+   *
+   * INVARIANT: an auth user and NOTHING else. No `users` row is written, which
+   *            is the whole fixture: it is what makes `/welcome` ask the first
+   *            question, and what proves the app renders for somebody the
+   *            profile table has never heard of.
+   */
+  console.log(`Seeding the empty account (${FRESH_ACCOUNT.email})`);
+  const fresh = await admin.auth.admin.createUser({
+    email: FRESH_ACCOUNT.email,
+    password: DEMO_PASSWORD,
+    email_confirm: true,
+    /*
+     * The reset gate — ADR 0032 §4, and migration 20260912200000 for why it is
+     * THIS column. `app_metadata` is writable only by the service role: the
+     * client SDK's `updateUser` writes `user_metadata`, a different column, and
+     * no anon or authenticated session can reach this one.
+     *
+     * It used to be the email address, which a signed-up user chooses — so
+     * anybody could claim `fresh@samson.test` and call a `security definer`
+     * function that deletes gamification rows the client may not write.
+     */
+    app_metadata: { demo_reset: true },
+  });
+  if (fresh.error || !fresh.data.user) {
+    throw new Error(`creating ${FRESH_ACCOUNT.email}: ${fresh.error?.message}`);
   }
 
   console.log('Seeding synthetic users, one session at a time');

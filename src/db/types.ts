@@ -767,11 +767,13 @@ export type Database = {
           birth_date: string | null
           bodyweight_kg: number | null
           created_at: string
+          diet_goal: string | null
           display_name: string | null
           height_cm: number | null
           humor_max_level: string
           leaderboard_opt_out: boolean
           llm_weekly_budget_usd: number
+          onboarded_at: string | null
           sex: string | null
           theme: string
           timezone: string
@@ -783,11 +785,13 @@ export type Database = {
           birth_date?: string | null
           bodyweight_kg?: number | null
           created_at?: string
+          diet_goal?: string | null
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string
           leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
+          onboarded_at?: string | null
           sex?: string | null
           theme?: string
           timezone?: string
@@ -799,11 +803,13 @@ export type Database = {
           birth_date?: string | null
           bodyweight_kg?: number | null
           created_at?: string
+          diet_goal?: string | null
           display_name?: string | null
           height_cm?: number | null
           humor_max_level?: string
           leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
+          onboarded_at?: string | null
           sex?: string | null
           theme?: string
           timezone?: string
@@ -1044,6 +1050,7 @@ export type Database = {
           unpriced_speech: number
         }[]
       }
+      reset_demo_account: { Args: never; Returns: undefined }
       unlocked_achievements: {
         Args: never
         Returns: {

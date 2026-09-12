@@ -113,7 +113,16 @@ if (TAB_HREFS.some((href) => !RENDERED.has(href))) {
 }
 
 /** Signed out, every tab redirects to the page you are already on. */
-const HIDDEN_ON = ['/sign-in'];
+/*
+ * `/welcome` joins `/sign-in` as pre-app — ADR 0032 §2.
+ *
+ * FOUND IN REVIEW: without it the welcome flow rendered five tabs with NONE lit,
+ * which is the exact failure `src/ui/tabs.ts`'s AI-NOTE names. It also handed a
+ * half-onboarded user four ways out of a flow that Hub then bounces them back
+ * into. It is NOT added to `OWNED_BY`, which is the orphan-link guard: nothing
+ * links here, by design — you arrive by redirect.
+ */
+const HIDDEN_ON = ['/sign-in', '/welcome'];
 
 export function TabBar() {
   const pathname = usePathname();

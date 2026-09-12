@@ -6,6 +6,7 @@
  *      everyone. These queries make that a failing test instead of a breach.
  */
 import { Client } from 'pg';
+import { DIET_GOALS } from '../../src/diet/energy';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DB_URL, redactDbUrl } from './helpers';
 import { STAGE_MODELS } from '../../src/llm/models';
@@ -385,6 +386,38 @@ describe('CLAUDE.md #3 — the ledger accepts every stage the code can emit', ()
    * the migration lands. This test is how the next stage gets caught here
    * instead.
    */
+  /*
+   * The same pairing for `users.diet_goal` — ADR 0032 §3. Its migration names
+   * this precedent ("two copies of one fact, the way `llm_calls.stage` is") and
+   * the first version did not follow it, so adding a fourth goal would have
+   * compiled, shipped, and failed on the first save. FOUND IN REVIEW.
+   */
+  it('admits every value of DIET_GOALS, and none the code cannot emit', async () => {
+    const { rows } = await db().query<{ def: string }>(
+      `select pg_get_constraintdef(c.oid) as def
+         from pg_constraint c
+         join pg_class t on t.oid = c.conrelid
+         join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public'
+          and t.relname = 'users'
+          and c.conname = 'users_diet_goal_check'`
+    );
+
+    const def = rows[0]?.def;
+    expect(def, 'users_diet_goal_check is missing entirely').toBeDefined();
+
+    const missing = DIET_GOALS.filter((goal) => !def?.includes(`'${goal}'`));
+    expect(missing, 'add these to the constraint in a migration').toEqual([]);
+
+    // The other direction: a value the constraint admits and the code cannot
+    // produce is a value nothing validates on the way in.
+    const admitted = [...(def?.matchAll(/'([a-z]+)'/gu) ?? [])]
+      .map((m) => m[1])
+      .filter((g): g is string => g !== undefined);
+    const unknown = admitted.filter((goal) => !(DIET_GOALS as readonly string[]).includes(goal));
+    expect(unknown, 'the constraint admits a goal no code emits').toEqual([]);
+  });
+
   it('admits every value of LlmStage', async () => {
     const { rows } = await db().query<{ def: string }>(
       `select pg_get_constraintdef(c.oid) as def

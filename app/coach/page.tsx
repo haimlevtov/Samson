@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import { hasApiKey } from '@/src/llm/config';
+import { normaliseGoal } from '@/src/diet/energy';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { planSessionOptions } from '@/src/templates/plan';
@@ -201,7 +202,9 @@ export default async function CoachPage() {
        * ADR 0023's table is still linked from the header for anyone who would
        * rather read it than ask.
        */}
-      <CoachBox />
+      {/* The stored goal, so the selector opens where the user left it — ADR
+          0032 §3. `normaliseGoal` handles a null or an unrecognised value. */}
+      <CoachBox goal={normaliseGoal(user.dietGoal ?? '')} />
     </>
   );
 }

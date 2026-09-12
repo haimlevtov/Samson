@@ -131,11 +131,18 @@ function Refusal({ state }: { state: CoachState }) {
  * Everything that constrains the coach is on the server. Nothing here is a
  * control.
  */
-export function CoachBox() {
-  const [state, formAction, pending] = useActionState<CoachState, FormData>(
-    askTheCoach,
-    EMPTY_COACH
-  );
+export function CoachBox({ goal }: { goal: DietGoal }) {
+  /*
+   * The STORED goal is the initial state — ADR 0032 §3, and until it existed
+   * this opened on 'maintain' every time regardless of what the user had said.
+   * A selector whose value survives one request is what that column was added
+   * to fix, and reading it here is the half that makes the column real rather
+   * than write-only.
+   */
+  const [state, formAction, pending] = useActionState<CoachState, FormData>(askTheCoach, {
+    ...EMPTY_COACH,
+    goal,
+  });
 
   const formRef = useRef<HTMLFormElement>(null);
   const endRef = useRef<HTMLDivElement>(null);

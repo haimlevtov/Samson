@@ -30,7 +30,7 @@ Three consequences that drive every decision below:
 ## 1. User flow
 
 ```
-sign in ──► /hub ──► /workout ──► [pick a template] ──► /history/[id] ──┐
+sign in ──► /welcome (first visit only) ──► /hub ──► /workout ──► [pick a template] ──► /history/[id] ──┐
               │                                               ▲         │
               │                                               └─ rest ◄─┘
               │                                                     │
@@ -80,11 +80,12 @@ against "how did last month go" and could only lose.
 
 **Hub — `/hub`** — ADR 0013 moved everything personal off this tab.
 
-| Rank | What                                           |
-| ---- | ---------------------------------------------- |
-| 1    | Challenges you can accept or are part-way into |
-| 2    | The leaderboard — ADR 0016                     |
-| 3    | Challenges the validator declined, and why     |
+| Rank | What                                                                                                                                                                        |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Challenges you can accept or are part-way into                                                                                                                              |
+| 2    | The leaderboard — ADR 0016                                                                                                                                                  |
+| 3    | Challenges the validator declined, and why                                                                                                                                  |
+| 4    | **Reset this demo account** — one seeded address only, and last on the page. An irreversible control on a tab is a departure from ADR 0013, argued there and in ADR 0032 §4 |
 
 **Profile — `/profile`**
 

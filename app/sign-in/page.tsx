@@ -18,6 +18,9 @@ const FIXTURES = [
   { email: 'returning@samson.test', label: 'Maya — returning after a five-week layoff' },
   { email: 'homegym@samson.test', label: 'Yossi — dumbbells capped at 30 kg' },
   { email: 'inconsistent@samson.test', label: 'Tom — makes about half his sessions' },
+  // Last, and described as what it is: the other five are furnished, and this
+  // is the one that shows what a real first visit looks like — ADR 0032.
+  { email: 'fresh@samson.test', label: 'Nobody yet — the empty account a new user meets' },
 ];
 
 export default async function SignInPage({

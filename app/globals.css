@@ -2944,3 +2944,68 @@ details.quick-log[open] > summary {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* The welcome flow — ADR 0032 §2.
+
+   Its own head rather than `header.top`: this is a pre-app screen with no tabs,
+   no cog and one question on it, and `header.top`'s layout exists to hold a
+   title against controls that are not here. */
+.welcome-head {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+.welcome-head h1 {
+  margin: 0;
+}
+/* The progress bar reuses `.xp-meter`'s shape rather than hand-rolling a second
+   one — FOUND IN REVIEW, where the first version defined no rule at all, so the
+   inner span stayed `display: inline`, its width was ignored, and the bar on the
+   one surface whose design note says "with progress shown" rendered as nothing. */
+.welcome-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.welcome-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-progress > span {
+    transition: width 200ms ease;
+  }
+}
+.welcome-form {
+  display: grid;
+  gap: 14px;
+}
+/* The skip control and its cost sentence read as one thing, because the
+   sentence is what makes the button a choice rather than an escape. */
+.welcome-skip {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.welcome-skip p {
+  margin: 0;
+}
+
+/* The demo reset — ADR 0032 §4. The only irreversible control on a tab, so it
+   says so with a border rather than relying on the copy alone. */
+.danger-card {
+  border-color: var(--bad);
+}
+.danger-card p {
+  margin: 0 0 10px;
+}
+.reset-form {
+  align-items: flex-end;
+  gap: 10px;
+}
+.reset-form .grow {
+  flex: 1 1 10rem;
+}

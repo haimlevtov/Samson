@@ -133,6 +133,22 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
    */
   const goal = z.enum(DIET_GOALS).catch('maintain').parse(formData.get('goal'));
 
+  /*
+   * PERSISTED — ADR 0032 §3. Without this the selector still forgets, and
+   * onboarding's own copy ("you can change it any time on the Coach tab") is a
+   * promise nothing keeps.
+   *
+   * Fire and forget, deliberately: the goal is a preference, the figures below
+   * are computed from the value in THIS request either way, and a failed write
+   * must not cost the user the answer they asked for. Upsert, because a user
+   * with no profile row is a state that exists (ADR 0032 §1).
+   */
+  const { error: goalError } = await db
+    .from('users')
+    .upsert({ user_id: user.id, diet_goal: goal }, { onConflict: 'user_id' });
+  if (goalError)
+    console.error('coach goal not stored', { code: goalError.code, hint: goalError.hint });
+
   // Parsed, not trusted — see the invariant above. A malformed transcript is
   // dropped rather than repaired: continuing from a conversation we cannot
   // read is worse than starting a fresh one.
