@@ -25,6 +25,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { adminClient, anonClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 import { MAX_PLAUSIBLE_REPS, MAX_PLAUSIBLE_WEIGHT_KG } from '../../src/gamification/plausibility';
+import { loadBadgeCatalogue } from '../../src/db/gamification';
 
 const admin = adminClient();
 
@@ -816,5 +817,179 @@ describe('the boundary of each remaining tier', () => {
       throw error;
     }
     if (cleanup) throw cleanup;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The badge catalogue — ADR 0017's 2026-09-12 amendment, and PR 7 of
+// docs/plans/coach-memory-voice-onboarding.md
+//
+// The header's "every assertion runs through a user-scoped client" has one
+// exception here, and it is deliberate: whether every SHARED row carries
+// instructions, and whether the CHECK refuses one that does not, are properties
+// of the content rather than of what a user may read, so the service role asks.
+// ---------------------------------------------------------------------------
+
+/** Shared rows matching a filter, read with the service role — the truth. */
+async function sharedSlugs(filter: { hidden: boolean; humorLevel?: string }): Promise<string[]> {
+  let query = admin
+    .from('achievements')
+    .select('slug')
+    .is('user_id', null)
+    .eq('hidden', filter.hidden);
+  if (filter.humorLevel !== undefined) query = query.eq('humor_level', filter.humorLevel);
+  const { data, error } = await query;
+  if (error) throw new Error(`reading shared achievements: ${error.message}`);
+  return (data ?? []).map((row) => row.slug);
+}
+
+describe('the badge catalogue', () => {
+  it('says how to earn every shared badge, and refuses a shared row that does not', async () => {
+    const { data, error } = await admin
+      .from('achievements')
+      .select('slug, how_to_earn')
+      .is('user_id', null);
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+
+    const blank = (data ?? []).filter((row) => (row.how_to_earn ?? '').trim() === '');
+    expect(blank.map((row) => row.slug)).toEqual([]);
+
+    // The constraint, not just today's rows: the next migration that forgets it
+    // fails when it is applied.
+    const slug = `no-how-${Date.now()}`;
+    const refused = await admin.from('achievements').insert({
+      user_id: null,
+      slug,
+      name: 'No instructions',
+      description: 'Should not insert.',
+      how_to_earn: '   ',
+      predicate: '(select false)',
+      tier: 'consistency',
+    });
+
+    // Removed BEFORE the assertion, and checked: if the constraint were
+    // missing, a failed expect — or a failed delete — would otherwise leave a
+    // blank shared row in every user's catalogue.
+    const cleanup = await admin.from('achievements').delete().eq('slug', slug).is('user_id', null);
+    expect(cleanup.error, 'removing the probe row').toBeNull();
+
+    // 23514 is check_violation. Any other error would pass a bare not-null
+    // check while saying nothing about the constraint.
+    expect(refused.error?.code, refused.error?.message).toBe('23514');
+  });
+
+  it('never sends a locked hidden badge — its instructions included — only a count', async () => {
+    /*
+     * SKILL.md §4.5, first half, for the catalogue: the definition is absent
+     * while it is LOCKED, and `how_to_earn` is part of the definition.
+     */
+    const user = await newUser('cat-locked');
+    const secret = new Set(await sharedSlugs({ hidden: true }));
+    expect(secret.size, 'nothing hidden to withhold — this test would be vacuous').toBeGreaterThan(
+      0
+    );
+
+    // The table directly, asking for the new column by name.
+    const { data: rows, error } = await user.client
+      .from('achievements')
+      .select('slug, how_to_earn, hidden');
+    expect(error).toBeNull();
+    expect((rows ?? []).filter((row) => row.hidden)).toEqual([]);
+
+    // And the page's own read.
+    const badges = await loadBadgeCatalogue(user.client, user.id);
+    expect(badges.toGet.filter((badge) => secret.has(badge.slug))).toEqual([]);
+    expect(badges.earned).toEqual([]);
+    expect(badges.hiddenRemaining).toBe(secret.size);
+
+    // Nothing in what the page received names a hidden badge, in any field.
+    const sent = JSON.stringify(badges);
+    for (const slug of secret) expect(sent).not.toContain(slug);
+  });
+
+  it('moves a hidden badge from the count to the shelf once it is earned', async () => {
+    /*
+     * SKILL.md §4.5, second half: present for the holder once earned — the
+     * name and the description. `how_to_earn` is not, and is not meant to be:
+     * `unlocked_achievements()` does not return it.
+     */
+    const user = await newUser('cat-found');
+    const exerciseId = await anyExercise();
+    const before = await loadBadgeCatalogue(user.client, user.id);
+    expect(before.hiddenRemaining).not.toBeNull();
+
+    const workoutId = await addWorkout(user, { localDate: '2026-05-04' });
+    await addSets(user, workoutId, { exerciseId, weightKg: 50, reps: 5, count: 20 });
+    expect(await awardFor(user, '2026-05-04')).toContain('groundhog-set');
+
+    const after = await loadBadgeCatalogue(user.client, user.id);
+    expect(after.hiddenRemaining).toBe(before.hiddenRemaining! - 1);
+    expect(after.earned.find((badge) => badge.slug === 'groundhog-set')).toMatchObject({
+      name: 'Groundhog Set',
+      hidden: true,
+    });
+    expect(after.toGet.map((badge) => badge.slug)).not.toContain('groundhog-set');
+  });
+
+  it('lists a held VISIBLE badge once, as earned and not as still to get', async () => {
+    const user = await newUser('cat-visible');
+    const exerciseIds = await exercisesAcrossPatterns(5);
+    const workoutId = await addWorkout(user, { localDate: '2026-05-11' });
+    await addSetGroups(
+      user,
+      workoutId,
+      exerciseIds.map((exerciseId) => ({ exerciseId, weightKg: 20, reps: 5, count: 1 }))
+    );
+    expect(await awardFor(user, '2026-05-11')).toContain('five-patterns');
+
+    const badges = await loadBadgeCatalogue(user.client, user.id);
+    expect(badges.earned.map((badge) => badge.slug)).toContain('five-patterns');
+    expect(badges.toGet.map((badge) => badge.slug)).not.toContain('five-patterns');
+    // Everything else visible is still offered, with its instructions.
+    expect(badges.toGet.length).toBeGreaterThan(0);
+    expect(badges.toGet.every((badge) => badge.howToEarn.trim().length > 0)).toBe(true);
+  });
+
+  it("reads the user's own humour setting, and counts what it holds back", async () => {
+    /*
+     * FOUND IN REVIEW: the first version took the level from `currentUser`,
+     * which substitutes `cheeky` for a failed read. The reader asks for the
+     * stored value itself now, so this asserts against the row.
+     */
+    const user = await newUser('cat-clean');
+    const { error } = await admin
+      .from('users')
+      .update({ humor_max_level: 'clean' })
+      .eq('user_id', user.id);
+    if (error) throw new Error(`setting humour: ${error.message}`);
+
+    const cheeky = await sharedSlugs({ hidden: false, humorLevel: 'cheeky' });
+    expect(cheeky.length, 'no cheeky rows — this test would be vacuous').toBeGreaterThan(0);
+
+    const badges = await loadBadgeCatalogue(user.client, user.id);
+    expect(badges.toGet.filter((badge) => cheeky.includes(badge.slug))).toEqual([]);
+    expect(badges.aboveCeiling).toBe(cheeky.length);
+  });
+
+  it('counts for the caller only, and refuses a signed-out caller', async () => {
+    const [finder, stranger] = await Promise.all([newUser('cat-count-a'), newUser('cat-count-b')]);
+    const exerciseId = await anyExercise();
+
+    const workoutId = await addWorkout(finder, { localDate: '2026-05-18' });
+    await addSets(finder, workoutId, { exerciseId, weightKg: 30, reps: 10, count: 20 });
+    expect(await awardFor(finder, '2026-05-18')).toContain('groundhog-set');
+
+    // No parameter exists to ask about somebody else; the stranger's own count
+    // is untouched by what the finder earned.
+    const theirs = await stranger.client.rpc('hidden_achievements_remaining');
+    expect(theirs.error).toBeNull();
+    expect(theirs.data).toBe((await sharedSlugs({ hidden: true })).length);
+
+    // INVARIANT: RLS and grants are two independent gates — ADR 0003. The
+    // function's own no-caller branch is asserted in schema-invariants, which
+    // can call it with the grant and without a JWT; this is the grant.
+    const { error } = await anonClient().rpc('hidden_achievements_remaining');
+    expect(error).not.toBeNull();
   });
 });

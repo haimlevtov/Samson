@@ -40,6 +40,7 @@ beforeAll(async () => {
       slug: `hidden-fixture-${Date.now()}`,
       name: 'Secret Badge',
       description: 'Should never reach a client.',
+      how_to_earn: 'Should never reach a client either.',
       predicate: 'false',
       tier: 'hidden',
       hidden: true,

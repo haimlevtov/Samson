@@ -491,6 +491,7 @@ describe('a session that unlocks more than one achievement', () => {
           slug,
           name: slug,
           description: 'Fixture, always unlocks',
+          how_to_earn: 'Fixture, always unlocks',
           predicate: '(select true)',
           tier: 'consistency',
           humor_level: 'clean',

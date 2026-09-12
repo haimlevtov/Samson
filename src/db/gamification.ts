@@ -15,6 +15,7 @@ import type { Db } from './client';
 import { startOfWeek } from '../metrics/dates';
 import { WEEKLY_XP_CEILING } from '../gamification/xp';
 import { challengeSpecSchema, type ChallengeSpec } from '../gamification/challenge';
+import { buildCatalogue, humorCeiling, type Catalogue } from '../gamification/catalogue';
 import type { LocalDate } from '../metrics/types';
 
 export interface XpSummary {
@@ -120,6 +121,78 @@ export async function loadUnlockedAchievements(db: Db): Promise<UnlockedAchievem
     unlockedAt: row.unlocked_at,
     localDate: row.local_date,
   }));
+}
+
+/**
+ * Every badge this user may see, shaped for `/badges` — ADR 0017's 2026-09-12
+ * amendment.
+ *
+ * Four reads, and none of them relaxes anything:
+ *
+ * - the SHARED visible rows, through `achievements_read_visible` — which is what
+ *   keeps a locked hidden badge out of the response;
+ * - what the user holds, through `unlocked_achievements()`, as Profile reads it;
+ * - how many hidden badges are left, as one integer;
+ * - the user's humour setting, read HERE rather than taken from `currentUser`.
+ *
+ * INVARIANT: the select list is explicit and never contains `predicate` — the
+ *            policy grants the ROW, and that column is the SQL the evaluator
+ *            runs (ADR 0009). `tests/unit/invariants.test.ts` fails on a
+ *            `select('*')` or a `predicate` in any read of `achievements` from
+ *            application code. It does NOT stop a signed-in user asking the API
+ *            for that column on a visible row — ADR 0017's amendment says why
+ *            that is accepted.
+ *
+ * WHY `user_id is null`: a user-owned achievement's predicate is never executed
+ * (ADR 0009 §3), so it can never be earned, and listing it with instructions
+ * would be a promise the evaluator does not keep.
+ *
+ * WHY the humour setting is its own read — FOUND IN REVIEW. `currentUser`
+ * ignores a failed profile read and substitutes `cheeky`, the column default.
+ * That is right for a coach's tone and wrong for a gate: somebody who chose
+ * `clean` would be shown every cheeky badge name the one time their row did not
+ * load. Here a failed read throws, and a missing row is null, which
+ * `humorCeiling` reads as `clean`.
+ */
+export async function loadBadgeCatalogue(db: Db, userId: string): Promise<Catalogue> {
+  const [visible, held, remaining, profile] = await Promise.all([
+    db
+      .from('achievements')
+      .select('slug, name, how_to_earn, tier, humor_level')
+      .is('user_id', null),
+    loadUnlockedAchievements(db),
+    db.rpc('hidden_achievements_remaining'),
+    db.from('users').select('humor_max_level').eq('user_id', userId).maybeSingle(),
+  ]);
+
+  if (visible.error) throw new Error(`loading badges: ${visible.error.message}`);
+  if (remaining.error) throw new Error(`counting hidden badges: ${remaining.error.message}`);
+  if (profile.error) throw new Error(`loading humour setting: ${profile.error.message}`);
+
+  /*
+   * No shared visible rows is not a state, it is a failed read — FOUND IN
+   * REVIEW. Eleven ship in migrations, so an empty answer means a policy or
+   * grant went wrong, and rendering it would tell somebody with no badges
+   * "None yet" directly above "Every badge on the list is yours."
+   */
+  const rows = visible.data ?? [];
+  if (rows.length === 0) throw new Error('loading badges: no shared badges came back');
+
+  return buildCatalogue({
+    visible: rows.map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      // Required on shared rows by `achievements_shared_rows_say_how_to_earn`,
+      // which the generated type cannot know — it says `string | null`, and
+      // `BadgeToGet.howToEarn` is a string.
+      howToEarn: row.how_to_earn ?? '',
+      tier: row.tier,
+      humorLevel: row.humor_level,
+    })),
+    held,
+    hiddenRemaining: remaining.data ?? null,
+    humorCeiling: humorCeiling(profile.data?.humor_max_level ?? null),
+  });
 }
 
 /**

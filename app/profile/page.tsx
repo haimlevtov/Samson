@@ -228,6 +228,15 @@ export default async function ProfilePage() {
       </Link>
 
       <h2 className="section">Badges</h2>
+      {/*
+       * The way into /badges — ADR 0017's 2026-09-12 amendment. Above the shelf
+       * rather than below it, so it is there for somebody who has earned nothing
+       * yet, which is exactly who needs to know what there is to earn.
+       */}
+      <Link href="/badges" className="card row-link">
+        <strong>Every badge, and how to earn it</strong>
+        <span aria-hidden="true">›</span>
+      </Link>
       {badges.length === 0 ? (
         <p className="card muted">
           Nothing unlocked yet. Achievements come from consistency, not from a single heavy day.
@@ -235,8 +244,16 @@ export default async function ProfilePage() {
       ) : (
         <div className="badge-shelf">
           {badges.map((b) => (
-            <article key={b.slug} className="card badge-card">
-              <h3>{b.name}</h3>
+            <article key={b.slug} className="card badge-card badge-linked">
+              {/*
+               * A badge is what somebody taps expecting to learn about it, so
+               * each one opens its place in the catalogue. The NAME is the link
+               * — a short accessible name — and `.badge-linked` stretches its
+               * target over the card, so the whole card is still one tap.
+               */}
+              <h3>
+                <Link href={`/badges#${b.slug}`}>{b.name}</Link>
+              </h3>
               <p className="muted small">{b.description}</p>
               <p className="muted small">
                 <span className="chip chip-on">{b.tier}</span>

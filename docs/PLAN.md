@@ -292,6 +292,9 @@ five are done as of 2026-09-09.**
   now returned to its holder by a parameterless definer function. Nothing else
   changed: `achievements_read_visible` still withholds every definition the
   caller has no unlock event for, which is what this criterion was for.
+  _Since 2026-09-12 one more thing reaches the client: HOW MANY locked hidden
+  badges are left — one integer, no definition — for the badge catalogue. ADR
+  0017's amendment of that date argues why a count is not a definition._
 - A test asserts every evidence-table claim has a resolvable DOI — **met, by
   three checks rather than one.** One test could not do it:
   `verify.yml`'s unit job has no network and no database by design, and the

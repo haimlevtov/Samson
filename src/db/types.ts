@@ -78,6 +78,7 @@ export type Database = {
           created_at: string
           description: string
           hidden: boolean
+          how_to_earn: string | null
           humor_level: string
           id: string
           name: string
@@ -91,6 +92,7 @@ export type Database = {
           created_at?: string
           description: string
           hidden?: boolean
+          how_to_earn?: string | null
           humor_level?: string
           id?: string
           name: string
@@ -104,6 +106,7 @@ export type Database = {
           created_at?: string
           description?: string
           hidden?: boolean
+          how_to_earn?: string | null
           humor_level?: string
           id?: string
           name?: string
@@ -1048,6 +1051,7 @@ export type Database = {
       accept_challenge: { Args: { p_challenge_id: string }; Returns: boolean }
       award_session_xp: { Args: { p_workout_id: string }; Returns: Json }
       evaluate_achievements: { Args: { p_user_id: string }; Returns: string[] }
+      hidden_achievements_remaining: { Args: never; Returns: number }
       llm_spend_summary: {
         Args: { p_since: string; p_user_id: string }
         Returns: {

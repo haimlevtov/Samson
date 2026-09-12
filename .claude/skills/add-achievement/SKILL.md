@@ -7,8 +7,9 @@ description: Add a new achievement to Samson. Use when adding, editing, or remov
 
 Achievements are database rows with SQL predicates, never hardcoded checks.
 Adding one is a migration plus a test — no application logic changes. The
-rendering code branches on the generic columns (`tier`, `hidden`), never on a
-slug, so a new row needs nothing in `src/` or `app/`.
+rendering code branches on the generic columns (`tier`, `hidden`, and on
+`/badges` `humor_level`), never on a slug, so a new row needs nothing in `src/`
+or `app/`.
 
 ## Steps
 
@@ -20,12 +21,13 @@ Insert into `achievements` via a new migration:
 | ------------- | -------------------------------------------------------------------------------------- |
 | `slug`        | stable, lowercase, never reused after release                                          |
 | `name`        | the joke or reference. See naming rules below.                                         |
-| `description` | shown after unlock                                                                     |
+| `description` | shown after unlock — the reward copy, written to the person who holds it               |
+| `how_to_earn` | **required.** What to do to earn it, for somebody who does not — see §2b               |
 | `predicate`   | SQL boolean over the user's logged data                                                |
 | `tier`        | `volume`, `consistency`, `comeback`, `pr`, `recovery`, `variety`, `hidden`, `calendar` |
 | `humor_level` | `clean`, `cheeky`, or `crude`                                                          |
 | `hidden`      | if true, the definition is withheld until the user earns it — ADR 0017                 |
-| `source_hint` | optional playful nod to the reference, shown on the detail screen                      |
+| `source_hint` | optional playful nod to the reference, shown on an earned badge's card                 |
 
 ### 2. Write the predicate
 
@@ -63,6 +65,36 @@ also holds shared catalogue rows the filter is
 --      evaluation silently fires on the wrong day for every non-server user.
 ```
 
+### 2b. Write how to earn it
+
+`/badges` lists every visible badge a user does not hold, and what it shows
+under the name is `how_to_earn` — ADR 0017's 2026-09-12 amendment. It is
+**required on every shared row** by `achievements_shared_rows_say_how_to_earn`,
+so a migration that omits it fails when it is applied.
+
+**It is not the description reworded.** `description` is past tense and written
+to someone who has the badge. `how_to_earn` is an instruction to someone who
+does not, and it must be **true to the predicate, not to the name**. When this
+column was first filled, two of the eleven descriptions were not the condition:
+`hundred-tonnes` never mentioned its thirty logged days, and `new-years-day`
+said "trained" when a planned rest day earns it too.
+
+Read the predicate, then write what it checks in words a lifter uses: the
+window, whether rest days count, whether warm-ups count, and any minimum the
+predicate enforces that the name does not suggest. Leave out the plausibility
+limits — they are a guard, not a goal.
+
+**Changing a predicate means changing its `how_to_earn` in the same
+migration.** Nothing can test prose against SQL, so this is the one step where
+the only check is you.
+
+A hidden badge's `how_to_earn` never reaches anybody. While the badge is
+locked it is a column on a row the policy withholds; once it is earned the
+holder gets its name and description through `unlocked_achievements()`, which
+does not return `how_to_earn` — by then it would be telling somebody how to do
+what they have done. So write it as freely as any other, and do not widen that
+function to carry it.
+
 ### 3. Name it
 
 - Twist the reference toward lifting rather than quoting it verbatim. "I Am
@@ -71,6 +103,8 @@ also holds shared catalogue rows the filter is
   not.
 - Set `humor_level` honestly. Anything trading on a body part or sexual
   reading is `crude` and ships behind the opt-in tier — default is `cheeky`.
+  It is a gate, not a label: `/badges` does not list an UNEARNED badge above
+  the user's humour setting, and counts it instead.
 - Puns do not survive translation. If the strings table gains a locale,
   achievement names need separately authored copy, not machine translation.
 
@@ -83,10 +117,12 @@ Every achievement ships with a test in the same commit asserting:
 3. It fires exactly once — re-running evaluation does not duplicate the event
 4. For `calendar` tier: it fires on the correct local date for a fixture user
    in a non-server timezone
-5. For `hidden`: the definition is absent from the client payload while it is
-   LOCKED, and present for the holder once earned. Both halves — ADR 0017
-   narrowed the criterion, and a test for only the first half would pass on a
-   version that never showed the badge to anyone.
+5. For `hidden`: the definition — name, description and `how_to_earn` — is
+   absent from the client payload while it is LOCKED, and the name and
+   description are present for the holder once earned (`how_to_earn` stays
+   absent; see §2b). Both halves — ADR 0017 narrowed the criterion, and a test
+   for only the first half would pass on a version that never showed the badge
+   to anyone.
 6. If the predicate joins a table a user can own rows in: a row of theirs
    pointing at ANOTHER user's row does not count, and one pointing at their
    own does.
