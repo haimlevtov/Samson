@@ -20,7 +20,7 @@ because several of them touch the same surface.
 | 6   | [Hear a coach before you pick one](#pr-6--hear-a-coach-before-you-pick-one)                | `persona-preview`      | shipped 09-11, [↓](#pr-6--hear-a-coach-before-you-pick-one-2026-09-11)         |
 | 6b  | [Each coach speaks in character](#pr-6b--each-coach-speaks-in-character)                   | `coach-tts`            | shipped 09-11, [↓](#pr-6b--each-coach-speaks-in-character-2026-09-11)          |
 | 6c  | [The budget cannot be moved by its owner](#pr-6c--the-budget-cannot-be-moved-by-its-owner) | `budget-integrity`     | shipped 09-12, [↓](#pr-6c--the-budget-cannot-be-moved-by-its-owner-2026-09-12) |
-| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | in progress, [ADR 0025 §6](../adr/0025-coach-voices.md)                        |
+| 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | shipped 09-12, [↓](#pr-6d--the-device-voice-columns-go-2026-09-12)             |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
 | 8a  | [One box on Coach](#pr-8--one-box-and-a-plan-you-can-ask-for)                              | `coach-one-box`        | shipped 09-12, [↓](#pr-8a--one-box-on-coach-2026-09-12)                        |
 | 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | shipped 09-12, [↓](#pr-8b--a-plan-you-can-ask-for-2026-09-12)                  |
@@ -842,9 +842,10 @@ closest — its graph was rendered and measured as a component at four widths in
 both themes, which is not the page — and the Voice card PRs 6 and 6b built is on
 `/coach`.
 
-**Eight of the eleven PRs above have something to look at in a browser** —
+**Nine of the twelve PRs above have something to look at in a browser** —
 every one except this plan and the two with no surface, 6c and 6d; PR 5
-explicitly requires opening each seeded Profile.
+explicitly requires opening each seeded Profile. _(Eleven and eight until the
+8a/8b split added a row; corrected when 6d closed the plan.)_
 Six of them change markup. If the pass stays unrun the same class of defect will
 keep shipping, so it is worth clearing before PR 7 — which adds a button to
 `/coach` — rather than after PR 8.
@@ -1479,3 +1480,55 @@ been made from the web, so every state here is proved by test and by reading.
 **Hosted still has five accepted plans**, so the questionnaire is not visible
 there until the next seed — deliberately not done from here, since re-seeding is
 the owner's call.
+
+### PR 6d — the device-voice columns go, 2026-09-12
+
+Shipped as [ADR 0025](../adr/0025-coach-voices.md) §6 planned it, which is the
+only interesting thing about it: the ADR decided in advance that this would be
+**two migrations**, and said why.
+
+`personas.tts_voice_id` (a BCP-47 language tag, despite the name) and
+`tts_voice_variant` (which device voice within that language) picked a voice out
+of the browser's own `speechSynthesis`. 6b took the coaches off device speech —
+they speak through the gateway's speech stage now, with `tts_voice` and
+`tts_instructions` — so the two columns described nothing.
+
+**The contract half of an expand-and-contract, and it waited a day for a reason.**
+Dropping them in 6b's push would have broken the running app for as long as the
+deploy took, because the old bundle still selected them. So: 6b's code ships,
+`main` deploys, and only then do the columns go. The owner confirmed the deploy
+before the migration was pushed — a merge is not a deploy, and this is the one
+migration shape the next one cannot undo.
+
+Verified before writing it rather than assumed: nothing under `src/`, `app/`,
+`tests/` or `scripts/` named either column. What was left was the generated
+types, the migrations that created them, and prose.
+
+**Types regenerated from a local stack built from zero** with the CI-pinned CLI
+(2.116.0) — never `--linked`, which emits a `PostgrestVersion` the local
+generator does not. The diff was six lines: the two columns across `Row`,
+`Insert` and `Update`. The db suite passed 273 of 273 on that stack.
+
+**What review found**, and both were in the artifact trail rather than the drop:
+
+- **The plan row said "shipped" inside the PR that would ship it**, and linked to
+  an Outcome section that did not exist. This file's own pattern — set by 6c and
+  8b — is that the row flips and the Outcome lands after the merge, which is what
+  this section is. A PR asserting its own shipment is the same class of mistake
+  as a plan committed alongside its code.
+- **ADR 0006 already carried the supersession note twice**, in its Status header
+  and a terminal block. The new one made three, mid-document, claiming
+  "everything below is the decision as it was taken" with three later amendments
+  below it — the file contradicted itself within a screen. Folded into the block
+  that existed. The PRD insert had the same shape and was trimmed to the one fact
+  that was new.
+- **The drop shipped without a test**, and now has one:
+  `tests/db/schema-invariants.test.ts` asserts the two columns are absent AND that
+  `tts_voice`/`tts_instructions` are present — asserting only the absence would
+  pass on a `personas` table that had lost its voice entirely. Checked by removing
+  the migration, rebuilding from zero and watching it fail.
+
+**Docker twice, stopped twice**: once for the regeneration, once to run that test
+rather than ship it unverified.
+
+**This closes the rework plan — twelve of twelve.**
