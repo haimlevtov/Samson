@@ -11,7 +11,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12)               |
 | 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | shipped 09-12, [↓](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart-2026-09-12) |
 | 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | shipped 09-12, [↓](#pr-6--the-coach-tab-speaks-too-2026-09-12)                     |
-| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                            |
+| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | shipped 09-13, [↓](#pr-7--every-badge-and-how-to-get-it-2026-09-13)                |
 | 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12)      |
 | 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | shipped 09-12, [↓](#pr-9--date-of-birth-is-three-dropdowns-2026-09-12)             |
 
@@ -1210,3 +1210,66 @@ it is turned on, so the mismatch is visible rather than silent.
 **Verified in a browser at 375px against hosted**, with three spoken replies —
 the minimum to see a clip play, a second submission succeed after it, and the
 switch state carry.
+
+### PR 7 — every badge, and how to get it, 2026-09-13
+
+Shipped as [#68](https://github.com/haimlevtov/Samson/pull/68). `/badges`, owned
+by Profile: what you hold, newest first; every visible badge you do not, with how
+to earn it; how many sit above your humour setting; and how many hidden ones are
+left — a count, never which. The deviations from this entry are recorded in the
+callout at its top. **This closes the plan at nine of nine.**
+
+**The plan's premise did not survive the rows.** It said the `description` column
+is what a person reads as the unlock condition, and that a row where it did not
+stand on its own was a content bug to name. All eleven were. Each is reward copy
+in the past tense, and two are not even the condition: `hundred-tonnes` never
+mentioned its thirty logged days, and a planned rest day on the first of January
+earns `new-years-day`. `how_to_earn` is a second column, written against each
+predicate on hosted and required on shared rows by a CHECK.
+
+**Nothing in the app can log a rest day.** Found while writing those sentences:
+no code path writes `workouts.status = 'rest'` — only the seeder does. So
+`ten-rest-days` cannot be earned by a real user, and the rest-day halves of four
+other badges are unreachable. The catalogue now prints instructions nobody can
+follow, which at least makes the gap visible. Not fixed here.
+
+### What review found
+
+- **The humour gate trusted a fallback.** The first version took the setting from
+  `currentUser`, which substitutes `cheeky` when its profile read fails — so a
+  comment claiming "an unreadable setting is `clean`" was untrue end to end. The
+  catalogue reads the setting itself now, and a failed read throws.
+- **The filter was not hypothetical.** A comment and the ADR said the ceiling
+  "removes nothing yet"; four shipped badges are `cheeky`, so a `clean` user's
+  list silently lost four rows — on the page whose whole argument for the hidden
+  count is that a list which drops rows reads as complete. They are counted now.
+- **A count that could not be read rendered as a claim.** A malformed count
+  became 0, and 0 renders "You found every hidden badge" for somebody holding one.
+- **The predicate check saw one shape of read.** It caught `from('achievements')`
+  and not an embedded `achievements (*)` — the shape `src/db/gamification.ts`
+  had until f81e591. And its title promised the predicate never leaves the
+  server, which a table-wide grant does not: a signed-in user calling the API
+  can read it for a visible row. Retitled, widened, and the exposure accepted in
+  ADR 0017 with its reason.
+- **The function's no-caller branch had no test**, so deleting the line that makes
+  it fail closed passed everything. Asserted in schema-invariants now.
+- **Spacing and focus.** A card beside a shelf met at 0; cards inside a shelf
+  picked up 12px from `.card + .card`, which had been misaligning Profile's
+  two-column badge rows since before this PR. The focus ring depended on `:has`
+  and vanished where it is unsupported.
+- **ADR 0017's own table contradicted the decision below it**, and claimed
+  "everything" for a held badge that is never sent `how_to_earn`. The skill said
+  both that a holder gets `how_to_earn` and that nothing returns it.
+
+**"Rework PR 7" names two PRs.** Both plans number from one, and this PR's first
+commits used the label the templates PR already owned. Disambiguated in what this
+PR wrote; the two migration headers keep it, because they were already on hosted.
+Across the repository the label is ambiguous for PRs 1–9 of this plan, which is a
+cleanup of its own.
+
+**Verified:** 1430 unit tests; the full db suite (307) against a local stack
+before review; mutation checks on the shaping function, the select-list guard,
+the deep link and four database objects. The review pass's db changes ran first
+in CI. **Browser at 375px against hosted** as the beginner fixture: 5 earned, 4 to
+get, 2 hidden; a tapped badge lands on its card; keyboard focus rings the card.
+No paid calls.
