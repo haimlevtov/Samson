@@ -234,10 +234,7 @@ export default async function ProfilePage() {
        * yet, which is exactly who needs to know what there is to earn.
        */}
       <Link href="/badges" className="card row-link">
-        <span>
-          <strong>Every badge, and how to earn it</strong>
-          <span className="muted small"> earned · to get · hidden</span>
-        </span>
+        <strong>Every badge, and how to earn it</strong>
         <span aria-hidden="true">›</span>
       </Link>
       {badges.length === 0 ? (
