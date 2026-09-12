@@ -3,16 +3,21 @@
 Four changes, four branches, in this order. `main` is green at `3409c59`, the
 rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 
-| PR  | What                                                                    | Branch                  | State                                                              |
-| --- | ----------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
-| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)     | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                       | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)          |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)       | `session-talk`          | planned                                                            |
-| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing) | `fresh-user-onboarding` | planned                                                            |
+| PR  | What                                                                                                 | Branch                  | State                                                              |
+| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
+| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)          |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | planned                                                            |
+| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | planned                                                            |
+| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                            |
 
-Ordered smallest-risk first, and PR 4 last because it is the one that consumes
-the other three: a brand-new user meets the persona menu, then the onboarding
+Ordered smallest-risk first, and PR 4 near the end because it is the one that
+consumes the others: a brand-new user meets the persona menu, then the onboarding
 questions, then a coach with nothing to remember yet.
+
+**PR 5 was added on 2026-09-12, after PR 2 shipped**, and it is last because it
+is content rather than mechanism — a sixth persona row, two recast voices and a
+line of copy under a control PR 1 built. Nothing depends on it.
 
 ## Two decisions taken before planning, and who took them
 
@@ -192,9 +197,19 @@ transcript. There is no path where the browser hands the server words to say.
 
 Every spoken reply is a speech call, charged `SPEECH_ASSUMED_COST_USD` ($0.02)
 against the weekly budget, and a chatty session is a lot of presses. The default
-budget is $0.50 a week, so **twenty-five spoken replies spend a week**. PR 3 has
-to decide whether speaking is opt-in per session, and the ADR has to say what it
-chose.
+budget is $0.50 a week, so **twenty-five spoken replies spend a week**.
+
+**Decided by the owner on 2026-09-12: speaking is OPT-IN, per session.** The
+button holds the transcript either way; the coach answers in the chat either way;
+the audio is what the toggle buys. Off by default, and the reason is the number
+above rather than a preference — a feature that can spend the project's whole key
+in one session is not a default.
+
+The ADR has to say what that costs as well as what it saves: a user who never
+finds the toggle never hears a coach, and the whole point of ADR 0025's voices is
+that they are heard. So the toggle is on the session screen next to the talk
+button, not buried in Settings, and the card says what it costs in words — not in
+dollars, which are the project's and not the user's.
 
 ### Confinement is unchanged
 
@@ -266,6 +281,77 @@ A **Reset this demo account** control that returns the fresh user to empty.
 
 **Files:** `src/seed/archetypes.ts`, `scripts/seed.ts`, an onboarding route and
 its steps, a reset action, tests.
+
+---
+
+## PR 5 — a sixth coach, and a voice you can tell apart
+
+**Branch `austrian-persona`.** Content, not mechanism: a persona is a row
+(CLAUDE.md #7), and `.claude/skills/add-persona` is the procedure. Three things
+the owner asked for, in one PR because they are all the same surface.
+
+### The Austrian
+
+A sixth coach: a former Mr Olympia from a village in Styria, who won everything
+there was to win and now coaches. Big, warm, unhurried, absolutely certain that
+the next set is the one that matters.
+
+**Written as an archetype rather than as a named person, and that is the repo's
+own rule rather than a flinch.** `add-persona` says: _"Twist the reference toward
+lifting rather than quoting it verbatim... Character art, logos, and trademarked
+slogans are not [fine]."_ So: the accent, the cadence, the vocabulary — the pump,
+the mind-muscle connection, the unembarrassed love of training — and none of the
+film lines, no claim to be anybody, and no use of a living person's name in a
+row that speaks to users.
+
+- `system_prompt` describes a CHARACTER, because the column is fenced data and an
+  instruction there is read as description (ADR 0006).
+- `tts_instructions` carries the delivery: Austrian-accented English, deep and
+  warm, deliberate, unhurried. An ACCENT is a property of speech; it is not an
+  impersonation of a particular speaker, and the distinction is worth writing in
+  the ADR-less PR body because somebody will ask.
+- `banned_phrases` gets the two every persona carries plus the film quotes, so
+  the character cannot drift into the impression by accident.
+- `sample_line`: no numeral, none of its own banned phrases, clean through
+  `scanOutput` — `tests/db/personas.test.ts` checks all three.
+
+### The Physio and the Analyst get male voices
+
+Both are cast female today — `Erinome` and `Sulafat`. The owner asked for male
+voices for both.
+
+**The voice list does not say which are which.** `SPEECH_VOICES` in
+`src/speech/script.ts` carries a style label per voice and nothing about the
+speaker, and the OpenRouter catalogue carries neither. So the recast is checked
+against Google's published voice table before it is written, not chosen from
+memory — the voice-variant bug in `add-persona` is what happens when a voice is
+picked on an assumption.
+
+**And no two coaches may share a voice.** That skill's INVARIANT was written for
+the device-speech era and the column it names is gone, but the property it
+protects is the whole point of having five coaches: a new cast has to leave six
+distinct voices, and the db test has to assert it on `tts_voice` now rather than
+on the dropped `tts_voice_variant`.
+
+### A bio under the menu
+
+The `Change persona` menu gives a name and nothing else, so choosing between six
+coaches is guesswork. One or two sentences under the select, describing the coach
+in the third person — what they are like to be coached by.
+
+- **A new column**, `bio`, not a reuse of `system_prompt`: that one is a
+  description written FOR a model and reads badly to a person, and it is fenced
+  into a prompt, so making it double as UI copy would put user-facing text in the
+  instruction channel's payload.
+- It renders from the row, so it is content and needs no code per coach.
+- It changes with the selection, which is a client-side read of a row already
+  loaded — no request per change, the thing PR 1 was careful about.
+
+**Files:** a migration (the `bio` column, the sixth row, the two recast voices),
+`src/persona/schema.ts` (`SHIPPED_PERSONA_SLUGS`), `src/db/personas.ts`,
+`app/coach/CoachConsole.tsx`, `app/globals.css`, `tests/db/personas.test.ts`,
+and `.claude/skills/add-persona/SKILL.md` — whose voice-allocation table is about
+to be wrong in two rows.
 
 ---
 
