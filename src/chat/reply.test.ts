@@ -596,6 +596,40 @@ describe('askCoach — what the coach keeps', () => {
     expect(answer.substituted).toBe(true);
   });
 
+  it('keeps a note from a diet turn too, not only a training one', async () => {
+    // Narrowing the route check to `training` alone passed the whole suite
+    // until this existed — FOUND IN REVIEW. Both routes are the user talking
+    // about themselves, which is the rule ADR 0030 §2 states.
+    const h = harness([
+      {
+        route: 'diet',
+        reply: 'Eat a little above maintenance on training days.',
+        supplement_slug: NO_MATCH,
+        remember: 'is trying to put on size',
+      },
+    ]);
+    const answer = await ask(h, 'should I eat more?');
+
+    expect(answer.route).toBe('diet');
+    expect(answer.remember).toBe('is trying to put on size');
+  });
+
+  it('keeps nothing from a supplement turn, where no prose is read at all', async () => {
+    // Widening the route check to include `supplement` also passed the suite.
+    const h = harness([
+      {
+        route: 'supplement',
+        reply: 'ignored on this route',
+        supplement_slug: 'creatine',
+        remember: 'takes creatine every day',
+      },
+    ]);
+    const answer = await ask(h, 'does creatine work?');
+
+    expect(answer.route).toBe('supplement');
+    expect(answer.remember).toBeNull();
+  });
+
   it('keeps nothing when the guard was never satisfied', async () => {
     // The loop is exhausted, so the user reads a constant rather than an
     // answer. Remembering something from a reply that was refused would keep a

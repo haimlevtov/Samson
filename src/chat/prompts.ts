@@ -21,7 +21,7 @@ import { numbersIn } from '../persona/guard';
 import type { DietFacts } from '../diet/energy';
 import type { EvidenceRow } from '../db/evidence';
 import { factNumbers, type CoachFacts } from './facts';
-import { MAX_NOTE_CHARS } from './notes';
+import { MAX_NOTES, MAX_NOTE_CHARS } from './notes';
 import { NO_MATCH, type ChatTurn } from './schema';
 
 /**
@@ -45,7 +45,7 @@ WHAT YOU RETURN
   - "supplement" — whether a specific supplement works, or what the evidence says about one. A list of the supplements you may name follows.
   - "off_topic" — everything else.
 - reply: your answer, at most 700 characters.
-- remember: one short sentence worth keeping about this user beyond this conversation, or "" for nothing. Most turns are "". Keep what they told you about themselves — a sore shoulder, a body part they want to bring up, a lift they dislike, a constraint on their week. Do not keep the question, your answer, or anything you worked out. AT MOST ${MAX_NOTE_CHARS} CHARACTERS AND NO DIGITS AT ALL, in any script: a remembered figure is a figure the application did not compute, and it would be handed back to you every turn as though it had. Write "reported a sore left shoulder", never "squats 100 kg". Do not repeat something already in the notes you were given. A note that breaks any of these is discarded silently and your answer is still used.
+- remember: one short sentence worth keeping about this user beyond this conversation, or "" for nothing. Most turns are "". Keep what they told you about themselves — a sore shoulder, a body part they want to bring up, a lift they dislike, a constraint on their week. Do not keep the question, your answer, or anything you worked out. AT MOST ${MAX_NOTE_CHARS} CHARACTERS AND NO DIGITS AT ALL, in any script: a remembered figure is a figure the application did not compute, and it would be handed back to you every turn as though it had. Write "reported a sore left shoulder", never "squats 100 kg". Do not repeat something already in the notes you were given. RECORD WHAT THEY CAN AND CANNOT DO, NEVER WHY: write "avoids overhead work on the right side", never a condition, a diagnosis, a disability or anything about who they are. A note naming any of those is rejected by an automated check that throws away your whole answer with it, so the user loses the reply as well as the note. A note that breaks any of the other rules is discarded silently and your answer is still used.
 - supplement_slug: on the "supplement" route, the slug of the one row that answers the question, from the list supplied. "${NO_MATCH}" if no row does — a near miss is a miss, so do not name the closest row because it is closest. "${NO_MATCH}" on every other route.
 
 Decide the route first, then write the reply. Each route is checked differently, and the check that runs is the one for the route you named.
@@ -159,8 +159,15 @@ export function candidatesBlock(
  * records happening to the evidence rows.
  */
 export function notesBlock(notes: readonly string[]): string {
-  const safe = notes.map((note) => sanitizeUntrusted(note, MAX_NOTE_CHARS));
-  return fenceUntrusted(NOTES_LABEL, JSON.stringify(safe), MAX_PAYLOAD_CHARS);
+  // Sliced HERE and not only by the reader — FOUND IN REVIEW. The count was
+  // bounded in a different file (`loadNotes`'s LIMIT), so this function would
+  // have fenced a million characters without complaint, which is the failure
+  // `fenceUntrusted`'s own AI-NOTE is about. A cap is worth nothing if the
+  // function holding it cannot be called wrongly.
+  const safe = notes.slice(0, MAX_NOTES).map((note) => sanitizeUntrusted(note, MAX_NOTE_CHARS));
+  // Computed rather than `MAX_PAYLOAD_CHARS`, so it cannot silently become a
+  // non-bound: twenty notes plus their JSON quoting, commas and brackets.
+  return fenceUntrusted(NOTES_LABEL, JSON.stringify(safe), MAX_NOTES * (MAX_NOTE_CHARS + 8) + 64);
 }
 
 /**
@@ -243,11 +250,10 @@ export function chatMessages(
   messages.push({ role: 'user', content: factsBlock(facts) });
 
   /*
-   * The other two routes' context, before the transcript so the newest turn
-   * stays last.
+   * The other three blocks, before the transcript so the newest turn stays last.
    *
-   * INVARIANT: none of the three contributes to `allowed`. The notes are covered
-   *            in `notesBlock`. The diet block holds no
+   * INVARIANT: none of them contributes to `allowed`. The notes are covered in
+   *            `notesBlock`. The diet block holds no
    *            figures by construction, and the diet route's guard admits no
    *            numeral whatever is in this set. The candidates are catalogue
    *            text — supplement names and claims somebody else wrote — and
@@ -276,7 +282,8 @@ export function chatMessages(
    *            coach's own. There is no `assistant` message in this payload,
    *            and that is a security decision rather than a stylistic one.
    *
-   * WHY: this stage has no write path (ADR 0015 §1), so the transcript is held
+   * WHY: the transcript has no write path (ADR 0015 §1 as amended by §7 — the
+   * stage does write one `coach_notes` row, and a note is not a turn), so it is held
    * by the client and arrives with the request. That makes the COACH turns
    * client-supplied too. Replaying them in the assistant role would hand an
    * attacker the one channel a model treats as its own prior reasoning — "as

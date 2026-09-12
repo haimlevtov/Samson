@@ -17,6 +17,7 @@ import { DIET_GOALS, computeEnergy, dietFacts } from '@/src/diet/energy';
 import { loadEvidence } from '@/src/db/evidence';
 import { loadNotes, rememberNote } from '@/src/db/notes';
 import { BudgetExceededError } from '@/src/llm/types';
+import { logLine } from '@/src/llm/failure';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { MAX_TRANSCRIPT_TURNS, chatHistorySchema, type ChatTurn } from '@/src/chat/schema';
@@ -87,12 +88,17 @@ function sayable(result: {
  * form, one action, one call: the route is the model's and the guard that runs
  * is the one belonging to the route it named.
  *
- * INVARIANT: this action has no write path to the user's training data, and
+ * INVARIANT: this action has no write path to the user's TRAINING data, and
  *            adding one would break the guarantees in ADR 0015's table. It
  *            reads the user's own rows, calls one stage, and returns prose or a
- *            shared row. The one insert underneath it is the `llm_calls` ledger
- *            row the gateway writes per attempt, which invariant #3 requires
- *            and which no model chooses the shape of.
+ *            shared row.
+ *
+ *            It makes two inserts, neither of which is training data: the
+ *            `llm_calls` ledger row per attempt that invariant #3 requires, and
+ *            — since ADR 0030 — at most one `coach_notes` row, whose text code
+ *            validated and which the user can delete on Settings. The second
+ *            one is why ADR 0015 §1 no longer says "no database write path";
+ *            see its §7 amendment.
  *
  * INVARIANT: the transcript arriving in `previous` is USER INPUT. It is held by
  *            the client precisely because nothing stores it, so it is parsed by
@@ -252,10 +258,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
       try {
         await rememberNote(db, user.id, answer.remember);
       } catch (cause) {
-        console.error(
-          'coach note not stored',
-          cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-        );
+        console.error('coach note not stored', logLine(cause));
       }
     }
 
@@ -305,10 +308,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * commonly fill with the request they rejected, and which here means free
      * text this feature's own adversarial list shows can be a health disclosure.
      */
-    console.error(
-      'coach box failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('coach box failed', logLine(cause));
     return {
       turns: trim(withUser),
       result,
@@ -385,10 +385,7 @@ export async function deliverForPersona(
 
     // Name and bounded message only — see `askTheCoach` for what the object
     // carries. This was the third site with the same leak.
-    console.error(
-      'persona delivery failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('persona delivery failed', logLine(cause));
     return {
       ...EMPTY_DELIVERY,
       personaSlug: slug,
@@ -440,10 +437,7 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
     if (reason === 'failed') {
       // Name and bounded message only — `LlmCallFailedError` carries every
       // ledger row, and every row carries the user's id. See `askTheCoach`.
-      console.error(
-        'coach voice failed',
-        cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-      );
+      console.error('coach voice failed', logLine(cause));
     }
     return { ok: false, reason };
   }
@@ -633,10 +627,7 @@ export async function requestPlan(_previous: PlanState, formData: FormData): Pro
 
     // Name and bounded message only — `LlmCallFailedError` carries every ledger
     // row and every row carries the user's id. See `askTheCoach`.
-    console.error(
-      'plan request failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('plan request failed', logLine(cause));
     return {
       ...EMPTY_PLAN,
       outcome: 'failed',

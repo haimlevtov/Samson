@@ -204,11 +204,14 @@ export async function saveEquipment(
  *            independently rejects a delete of anyone else's row — CLAUDE.md
  *            #10. The id from the form is a filter, never an authorisation.
  *
- * WHY it returns void rather than a form state: this is a bare `<form action>`
- * on a server component, which is what keeps /settings free of client state. A
- * note that fails to delete is logged by name and bounded message (ADR 0028);
- * the page re-renders either way and the note is either gone or still listed,
- * which is the honest report of what happened.
+ * WHY it returns no form state: this is a bare `<form action>` on a server
+ * component, which is what keeps /settings free of client state. A failure
+ * redirects back with a flag instead, and the page renders a sentence from it.
+ *
+ * FOUND IN REVIEW: it used to just log and return, on the argument that the
+ * note still being listed WAS the report. It is not — the user cannot tell that
+ * from a mis-tap, and docs/specs/mobile-interface.md §4 exists to prevent
+ * exactly "nothing happens".
  */
 export async function forgetCoachNote(formData: FormData): Promise<void> {
   const db = await createServerDb();
@@ -216,15 +219,22 @@ export async function forgetCoachNote(formData: FormData): Promise<void> {
   if (!user) redirect('/sign-in');
 
   const id = String(formData.get('noteId') ?? '');
-  if (id === '') return;
+  if (id === '') redirect('/settings?forget=failed');
 
   try {
     await forgetNote(db, user.id, id);
   } catch (cause) {
     console.error('coach note not deleted', logLine(cause));
+    // The id is NOT echoed back into the URL: it identifies a row, and a note
+    // is health-adjacent text about a person. A flag is all the page needs.
+    redirect('/settings?forget=failed');
   }
 
-  // The coach reads these on the next message, and Settings lists them.
-  revalidatePath('/settings');
-  revalidatePath('/coach');
+  /*
+   * No `revalidatePath` — FOUND IN REVIEW, and the two that were here were both
+   * no-ops dressed as caution. /settings is `force-dynamic`, so it is rebuilt on
+   * every request anyway, and /coach renders no notes at all: `askTheCoach`
+   * reads them at call time, which no cache invalidation can help or hurt.
+   */
+  redirect('/settings');
 }

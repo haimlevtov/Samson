@@ -70,11 +70,20 @@ begin
     and id not in (
       select id from public.coach_notes
       where user_id = new.user_id
-      -- id breaks the tie: created_at defaults to now(), which is TRANSACTION
-      -- time, so a bulk insert gives every row one identical value and
-      -- `order by created_at` alone would evict arbitrarily. The same trap
-      -- ADR 0021 records for achievements, in a smaller place.
+      -- created_at is the right order here: ADR 0021's last Consequences bullet
+      -- clears tables "written one row per transaction", and this is one — at
+      -- most one note per coach turn. (sets broke there because it is
+      -- bulk-written. This is not.)
+      --
+      -- id is a second key only to make the order TOTAL, so the eviction is
+      -- deterministic when two rows share a timestamp. It is a random uuid, so
+      -- among those it picks stably and arbitrarily rather than by recency —
+      -- which is the distinction ADR 0021 exists to insist on.
       order by created_at desc, id desc
+      -- AI-NOTE: 20 is MAX_NOTES in src/chat/notes.ts, which Postgres cannot
+      -- read. They are held together by tests/db/notes.test.ts, which inserts
+      -- MAX_NOTES + n and asserts MAX_NOTES survive — that fails if EITHER side
+      -- moves without the other, in both directions.
       limit 20
     );
 

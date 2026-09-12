@@ -54,6 +54,16 @@ export type CoachRoute = (typeof COACH_ROUTES)[number];
  *            graceful degrade. Every field is required; the caller reads only
  *            the ones the route licenses.
  */
+/**
+ * The widest `remember` the schema accepts, which is NOT the rule.
+ *
+ * The rule is `MAX_NOTE_CHARS` and it is applied in code. This exists only so
+ * the field cannot be an essay that inflates every completion — a model told
+ * "at most 120 characters" that writes 180 should have its note dropped, not
+ * cost the user a retry of their whole question.
+ */
+const NOTE_SCHEMA_MAX_CHARS = MAX_NOTE_CHARS * 4;
+
 export function coachReplySchema(slugs: readonly string[]) {
   const admitted = [NO_MATCH, ...slugs] as [string, ...string[]];
 
@@ -113,16 +123,6 @@ export function coachReplySchema(slugs: readonly string[]) {
   });
 }
 
-/**
- * The widest `remember` the schema accepts, which is NOT the rule.
- *
- * The rule is `MAX_NOTE_CHARS` and it is applied in code. This exists only so
- * the field cannot be an essay that inflates every completion — a model told
- * "at most 120 characters" that writes 180 should have its note dropped, not
- * cost the user a retry of their whole question.
- */
-const NOTE_SCHEMA_MAX_CHARS = MAX_NOTE_CHARS * 4;
-
 export type CoachReply = z.infer<ReturnType<typeof coachReplySchema>>;
 
 /**
@@ -134,8 +134,8 @@ export type CoachReply = z.infer<ReturnType<typeof coachReplySchema>>;
  * where the fencing happens — so a turn cannot reach a model without passing
  * the one function that knows which side it came from.
  *
- * INVARIANT: validated on arrival — ADR 0015 §1. This stage has no write path,
- *            so the transcript is not stored: it is held by the client and
+ * INVARIANT: validated on arrival — ADR 0015 §1. The TRANSCRIPT has no write
+ *            path, so it is not stored: it is held by the client and
  *            comes back with every request. That makes it user input, exactly
  *            as the message is, and it is parsed rather than trusted.
  *

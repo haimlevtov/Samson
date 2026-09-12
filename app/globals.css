@@ -2105,9 +2105,14 @@ details.quick-log[open] > summary {
 
 /* What the coach remembers — ADR 0030 §4.
    One row per note: the sentence takes the free width and the control keeps its
-   own, which is the same shape .persona-picker uses. Wrapping rather than
-   truncating, because a note the user cannot read is a note they cannot decide
-   about — and the whole point of the list is deciding. */
+   own. Wrapping rather than truncating, because a note the user cannot read is a
+   note they cannot decide about, and deciding is the whole point of the list.
+
+   FOUND IN REVIEW: this claimed to be "the same shape .persona-picker uses", and
+   it is not — that one adds a single property on top of .row, which already
+   supplies flex, gap and wrapping. This is the fourth hand-rolled list block in
+   the file (.evidence-list, .chat-log, .tree are the others), which is the
+   practice here rather than an oversight; there is no list primitive to reuse. */
 .note-list {
   display: grid;
   gap: 12px;
@@ -2123,6 +2128,10 @@ details.quick-log[open] > summary {
 }
 .note-list li > span {
   flex: 1 1 12rem;
+  /* A note needs no whitespace to be valid, and a 120-character unbroken token
+     is wider than the card at 375px — body has overflow-x: hidden, so it would
+     be clipped rather than scrollable. Same treatment as .chat-turn p. */
+  overflow-wrap: anywhere;
 }
 .note-list form {
   margin: 0;

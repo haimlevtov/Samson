@@ -31,9 +31,19 @@ export async function loadNotes(db: Db): Promise<CoachNote[]> {
   const { data, error } = await db
     .from('coach_notes')
     .select('id, text, created_at')
-    // `id` breaks the tie: `created_at` defaults to transaction time, so rows
-    // written together share one value and ordering by it alone is arbitrary —
-    // the trap ADR 0021 records for achievements.
+    /*
+     * `created_at` IS the right order here, and ADR 0021's last Consequences
+     * bullet is why: the tables it clears are the ones "written one row per
+     * transaction", and `coach_notes` is one — at most one note per coach turn.
+     * `sets` broke because it is bulk-written; this is not.
+     *
+     * `id` is a second key only so the order is TOTAL, which matters for a list
+     * a user is pruning: two rows with one timestamp must not swap places
+     * between renders. It is a `gen_random_uuid()`, so among same-timestamp rows
+     * it is stable and arbitrary rather than newest-first — and ADR 0021's own
+     * warning is that a total order is not the same as the right order, so this
+     * comment says which of the two it is buying.
+     */
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(MAX_NOTES);

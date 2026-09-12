@@ -388,7 +388,9 @@ those three is gone. The chat stage can cause a row in `coach_notes`.
 anything; it fills a `remember` field, and code decides whether that becomes a
 row. It cannot write anywhere else, cannot read another user's rows, cannot move
 a figure the app displays, and cannot author a refusal. A note is at most 120
-characters, carries no numeral in any script, cannot duplicate one already held,
+characters, carries no numeral in any script and no spelled figure with a
+training unit on it, cannot duplicate one already held (invisible characters
+stripped first),
 is capped at twenty newest-kept, and is deleted by the user on Settings whenever
 they like.
 

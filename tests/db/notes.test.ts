@@ -9,9 +9,10 @@
  *            user can do runs through a user-scoped client — as in rls.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MAX_NOTES } from '../../src/chat/notes';
+import { MAX_NOTES, MAX_NOTE_CHARS } from '../../src/chat/notes';
 import { forgetNote, loadNotes, rememberNote } from '../../src/db/notes';
-import { adminClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
+import { Client as PgClient } from 'pg';
+import { DB_URL, adminClient, createTestUser, deleteTestUsers, type TestUser } from './helpers';
 
 let user: TestUser;
 let other: TestUser;
@@ -117,6 +118,62 @@ describe('the twenty-note bound', () => {
   });
 });
 
+describe('the reader, which is the bound ADR 0030 calls the control', () => {
+  /*
+   * FOUND IN REVIEW, and the first attempt at this test did not work: every
+   * other case here leaves at most twenty rows because the trigger clears them,
+   * so deleting `.limit(MAX_NOTES)` from `loadNotes` broke nothing — including
+   * a version of this test that planted twenty-five with the service role. The
+   * trigger is a TABLE trigger and does not care who is inserting.
+   *
+   * So the trigger is disabled for the duration, over a direct Postgres
+   * connection, which is the only way to reach the state the reader's LIMIT
+   * exists for: a table that has more rows than the prompt may carry. That state
+   * is exactly what ADR 0030 §3 says the limit is insurance against — "a trigger
+   * is a thing that can be dropped by a migration".
+   */
+  let pg: PgClient;
+
+  beforeAll(async () => {
+    pg = new PgClient({ connectionString: DB_URL });
+    await pg.connect();
+  }, 30_000);
+
+  afterAll(async () => {
+    await pg.end();
+  });
+
+  it('returns the newest twenty even when the table holds more', async () => {
+    await clear(user.id);
+    await pg.query('alter table public.coach_notes disable trigger coach_notes_trim');
+
+    try {
+      const admin = adminClient();
+      for (let n = 0; n < MAX_NOTES + 5; n++) {
+        const { error } = await admin.from('coach_notes').insert({
+          user_id: user.id,
+          text: `planted ${'z'.repeat(n + 1)}`,
+          created_at: new Date(Date.UTC(2026, 0, 1, 0, n)).toISOString(),
+        });
+        if (error) throw new Error(error.message);
+      }
+
+      // The premise: without the trigger the table really does hold more.
+      expect(await rowsOf(user.id)).toHaveLength(MAX_NOTES + 5);
+
+      const read = await loadNotes(user.client);
+      expect(read).toHaveLength(MAX_NOTES);
+      // Newest first, and the newest planted row leads.
+      expect(read[0]!.text).toBe(`planted ${'z'.repeat(MAX_NOTES + 5)}`);
+      const times = read.map((n) => n.createdAt);
+      expect([...times].sort().reverse()).toEqual(times);
+    } finally {
+      await pg.query('alter table public.coach_notes enable trigger coach_notes_trim');
+      await clear(user.id);
+    }
+  });
+});
+
 describe('the column refuses what the application refuses', () => {
   it('rejects a note longer than the bound', async () => {
     // The application drops these before they get here — `acceptableNote`.
@@ -124,7 +181,7 @@ describe('the column refuses what the application refuses', () => {
     // reason it is also a CHECK.
     const { error } = await user.client
       .from('coach_notes')
-      .insert({ user_id: user.id, text: 'c'.repeat(121) });
+      .insert({ user_id: user.id, text: 'c'.repeat(MAX_NOTE_CHARS + 1) });
 
     expect(error).not.toBeNull();
   });

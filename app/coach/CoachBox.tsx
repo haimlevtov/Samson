@@ -119,10 +119,14 @@ function Refusal({ state }: { state: CoachState }) {
  *            is not returned on that route at all.
  *
  * WHY the transcript lives in this component's action state rather than a table:
- * the stage has no database write path, and that absence is what makes "a
- * jailbroken box cannot persist anything" a guarantee instead of a hope. The
- * cost is that the conversation ends with the page, which is stated to the user
- * rather than left to be discovered.
+ * there is no write path for it, and the cost is that the conversation ends with
+ * the page — which is stated to the user rather than left to be discovered.
+ *
+ * AI-NOTE: this used to cite the absence as what made "a jailbroken box cannot
+ *          persist anything" a guarantee. ADR 0030 retired that sentence — the
+ *          box keeps short validated notes now, listed and deletable on
+ *          Settings — and the empty-state copy below says so. The transcript
+ *          itself is still not stored.
  *
  * Everything that constrains the coach is on the server. Nothing here is a
  * control.
@@ -295,8 +299,9 @@ export function CoachBox() {
           <p className="muted chat-empty">
             Ask about your training, what to eat around it, or what the evidence says about a
             supplement — a lift that has stalled, whether to deload, why the figure above is what it
-            is. It can only see the figures on your Profile and History tabs. The conversation is
-            not kept: it ends when you leave this page.
+            is. It can only see the figures on your Profile and History tabs. The conversation
+            itself is not kept — it ends when you leave this page — but the coach may keep a short
+            note about something you tell it. Settings lists every one, and you can delete them.
           </p>
         ) : (
           <ol className="chat-log">

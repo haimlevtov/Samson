@@ -49,11 +49,54 @@ describe('acceptableNote', () => {
     expect(acceptableNote('wants more work on their back', [])).not.toBeNull();
   });
 
+  it('drops a figure spelled out with a unit on it', () => {
+    /*
+     * FOUND IN REVIEW, and it falsified this rule's own headline: "no numeral"
+     * is not "no figure". A note is re-fed on every later turn, so the model
+     * could say "given your two hundred kilo squat" and neither reply guard
+     * would fire — both of them read numerals.
+     */
+    expect(acceptableNote('user squats two hundred kilos', [])).toBeNull();
+    expect(acceptableNote('benches one hundred and twenty pounds', [])).toBeNull();
+    expect(acceptableNote('does five sets on squat day', [])).toBeNull();
+    expect(acceptableNote('eats three thousand calories', [])).toBeNull();
+  });
+
+  it('keeps a spelled number with no training unit, which is the stated limit', () => {
+    // The UNIT is the boundary, exactly as it is in CALORIE_FIGURE. A guard
+    // that refused every number word would refuse ordinary language to catch a
+    // case the model has no reason to write.
+    expect(acceptableNote('wants one more session a week', [])).not.toBeNull();
+    expect(acceptableNote('trains four days a week', [])).not.toBeNull();
+    expect(acceptableNote('squats two hundred', [])).not.toBeNull();
+  });
+
   it('drops a duplicate, ignoring case and repeated whitespace', () => {
     const held = ['wants to bring up their biceps'];
     expect(acceptableNote('Wants To Bring Up Their Biceps', held)).toBeNull();
     expect(acceptableNote('wants  to   bring up their biceps', held)).toBeNull();
     expect(acceptableNote('  wants to bring up their biceps', held)).toBeNull();
+  });
+
+  it('strips zero-width characters before comparing, so they cannot beat the duplicate rule', () => {
+    /*
+     * FOUND IN REVIEW, and it defeated the rule entirely: a zero-width space is
+     * not whitespace to String.trim and is not matched by the whitespace class,
+     * so the same sentence with one appended passed every turn. Twenty of those
+     * evict twenty real memories — and `sanitizeUntrusted` strips them again on
+     * the way into the prompt, so the model would then read twenty identical
+     * lines. The rule's own failure producing the outcome the rule prevents.
+     */
+    const held = ['reported a sore left shoulder'];
+    for (const invisible of ['​', '‍', '⁠', '­', '﻿']) {
+      expect(acceptableNote(`reported a sore left shoulder${invisible}`, held)).toBeNull();
+    }
+  });
+
+  it('strips a bidi override, which would make the Settings list disagree with the prompt', () => {
+    // The list is what ADR 0030 §4 rests on. A note that renders as one thing
+    // and is sent as another makes that control a lie.
+    expect(acceptableNote('reported a sore ‮shoulder', [])).toBe('reported a sore shoulder');
   });
 
   it('keeps a note that is merely similar, which is the cost of the rule', () => {

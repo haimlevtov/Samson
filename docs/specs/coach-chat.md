@@ -72,10 +72,14 @@ it is not a control on the page so much as a control on the block.
 **The box is below both.** One text field, a send button, and the transcript.
 Empty state names the boundary before the user hits it: this coach talks about
 your training, what to eat for it, and what the evidence table says about a
-supplement — and the conversation is not kept.
+supplement. The empty state also says what the conversation does and does not
+leave behind: **the transcript is not kept, and the coach may keep a short note.**
 
 **Clear** appears once there is a transcript. It empties the visible
-conversation; there is nothing to delete, because nothing is stored. It exists
+conversation; there is nothing to delete THERE, because the transcript is not
+stored. _Notes are stored, and are deleted on Settings — ADR 0030 §4. Until
+2026-09-12 this section said "nothing is stored", which was the whole truth then
+and is not now._ It exists
 because the transcript is re-sent with every message — so without it, a user who
 has wandered somewhere unhelpful pays for that history on every subsequent turn
 and cannot get out of it except by leaving the page.
@@ -102,13 +106,13 @@ cuff about creatine.
 
 `chat`, added to `LlmStage`, `STAGE_MODELS` and the token budgets.
 
-| Setting                  | Value                                                        | Why                                                                                           |
-| ------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `CHAT_MAX_TOKENS`        | 400                                                          | A reply is capped at 700 characters by schema; 400 tokens is headroom, not a target           |
-| `MAX_CHAT_MESSAGE_CHARS` | 800                                                          | One question about training. Length is an attack — ADR 0005 §2                                |
-| `MAX_HISTORY_TURNS`      | 8                                                            | Turns replayed, newest kept. Both a cost bound and an attention bound                         |
-| `MAX_CHAT_ATTEMPTS`      | 2                                                            | Matches the persona stage: a model that invents a number twice will not stop on the third ask |
-| Models                   | `anthropic/claude-haiku-4.5`, then `google/gemini-2.5-flash` | Conversational and cheap. This is the highest-frequency call in the app                       |
+| Setting                  | Value                                                        | Why                                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CHAT_MAX_TOKENS`        | 600                                                          | `reply` is capped at 700 characters and `remember` at 480 — about 300 tokens together, so 600 is headroom rather than a target. It was 400 until `remember` existed |
+| `MAX_CHAT_MESSAGE_CHARS` | 800                                                          | One question about training. Length is an attack — ADR 0005 §2                                                                                                      |
+| `MAX_HISTORY_TURNS`      | 8                                                            | Turns replayed, newest kept. Both a cost bound and an attention bound                                                                                               |
+| `MAX_CHAT_ATTEMPTS`      | 2                                                            | Matches the persona stage: a model that invents a number twice will not stop on the third ask                                                                       |
+| Models                   | `anthropic/claude-haiku-4.5`, then `google/gemini-2.5-flash` | Conversational and cheap. This is the highest-frequency call in the app                                                                                             |
 
 **The ceiling is unchanged, and it had to be the largest of the three.** It was
 already above the diet stage's 300 and the supplement lookup's 60, so the box
@@ -129,6 +133,7 @@ coachReplySchema(slugs) = z.strictObject({
   route: z.enum(['training', 'diet', 'supplement', 'off_topic']),
   reply: z.string().min(1).max(700),
   supplement_slug: z.enum([NO_MATCH, ...slugs]),
+  remember: z.string().max(NOTE_SCHEMA_MAX_CHARS),
 });
 ```
 
@@ -156,6 +161,17 @@ reads only the fields the route licenses.
 the model a second way to return nothing, and the code discards the string in
 that branch anyway.
 
+**`remember` is declared LAST, and the position carries meaning like `route`'s
+does** — ADR 0030 §1. What is worth keeping is a judgement about an answer, so
+the model writes the answer first. It takes the empty string for "nothing", not
+`null`, for the same reason `supplement_slug` takes `NO_MATCH`.
+
+**Its schema bound is not its rule.** The schema admits four times
+`MAX_NOTE_CHARS` so that an over-long note is DROPPED rather than failing
+validation — a schema failure costs a whole retry, and the note is optional to
+the question the user actually asked. The rule is `acceptableNote`, in
+`src/chat/notes.ts`.
+
 ## 3. The facts the coach is given
 
 Built by `coachFacts()` in `src/chat/facts.ts` from `src/metrics/` and
@@ -164,14 +180,16 @@ Built by `coachFacts()` in `src/chat/facts.ts` from `src/metrics/` and
 The same fields every message. There is no prompt that widens this set, because
 nothing reads a prompt to decide what goes in it — ADR 0015 §1.
 
-**Since PR 8a the payload carries two more blocks, and both are built the same
-way — by code, unconditionally, before the call.** The model does not ask for
-either; they are there whichever route it takes.
+**The payload carries three more blocks, all built by code before the call.**
+The model does not ask for any of them; they are there whichever route it takes.
+Two are unconditional; the notes block is sent only when there is something to
+remember, because an empty fenced array says nothing and costs tokens.
 
-| Block                | What it is                                                                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| The diet categories  | `dietFacts()` — ADR 0024's **categories, never figures**. The target is computed by `computeEnergy` and rendered by the page, not by the model |
-| The supplement slugs | The `slug` column of the rows `loadEvidence` returns — RLS-scoped, shared rows only. The allowlist, and nothing else from the row              |
+| Block                | What it is                                                                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The diet categories  | `dietFacts()` — ADR 0024's **categories, never figures**. The target is computed by `computeEnergy` and rendered by the page, not by the model                                          |
+| The supplement slugs | The `slug` column of the rows `loadEvidence` returns — RLS-scoped, shared rows only. The allowlist, and nothing else from the row                                                       |
+| The notes            | What the coach has been told before — ADR 0030. `loadNotes` returns the newest `MAX_NOTES`; `notesBlock` sanitises each and caps the payload. **Sent only when there is at least one.** |
 
 **Why unconditionally:** a route is only known once the answer comes back, and
 both blocks are cheap and deterministic — pure arithmetic and one query the page
@@ -203,6 +221,12 @@ text, so it is sanitised and capped per field, and the digits inside it are not
 quotable. See ADR 0015 §4.
 
 ## 4. What comes back
+
+**And on two routes, a memory.** Beside the answer, a `training` or `diet` turn
+may leave one `coach_notes` row — ADR 0030. `supplement` and `off_topic` may
+not: neither reads the model's prose, and a memory harvested from a refused
+message is a memory of an attempt to steer the coach. An exhausted guard loop
+leaves none either, because the user never saw that answer.
 
 **One of four, by route.** The guard that runs is the guard belonging to the
 route the model named, and a retry that comes back on a **different** route is
@@ -303,14 +327,26 @@ Not a fabricated answer and not an empty box — `docs/specs/mobile-interface.md
 > there is load-bearing for the training route, where numerals are compared
 > against a set of numbers. `src/chat/routing.test.ts` holds the two apart.
 
+5. **`acceptableNote`** — ADR 0030 §2, and it is the only guard here whose
+   failure costs the user nothing. It runs on the attempt's own `remember`
+   field, **before** the route guard has decided whether the reply survives, and
+   its four checks (non-empty, at most `MAX_NOTE_CHARS`, no numeral in any
+   script and no spelled figure with a training unit, not a duplicate) drop the
+   note and leave the answer alone. The gateway's `scanValue` is the exception:
+   it runs on `remember` before any of this and fails the whole call.
+
 `chatMessages` returns `{ messages, allowed }` from **one pass**, so the
-quotable set cannot drift from what was sent. Two exclusions matter:
+quotable set cannot drift from what was sent. Three exclusions matter:
 
 - **Coach turns contribute nothing.** Admitting them would let one reply that
   slipped a number past the guard license every later reply to repeat it.
 - **Exercise names contribute nothing**, which is why the facts half reads typed
   leaves rather than the rendered block. Catalogue names carry digits ("3/4
   Sit-Up"), and any authenticated user may insert an exercise of their own.
+- **Notes contribute nothing.** `acceptableNote` already refuses every numeral,
+  so a note carrying one could only come from a row written around that rule —
+  and a figure that slipped into a memory once would otherwise license itself in
+  every reply thereafter.
 
 The set is fixed **before** the retry loop. The correction names the rejected
 figure, and recomputing after appending it would authorise the very number that
@@ -320,6 +356,24 @@ was just refused.
 
 The adversarial suite in `src/chat/reply.test.ts` runs against a scripted
 `LlmCaller` — no key, no network, no database.
+
+**Memory — ADR 0030, in `src/chat/notes.test.ts` and `tests/db/notes.test.ts`:**
+
+- every drop condition, at its boundary: exactly `MAX_NOTE_CHARS` keeps and one
+  more drops; a numeral in five scripts; a spelled figure with a unit, and a
+  spelled number without one, which is the stated limit
+- a duplicate defeated by an appended zero-width character — the case that
+  showed `trim()` alone was not enough
+- `training` and `diet` keep a note; `supplement` and `off_topic` drop it, and
+  both edges are asserted, because narrowing OR widening the route check passed
+  the whole suite before they existed
+- the notes block is fenced, is absent when there is nothing to remember, and
+  adds nothing to `allowed`
+- twenty full-length notes reach the model untruncated, and more than twenty are
+  cut to twenty by `notesBlock` itself rather than only by the reader
+- against Postgres: no cross-user read, write or delete; the bound holds for a
+  hand-written row as well as an application one; the reader returns the newest
+  `MAX_NOTES` in order; the column's CHECK refuses what the application refuses
 
 **Single-turn, inherited from ADR 0005 and re-run against this shape:**
 

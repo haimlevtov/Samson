@@ -47,11 +47,19 @@ function knownTimezones(): string[] {
  *          invariants.test.ts asserts every route in OWNED_BY is linked from
  *          somewhere under app/, which is the check that catches it.
  */
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  // A failed Forget redirects back with this — see `forgetCoachNote`. It carries
+  // no id: a note is health-adjacent text about a person and does not belong in
+  // a URL, which is shared, logged and kept in history.
+  searchParams: Promise<{ forget?: string }>;
+}) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  const { forget } = await searchParams;
   const [tags, owned, notes] = await Promise.all([
     equipmentCatalogue(db),
     userEquipment(db, user.id),
@@ -133,6 +141,13 @@ export default async function SettingsPage() {
        * the app reads these rows.
        */}
       <h2 className="section">What the coach remembers</h2>
+      {forget === 'failed' ? (
+        // Every state renders something — docs/specs/mobile-interface.md §4.
+        // "Still listed" is indistinguishable from a mis-tap without this.
+        <p className="card error" role="status">
+          That note could not be forgotten. Try again in a moment.
+        </p>
+      ) : null}
       {notes.length === 0 ? (
         // Every state renders something — docs/specs/mobile-interface.md §4.
         // And this is the honest normal state for most users: the coach keeps
@@ -149,8 +164,16 @@ export default async function SettingsPage() {
                 <span>{note.text}</span>
                 <form action={forgetCoachNote}>
                   <input type="hidden" name="noteId" value={note.id} />
+                  {/*
+                   * Every note has a Forget button, so the accessible name has
+                   * to say WHICH note it forgets — the same rule Hub's Accept
+                   * buttons follow. A clipped span rather than an `aria-label`,
+                   * because an overriding label would not contain the visible
+                   * word (WCAG 2.5.3) — the finding from PR 1's Try button.
+                   */}
                   <button type="submit" className="secondary">
                     Forget
+                    <span className="sr-only">: {note.text}</span>
                   </button>
                 </form>
               </li>

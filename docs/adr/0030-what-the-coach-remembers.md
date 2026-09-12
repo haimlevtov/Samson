@@ -57,13 +57,38 @@ A proposed note is **dropped** unless all of:
   and it would be re-fed to the model every turn as though it had. "Reported a
   sore shoulder" is a memory; "squats 100 kg" is an invented fact with a long
   life;
+- it contains **no figure spelled out with a training unit on it** — "two
+  hundred kilos", "five sets". _FOUND IN REVIEW: "no numeral" is not "no figure",
+  and the first version of this ADR said it was. A spelled figure passed every
+  check, and neither reply guard would catch the model restating it later,
+  because both of them read numerals. The **unit** is the boundary, exactly as it
+  is for `CALORIE_FIGURE`: a bare "squats two hundred" is not matched, and
+  neither is "wants one more session a week", which is a memory worth keeping.
+  **English only** — a number-word list per language is the shape `scanOutput`
+  declines for slurs, for the same reason._;
 - it is not a duplicate of a note already held, compared case-insensitively on
-  collapsed whitespace. Without this the model re-proposes the same sentence
-  every turn and twenty slots become one fact twenty times.
+  collapsed whitespace **after invisible characters are stripped**. Without the
+  duplicate rule the model re-proposes the same sentence every turn and twenty
+  slots become one fact twenty times. _Without the stripping the rule did not
+  work at all: a zero-width space is not whitespace to `String.trim` and is not
+  matched by the whitespace class, so one appended character defeated it — and
+  `sanitizeUntrusted` strips them again on the way into the prompt, so the model
+  would have read twenty identical lines. The rule's own failure producing the
+  outcome the rule prevents. FOUND IN REVIEW._
+
+**It is taken on two routes only** — `training` and `diet`, where the user is
+talking about themselves. An `off_topic` turn's prose is discarded _without being
+read_ (ADR 0015 §3) and its note goes with it: a memory harvested from a message
+the coach refused to answer is a memory of an attempt to steer it, re-fed on every
+turn afterwards. The `supplement` route reads no prose at all. An exhausted guard
+loop remembers nothing either, because the user never saw that answer.
 
 **Dropped silently, and never retried.** A bad note must not cost the user their
 answer: the reply is what they asked for and the note is a side effect. So a note
-that fails any check is discarded and the reply is returned as normal.
+that fails any check above is discarded and the reply is returned as normal.
+
+**That promise is unconditional for the checks above, and NOT for the output
+scan** below, which runs before any of them.
 
 **`scanOutput` is NOT applied here, because it has already run.** Since
 [ADR 0005](0005-llm-safety.md)'s 2026-09-12 amendment the gateway scans every
@@ -74,6 +99,29 @@ channel cannot be used to get text past layer 4 that `reply` could not. It is
 stated here rather than reimplemented, because a second scan would look like a
 second control and would not be one. Its limits are ADR 0005's, unchanged, and
 they include the homoglyph hole that amendment names.
+
+**And it has a cost this ADR first failed to state.** `scanValue` reports a
+finding without saying which field it came from, so the gateway cannot drop the
+note and keep the reply — it discards the whole attempt, retries to the ceiling
+and throws. **A finding whose only site is the note therefore costs the user
+their answer, plus three paid attempts.**
+
+The realistic path is not adversarial, which is what makes it serious:
+`PROTECTED_ATTRIBUTE` matches `disability`, so a user who says "I have a
+disability in my right shoulder" invites a model that writes that into
+`remember` — and gets three blocked attempts and a generic error with no
+explanation. A new denial path aimed at exactly the users the conduct rule exists
+to protect. FOUND IN REVIEW.
+
+Mitigated in the prompt, which is not a control: the model is told to record what
+the user can and cannot do and never why, and told what it costs them if it does
+otherwise. **The real fix is per-leaf attribution in `scanValue`**, so the
+gateway can drop a dirty note and keep a clean reply. That is a change to ADR
+0005's layer 4 and is not made here.
+
+A finding's matched text, up to 80 characters, also reaches `llm_calls.error` via
+`describeFinding` — health-adjacent free text in a column, RLS-scoped to the same
+user, and the same treatment `reply` has always had.
 
 ### 3. Bounded at twenty, in two places
 
@@ -113,14 +161,24 @@ ADR 0015's table gains a row, and one of its rows is narrowed:
 | The chat cannot persist anything                  | **Guaranteed**                             | **No longer true.** It can persist one short sentence per turn, which code validated and the user can delete                                         |
 
 **Weaker, honestly weaker.** What replaces it is not "trust the model": the model
-cannot choose the length, cannot include a figure, cannot repeat itself into the
-whole budget, cannot exceed twenty, and cannot keep anything the user removes.
+cannot choose the length, cannot write a numeral in any script nor a spelled
+figure carrying a training unit, cannot repeat itself into the whole budget,
+cannot exceed twenty, and cannot keep anything the user removes.
 
 ## What this does not guarantee
 
+- **A jailbroken turn now lasts longer than a turn.** Said as bluntly as ADR
+  0015 §7 says it, because this is the document a report will quote: an
+  instruction-shaped sentence that survives every check — "wants to be pushed
+  hard regardless of soreness" — becomes standing context that outlives a cleared
+  transcript and a new device. What bounds the damage is elsewhere and is
+  unchanged: the diet floor is clamped in code (invariant #6), notes enter no
+  quotable set, and the user can delete any of them.
 - **The coach will remember the wrong thing sometimes.** Which sentence is worth
   keeping is the model's judgement — the same class as `route`, and a mitigation
   rather than a control.
+- **Two turns at once can store the same note twice.** Both compare against the
+  same pre-turn snapshot. A lock would cost more than the duplicate does.
 - **A note records a claim, not a fact.** "Reported a sore shoulder" is what the
   user said. The conduct rule about injury still outranks it, and a note must
   never be read as a diagnosis.
