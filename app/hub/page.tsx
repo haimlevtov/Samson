@@ -9,8 +9,7 @@ import { evaluateChallenge } from '@/src/gamification/challenge';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { acceptChallengeAction } from './actions';
-import { DEMO_ACCOUNT_EMAIL, RESET_KEEPS, RESET_TABLES } from '@/src/db/demo-reset';
-import { resetDemoAccount } from './reset-actions';
+import { DemoResetCard } from './DemoResetCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -308,54 +307,16 @@ export default async function HubPage({
         </div>
       )}
       {/*
-       * The demo reset — ADR 0032 §4, and it is here because the owner asked
-       * for it on the main page: it exists to be pressed between demo runs, and
-       * a control you have to navigate to mid-demo is friction in exactly the
-       * moment it was added to remove.
+       * The demo reset — ADR 0032 §4. LAST on the page, deliberately: the first
+       * screen of the app is not where an irreversible control should meet a
+       * thumb first.
        *
-       * It renders for ONE account, and the same check runs in the action and
-       * again inside `reset_demo_account()` — which is where it is a CONTROL
-       * rather than a convenience, because that function is `security definer`
-       * and runs outside RLS. ADR 0032 §4 carries the correction; an earlier
-       * version of this comment claimed RLS was what made it safe, which stopped
-       * being true when the deletes moved into the function.
-       *
-       * LAST on the page, deliberately. The first screen of the app is not where
-       * an irreversible control should meet a thumb first.
+       * It is a component rather than markup because it is on `/welcome` too,
+       * and that is not a nicety — the demo account is redirected out of this
+       * page by the check at the top of it, so until PR 8 the reset lived only
+       * where its own account could not go. `DemoResetCard` carries that.
        */}
-      {user.email === DEMO_ACCOUNT_EMAIL ? (
-        <>
-          <h2 className="section">Demo</h2>
-          <div className="card danger-card">
-            <p>
-              This is the empty demo account. Resetting returns it to the state a brand-new user
-              sees — the welcome questions, no history, no plan.
-            </p>
-            <p className="muted small">
-              It deletes your {RESET_TABLES.join(', ')}. It keeps {RESET_KEEPS.join(' and ')}.
-            </p>
-            {reset === 'unconfirmed' ? (
-              <p className="error" role="status">
-                Type RESET to confirm.
-              </p>
-            ) : null}
-            {reset === 'failed' ? (
-              <p className="error" role="status">
-                That did not go through. Nothing may have been removed — try again.
-              </p>
-            ) : null}
-            <form action={resetDemoAccount} className="row reset-form">
-              <label className="grow">
-                <span className="label">Type RESET to confirm</span>
-                <input type="text" name="confirm" autoComplete="off" placeholder="RESET" />
-              </label>
-              <button type="submit" className="secondary">
-                Reset this demo account
-              </button>
-            </form>
-          </div>
-        </>
-      ) : null}
+      <DemoResetCard email={user.email} from="/hub" reset={reset} />
     </>
   );
 }

@@ -774,6 +774,7 @@ export type Database = {
           leaderboard_opt_out: boolean
           llm_weekly_budget_usd: number
           onboarded_at: string | null
+          persona_slug: string | null
           sex: string | null
           theme: string
           timezone: string
@@ -792,6 +793,7 @@ export type Database = {
           leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
           onboarded_at?: string | null
+          persona_slug?: string | null
           sex?: string | null
           theme?: string
           timezone?: string
@@ -810,6 +812,7 @@ export type Database = {
           leaderboard_opt_out?: boolean
           llm_weekly_budget_usd?: number
           onboarded_at?: string | null
+          persona_slug?: string | null
           sex?: string | null
           theme?: string
           timezone?: string

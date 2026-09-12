@@ -52,10 +52,50 @@ export function EquipmentForm({ tags, owned }: { tags: EquipmentTag[]; owned: Ow
       return next;
     });
 
+  /*
+   * Select-all, asked for on the welcome flow and useful on both surfaces — the
+   * catalogue runs to a dozen tags and a gym member owns nearly all of them.
+   *
+   * It carries NO `name`, so it is not part of the submission: it drives the
+   * real checkboxes, which are what the server reads. A control that posted its
+   * own value would be a second, wider answer to the same question.
+   */
+  const allChecked = tags.length > 0 && checked.size === tags.length;
+  const someChecked = checked.size > 0 && !allChecked;
+
+  const toggleAll = () =>
+    setChecked((current) =>
+      // Partial counts as "not all", so the first press fills in the rest rather
+      // than clearing what was already ticked. Undoing somebody's selection is
+      // not what they asked for by pressing a box labelled "all".
+      current.size === tags.length ? new Set<string>() : new Set(tags.map((t) => t.slug))
+    );
+
   return (
     <form action={formAction} className="settings-form">
       <fieldset className="equipment-set">
         <legend className="label">What can you train with?</legend>
+
+        {tags.length > 0 ? (
+          <label className="check-row check-all">
+            <input
+              type="checkbox"
+              checked={allChecked}
+              /*
+               * The third state, and it has to be set imperatively — there is no
+               * `indeterminate` attribute in HTML, only a DOM property. Without
+               * it a partial selection renders as an empty box, which reads as
+               * "nothing is selected" while five things are.
+               */
+              ref={(node) => {
+                if (node) node.indeterminate = someChecked;
+              }}
+              onChange={toggleAll}
+              disabled={pending}
+            />
+            <span>{allChecked ? 'Clear all' : 'Select all'}</span>
+          </label>
+        ) : null}
 
         {tags.map((tag) => {
           const isChecked = checked.has(tag.slug);

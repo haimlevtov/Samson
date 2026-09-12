@@ -970,7 +970,8 @@ button.set-prev.copy:hover:not(:disabled) {
 }
 
 .humor,
-.equipment-set {
+.equipment-set,
+.coach-set {
   display: grid;
   gap: 2px;
   margin: 0;
@@ -979,7 +980,8 @@ button.set-prev.copy:hover:not(:disabled) {
   border-radius: var(--radius-sm);
 }
 .humor legend,
-.equipment-set legend {
+.equipment-set legend,
+.coach-set legend {
   padding: 0 4px;
 }
 /* Three abreast: the choice is small and comparing them is the whole task. */
@@ -2527,6 +2529,15 @@ details.quick-log[open] > summary {
   accent-color: var(--accent-text);
 }
 
+/* Select-all — it governs the list rather than belonging to it, so it is ruled
+   off from the items below. Nothing else here differs: it is a .check-row, and
+   copying that row's layout would be the third copy of one thing in this file. */
+.check-all {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
 /*
  * The progression trees — ADR 0020.
  *
@@ -2992,6 +3003,45 @@ details.quick-log[open] > summary {
 }
 .welcome-skip p {
   margin: 0;
+}
+
+/*
+ * Picking a coach — rework PR 8.
+ *
+ * Radio ROWS rather than a select, because the sample line is the reason to
+ * prefer one, and a dropdown shows one name at a time with no room for it. The
+ * frame is the shared bordered fieldset (`.humor`); only the row is here.
+ *
+ * `label.coach-choice` rather than the bare class: `.welcome-form` has no
+ * `label { display: block }` rule to outrank today, but `.settings-form` does
+ * (0,1,1), and this component is the kind that gets reused onto that surface.
+ * The specificity trap is recorded three times in this file already.
+ */
+label.coach-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 6px 0;
+  cursor: pointer;
+}
+label.coach-choice + label.coach-choice {
+  border-top: 1px solid var(--border);
+}
+.coach-choice input[type='radio'] {
+  /* The base `input` rule sets a 44px min-height; without this the radio is a
+     44px-tall column beside its text. The PAIR is the target — the row's own
+     min-height is what mobile-interface.md §3 is satisfied by. */
+  width: auto;
+  min-height: 0;
+  margin-top: 4px;
+  accent-color: var(--accent-text);
+}
+/* Name over line, so the line reads as the coach talking rather than as a
+   caption on a control. */
+.coach-choice > span {
+  display: grid;
+  gap: 2px;
 }
 
 /* The demo reset — ADR 0032 §4. The only irreversible control on a tab, so it

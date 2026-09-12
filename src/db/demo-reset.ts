@@ -46,7 +46,11 @@ export const DEMO_ACCOUNT_EMAIL = 'fresh@samson.test';
  *          cascade from `workout_templates`, which is still a deletion.
  */
 export const RESET_TABLES = [
-  'name and body measurements',
+  // The onboarding answers, all of them. This said "name and body measurements"
+  // while the function also cleared `diet_goal` — and now `persona_slug` — which
+  // is the promise-nothing-keeps half of this module's own AI-NOTE, pointing the
+  // other way.
+  'onboarding answers (your name, measurements, diet goal and coach)',
   'sets',
   'workouts',
   'workout_templates',
@@ -71,9 +75,14 @@ export const RESET_TABLES = [
  * reset that silently moved somebody's timezone would be doing something nobody
  * asked for.
  *
- * The PROFILE fields do not: name, bodyweight, height, date of birth and sex are
- * cleared, because they are the answers onboarding asks for and the flow has to
- * ask again. FOUND IN REVIEW — this list said "your settings" while the function
+ * The PROFILE fields do not: name, bodyweight, height, date of birth, sex,
+ * diet goal and chosen coach are cleared, because they are the answers
+ * onboarding asks for and the flow has to ask again.
+ *
+ * AI-NOTE: that list and `src/onboarding/steps.ts` are one fact. Every column
+ *          `isAnswered` reads must be cleared by the function, or the reset
+ *          silently shortens the flow it exists to restore — which is exactly
+ *          what a surviving `plan_runs` row did before review caught it. FOUND IN REVIEW — this list said "your settings" while the function
  * nulled five of the eight fields on the settings form, which is the promise-
  * nothing-keeps half of this module's own AI-NOTE.
  *

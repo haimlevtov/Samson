@@ -30,10 +30,22 @@ export async function resetDemoAccount(formData: FormData): Promise<void> {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  /*
+   * Which page the card was pressed on, so a refusal is rendered where the user
+   * is looking. The demo account cannot reach /hub at all — onboarding sends it
+   * to /welcome — so sending every refusal to /hub would bounce it straight back
+   * to /welcome with the message stripped off the URL, and the card would look
+   * like it did nothing.
+   *
+   * An ALLOWLIST rather than the posted value. It is a form field, and a
+   * redirect built out of one is an open redirect; two literals cost nothing.
+   */
+  const from = String(formData.get('from') ?? '') === '/welcome' ? '/welcome' : '/hub';
+
   if (user.email !== DEMO_ACCOUNT_EMAIL) {
     // Not an error the user needs explaining: they did not see this control, so
     // they did not press it. Nothing is deleted and nothing is said.
-    redirect('/hub');
+    redirect(from);
   }
 
   /*
@@ -42,7 +54,7 @@ export async function resetDemoAccount(formData: FormData): Promise<void> {
    * first screen of the app, where an accidental press is likeliest.
    */
   if (String(formData.get('confirm') ?? '').trim() !== 'RESET') {
-    redirect('/hub?reset=unconfirmed');
+    redirect(`${from}?reset=unconfirmed`);
   }
 
   try {
@@ -51,7 +63,7 @@ export async function resetDemoAccount(formData: FormData): Promise<void> {
     // Name and bounded message — ADR 0028. The row contents never reach the log:
     // this table is a health profile joined to an account id.
     console.error('demo reset failed', logLine(cause));
-    redirect('/hub?reset=failed');
+    redirect(`${from}?reset=failed`);
   }
 
   // Everything downstream of this reads the user's rows, and there are none now.

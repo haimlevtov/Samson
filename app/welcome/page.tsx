@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
 import { userEquipment } from '@/src/db/exercises';
-import { latestAcceptedPlan } from '@/src/db/personas';
+import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import {
   ONBOARDING_STEPS,
   SKIP_COST,
@@ -12,8 +12,9 @@ import {
 } from '@/src/onboarding/steps';
 import { EquipmentForm } from '../settings/EquipmentForm';
 import { PlanRequestForm } from '../coach/PlanRequestForm';
+import { DemoResetCard } from '../hub/DemoResetCard';
 import { finishOnboarding, skipStep } from './actions';
-import { BodyStep, GoalStep, NameStep } from './Steps';
+import { BodyStep, CoachStep, GoalStep, NameStep } from './Steps';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,19 +32,33 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ skip?: string }>;
+  // `reset` is the demo card's own refusal, sent back here rather than to /hub
+  // — the demo account cannot reach /hub. See app/hub/reset-actions.ts.
+  searchParams: Promise<{ skip?: string; reset?: string }>;
 }) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const { skip } = await searchParams;
+  const { skip, reset } = await searchParams;
 
-  const [tags, owned, plan] = await Promise.all([
+  const [tags, owned, plan, personas] = await Promise.all([
     equipmentCatalogue(db),
     userEquipment(db, user.id),
     latestAcceptedPlan(db),
+    listPersonas(db),
   ]);
+
+  /*
+   * Three fields of each row, not the row. `systemPrompt` is the character
+   * description ADR 0006 fences into a message, and a client component has no
+   * use for it — so it does not cross into one.
+   */
+  const coaches = personas.map((persona) => ({
+    slug: persona.slug,
+    name: persona.name,
+    sampleLine: persona.sampleLine,
+  }));
 
   /*
    * The skip list is query-string input, so it is filtered against the known
@@ -58,6 +73,7 @@ export default async function WelcomePage({
 
   const step = nextStep({
     displayName: user.displayName,
+    personaSlug: user.personaSlug,
     // The four ADR 0024 needs. All four or none: a partial profile is what its
     // three refusals are about, and the step asks for all four together.
     hasBiometrics:
@@ -104,6 +120,29 @@ export default async function WelcomePage({
           <h2 className="section">What should the coach call you?</h2>
           <div className="card">
             <NameStep carried={carried} />
+          </div>
+        </>
+      ) : null}
+
+      {step === 'coach' ? (
+        <>
+          <h2 className="section">Who do you want in your corner?</h2>
+          <div className="card">
+            {/*
+             * A coach with no rows to offer would be a step with no answer, and
+             * the flow would stick on it — `isAnswered` wants a slug. The
+             * personas are shared content seeded by a migration, so an empty
+             * list means the catalogue is missing rather than that the user has
+             * nothing; either way the honest move is to say so and let them past.
+             */}
+            {coaches.length === 0 ? (
+              <p className="muted">
+                No coaches are available just now. You can pick one later on the Coach tab.
+              </p>
+            ) : (
+              <CoachStep coaches={coaches} carried={carried} />
+            )}
+            <SkipButton step="coach" carried={carried} />
           </div>
         </>
       ) : null}
@@ -175,6 +214,20 @@ export default async function WelcomePage({
           </div>
         </>
       ) : null}
+
+      {/*
+       * The reset, and the reason PR 8 exists — ADR 0032 §4.
+       *
+       * It was on Hub only, and `app/hub/page.tsx` redirects a user whose
+       * `onboarded_at` is null to THIS page. The demo account's `onboarded_at`
+       * is null by design, so the control that exists to restart the demo could
+       * only be reached by somebody who had finished it. `DemoResetCard` renders
+       * for that one account, and here it is where the account actually is.
+       *
+       * Below the question, for the same reason it is last on Hub: an
+       * irreversible control is not what a thumb should meet first.
+       */}
+      <DemoResetCard email={user.email} from="/welcome" reset={reset} />
     </>
   );
 }

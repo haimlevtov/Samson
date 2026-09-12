@@ -9,7 +9,7 @@
  * the guard that came with it.
  */
 import { describe, expect, it } from 'vitest';
-import { onboardingBodySchema, readBodyForm } from './schema';
+import { isCompleteBody, onboardingBodySchema, readBodyForm } from './schema';
 
 const form = (entries: Record<string, string>): FormData => {
   const data = new FormData();
@@ -103,5 +103,40 @@ describe('the bounds are the diet engine own', () => {
       admin: 'yes',
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('isCompleteBody', () => {
+  /** What the schema makes of a form, which is what the action branches on. */
+  const parse = (entries: Record<string, string>) => {
+    const parsed = onboardingBodySchema.safeParse(readBodyForm(form(entries)));
+    if (!parsed.success) throw new Error('fixture did not parse');
+    return parsed.data;
+  };
+
+  it('accepts all four', () => {
+    expect(isCompleteBody(parse(COMPLETE))).toBe(true);
+  });
+
+  it('refuses three, which is the case that used to loop in silence', () => {
+    /*
+     * THE BUG THIS EXISTS FOR. Every field is nullable, so three answers parse
+     * cleanly and the upsert succeeds — and `hasBiometrics` wants all four, so
+     * `/welcome` re-renders the same step with empty boxes and no message. The
+     * user's own answers leave the screen with nothing to explain why.
+     */
+    for (const missing of Object.keys(COMPLETE)) {
+      const partial = { ...COMPLETE };
+      // Blank, not absent: a blank text input posts '' and the schema reads
+      // that as "clear this", which is exactly what the form sends.
+      partial[missing as keyof typeof COMPLETE] = '';
+      expect(isCompleteBody(parse(partial)), missing).toBe(false);
+    }
+  });
+
+  it('refuses an empty form', () => {
+    expect(isCompleteBody(parse({ bodyweightKg: '', heightCm: '', birthDate: '', sex: '' }))).toBe(
+      false
+    );
   });
 });

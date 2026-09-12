@@ -55,16 +55,37 @@ const SHOWN_TEXT: Record<ShownReason, string> = {
  */
 export function CoachConsole({
   personas,
+  chosenSlug,
   weekLabels,
   voiceAvailable,
 }: {
   personas: ListedPersona[];
+  /**
+   * The coach this user picked in onboarding — `users.persona_slug`, PR 8.
+   *
+   * Null for somebody who has not chosen, and for a slug that no longer names a
+   * listed coach the fallback below catches it. That case is real rather than
+   * defensive: `is_active = false` retires a coach without deleting the row,
+   * which is why the column carries no foreign key.
+   */
+  chosenSlug: string | null;
   /** One label per week of the block, so notes can be shown against them. */
   weekLabels: string[];
   /** Whether the server can speak at all — false with no key configured. */
   voiceAvailable: boolean;
 }) {
-  const [selected, setSelected] = useState(personas[0]?.slug ?? '');
+  /*
+   * The stored choice first, alphabetical only as a fallback — ADR 0031 §5 calls
+   * that fallback what it is, "the first shared, voiced coach alphabetically",
+   * and says it stands in for a column. This is the column.
+   *
+   * Changing it here still lasts one page: persisting the PICKER is PR 6's, and
+   * it needs the voice switch beside it to be worth the write. What changes now
+   * is only which coach the page opens on.
+   */
+  const [selected, setSelected] = useState(
+    personas.find((p) => p.slug === chosenSlug)?.slug ?? personas[0]?.slug ?? ''
+  );
   const [voice, setVoice] = useState<PlayerState>(EMPTY_PLAYER);
   const player = useRef<CoachPlayer | null>(null);
 

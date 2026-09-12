@@ -103,12 +103,18 @@ async function furnish(id: string, marker: string): Promise<void> {
     if (error) throw new Error(`${table}: ${error.message}`);
   };
 
-  const { error: profileError } = await admin
-    .from('users')
-    .upsert(
-      { user_id: id, display_name: marker, bodyweight_kg: 80, diet_goal: 'gain' },
-      { onConflict: 'user_id' }
-    );
+  const { error: profileError } = await admin.from('users').upsert(
+    {
+      user_id: id,
+      display_name: marker,
+      bodyweight_kg: 80,
+      diet_goal: 'gain',
+      // Every onboarding ANSWER, because the reset's job is to make the flow
+      // ask again — see the assertions below.
+      persona_slug: 'old-master',
+    },
+    { onConflict: 'user_id' }
+  );
   if (profileError) throw new Error(`users: ${profileError.message}`);
 
   await put('coach_notes', { text: `${marker} note` });
@@ -302,13 +308,22 @@ describe('reset_demo_account', () => {
 
     const { data } = await admin
       .from('users')
-      .select('display_name, bodyweight_kg, diet_goal, onboarded_at, timezone')
+      .select('display_name, bodyweight_kg, diet_goal, persona_slug, onboarded_at, timezone')
       .eq('user_id', demo.id)
       .maybeSingle();
 
     expect(data?.display_name).toBeNull();
     expect(data?.bodyweight_kg).toBeNull();
     expect(data?.diet_goal).toBeNull();
+    /*
+     * The chosen coach, and the reason it is asserted beside the others rather
+     * than trusted: a column `src/onboarding/steps.ts` reads to decide whether a
+     * step is answered, left behind by the reset, silently shortens the flow the
+     * reset exists to restore. That is not hypothetical — a surviving
+     * `plan_runs` row did exactly this in PR 4, and the plan step was never
+     * offered again.
+     */
+    expect(data?.persona_slug).toBeNull();
     // Cleared, or the next sign-in would skip the welcome flow entirely.
     expect(data?.onboarded_at).toBeNull();
     // Kept: a preference about using the app, not training data.

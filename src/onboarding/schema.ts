@@ -33,6 +33,45 @@ export const onboardingBodySchema = z.strictObject({
 
 export type OnboardingBody = z.infer<typeof onboardingBodySchema>;
 
+/** The same four, with none of them absent. */
+export type CompleteOnboardingBody = {
+  [K in keyof OnboardingBody]: NonNullable<OnboardingBody[K]>;
+};
+
+/**
+ * All four, or none of them counts — and `app/welcome/page.tsx` has said so
+ * since the flow shipped: *"All four or none: a partial profile is what its
+ * three refusals are about, and the step asks for all four together."*
+ *
+ * The code did not enforce it, and the gap was a silent loop rather than an
+ * untidy comment. Every field here is nullable, so three answers PARSE; the
+ * upsert succeeds; `hasBiometrics` stays false because it wants all four; and
+ * `/welcome` re-renders the same step with empty boxes and nothing said. The
+ * user's own answers are off the screen with no explanation of why.
+ *
+ * WHY here rather than as a `.refine` on the schema: the caller needs to tell
+ * this refusal from a BOUNDS refusal, because they are different sentences —
+ * "that did not look right" is wrong for four perfectly good answers, and ADR
+ * 0028 is about exactly that distinction. A predicate the action can branch on
+ * keeps both messages in the caller's hands.
+ *
+ * WHY here rather than in the action: nothing under `app/` is in the unit
+ * suite — `vitest.config.ts` includes `src/**` and `tests/unit/**` — so a rule
+ * written there is a rule nothing can fail on.
+ */
+export function isCompleteBody(body: OnboardingBody): body is CompleteOnboardingBody {
+  return (
+    body.bodyweightKg !== null &&
+    body.heightCm !== null &&
+    body.birthDate !== null &&
+    body.sex !== null
+  );
+}
+
+/** What a partial answer is told, in the app's own words — ADR 0028. */
+export const INCOMPLETE_BODY_MESSAGE =
+  'The coach needs all four of these to work out a calorie target. Fill in the rest, or skip this step.';
+
 /**
  * A field the form sent, or `undefined` when it sent no such field at all.
  *

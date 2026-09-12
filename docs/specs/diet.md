@@ -17,12 +17,21 @@ the numbers in it.
 Four fields on `users`, all of which existed as columns from the phase-0 schema
 and none of which anything read or wrote before phase 6.
 
-| Column          | Type            | Constraint after this PR                | Asked for as                    |
-| --------------- | --------------- | --------------------------------------- | ------------------------------- |
-| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms                       |
-| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres                     |
-| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date                          |
-| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select: blank, plus the three |
+| Column          | Type            | Constraint after this PR                | Asked for as         |
+| --------------- | --------------- | --------------------------------------- | -------------------- |
+| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms            |
+| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres          |
+| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date               |
+| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select — see below |
+
+**`sex` is asked for differently on the two surfaces**, and the column is the
+same on both. Settings offers a blank ("Not set") plus the three, because
+clearing a field is a thing a settings form must allow. `/welcome` offers the
+two sexes and `unspecified` under the label "Prefer not to say", with no blank:
+blank writes null, null leaves the step unanswered, and the flow would re-render
+it with no message — so on that surface declining has to be a VALUE rather than
+an absence. Labels live in `src/ui/sex.ts`; the welcome step used to render the
+raw column values, which showed somebody the word "unspecified".
 
 **The bounds are not cosmetic.** `'NaN'::numeric > 0` is TRUE in PostgreSQL —
 measured against this hosted project and recorded in
