@@ -132,11 +132,6 @@ coach produces an audibly different speaker on any ordinary device. The claim in
 the first paragraph stands: nothing here is a recorded or synthesised persona
 voice. It is the device's voices, allocated so they do not collide.
 
-_Superseded for voice by [ADR 0025](0025-coach-voices.md): the coaches speak
-through a real provider now, and `tts_voice_id` and `tts_voice_variant` were
-dropped on 2026-09-12 (migration `20260912160000`). Everything below is the
-decision as it was taken, and the paragraph on persona-as-tone still holds._
-
 `tts_voice_id` keeps its misleading name for now; renaming a column is a
 migration and a type regeneration for a cosmetic gain. `src/ui/speak.ts` says
 what it actually holds, and `src/ui/speak.test.ts` pins the behaviour that was
@@ -223,3 +218,8 @@ coach needs `2`, not the default `0`, or it speaks in the Old Master's voice.
 > above about variants are history: device voices could not carry five
 > characters, and a coach now speaks in a voice synthesised from a direction in
 > its row, through the gateway. This ADR still governs what a persona may SAY.
+>
+> **And the columns are gone, 2026-09-12** — migration `20260912160000`, rework
+> PR 6d. `tts_voice_id` and `tts_voice_variant` no longer exist, so the
+> paragraphs above about keeping a misleading name and allocating variants
+> describe a schema rather than the schema.

@@ -18,8 +18,10 @@
 -- long as the deploy took, because the old bundle was still selecting them.
 --
 -- So the order is: 6b's code deploys, and only then does this run. Verified
--- before writing it — nothing under `src/`, `app/` or `tests/` names either
--- column, and `main` has carried 6b since 2026-09-11.
+-- before writing it — nothing under `src/`, `app/`, `tests/` or `scripts/` names
+-- either column, and `main` has carried 6b since 2026-09-11. (A merge is not a
+-- deploy: this must not reach hosted until that `main` is actually serving, which
+-- is what makes the contract half of an expand-and-contract safe.)
 --
 -- AI-NOTE: this regenerates `src/db/types.ts`, which CI checks byte for byte
 --          against `supabase gen types typescript --local`. The regeneration

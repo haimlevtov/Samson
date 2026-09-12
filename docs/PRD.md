@@ -205,14 +205,10 @@ language hint (`tts_voice_id`, a BCP-47 tag) and a `tts_voice_variant` saying
 which of the matching voices this coach takes. Persona voice is therefore tone,
 rate and word choice rather than timbre.
 
-**Superseded 2026-09-11 by [ADR 0025](adr/0025-coach-voices.md), and the columns
-are gone as of 2026-09-12.** There IS a voice provider now: the coaches speak
-through the gateway's speech stage, and each row carries `tts_voice` — a voice
-cast for that character — and `tts_instructions`, the direction it is spoken
-with. `tts_voice_id` and `tts_voice_variant` described a device-voice picker that
-no longer exists and were dropped by migration `20260912160000`; the paragraph
-above is kept because it is the reasoning ADR 0025 had to answer, not because any
-of it still holds.
+_The two columns named above were dropped on 2026-09-12 — migration
+`20260912160000`, rework PR 6d. The paragraph is kept because it is the reasoning
+[ADR 0025](adr/0025-coach-voices.md) had to answer, not because any of it still
+holds._
 
 **A coach can be heard before it is chosen (2026-09-11).** Each row also
 carries a sample line, which the Voice card on Coach speaks in that coach's
