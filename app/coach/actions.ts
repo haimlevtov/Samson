@@ -15,7 +15,9 @@ import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
 import { z } from 'zod';
 import { DIET_GOALS, computeEnergy, dietFacts } from '@/src/diet/energy';
 import { loadEvidence } from '@/src/db/evidence';
+import { loadNotes, rememberNote } from '@/src/db/notes';
 import { BudgetExceededError } from '@/src/llm/types';
+import { logLine } from '@/src/llm/failure';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { MAX_TRANSCRIPT_TURNS, chatHistorySchema, type ChatTurn } from '@/src/chat/schema';
@@ -86,12 +88,17 @@ function sayable(result: {
  * form, one action, one call: the route is the model's and the guard that runs
  * is the one belonging to the route it named.
  *
- * INVARIANT: this action has no write path to the user's training data, and
+ * INVARIANT: this action has no write path to the user's TRAINING data, and
  *            adding one would break the guarantees in ADR 0015's table. It
  *            reads the user's own rows, calls one stage, and returns prose or a
- *            shared row. The one insert underneath it is the `llm_calls` ledger
- *            row the gateway writes per attempt, which invariant #3 requires
- *            and which no model chooses the shape of.
+ *            shared row.
+ *
+ *            It makes two inserts, neither of which is training data: the
+ *            `llm_calls` ledger row per attempt that invariant #3 requires, and
+ *            — since ADR 0030 — at most one `coach_notes` row, whose text code
+ *            validated and which the user can delete on Settings. The second
+ *            one is why ADR 0015 §1 no longer says "no database write path";
+ *            see its §7 amendment.
  *
  * INVARIANT: the transcript arriving in `previous` is USER INPUT. It is held by
  *            the client precisely because nothing stores it, so it is parsed by
@@ -210,7 +217,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * message, and an escaped rejection would bypass the generic error state
      * the rest of this action is careful to build.
      */
-    const { rows } = await loadEvidence(db);
+    const [{ rows }, notes] = await Promise.all([loadEvidence(db), loadNotes(db)]);
 
     const answer = await askCoach(
       user.id,
@@ -222,6 +229,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
         // panel renders the refusal in the app's own words instead.
         diet: result.kind === 'ok' ? dietFacts(result) : null,
         evidence: rows,
+        notes: notes.map((note) => note.text),
       },
       { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
     );
@@ -233,6 +241,26 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * a row was found, which is exactly when there is something else to render.
      */
     const spoken = answer.text ?? SUPPLEMENT_ANSWER_TURN;
+
+    /*
+     * The one write this stage can cause — ADR 0030, and the reason ADR 0015's
+     * "no database write path" sentence is retired rather than reworded.
+     *
+     * `answer.remember` has already passed `acceptableNote`; nothing here
+     * re-examines it. `user.id` is the verified session's, never a field.
+     *
+     * WHY its own try/catch: a note is a side effect of an answer the user is
+     * waiting for. A failed insert must not turn a reply they can read into an
+     * error they cannot act on, so it is logged by name and bounded message —
+     * ADR 0028 — and the answer is returned regardless.
+     */
+    if (answer.remember !== null) {
+      try {
+        await rememberNote(db, user.id, answer.remember);
+      } catch (cause) {
+        console.error('coach note not stored', logLine(cause));
+      }
+    }
 
     return {
       turns: trim([...withUser, { role: 'coach', text: spoken }]),
@@ -280,10 +308,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * commonly fill with the request they rejected, and which here means free
      * text this feature's own adversarial list shows can be a health disclosure.
      */
-    console.error(
-      'coach box failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('coach box failed', logLine(cause));
     return {
       turns: trim(withUser),
       result,
@@ -360,10 +385,7 @@ export async function deliverForPersona(
 
     // Name and bounded message only — see `askTheCoach` for what the object
     // carries. This was the third site with the same leak.
-    console.error(
-      'persona delivery failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('persona delivery failed', logLine(cause));
     return {
       ...EMPTY_DELIVERY,
       personaSlug: slug,
@@ -415,10 +437,7 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
     if (reason === 'failed') {
       // Name and bounded message only — `LlmCallFailedError` carries every
       // ledger row, and every row carries the user's id. See `askTheCoach`.
-      console.error(
-        'coach voice failed',
-        cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-      );
+      console.error('coach voice failed', logLine(cause));
     }
     return { ok: false, reason };
   }
@@ -608,10 +627,7 @@ export async function requestPlan(_previous: PlanState, formData: FormData): Pro
 
     // Name and bounded message only — `LlmCallFailedError` carries every ledger
     // row and every row carries the user's id. See `askTheCoach`.
-    console.error(
-      'plan request failed',
-      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
-    );
+    console.error('plan request failed', logLine(cause));
     return {
       ...EMPTY_PLAN,
       outcome: 'failed',

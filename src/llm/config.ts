@@ -37,14 +37,23 @@ export const PERSONA_MAX_TOKENS = 2_000;
 export const NORMALIZER_MAX_TOKENS = 800;
 
 /**
- * One conversational reply — docs/specs/coach-chat.md §2.
+ * One conversational reply, and the note beside it — docs/specs/coach-chat.md §2.
  *
- * WHY it is the smallest ceiling in the file: the schema caps `reply` at 700
- * characters, which is roughly 200 tokens, so 400 is headroom rather than a
- * target. This is also the only stage a user can invoke repeatedly by typing,
- * which makes its ceiling the one that decides what abuse costs.
+ * WHY it is still among the smallest ceilings in the file: the schema caps
+ * `reply` at 700 characters and `remember` at 480, which is roughly 300 tokens
+ * together with the JSON around them. This is also the only stage a user can
+ * invoke repeatedly by typing, which makes its ceiling the one that decides what
+ * abuse costs.
+ *
+ * RAISED FROM 400 when `remember` was added — FOUND IN REVIEW, which caught the
+ * justification above still counting one string. 400 left 25% headroom over a
+ * maximal answer where it used to leave over 100%, and the failure mode is not
+ * graceful: a truncated response that does not parse is deliberately NOT
+ * retryable (see gateway.ts), so the user gets an error rather than a shorter
+ * reply. A ceiling is billed on what is produced, not on what is permitted, so
+ * the headroom costs nothing until it is used.
  */
-export const CHAT_MAX_TOKENS = 400;
+export const CHAT_MAX_TOKENS = 600;
 
 /*
  * `DIET_MAX_TOKENS` (300), `SUPPLEMENT_MAX_TOKENS` (60) and

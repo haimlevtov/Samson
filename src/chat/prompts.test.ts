@@ -16,9 +16,11 @@ import {
   candidatesBlock,
   chatMessages,
   factsBlock,
+  notesBlock,
   numeralCorrection,
   unknownNumberCorrection,
 } from './prompts';
+import { MAX_NOTES, MAX_NOTE_CHARS } from './notes';
 import { COACH_ROUTES, NO_MATCH, coachReplySchema, type ChatTurn } from './schema';
 
 const FENCE = '<<<SAMSON-UNTRUSTED>>>';
@@ -53,7 +55,7 @@ const contentOf = (messages: ChatMessage[]): string => messages.map((m) => m.con
  * the wrong string.
  */
 const payload = (history: ChatTurn[], message: string) =>
-  chatMessages(FACTS, history, message, { diet: null, evidence: [] });
+  chatMessages(FACTS, history, message, { diet: null, evidence: [], notes: [] });
 const msgs = (history: ChatTurn[], message: string) => payload(history, message).messages;
 const allowedFor = (history: ChatTurn[], message: string) => payload(history, message).allowed;
 
@@ -200,7 +202,9 @@ describe('chatMessages — fencing', () => {
   it('fences the coach turns too, and gives the model no assistant channel', () => {
     /*
      * The vector this closes — ADR 0015 section 2. The transcript is
-     * client-supplied, because this stage has no write path to store one in.
+     * client-supplied, because the transcript has no write path to store it in.
+     * (The stage writes one `coach_notes` row per turn at most — ADR 0030 — and
+     * a note is not a turn: it never comes back as history.)
      * A forged coach turn in the assistant role is the strongest jailbreak
      * shape there is and would arrive pre-trusted.
      */
@@ -396,12 +400,20 @@ describe('coachReplySchema', () => {
     expect(Object.keys(coachReplySchema([]).shape)[0]).toBe('route');
   });
 
+  it('declares remember LAST, which schema.ts says carries meaning too', () => {
+    // The mirror of the rule above: the route is committed to before the answer
+    // is written, and what was worth remembering is judged after it — ADR 0030
+    // §1. Reordering either is a behavioural change.
+    expect(Object.keys(coachReplySchema([]).shape).at(-1)).toBe('remember');
+  });
+
   it('admits the sentinel with no rows at all, so an empty table still parses', () => {
     const schema = coachReplySchema([]);
     const parsed = schema.safeParse({
       route: 'supplement',
       reply: 'x',
       supplement_slug: NO_MATCH,
+      remember: '',
     });
     expect(parsed.success).toBe(true);
   });
@@ -416,5 +428,80 @@ describe('coachReplySchema', () => {
       extra: 'anything',
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+/**
+ * The notes block — ADR 0030 §3, and the one property that matters about it.
+ */
+describe('chatMessages — what the coach was told before', () => {
+  const build = (notes: readonly string[]) =>
+    chatMessages(FACTS, [], 'how is it going?', { diet: null, evidence: [], notes });
+
+  it('fences the notes, like every other untrusted block', () => {
+    const { messages } = build(['reported a sore left shoulder']);
+    const block = messages.find((m) => m.content.includes('reported a sore left shoulder'));
+
+    expect(block).toBeDefined();
+    expect(block!.role).toBe('user');
+    // A note is the user's own words, kept by a model's judgement. Both halves
+    // of that are reasons it is data rather than instruction.
+    expect(block!.content).toContain('SAMSON-UNTRUSTED');
+  });
+
+  it('sends no block at all when there is nothing to remember', () => {
+    const { messages } = build([]);
+    expect(messages.some((m) => m.content.includes('kept as notes'))).toBe(false);
+  });
+
+  it('adds nothing to the quotable set', () => {
+    /*
+     * INVARIANT: notes contribute NOTHING to `allowed` — the same reasoning
+     * that keeps coach turns out of it. `acceptableNote` already refuses any
+     * numeral, so a note carrying one can only arrive from a row written before
+     * that rule existed or around it; either way it must not license a figure.
+     */
+    const clean = build([]).allowed;
+    const withNotes = build(['squats 987 kg', 'benched 654 kg last week']).allowed;
+
+    // The set equality is the assertion; the two below name the figures, and
+    // both are absent from FACTS so they can only have come from a note.
+    expect([...withNotes].sort()).toEqual([...clean].sort());
+    expect(clean.has(987)).toBe(false);
+    expect(withNotes.has(987)).toBe(false);
+    expect(withNotes.has(654)).toBe(false);
+  });
+});
+
+describe('notesBlock — the caps the comment spends a paragraph on', () => {
+  it('sends twenty full-length notes without truncating the last one', () => {
+    /*
+     * The whole reason `notesBlock` passes an explicit cap: twenty notes at
+     * MAX_NOTE_CHARS is about 2.4 kB, and `fenceUntrusted`'s DEFAULT is
+     * MAX_UNTRUSTED_CHARS (2,000) — so the block would arrive cut mid-sentence.
+     * A note cut in half can invert its meaning, which is what MAX_CLAIM_CHARS
+     * records happening to the evidence rows.
+     */
+    const notes = Array.from({ length: MAX_NOTES }, (_, n) =>
+      `note ${String.fromCharCode(97 + n)}`.padEnd(MAX_NOTE_CHARS, 'x')
+    );
+    const block = notesBlock(notes);
+
+    expect(block).not.toContain('[truncated');
+    expect(block).toContain(notes.at(-1)!);
+    expect(block).toContain(notes[0]!);
+  });
+
+  it('sends at most MAX_NOTES, whatever it is handed', () => {
+    // The count was bounded in a different file until review — a cap is worth
+    // nothing if the function holding it can be called wrongly.
+    const many = Array.from(
+      { length: MAX_NOTES * 3 },
+      (_, n) => `note number ${'y'.repeat(n + 1)}`
+    );
+    const block = notesBlock(many);
+
+    expect(block).toContain(`note number ${'y'.repeat(1)}`);
+    expect(block).not.toContain(`note number ${'y'.repeat(MAX_NOTES + 1)}`);
   });
 });

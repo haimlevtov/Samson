@@ -7,6 +7,7 @@ import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { readSettingsForm, settingsSchema } from '@/src/settings/schema';
 import { equipmentCatalogue, replaceEquipment } from '@/src/db/equipment';
 import { equipmentSelection } from '@/src/settings/equipment';
+import { forgetNote } from '@/src/db/notes';
 import { logLine } from '@/src/llm/failure';
 import type { SettingsFormState } from './form-state';
 
@@ -194,4 +195,46 @@ export async function saveEquipment(
    */
   revalidatePath('/', 'layout');
   return { error: null, saved: true };
+}
+
+/**
+ * Removes one thing the coach remembers — ADR 0030 §4.
+ *
+ * INVARIANT: `user_id` comes from the verified session, and `coach_notes_own`
+ *            independently rejects a delete of anyone else's row — CLAUDE.md
+ *            #10. The id from the form is a filter, never an authorisation.
+ *
+ * WHY it returns no form state: this is a bare `<form action>` on a server
+ * component, which is what keeps /settings free of client state. A failure
+ * redirects back with a flag instead, and the page renders a sentence from it.
+ *
+ * FOUND IN REVIEW: it used to just log and return, on the argument that the
+ * note still being listed WAS the report. It is not — the user cannot tell that
+ * from a mis-tap, and docs/specs/mobile-interface.md §4 exists to prevent
+ * exactly "nothing happens".
+ */
+export async function forgetCoachNote(formData: FormData): Promise<void> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const id = String(formData.get('noteId') ?? '');
+  if (id === '') redirect('/settings?forget=failed');
+
+  try {
+    await forgetNote(db, user.id, id);
+  } catch (cause) {
+    console.error('coach note not deleted', logLine(cause));
+    // The id is NOT echoed back into the URL: it identifies a row, and a note
+    // is health-adjacent text about a person. A flag is all the page needs.
+    redirect('/settings?forget=failed');
+  }
+
+  /*
+   * No `revalidatePath` — FOUND IN REVIEW, and the two that were here were both
+   * no-ops dressed as caution. /settings is `force-dynamic`, so it is rebuilt on
+   * every request anyway, and /coach renders no notes at all: `askTheCoach`
+   * reads them at call time, which no cache invalidation can help or hurt.
+   */
+  redirect('/settings');
 }

@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
+import { loadNotes } from '@/src/db/notes';
 import { userEquipment } from '@/src/db/exercises';
 import { EquipmentForm } from './EquipmentForm';
 import { SettingsForm } from './SettingsForm';
 import { SignOutButton } from './SignOutButton';
+import { forgetCoachNote } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +47,24 @@ function knownTimezones(): string[] {
  *          invariants.test.ts asserts every route in OWNED_BY is linked from
  *          somewhere under app/, which is the check that catches it.
  */
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  // A failed Forget redirects back with this — see `forgetCoachNote`. It carries
+  // no id: a note is health-adjacent text about a person and does not belong in
+  // a URL, which is shared, logged and kept in history.
+  searchParams: Promise<{ forget?: string }>;
+}) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const [tags, owned] = await Promise.all([equipmentCatalogue(db), userEquipment(db, user.id)]);
+  const { forget } = await searchParams;
+  const [tags, owned, notes] = await Promise.all([
+    equipmentCatalogue(db),
+    userEquipment(db, user.id),
+    loadNotes(db),
+  ]);
 
   const zones = knownTimezones();
   // A stored zone this runtime does not list would otherwise vanish from the
@@ -110,6 +124,67 @@ export default async function SettingsPage() {
       <div className="card settings-body">
         <EquipmentForm tags={tags} owned={owned} />
       </div>
+
+      {/*
+       * What the coach remembers — ADR 0030 §4.
+       *
+       * WHY it is here and not on Coach: a list you audit and prune is a thing
+       * you manage about yourself, which is what this route is for (ADR 0013's
+       * amendment), and the Coach tab is where you talk to it rather than where
+       * you administer it. It sits after Equipment because both are "facts about
+       * me the app acts on", and before Account because Account is the
+       * irreversible corner.
+       *
+       * A bare `<form action>` per note: no client state, no confirmation step.
+       * Deleting one note is not destructive in the way signing out is — it is
+       * one sentence, the coach simply stops being told it, and nothing else in
+       * the app reads these rows.
+       */}
+      <h2 className="section">What the coach remembers</h2>
+      {forget === 'failed' ? (
+        // Every state renders something — docs/specs/mobile-interface.md §4.
+        // "Still listed" is indistinguishable from a mis-tap without this.
+        <p className="card error" role="status">
+          That note could not be forgotten. Try again in a moment.
+        </p>
+      ) : null}
+      {notes.length === 0 ? (
+        // Every state renders something — docs/specs/mobile-interface.md §4.
+        // And this is the honest normal state for most users: the coach keeps
+        // very little, which is the point.
+        <p className="card muted">
+          Nothing yet. When you tell the coach something about yourself — a sore shoulder, a lift
+          you want to bring up — it may keep a short note here.
+        </p>
+      ) : (
+        <div className="card">
+          <ul className="note-list">
+            {notes.map((note) => (
+              <li key={note.id}>
+                <span>{note.text}</span>
+                <form action={forgetCoachNote}>
+                  <input type="hidden" name="noteId" value={note.id} />
+                  {/*
+                   * Every note has a Forget button, so the accessible name has
+                   * to say WHICH note it forgets — the same rule Hub's Accept
+                   * buttons follow. A clipped span rather than an `aria-label`,
+                   * because an overriding label would not contain the visible
+                   * word (WCAG 2.5.3) — the finding from PR 1's Try button.
+                   */}
+                  <button type="submit" className="secondary">
+                    Forget
+                    <span className="sr-only">: {note.text}</span>
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+          <p className="muted small">
+            The coach keeps at most twenty of these, newest first, and never a number. Forgetting
+            one removes it for good.
+          </p>
+        </div>
+      )}
 
       {/*
        * Sign out is its own card, away from the form.

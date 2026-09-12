@@ -42,8 +42,10 @@ and did not yet have to solve, because until now there was no free-text box.
 
 ### 1. The stage can only speak — structural
 
-The chat gets **no tools, no database write path, and no way to reach the
-planner.** It receives a fenced, code-built summary of the user's own metrics
+The chat gets **no tools and no way to reach the planner.** It had no database
+write path either, and that sentence stood here until 2026-09-12 —
+[ADR 0030](0030-what-the-coach-remembers.md) gave it one, deliberately and
+narrowly, and the amendment at the foot of this file says what changed. It receives a fenced, code-built summary of the user's own metrics
 and the recent transcript. That is the entire input, and prose is the entire
 output.
 
@@ -214,7 +216,8 @@ following as the actual guarantees:
 | Claim                                                 | Status                                                                                                                                                              |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The chat cannot read another user's data              | **Guaranteed** — no tool, no query, RLS underneath                                                                                                                  |
-| The chat cannot write to the user's training data     | **Guaranteed** — no such write path exists                                                                                                                          |
+| The chat cannot write to the user's training data     | **Guaranteed** — nothing it can reach is training data. See §7                                                                                                      |
+| The chat cannot persist anything                      | **No longer true** — one validated, user-removable sentence per turn. [ADR 0030](0030-what-the-coach-remembers.md), §7 below                                        |
 | The chat cannot change a number the app shows         | **Guaranteed** — those come from `src/metrics/`                                                                                                                     |
 | A refusal's wording cannot be altered by the user     | **Guaranteed** — it is a constant                                                                                                                                   |
 | Every numeral in a reply appeared in what it was fed  | **Enforced** — guard, retry, then a code-owned message                                                                                                              |
@@ -370,3 +373,34 @@ the empty allowed set by changing its mind about what the question was.
   ceilings if their stages lose their callers. Whichever ceiling the one box
   runs under has to be the largest of the three it replaces, or the answer it
   gives is quietly shorter than the panel it replaced.
+
+## Amendment, 2026-09-12 — §7: the coach remembers, and the guarantee narrows
+
+[ADR 0030](0030-what-the-coach-remembers.md) is the decision and the reasoning.
+This section exists because §1 and the guarantee table above were written to be
+read on their own, and both were wrong the moment memory shipped.
+
+**What §1 said:** no tools, no database write path, no way to reach the planner —
+and that this was the layer that IS a guarantee. **What is true now:** one of
+those three is gone. The chat stage can cause a row in `coach_notes`.
+
+**What is unchanged, and it is most of it.** The model still cannot call
+anything; it fills a `remember` field, and code decides whether that becomes a
+row. It cannot write anywhere else, cannot read another user's rows, cannot move
+a figure the app displays, and cannot author a refusal. A note is at most 120
+characters, carries no numeral in any script and no spelled figure with a
+training unit on it, cannot duplicate one already held (invisible characters
+stripped first),
+is capped at twenty newest-kept, and is deleted by the user on Settings whenever
+they like.
+
+**What it costs to say plainly:** _"a jailbroken chat cannot persist anything"_
+was the sentence this ADR's table was quoted for, and it is retired rather than
+reworded. The replacement is narrower and duller — a jailbroken chat can persist
+one short, numeral-free, scanned sentence that the user can delete — and the
+report must use that one.
+
+**And one thing got stronger, in the same week.** `remember` is a string leaf of
+the completion, so [ADR 0005](0005-llm-safety.md)'s 2026-09-12 amendment scans it
+like any other: an unsafe note fails the whole call rather than being stored. The
+note channel cannot carry text past layer 4 that `reply` could not.

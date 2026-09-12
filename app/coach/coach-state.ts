@@ -14,11 +14,15 @@
  *
  * WHY nothing here is persisted, in two parts, because the reasons differ:
  *
- * - **The transcript** is client-held because the stage has no database write
- *   path, and that absence is a load-bearing part of ADR 0015 §1 — it is why a
- *   jailbroken box cannot persist anything. The cost is that it arrives as
+ * - **The transcript** is client-held because there is no write path for it,
+ *   which is a load-bearing part of ADR 0015 §1. The cost is that it arrives as
  *   untrusted input and is parsed by `chatHistorySchema` and fenced turn by
  *   turn. That trade is argued in the ADR.
+ *
+ *   _This used to say the absence was "why a jailbroken box cannot persist
+ *   anything". ADR 0030 retired that sentence: the box can now persist one
+ *   validated, user-removable note. The TRANSCRIPT still has no write path, and
+ *   every consequence above still follows from that._
  * - **The figures** are a pure function of the Settings values and today's
  *   date, so storing them would create a second source of truth that goes stale
  *   the moment a weight changes — `docs/plans/phase-6.md`, "what is
