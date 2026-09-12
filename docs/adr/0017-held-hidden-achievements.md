@@ -187,15 +187,61 @@ achievement is added.
 
 - **It never selects `predicate`.** That column is the SQL an achievement is
   evaluated with (ADR 0009) and `achievements_read_visible` grants the row, so a
-  careless `select('*')` would hand every visible badge's SQL to the browser. The
-  `description` is what a person reads as the unlock condition; the predicate is a
-  description of the schema.
+  careless `select('*')` would hand every visible badge's SQL to the browser.
+  What a person reads as the unlock condition is `how_to_earn` — below; the
+  predicate is a description of the schema.
 - **It respects the user's humour ceiling for badges they have NOT earned.** Every
   shipped achievement is `clean` or `cheeky` today, so this changes nothing yet —
   but the catalogue is the first surface to show UNEARNED names, and a future
   `crude` row would otherwise reach a user who chose `clean`. An earned badge is
   shown regardless: Profile already shows it, and hiding something a person holds
   would be the failure this ADR was written to end.
+
+### "How to earn it" is a column, because the description is not one
+
+The plan for this PR said the `description` is what the user reads as the unlock
+condition, and that a row whose description did not stand on its own for an
+unearned badge was a content bug to be named. **Read against the eleven shipped
+rows, every one of them is.** A description is written for the moment of
+earning — "You trained on the first of January. Most of the gym was there too;
+you came back on the second." That is a reward, in the past tense, addressed to
+somebody who has it. Shown to somebody who does not, it is a sentence about a
+thing they did not do.
+
+Some are also not the condition. `hundred-tonnes` says "a hundred thousand
+kilograms moved"; its predicate also requires thirty separate logged days, which
+is the part that makes it a badge about habit rather than one heavy month
+(`docs/specs/xp-and-challenges.md`). `new-years-day` says "you trained", and a
+planned rest day on the first of January earns it too.
+
+**Rewriting the descriptions was rejected**: it would take the reward copy away
+from everybody who already holds a badge in order to serve the people who do
+not. So there are two texts, for two moments:
+
+| Column        | Read by                 | Tense                             |
+| ------------- | ----------------------- | --------------------------------- |
+| `description` | the person who holds it | what you did                      |
+| `how_to_earn` | the person who does not | what to do, true to the predicate |
+
+`how_to_earn` is **content, and lives in the row** (CLAUDE.md #7) — never prose
+the component invents. It is **required on every shared row** by a CHECK, so the
+next achievement migration that forgets it fails when it is applied rather than
+rendering a blank card. A user-owned row may omit it: its predicate is never
+executed (ADR 0009 §3), so it can never be earned and the catalogue does not
+list it.
+
+**It is as secret as the rest of the definition.** A hidden badge's `how_to_earn`
+is withheld by the same policy that withholds its name — it is a column on a row
+the client never receives. `unlocked_achievements()` does not return it, so a
+held hidden badge shows its description, which is what Profile already shows.
+
+### Where the catalogue lives
+
+**`/badges`, a route Profile owns** — the arrangement `/settings` and
+`/progression-trees` already have, and not a sixth tab (ADR 0012's budget). The
+Badges section on Profile links to it, and so does every badge card there, since
+a badge is the thing a person taps expecting to learn about it. It lists **shared
+rows only**: the badges the evaluator can actually award.
 
 ## Related
 

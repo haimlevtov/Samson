@@ -89,14 +89,14 @@ against "how did last month go" and could only lose.
 
 **Profile — `/profile`**
 
-| Rank | What                                                                          |
-| ---- | ----------------------------------------------------------------------------- |
-| 1    | Level, and progress into the next one                                         |
-| 2    | Streak and adherence — the retention numbers, per PRD §3                      |
-| 3    | XP this week against the ceiling                                              |
-| 4    | Badges, and the link into the progression trees                               |
-| 5    | Tonnage and what it weighs as much as, acute:chronic, weekly chart, best e1RM |
-| 6    | — (settings moved to `/settings`; the cog is in the header)                   |
+| Rank | What                                                                           |
+| ---- | ------------------------------------------------------------------------------ |
+| 1    | Level, and progress into the next one                                          |
+| 2    | Streak and adherence — the retention numbers, per PRD §3                       |
+| 3    | XP this week against the ceiling                                               |
+| 4    | Badges — each one, and the section, open `/badges` — and the progression trees |
+| 5    | Tonnage and what it weighs as much as, acute:chronic, weekly chart, best e1RM  |
+| 6    | — (settings moved to `/settings`; the cog is in the header)                    |
 
 **A consequence worth stating:** the stat tiles are equal in weight and are not
 equal in rank. Streak and adherence are the mechanic the product retains people
@@ -120,6 +120,12 @@ not want a lower slot; it wants a door.
 tab bar — five is the budget ADR 0012 set — so deleting that link orphans the
 page without breaking a build. `tests/unit/invariants.test.ts` asserts every
 route in `OWNED_BY` is linked from somewhere under `app/`.
+
+**`/badges` is the catalogue**, and Profile owns it the way it owns
+`/settings`. Ranked: what you hold, newest first — the one you just earned is the
+one you came to look at; then what is still to get, alphabetically, each with
+how to earn it; then how many hidden ones are left. Earned comes first because a
+list that opens on everything you lack is a list of failures.
 
 **Disclosures.** Where a section is demoted rather than deleted — the coach's
 accepted plan, the session quick-log — it goes behind a native `<details>`, not
@@ -310,6 +316,9 @@ section exists to prevent.
 | **Voice refused or fails**        | The reason, then the line — the week's budget spent, no voice, or the call failed. Blocked playback: "Tap again to play."                                                                                                                                                                                    |
 | **A reply is spoken**             | The switch sits above the chat box, off by default, naming the voice ("Read the answers aloud — The Analyst") and saying what it costs. Once a clip plays: "In The Analyst's voice." Blocked playback shows the sentence above and a Tap to play button INSTEAD of the name — never both.                    |
 | **A reply is not spoken**         | The written reply always stays. The reason renders beside it: no key, budget spent, too long to read aloud, or the voice did not come through — which also covers running out of time and a press too soon after the last. An answer the app substituted for the coach's is never spoken.                    |
+| **No badge earned yet**           | The Earned section says so and points at the list below it. An empty heading reads as a failed load.                                                                                                                                                                                                         |
+| **Every visible badge earned**    | "Every badge on the list is yours." — a state, not a blank section.                                                                                                                                                                                                                                          |
+| **Hidden badges left to find**    | "2 hidden badges left to find." and nothing about which. One is "1 hidden badge". When none are left and the user holds one, "You found every hidden badge." When none exist, nothing.                                                                                                                       |
 | **Offline / request fails**       | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                                                                                                                                                                                                    |
 
 **The rule behind the table:** the app never says a number it has not computed,

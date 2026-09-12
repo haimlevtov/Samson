@@ -273,6 +273,15 @@ This section previously said the definitions are "never sent to the client",
 which read as a privacy promise and was really a description of a policy; the
 effect was that unlocking a secret badge showed you nothing at all.
 
+**Every badge, and how to earn it — built 2026-09-12**, at `/badges`, reached
+from Profile's Badges section and from any badge on it. What you hold, newest
+first; every badge you do not, with what to do to earn it; and, for hidden ones,
+**only how many are left to find** — never which. The "how to earn it" text is
+its own column, written to match the unlock condition, because a badge's
+description is written for the person who already has it
+([ADR 0017](adr/0017-held-hidden-achievements.md)'s 2026-09-12 amendment). A
+badge above your humour setting is not listed until you earn it.
+
 Every completion is verified server-side. Nothing can be granted from the
 client, and submitted loads face plausibility checks — an empty bar spammed for
 reps must not unlock a volume badge. The volume badge additionally requires its
