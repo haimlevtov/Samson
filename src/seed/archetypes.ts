@@ -326,6 +326,27 @@ const HOME_GYM_PROGRAMME: ProgrammeEntry[] = [
 ];
 
 /** The five cases PLAN.md names. */
+/**
+ * The archetype seeded WITHOUT an accepted plan — rework PR 8b.
+ *
+ * Its Coach tab shows the questionnaire instead of a block, which is the only way
+ * that state is reachable on a seeded database. The inconsistent archetype is the
+ * one it should be for a reason about the character rather than convenience:
+ * somebody who misses half their sessions is the likeliest of the five not to
+ * have got round to asking for a plan, and it exercises the state with the
+ * thinnest history.
+ *
+ * WHY it lives here rather than in scripts/seed.ts, where it was: a test that
+ * checks the key against this list has to import the list, and importing the
+ * SCRIPT runs its `main()` — which called `process.exit(1)` in CI with no
+ * environment. FOUND BY CI, and the test's own comment had claimed a dynamic
+ * import avoided it. It does not; importing a module executes it.
+ *
+ * AI-NOTE: four accepted plan_runs rows, not five. A test or a demo script that
+ *          assumes every seeded user has a plan will be wrong about this one.
+ */
+export const PLANLESS_ARCHETYPE = 'inconsistent';
+
 export const ARCHETYPES: Archetype[] = [
   {
     key: 'beginner',

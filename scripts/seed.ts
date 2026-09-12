@@ -18,6 +18,7 @@ import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   ARCHETYPES,
+  PLANLESS_ARCHETYPE,
   generateHistory,
   outOfGrant,
   templatesFor,
@@ -187,15 +188,6 @@ async function seedCatalogue(admin: Admin, snapshot: Snapshot): Promise<Map<stri
 
 /** Four weeks is long enough to show progression, short enough to read on a phone. */
 const PLAN_WEEKS = 4;
-
-/**
- * The archetype seeded WITHOUT an accepted plan — rework PR 8b.
- *
- * Its Coach tab shows the questionnaire instead of a block, which is the only
- * way that state is reachable on a seeded database. See the branch below for why
- * this archetype and not another.
- */
-export const PLANLESS_ARCHETYPE = 'inconsistent';
 
 /**
  * Compound patterns first, so the seeded plan reads like training.
