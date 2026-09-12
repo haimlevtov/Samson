@@ -282,27 +282,29 @@ distance from the screen edge; the measurement is
 Every state below must render something. "Nothing happens" is the failure this
 section exists to prevent.
 
-| State                         | What the user sees                                                                                                                                                            |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Set logging**               | The row's tick shows a pending mark and the row is locked. It does not vanish or move.                                                                                        |
-| **Set logged**                | The row turns green with a filled tick, and the rest timer starts counting — that _is_ the confirmation, and it is what they need next.                                       |
-| **Set un-ticked**             | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                                                                     |
-| **Start pressed mid-session** | The session already running opens, rather than a second one. Nothing is created and nothing logged is orphaned.                                                               |
-| **No previous session**       | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                                                                   |
-| **Rest finished**             | The timer turns green and the device says "Rest over." — or beeps where it cannot speak. No coach's voice, on purpose: ADR 0025.                                              |
-| **Nothing added yet**         | "No exercises yet." plus the add control. Never an empty grid with headers.                                                                                                   |
-| **Log failed**                | The server's message, inline, and **the form keeps its values**. Retyping a weight while out of breath is the worst possible recovery.                                        |
-| **Search matches nothing**    | "Nothing matches. Only equipment you own is listed." — names the reason, since an empty list otherwise reads as a broken app.                                                 |
-| **User owns no equipment**    | Explains that no equipment is recorded and what fixes it. Never an empty picker with no explanation.                                                                          |
-| **Row ticked while empty**    | "Fill in reps first." on the row. Nothing is written; a zero-rep set is not a set.                                                                                            |
-| **Metric not yet computable** | An em dash plus what is missing — "12/28 days of history". A blank is honest; a zero is a claim.                                                                              |
-| **Nothing lifted this week**  | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                                                            |
-| **No loaded sets yet**        | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.                                                     |
-| **e1RM above 12 reps**        | Blank, per the Epley cutoff. The hint explains why.                                                                                                                           |
-| **No coach voice**            | No key, or a coach with no voice (a user's own row): the reason, then the line as text, and no Try button.                                                                    |
-| **Voice loading**             | "Finding…" on the button, which stays pressable: a second press joins the call already in flight. The coach's name is in the button's accessible name, not its visible label. |
-| **Voice refused or fails**    | The reason, then the line — the week's budget spent, no voice, or the call failed. Blocked playback: "Tap again to play."                                                     |
-| **Offline / request fails**   | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                                                                     |
+| State                            | What the user sees                                                                                                                                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Set logging**                  | The row's tick shows a pending mark and the row is locked. It does not vanish or move.                                                                                              |
+| **Set logged**                   | The row turns green with a filled tick, and the rest timer starts counting — that _is_ the confirmation, and it is what they need next.                                             |
+| **Set un-ticked**                | The `sets` row is deleted and its values return to a pending row. A mis-tap never costs a retyped weight.                                                                           |
+| **Start pressed mid-session**    | The session already running opens, rather than a second one. Nothing is created and nothing logged is orphaned.                                                                     |
+| **No previous session**          | An em dash in `PREVIOUS`. A blank column reads as a broken lookup; a zero would be a claim.                                                                                         |
+| **Rest finished**                | The timer turns green and the device says "Rest over." — or beeps where it cannot speak. No coach's voice, on purpose: ADR 0025.                                                    |
+| **Nothing added yet**            | "No exercises yet." plus the add control. Never an empty grid with headers.                                                                                                         |
+| **Log failed**                   | The server's message, inline, and **the form keeps its values**. Retyping a weight while out of breath is the worst possible recovery.                                              |
+| **Search matches nothing**       | "Nothing matches. Only equipment you own is listed." — names the reason, since an empty list otherwise reads as a broken app.                                                       |
+| **User owns no equipment**       | Explains that no equipment is recorded and what fixes it. Never an empty picker with no explanation.                                                                                |
+| **Welcome answer partly filled** | The step says it needs all four and keeps what was typed. Saving three of them looked like success and re-rendered the step blank, which is the shape this table exists to prevent. |
+| **No coach rows to offer**       | The coach step says so and lets the user past. A step whose question has no possible answer would stick the flow.                                                                   |
+| **Row ticked while empty**       | "Fill in reps first." on the row. Nothing is written; a zero-rep set is not a set.                                                                                                  |
+| **Metric not yet computable**    | An em dash plus what is missing — "12/28 days of history". A blank is honest; a zero is a claim.                                                                                    |
+| **Nothing lifted this week**     | `0 kg`, not a dash. The week's tonnage is computed and it is zero — a true claim, so the row above does not apply.                                                                  |
+| **No loaded sets yet**           | "Nothing to chart yet" and why: warm-ups and bodyweight count as zero. "No sets logged" is false for a bodyweight lifter.                                                           |
+| **e1RM above 12 reps**           | Blank, per the Epley cutoff. The hint explains why.                                                                                                                                 |
+| **No coach voice**               | No key, or a coach with no voice (a user's own row): the reason, then the line as text, and no Try button.                                                                          |
+| **Voice loading**                | "Finding…" on the button, which stays pressable: a second press joins the call already in flight. The coach's name is in the button's accessible name, not its visible label.       |
+| **Voice refused or fails**       | The reason, then the line — the week's budget spent, no voice, or the call failed. Blocked playback: "Tap again to play."                                                           |
+| **Offline / request fails**      | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                                                                           |
 
 **The rule behind the table:** the app never says a number it has not computed,
 and never implies success it has not had. Both are invariant #1 seen from the

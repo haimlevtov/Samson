@@ -216,6 +216,21 @@ a different PR and it needs a column._
 
 ### 5. The voice is the default coach, and it is named on the card
 
+> **Amended 2026-09-12 by rework PR 8 — the column this section asked for
+> exists.** `users.persona_slug` shipped with the welcome flow's coach step, and
+> the session voice reads it: the coach who speaks is the one the user picked,
+> when that coach is shared and voiced, and the alphabetical rule below is the
+> fallback for somebody who has not chosen. The paragraph that follows is kept
+> because the reasoning is what a reader needs, and because the fallback it
+> describes is still what runs for a user who skipped the question.
+>
+> **Half of what this section asked for is still missing, and that is worth
+> saying plainly.** It asked for "a column **and a settings control**". There is
+> a column with exactly one writer — the welcome step. The Coach tab's picker
+> still dies with the page, so a coach changed there does not persist, and
+> Settings has no control at all. Changing your mind permanently means the
+> welcome flow, which a user who has finished it cannot reach. That is PR 6's.
+
 There is **no stored persona choice** — `users` has no such column, and the Coach
 tab's picker is component state that dies with the page. So the session coach
 speaks as the first **shared, voiced** persona alphabetically.
@@ -231,6 +246,13 @@ same underlying gap — there is no persona to name until one has spoken._
 _Persisting the choice is a column and a settings control, and it belongs with
 whatever change wants it on more than one screen. Guessing here would have been
 inventing a preference the user never expressed._
+
+_The column arrived with rework PR 8 — see the amendment at the head of this
+section. The divergence the first correction above describes is closed for the
+session card, which now resolves the stored choice through `openingCoach` over
+the voiced shared coaches. It is NOT closed for the Coach tab, whose picker
+lists every active persona including a user's own: that tab opens on the stored
+choice and then drifts within the page as before._
 
 ### 6. Confinement is unchanged
 

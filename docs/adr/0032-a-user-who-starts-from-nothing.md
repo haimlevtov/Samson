@@ -87,6 +87,13 @@ lands on maintain — so nothing that reads it changes behaviour.
 
 ### 4. The reset is on the main page, for one account, and deletes only its own rows
 
+> **Superseded in part — read the two amendments below this section before
+> relying on anything in it.** The placement changed twice on 2026-09-12 (it is
+> one button on `/sign-in` now), the typed confirmation is gone, and the gate is
+> `raw_app_meta_data` rather than an email. The bullets below are kept as
+> written, because what they argued is why the later decisions went the way they
+> did — but three of them no longer describe the shipped control.
+
 The owner asked for it on the main page, for demo convenience. The plan that led
 here moved it to Profile and flagged the departure for an overrule; **the
 owner's version is the one that ships**, and the reasoning holds up: the control
@@ -147,7 +154,13 @@ other user reaching a capability the policies deliberately withhold.
 
 **Both properties now hold, and they are different.** The function cannot be
 pointed at another user, because it takes no argument. And it cannot be called by
-another user at all, because it checks the caller's own address.
+another user at all, because it checks a mark on the caller's own account.
+
+_That sentence said "checks the caller's own address" until 2026-09-12, and it
+was already false when it was written down here: the migration that replaced the
+email gate says in as many words "the email is no longer load-bearing anywhere in
+this function". An ADR that names the wrong gate invites the next reader to
+restore it._
 
 ### The main page was the wrong main page — amended 2026-09-12, rework PR 8
 
@@ -208,25 +221,36 @@ review found them disagreeing twice. With nothing rendering them they were two
 dead arrays and an AI-NOTE describing a screen that no longer exists, which is a
 worse guard than none: it reads as maintained.
 
-### Sex is asked for as three options, not two
+### Sex is two options, because the calorie target is computed from it
 
-The owner asked for "male or female only" and the plan entry for this PR wrote
-that down as "the welcome control offers the two". It offers three, and the
-departure is recorded here rather than left in a source comment.
+The owner asked for "male or female only". I shipped three — the two plus
+`unspecified` under the label "Prefer not to say" — arguing that a health
+profile should carry a way to decline, and wrote that argument into this ADR.
 
-What was there was worse than either reading: a blank option ON TOP of `SEXES`
-rendered raw, so the list read "Prefer not to say / male / female /
-unspecified" — four entries, two of which mean the same thing, and only one of
-those two counting as an answer. Blank writes null, `hasBiometrics` wants a
-value, and the step then re-renders with nothing said.
+**The owner overruled it, with the reason: "this is for scientific calculation,
+its a must".** That is correct on the merits and my version was the weaker one.
+`mifflinStJeor` selects its constant by sex (ADR 0024 §3), so a calorie target
+computed from `unspecified` is a figure derived from a value nobody stated. It
+is SAFE — `unspecified` takes the higher of the two constants, so it never
+under-feeds anybody — and being safe is not the same as being an answer. This
+project's whole position is that a number the user sees is computed from real
+inputs; a shrug is not one.
 
-So the two SEXES are the two on offer, and the third entry is named as a
-declining rather than as a sex. The value behind it is `unspecified`, which has
-existed since ADR 0024 §3 with a defined behaviour — it takes the higher of the
-two Mifflin constants, so it never under-feeds anybody. A health profile with no
-way to decline is not something this project will ask for, and it does not have
-to: Settings keeps its blank, and `/welcome` cannot, because on that surface
-blank leaves the step unanswered.
+So onboarding collects male or female and the step stays skippable, which is
+where declining lives.
+
+**The control needs one thing the instruction does not mention, and it is not a
+third option.** A two-option `<select>` with no placeholder preselects the
+first, so a user who never touched the field would be recorded as male. The
+control starts on an empty "Choose one" and is `required`, so exactly two values
+can be submitted and neither can be submitted by accident. The server refuses a
+blank regardless — `isCompleteBody` — because a required attribute is a
+convenience rather than a control.
+
+**`unspecified` remains a valid COLUMN value**, and that is deliberate rather
+than an oversight: the CHECK admits it, `src/diet/energy.ts` has a constant for
+it, rows already carry it, and Settings must be able to show what is stored. The
+ban is on COLLECTING it in onboarding.
 
 ### A sixth question, and the column three things had been waiting for
 

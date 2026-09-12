@@ -148,6 +148,24 @@ says so when it does not.**
 
 ## Consequences
 
+> **Amended 2026-09-12, rework PR 8 — the days-a-week bound.** The block-weeks
+> cap has a sibling this ADR never mentioned: `PLAN_DAYS_PER_WEEK`, which was
+> `[2,3,4,5,6]` against a planner schema admitting 1 to 7. The reason given in
+> code was that seven "leaves no rest day, **which the rules reject anyway**".
+> That second clause was **false** — `src/planner/rules.ts` holds six rules and
+> not one of them looks at rest — so an option the owner wanted was withheld
+> behind a claim nothing enforced. It is 1 to 7 now, the same bound the schema
+> has, so the two cannot disagree about what a week is.
+>
+> The reservation is recorded rather than acted on. `docs/FRAMING.md` names the
+> user's body as a stakeholder that cannot complain, and seven days with no rest
+> day is the kind of plan this project has been careful about. What still bounds
+> it is arithmetic that runs either way: `acwr_band` and
+> `weekly_volume_increase` cap how fast load climbs however many days it is
+> spread over. So it is unwise rather than unsafe, it is the user's own
+> training, and the control says what seven costs instead of pretending the
+> option does not exist.
+
 - `generatePlan` takes an optional fifth argument. Every existing caller is
   unchanged, and the eval must stay unchanged — it is a graded output.
 - `app/coach/page.tsx` gains an explicit `maxDuration`. Relying on a platform

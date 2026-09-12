@@ -19,7 +19,7 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 
 | Column | Notes |
 | --- | --- |
-| `slug` | stable, lowercase, never reused |
+| `slug` | stable, lowercase, never reused — and it is STORED on users now, see below |
 | `name` | what the persona menu on Coach lists — "The Rival" |
 | `system_prompt` | a description of a **character**, see below |
 | `tts_voice` | the speech model's voice name, e.g. `Algenib`; 64 characters at most. **See §2** |
@@ -30,6 +30,11 @@ shared-content pattern the exercise catalogue uses — `personas_read` is
 | `sample_line` | what the Coach tab's Voice card speaks when a coach is previewed. See below |
 
 ### `sample_line` is the coach's first impression
+
+_Since rework PR 8 it is **read as well as heard**: the welcome flow's coach step
+renders it as text under each coach's name, which is the first screen a new user
+sees. Write it to work both ways — a line that only lands when performed will sit
+flat on that list._
 
 A few short sentences, 280 characters at most, in the character's own voice —
 it is spoken, so write it to be heard. The same rules bind it as bind every
@@ -51,6 +56,19 @@ the character's description and will not take effect the way you expect.
 
 > Good: "Short, clipped sentences. Dry rather than loud — never shouting."
 > Bad: "You must respond in under three sentences and never use exclamation marks."
+
+### Retiring a coach leaves stored slugs behind
+
+`users.persona_slug` holds the coach a user picked in onboarding, and it carries
+**no foreign key** — `personas` is unique on `(user_id, slug)`, so there is
+nothing to reference. One would not help anyway: `is_active = false` retires a
+coach without deleting the row, so a stored slug can stop naming anything the
+picker lists with the constraint fully satisfied.
+
+`openingCoach` in `src/persona/choice.ts` absorbs that — a stored slug not on
+offer falls back to the first listed coach — and it is the ONE place the
+decision lives. Do not add a second fallback beside it. And never reuse a
+released slug for a different character: somebody is stored as it.
 
 ## 2. The voice — a direction, not a device
 

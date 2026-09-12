@@ -25,13 +25,19 @@ and none of which anything read or wrote before phase 6.
 | `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select — see below |
 
 **`sex` is asked for differently on the two surfaces**, and the column is the
-same on both. Settings offers a blank ("Not set") plus the three, because
-clearing a field is a thing a settings form must allow. `/welcome` offers the
-two sexes and `unspecified` under the label "Prefer not to say", with no blank:
-blank writes null, null leaves the step unanswered, and the flow would re-render
-it with no message — so on that surface declining has to be a VALUE rather than
-an absence. Labels live in `src/ui/sex.ts`; the welcome step used to render the
-raw column values, which showed somebody the word "unspecified".
+same on both.
+
+- **Settings** offers a blank ("Not set") plus the three, because clearing a
+  field is a thing a settings form must allow and because a row that already
+  holds `unspecified` has to be displayable.
+- **`/welcome` offers two**, male and female, behind an empty "Choose one" that
+  cannot be submitted. The owner's instruction, and the reason is this table:
+  the BMR constant is selected by sex, so a target computed from `unspecified`
+  is derived from a value nobody stated. Safe — it takes the higher constant —
+  and not an answer. Declining is the Skip button, not a value.
+
+Labels live in `src/ui/sex.ts`; the welcome step used to render the raw column
+values, which showed somebody the word "unspecified".
 
 **The bounds are not cosmetic.** `'NaN'::numeric > 0` is TRUE in PostgreSQL —
 measured against this hosted project and recorded in

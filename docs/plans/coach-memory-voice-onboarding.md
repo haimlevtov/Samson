@@ -475,6 +475,19 @@ its non-holder), tests.
 **Branch `welcome-second-pass`.** The owner opened PR 4, used it, and came back
 with five things. Four are small; one is a control that cannot be reached at all.
 
+> **Three things below are not what shipped.** Recorded here so a reader of the
+> plan is not misled; each is argued where the decision was actually taken.
+>
+> - **The reset is one button on `/sign-in`**, not a card on `/welcome` and Hub.
+>   The owner asked for that mid-PR — [ADR 0032](../adr/0032-a-user-who-starts-from-nothing.md)'s
+>   second amendment.
+> - **`users.persona_slug` carries NO foreign key.** `personas` is unique on
+>   `(user_id, slug)`, so there is nothing to point at — the migration and ADR
+>   0032 both argue it.
+> - **Sex is two options behind an unselectable placeholder.** This entry says
+>   "the welcome control offers the two" and I first shipped three; the owner
+>   overruled that, for the reason ADR 0032 now records.
+
 ### The reset button is unreachable, which is a design fault rather than a bug
 
 **Hub redirects a user whose `onboarded_at` is null to `/welcome`.** The demo
