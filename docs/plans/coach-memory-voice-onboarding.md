@@ -7,7 +7,7 @@ rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 | --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
 | 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
 | 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)          |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | planned                                                            |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)  |
 | 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | planned                                                            |
 | 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                            |
 
@@ -478,3 +478,46 @@ the deploy-order rule.
 
 **Still not opened in a browser.** This plan's Verification section owes that and
 PR 2 does not discharge it.
+
+### PR 3 — talk to it during a session, 2026-09-12
+
+Shipped as [#61](https://github.com/haimlevtov/Samson/pull/61), with
+[ADR 0031](../adr/0031-talking-during-a-session.md) first. Hold the button,
+speak, release; the coach answers in the chat and — opt-in, per session — aloud.
+
+**The owner's decision, and the arithmetic behind it:** a spoken reply is $0.02
+against a $0.50 week, so twenty-five presses spend it. Off by default, toggled on
+the session card rather than in Settings, and the label says what it costs in
+words rather than dollars — the money is the project's.
+
+**Four review rounds, and this is the PR to read if you want to know how this
+project actually goes wrong.** Two findings stand out:
+
+- **I broke an invariant that was written at me.** `src/speech/script.ts` says
+  "known text only — nothing here takes what the browser sent", and an AI-NOTE
+  beneath it names the PR that speaks model-written prose and says it must strip
+  brackets and the script's own labels first. This was that PR and did none of
+  it. The speech model's input is an instruction channel: `[whispers]` is
+  performed, and a second `### DIRECTOR'S NOTES` block is a second set of
+  directions. `spokenLine` is the control now — and its FIRST version stripped
+  the labels before the whitespace collapse and before `sanitizeUntrusted`, both
+  of which rebuild what the matcher just missed. Five spellings walked through,
+  including a curly apostrophe, which is what a model actually emits.
+- **Four of the resilience findings were bugs `src/speech/player.ts` had already
+  found and fixed**, reintroduced because this PR wrote playback and in-flight
+  bookkeeping from scratch instead of reading the module next door. That file's
+  header says in as many words that those bugs live in the press, cache and
+  in-flight bookkeeping, and that it exists so they can be tested.
+
+And twice a fix was wrong on the first attempt while its test passed anyway — the
+`holding` latch's regression test asserted only that `release()` did not throw,
+which was true of the broken code as well. A test that cannot fail is a claim,
+not a check.
+
+ADR 0031 carries a section listing all of it, because the pattern repeated: a
+guard written, a sentence written to match, and nothing measuring whether the
+sentence held.
+
+**Not opened in a browser** — and `SpeechRecognition` is the one part no test
+here reaches. The state machine is proved; what Chrome does with a held button is
+not.
