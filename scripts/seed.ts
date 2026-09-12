@@ -18,6 +18,7 @@ import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   ARCHETYPES,
+  PLANLESS_ARCHETYPE,
   generateHistory,
   outOfGrant,
   templatesFor,
@@ -444,15 +445,33 @@ async function seedArchetype(
     candidates: plausibleFirst(candidatesFor(archetype)),
   });
 
-  const { error: planError } = await admin.from('plan_runs').insert({
-    user_id: userId,
-    status: 'accepted',
-    iterations: 1,
-    block: compliantBlock(ruleContext, PLAN_WEEKS, archetype.daysPerWeek) as never,
-    rejections: [],
-    input_hash: 'seeded',
-  });
-  if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
+  /*
+   * ONE ARCHETYPE SHIPS WITH NO PLAN — the rework plan asks for it, so that the
+   * Coach tab's empty state and its questionnaire (rework PR 8b, ADR 0027) are
+   * reachable without deleting a row by hand.
+   *
+   * The inconsistent archetype is the one it should be, and the reason is the
+   * character rather than convenience: somebody who misses half their sessions
+   * is the likeliest of the five not to have got round to asking for a plan. It
+   * also means the state is exercised by the user whose history is thinnest,
+   * which is the harder case for the planner when they do ask.
+   *
+   * AI-NOTE: four accepted rows, not five. A test or a demo script that assumes
+   *          every seeded user has a plan will be wrong about exactly this one.
+   */
+  if (archetype.key === PLANLESS_ARCHETYPE) {
+    console.log(`  plan_runs: none for ${archetype.key}, deliberately`);
+  } else {
+    const { error: planError } = await admin.from('plan_runs').insert({
+      user_id: userId,
+      status: 'accepted',
+      iterations: 1,
+      block: compliantBlock(ruleContext, PLAN_WEEKS, archetype.daysPerWeek) as never,
+      rejections: [],
+      input_hash: 'seeded',
+    });
+    if (planError) throw new Error(`plan_run for ${archetype.key}: ${planError.message}`);
+  }
 
   const challenges = await seedChallenges({
     admin,

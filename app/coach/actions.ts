@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { createSupabaseLedger } from '@/src/db/ledger';
 import { loadXpSummary } from '@/src/db/gamification';
@@ -19,6 +20,17 @@ import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { MAX_TRANSCRIPT_TURNS, chatHistorySchema, type ChatTurn } from '@/src/chat/schema';
 import { EMPTY_COACH, type CoachState } from './coach-state';
+import { EMPTY_PLAN, type PlanState } from './plan-state';
+import { availableExercises } from '@/src/db/exercises';
+import {
+  PLAN_RUN_COOLDOWN_SECONDS,
+  createSupabasePlanStore,
+  startedPlanRunRecently,
+} from '@/src/db/plans';
+import { buildPlannerContext } from '@/src/planner/context';
+import { PLAN_NOT_RECORDED, PLAN_OUT_OF_TIME, generatePlan } from '@/src/planner/loop';
+import { planRequestFrom } from '@/src/planner/request';
+import { WEB_PLAN_DEADLINE_MS, WEB_PLAN_MAX_ITERATIONS } from '@/src/llm/config';
 import { adherence } from '@/src/metrics/adherence';
 import { addDays } from '@/src/metrics/dates';
 import { deliverPlan } from '@/src/persona/deliver';
@@ -49,6 +61,23 @@ const RECENT_NOTES = 5;
  * rather than under an answer to it.
  */
 const ANSWERLESS = { row: null, supplementMiss: false } as const;
+
+/**
+ * The only `error` strings a plan run may show the user.
+ *
+ * Both are constants exported by the planner loop, which is what makes this a
+ * check rather than a judgement — see the call site for what the alternative
+ * leaked.
+ */
+function sayable(result: {
+  status: string;
+  error: string | null;
+  recorded: boolean;
+}): string | null {
+  if (!result.recorded) return PLAN_NOT_RECORDED;
+  if (result.status === 'accepted') return null;
+  return result.error === PLAN_OUT_OF_TIME ? PLAN_OUT_OF_TIME : null;
+}
 
 /**
  * One turn of the coach box — ADR 0015 §6, docs/specs/coach-chat.md.
@@ -392,5 +421,204 @@ export async function hearCoach(slug: unknown): Promise<VoiceResult> {
       );
     }
     return { ok: false, reason };
+  }
+}
+
+/**
+ * Generate a plan from the questionnaire — rework PR 8b,
+ * [ADR 0027](../../docs/adr/0027-planner-in-a-function.md).
+ *
+ * `docs/specs/coach-chat.md` §1 argued this should not exist, and the argument
+ * was right about the arithmetic: three planner+critic rounds at their
+ * configured timeouts is 540s against a 60s function ceiling. What makes it fit
+ * is a budget — one iteration, a four-week block, and a wall-clock deadline
+ * enforced inside the loop — and what that costs is in the ADR's table.
+ *
+ * INVARIANT: the block is NOT returned through this action's state — it is a
+ *            `plan_runs` row, and the page re-reads it. A block arriving through
+ *            client state would be a training plan whose provenance is a POST.
+ *
+ * INVARIANT: every figure in the block comes from the model INSIDE the planner
+ *            pipeline, checked by `checkRules` and the critic before it is
+ *            stored — CLAUDE.md #1 and #5. This action chooses none of it; it
+ *            supplies four answers and the candidate list.
+ *
+ * INVARIANT: the candidates are equipment-filtered in SQL before the model sees
+ *            anything — CLAUDE.md #5. `availableExercises` does it, and an empty
+ *            list refuses the run rather than sending it.
+ */
+export async function requestPlan(_previous: PlanState, formData: FormData): Promise<PlanState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const parsed = planRequestFrom(formData);
+  if (!parsed.success) {
+    // Nothing was sent, so nothing was spent. The control's own bounds make this
+    // unreachable by hand; a crafted POST reaches it.
+    return {
+      ...EMPTY_PLAN,
+      outcome: 'invalid',
+      error: 'Those answers did not add up to a request. Check the form and try again.',
+    };
+  }
+
+  const request = parsed.data;
+  const today = localDateFor(user.timezone);
+
+  /*
+   * The deadline is wall-clock from HERE, not from where `generatePlan` starts.
+   * FOUND IN REVIEW: the reads and the context build happen before the loop, so
+   * a slow cold start plus `loadHistory` plus the candidate join were outside the
+   * budget entirely — and `page.tsx`'s comment claiming the 15s gap covered them
+   * was asserting what it did not measure. Slow pre-work now shortens the loop
+   * rather than the function.
+   */
+  const startedAt = Date.now();
+
+  try {
+    /*
+     * Inside the try, all of it. FOUND IN REVIEW: these reads sat above it, so a
+     * transient database error escaped `PlanState` and took the whole Coach page
+     * to the error boundary — losing the questionnaire and the answers just
+     * typed, for a failure that cost nothing and could have rendered in place.
+     */
+    const [history, candidates] = await Promise.all([
+      loadHistory(db),
+      availableExercises(db, user.id),
+    ]);
+
+    /*
+     * ADR 0027 §5: no candidates, no call. `availableExercises` returns an empty
+     * list for a user with no `user_equipment` rows, and invariant #5 means the
+     * planner may only pick from that list — so a run against nothing cannot
+     * produce a valid block, and sending it would buy a guaranteed rejection.
+     *
+     * Nothing but `scripts/seed.ts` writes that table today, which is why this is
+     * a named state rather than a defensive branch.
+     */
+    if (candidates.length === 0) {
+      return { ...EMPTY_PLAN, outcome: 'no-equipment' };
+    }
+
+    /*
+     * One run at a time — FOUND IN REVIEW, and it is the finding with money
+     * attached. `disabled={pending}` is client state and this action is a plain
+     * endpoint, so a second tab, an impatient double-click or a scripted POST
+     * started as many concurrent runs as it liked — and `enforceBudget` reads
+     * spend then allows, so every one of them passed the gate on the same stale
+     * figure. At ~6,000 planner tokens a call against a $0.50 weekly ceiling,
+     * that is the cheapest expensive mistake in the app.
+     *
+     * Not a lock and not a queue (CLAUDE.md puts those out of scope): one
+     * RLS-scoped indexed read of a table this run is about to write anyway.
+     */
+    if (await startedPlanRunRecently(db, PLAN_RUN_COOLDOWN_SECONDS)) {
+      return { ...EMPTY_PLAN, outcome: 'already-running' };
+    }
+
+    const context = buildPlannerContext({
+      goal: request.goal,
+      daysPerWeek: request.days_per_week,
+      blockWeeks: request.block_weeks,
+      injuredJoints: request.injured_joints,
+      asOf: today,
+      workouts: history.workouts,
+      sets: history.sets,
+      candidates: candidates.map((c) => ({
+        id: c.id,
+        slug: c.slug,
+        name: c.name,
+        primaryMuscle: c.primaryMuscle,
+        movementPattern: c.movementPattern,
+        equipment: c.equipment,
+      })),
+    });
+
+    const result = await generatePlan(
+      user.id,
+      context.plannerInput,
+      context.ruleContext,
+      {
+        call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))),
+        plans: createSupabasePlanStore(db),
+      },
+      /*
+       * The whole reason this action can exist — ADR 0027 §1 and §2.
+       *
+       * `maxAttempts: 1` is not optional decoration. `timeoutMs` is a PER-ATTEMPT
+       * abort in the gateway, which retries a timeout up to three times, so a
+       * deadline expressed only through it bounds one attempt — three of a 45s
+       * allowance is ~136s against a 60s ceiling. FOUND IN REVIEW.
+       */
+      {
+        maxIterations: WEB_PLAN_MAX_ITERATIONS,
+        maxAttempts: 1,
+        deadlineMs: WEB_PLAN_DEADLINE_MS - (Date.now() - startedAt),
+      }
+    );
+
+    /*
+     * FOUND BY READING, before review: without this the accepted case did
+     * nothing visible. `useActionState` returns state to the client; it does not
+     * re-run the server component, so a plan that was written and stored would
+     * have left the questionnaire sitting there looking as though the press had
+     * been ignored — and `PlanRequest` renders no sentence for `accepted`
+     * precisely because the plan itself is supposed to appear.
+     *
+     * That is the dead end ADR 0027 §4 forbids, arriving by omission rather than
+     * by design. Both routes read `latestAcceptedPlan`: `/coach` renders the
+     * block, and `/workout`'s template import offers its sessions.
+     */
+    if (result.status === 'accepted') {
+      revalidatePath('/coach');
+      revalidatePath('/workout');
+    }
+
+    return {
+      outcome: result.status,
+      rejectionCount: result.rejections.length,
+      /*
+       * ONLY the loop's own constants cross, never `result.error` as it comes.
+       *
+       * FOUND IN REVIEW, and the comment here used to get it exactly backwards:
+       * it said the gateway "already bounds" that string. The gateway bounds its
+       * LENGTH, not its content — `LlmCallFailedError.message` embeds up to 500
+       * characters of the upstream response body, which providers fill with
+       * model ids, quota text and the request they rejected. And the action's
+       * own catch never saw it, because the loop RETURNS those rather than
+       * throwing. This is the same leak class already fixed at three sites in
+       * this file.
+       *
+       * Comparing against a constant is a check. Trusting a string's provenance
+       * is not.
+       */
+      error: sayable(result),
+    };
+  } catch (cause) {
+    // The same allowlist every other action on this page uses, for the reason
+    // `askTheCoach` records: a raw error here would hand a user constraint and
+    // column names for tables they cannot read.
+    if (cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError) {
+      return { ...EMPTY_PLAN, outcome: 'failed', error: cause.message };
+    }
+
+    // Name and bounded message only — `LlmCallFailedError` carries every ledger
+    // row and every row carries the user's id. See `askTheCoach`.
+    console.error(
+      'plan request failed',
+      cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+    );
+    return {
+      ...EMPTY_PLAN,
+      outcome: 'failed',
+      /*
+       * "Nothing was saved" was here and was not knowable — FOUND IN REVIEW. A
+       * throw at this point may follow two paid model calls and a written
+       * `plan_runs` row, so the sentence claimed something the code could not
+       * check. What IS true is that the page has no plan to show.
+       */
+      error: 'That did not finish. Try again in a moment.',
+    };
   }
 }

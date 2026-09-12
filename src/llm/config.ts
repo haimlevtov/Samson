@@ -227,3 +227,44 @@ export function modelOverrideFromEnv(env: Env = process.env): string[] | undefin
     .filter(Boolean);
   return models.length > 0 ? models : undefined;
 }
+
+/**
+ * What a planner run from the WEB may cost itself — ADR 0027.
+ *
+ * These are not the eval's numbers and must not replace them. `npm run
+ * eval:planner` runs on a developer's machine with no function ceiling, and it
+ * is a graded output: lowering `MAX_PLAN_ITERATIONS` or `PLANNER_TIMEOUT_MS`
+ * globally would make the measurement worse to fit a surface the measurement
+ * does not run on.
+ *
+ * WHY a deadline below the function ceiling rather than at it: the run also has
+ * to read history, build the context, write a ledger row per attempt and a
+ * `plan_runs` row at the end. A deadline equal to the ceiling would spend the
+ * whole ceiling on the model and be killed during the bookkeeping — which writes
+ * nothing and renders nothing, the one outcome ADR 0027 §4 forbids.
+ *
+ * AI-NOTE: `WEB_PLAN_DEADLINE_MS` and the `maxDuration` exported by
+ *          `app/coach/page.tsx` are two halves of one fact. Change both together,
+ *          and keep the gap: it is the bookkeeping's.
+ */
+export const WEB_PLAN_DEADLINE_MS = 45_000;
+
+/**
+ * One planner+critic round from the web, not three.
+ *
+ * WHY: three cannot fit, and the honest consequence is in ADR 0027 §2 — a block
+ * the rules reject is reported rather than retried, so the retry loop that makes
+ * the planner trustworthy is one the USER spends by pressing the button again.
+ */
+export const WEB_PLAN_MAX_ITERATIONS = 1;
+
+/**
+ * The longest block the web asks for.
+ *
+ * `plannerInputSchema` admits 12 and `trainingBlockSchema` admits 8; both stay,
+ * because they bound what is VALID rather than what this surface requests.
+ * Generation time scales with output tokens and nothing else here moves the
+ * deadline, so the block length is the only lever. Four is also every seeded
+ * block's length — the shape the rules and the critic have been exercised on.
+ */
+export const WEB_PLAN_MAX_BLOCK_WEEKS = 4;

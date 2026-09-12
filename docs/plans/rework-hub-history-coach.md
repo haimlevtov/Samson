@@ -23,7 +23,7 @@ because several of them touch the same surface.
 | 6d  | [The device-voice columns go](#pr-6d--the-device-voice-columns-go)                         | `drop-device-voice`    | planned, after 6b deploys                                                      |
 | 7   | [A plan becomes a template](#pr-7--a-plan-becomes-a-template)                              | `plan-to-template`     | shipped 09-12, [↓](#pr-7--a-plan-becomes-a-template-2026-09-12)                |
 | 8a  | [One box on Coach](#pr-8--one-box-and-a-plan-you-can-ask-for)                              | `coach-one-box`        | shipped 09-12, [↓](#pr-8a--one-box-on-coach-2026-09-12)                        |
-| 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | planned, after 8a                                                              |
+| 8b  | [A plan you can ask for](#pr-8--one-box-and-a-plan-you-can-ask-for)                        | `coach-ask-for-a-plan` | shipped 09-12, [↓](#pr-8b--a-plan-you-can-ask-for-2026-09-12)                  |
 
 PR 8 was written as one item because both changes land on one surface. It ships
 as two: 8a rearranges that surface and 8b fills the state 8a leaves — the
@@ -387,7 +387,7 @@ the reason every model-backed surface is scripted today.
   and review found it stops the delivery's reading too._
 - **The preview appears where the Voice card does**, which is once a plan has
   been accepted: it is heard before a coach DELIVERS the plan, not before a plan
-  exists. A user with no plan sees the "No accepted plan yet" card.
+  exists. A user with no plan sees the questionnaire (8b; it was a "No accepted plan yet" card before that).
 - **The browser pass needs a signed-in session**, which this agent does not
   create: it does not type passwords, the published demo one included. It goes
   on the plans README's browser-pass row rather than being claimed.
@@ -726,6 +726,13 @@ written down so nobody rediscovers them:
   call and the loop allows three. Mitigations that do not need a queue: cap the
   block at fewer weeks for a first plan, and surface a partial failure as a
   state rather than a hang.
+
+> **Decided in [ADR 0027](../adr/0027-planner-in-a-function.md), 8b, committed
+> first.** The limits above are not merely named, they are enforced: a wall-clock
+> deadline inside the planner loop, ONE iteration rather than three, and a
+> four-week block rather than eight. The ADR also states what none of that buys —
+> pressing the button does not guarantee a plan, and a failed attempt still costs
+> the user budget.
 
 **A questionnaire, then.** `ContextInput` in `src/planner/context.ts` takes
 `goal`, `daysPerWeek`, `blockWeeks`, `injuredJoints`, `asOf`, `workouts`, `sets`
@@ -1400,3 +1407,75 @@ until a row whose slug IS the sentinel was added as a case.
 new component uses was checked against `globals.css` instead, which found one
 real break — the diet controls had lost the `.settings-form` grid when the form
 moved outward.
+
+### PR 8b — a plan you can ask for, 2026-09-12
+
+Shipped as decided in [ADR 0027](../adr/0027-planner-in-a-function.md), committed
+first. The card that explained why there was no **Create a plan** button is a
+four-question form, and pressing it runs the real pipeline — planner model,
+deterministic rules, critic model — inside a server action.
+
+**The arithmetic was the whole problem.** Three planner+critic rounds at their
+configured timeouts is 540s against a 60s function ceiling; one round is 180s. So
+the work was not "build a button" but "what has to be true for a run to fit": a
+wall-clock deadline for the whole run, one iteration instead of three, one
+gateway attempt instead of three, and a four-week block instead of eight. The
+eval passes no budget and is unchanged, which matters because it is graded.
+
+**What review found**, across three reviewers and a re-review, and the first
+finding is the one worth remembering:
+
+- **The deadline bounded one ATTEMPT, not the run.** `timeoutMs` is a per-attempt
+  `AbortSignal.timeout` inside the gateway, which retries a timeout three times
+  with backoff — so a 45s allowance permitted ~136s, over twice the ceiling it
+  was written to fit inside. Two reviewers found it independently. The failure
+  mode was exactly the one the deadline existed to prevent: the function killed
+  mid-call, no `plan_runs` row, no state, a spinner that never resolves, and a
+  billed attempt whose ledger row was never written. **A bound is only a bound
+  once you know which layer applies it.**
+- **Raw provider text reached the browser.** `result.error` was passed through,
+  and on a failure that is `LlmCallFailedError.message`, which embeds up to 500
+  characters of upstream body. The comment defending it said the gateway "already
+  bounds" the string — it bounds the length, not the content — and the action's
+  own allowlist never saw it because the loop RETURNS those rather than throwing.
+- **No guard on repeat presses**, on the most expensive stage in the app. Client
+  `disabled={pending}` against a plain endpoint and a read-then-act budget gate.
+  One RLS-scoped read now refuses a run when one started in the last 75s.
+- **The planner could eat the whole budget**, so a block that had passed the
+  arithmetic was discarded as failed after being paid for. The planner's
+  allowance reserves the critic's floor now, and the floors are per-stage from
+  the ADR's own measurements rather than one flat 5s that was below both.
+- **A failed `plan_runs` insert threw away an accepted block** and told the user
+  nothing was saved. The throw is part of the result now.
+- **Three false sentences**: "leaving the page cancels it" (a server action is
+  not aborted by navigation), "the Hub tab lists them" (nothing reads
+  `plan_runs.rejections`), and "Nothing was saved" at a point where that was not
+  knowable. All three were in rendered copy, and the Hub one was also in a
+  comment and an ADR guarantee row.
+- **An accepted plan appeared nowhere** — found by reading, before review.
+  `useActionState` does not re-run the server component, and the success branch
+  deliberately renders no sentence because the plan is supposed to be the
+  sentence. So the one outcome the user wants looked exactly like the press being
+  ignored.
+
+**And one found by CI**, one commit after the test that needed it: the
+planless-archetype test imported its constant from `scripts/seed.ts`, and
+importing that module runs its `main()`. The comment claimed a dynamic import
+avoided it; `await import()` defers when a module is evaluated, not whether.
+Locally it went unnoticed because `.env.local` exists, so `main()` got further
+rather than exiting — the worse of the two outcomes, and the reason hosted was
+checked afterwards. Nothing had been written.
+
+**No migration.** `plan_runs` already had own-row read and insert policies.
+
+**Verification.** `npm run verify` and `npm run build` green; 1,194 unit tests;
+both planner evals unchanged (30/30 compliant, 0/30 naive with 360 rule
+rejections). **Fourteen guard mutations, fourteen caught.**
+
+**Not verified, and stated rather than implied:** no browser pass, and generation
+has never run end to end. `/coach` needs a session and no live planner call has
+been made from the web, so every state here is proved by test and by reading.
+
+**Hosted still has five accepted plans**, so the questionnaire is not visible
+there until the next seed — deliberately not done from here, since re-seeding is
+the owner's call.

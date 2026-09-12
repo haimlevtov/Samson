@@ -22,6 +22,7 @@ import {
 } from '../diet/biometrics';
 import {
   ARCHETYPES,
+  PLANLESS_ARCHETYPE,
   generateHistory,
   outOfGrant,
   templatesFor,
@@ -906,5 +907,23 @@ describe('the templates each archetype is seeded with', () => {
     };
 
     expect(build(machineOnlyDayC, []).map((t) => t.name)).toEqual(['Day A', 'Day B']);
+  });
+});
+
+describe('the planless archetype', () => {
+  it('names an archetype that exists', () => {
+    /*
+     * `Archetype.key` is a plain string, so `PLANLESS_ARCHETYPE` is an unchecked
+     * one: a typo silently restores an accepted plan for all five users and the
+     * Coach tab's questionnaire becomes unreachable again — the state rework PR
+     * 8b exists to make visible. The seeder's own AI-NOTE warns a human about
+     * exactly this; nothing enforced it. FOUND IN REVIEW.
+     *
+     * FOUND BY CI straight afterwards: the first version of this test imported
+     * the constant from scripts/seed.ts, and importing that module runs its
+     * `main()`, which exits the process when there is no environment. The
+     * constant lives beside ARCHETYPES now, which is where it belonged.
+     */
+    expect(ARCHETYPES.map((a) => a.key)).toContain(PLANLESS_ARCHETYPE);
   });
 });

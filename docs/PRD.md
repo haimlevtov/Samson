@@ -93,7 +93,10 @@ what you say  →  normalizer  →  metrics engine  →  planner  →  safety cr
   days, and emits a training block chosen from a pre-filtered candidate list.
 - **Safety critic** runs on a _different model_ from the planner and rejects
   plans with structured reasons — volume caps, deload cadence, injury
-  exclusions. The planner retries, at most three times. A critic sharing the
+  exclusions. The planner retries, at most three times — **that is the eval; a
+  plan asked for on the Coach tab gets one iteration and one attempt**, because
+  three of each cannot fit inside a serverless function
+  ([ADR 0027](adr/0027-planner-in-a-function.md)). A critic sharing the
   planner's weights shares its blind spots.
 - **Persona layer** changes only how the finished plan is delivered.
 
@@ -142,6 +145,17 @@ joints are absent.
 
 _This is the highest-unknown part of the product._ It is scheduled early
 specifically so that if it does not work, there is still time to change course.
+
+**Extended (rework PR 8b, 2026-09-12).** A user can **ask for a plan**. Where a
+plan would be, the Coach tab shows a four-question form — goal, days a week,
+weeks, anything sore — and pressing it runs the real pipeline (planner model,
+deterministic rules, critic model) inside a server action.
+
+What that costs is the subject of [ADR 0027](adr/0027-planner-in-a-function.md).
+The short version: one iteration and one attempt rather than three of each, so
+**pressing it does not guarantee a plan**, and a failed attempt still charges the
+timeout assumption against the weekly budget. Blocks also still come from the
+live planner eval, which is the path the graded measurement uses.
 
 **Extended (rework PR 8a, 2026-09-12).** Coaching is not only plan generation:
 the coach answers a **training question** in the one box on `/coach`, alongside
