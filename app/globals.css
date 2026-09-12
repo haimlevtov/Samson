@@ -2831,16 +2831,84 @@ details.quick-log[open] > summary {
   display: grid;
   gap: 12px;
 }
+/* The voice switch — ADR 0031 §3.
+
+   A tickbox said "there is a form here and you are filling it in". This is a
+   power switch: it governs what the next press costs, nothing is saved, and the
+   control should look like the thing it is.
+
+   Built on the native checkbox, which is clipped rather than hidden — an input
+   with `display: none` leaves the label focusable by nothing and drops it out of
+   the accessibility tree. `.sr-only` is the same treatment used elsewhere in
+   this file, and the painted track is `aria-hidden` because the input carries
+   the state. */
 .speak-toggle {
+  display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
+  /* The pair is the target, not the 40px track — mobile-interface.md §3. */
+  min-height: var(--tap);
+  cursor: pointer;
 }
 .speak-toggle input {
-  /* The 44px target the rest of the app gets — mobile-interface.md §3. A
-     checkbox does not inherit it from the base button rule. */
-  min-width: var(--tap);
-  min-height: var(--tap);
-  margin: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.speak-toggle .track {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-strong);
+  /* Centred against the first line of the label rather than the whole block,
+     which is two lines tall and would leave the switch floating mid-paragraph. */
+  margin-top: 2px;
+}
+.speak-toggle .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .speak-toggle .track,
+  .speak-toggle .knob {
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      transform 120ms ease;
+  }
+}
+.speak-toggle input:checked + .track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.speak-toggle input:checked + .track .knob {
+  background: #fff;
+  /* POSITION carries the state, not only colour — a switch distinguished by hue
+     alone is a switch somebody cannot read. The sentence under the label says it
+     in words as well, which is the half that survives a screenshot in
+     greyscale. */
+  transform: translateX(18px);
+}
+.speak-toggle input:focus-visible + .track {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.speak-toggle .speak-label {
+  flex: 1 1 auto;
 }
 .session-coach .grow {
   flex: 1 1 12rem;
