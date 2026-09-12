@@ -24,6 +24,15 @@ import { BudgetExceededError } from './types';
 export const LOG_MESSAGE_MAX_CHARS = 200;
 
 /**
+ * What a missing key says, owned here rather than read off the error.
+ *
+ * Kept identical to `MissingApiKeyError`'s own message — a test asserts they
+ * agree, so this is a copy that cannot drift rather than a second wording.
+ */
+export const MISSING_KEY_MESSAGE =
+  'OPENROUTER_API_KEY is not set. Copy .env.example to .env.local and fill it in.';
+
+/**
  * Whether this failure's own words are the user's business — ADR 0028 §1.
  *
  * `MissingApiKeyError` says exactly what to do and names no internals.
@@ -31,7 +40,7 @@ export const LOG_MESSAGE_MAX_CHARS = 200;
  * ceiling, which they are entitled to and which explains a refusal that would
  * otherwise look like a bug.
  */
-export function isUserFacing(cause: unknown): boolean {
+export function isUserFacing(cause: unknown): cause is MissingApiKeyError | BudgetExceededError {
   return cause instanceof MissingApiKeyError || cause instanceof BudgetExceededError;
 }
 
@@ -51,7 +60,25 @@ export function isUserFacing(cause: unknown): boolean {
  *            fill with the request they rejected.
  */
 export function userFacingError(cause: unknown, fallback: string): string {
-  return cause instanceof Error && isUserFacing(cause) ? cause.message : fallback;
+  /*
+   * REBUILT from the error's own typed fields, never read off `.message` —
+   * FOUND IN REVIEW. Returning `cause.message` made the guarantee depend on two
+   * things it should not: that nobody subclasses either class with a message of
+   * their own, and that nobody reassigns `.message` on an instance. Neither
+   * happens today and neither needed to be load-bearing.
+   *
+   * `src/speech/refusal.ts` took the strict version of this in ADR 0025 for the
+   * same reason: the surface shows a string this project wrote, and the error's
+   * job is to say WHICH one.
+   */
+  if (cause instanceof MissingApiKeyError) return MISSING_KEY_MESSAGE;
+  if (cause instanceof BudgetExceededError) {
+    // The two numbers are `readonly` on the class and both are the user's own —
+    // their spend against their own ceiling. No table, model or provider name
+    // can reach this sentence, because it is built here out of two numbers.
+    return `Weekly LLM budget exhausted: spent ${cause.spent.toFixed(4)} of ${cause.budget.toFixed(4)} USD.`;
+  }
+  return fallback;
 }
 
 /**

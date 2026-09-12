@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { logLine } from '@/src/llm/failure';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
 import { loadChallenges } from '@/src/db/gamification';
@@ -49,7 +50,8 @@ export default async function HubPage() {
      * exactly like an unpopulated feature is one nobody would ever notice.
      */
     loadLeaderboard(db).catch((cause: unknown) => {
-      console.error('leaderboard unavailable', cause);
+      // ADR 0028: the name and a bounded message, never the object.
+      console.error('leaderboard unavailable', logLine(cause));
       return [];
     }),
   ]);

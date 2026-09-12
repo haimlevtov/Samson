@@ -139,7 +139,10 @@ export async function finishWorkout(formData: FormData): Promise<void> {
     const result = await awardSessionXp(db, workoutId);
     unlocked = result.unlocked;
   } catch (cause) {
-    console.error('award_session_xp failed', cause);
+    // ADR 0028's log clause, in the file that PR is about. This logged the
+    // whole object: a wrapped Error here, so no enumerable ledger rows and no
+    // user id — but an unbounded raw Postgres message, stack and all.
+    console.error('award_session_xp failed', logLine(cause));
   }
 
   revalidatePath('/history');
@@ -202,9 +205,9 @@ export async function parseFreeText(
      * ADR 0028. This returned `cause.message` for everything that was not a
      * missing key, so a raw Postgres error — table names, column semantics,
      * constraint names — or up to 500 characters of upstream provider body
-     * reached the browser. It is the sixth site where that was found, which is
-     * why the judgement now lives in a tested module instead of in a seventh
-     * copy of this `catch`.
+     * reached the browser. It is the ninth site of this shape — ADR 0028
+     * tabulates eight before it — which is why the judgement now lives in a
+     * tested module instead of in another copy of this `catch`.
      *
      * `BudgetExceededError` used to reach the user here only by accident: it is
      * an Error, so the fall-through showed its message. That was the right

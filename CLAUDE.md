@@ -80,6 +80,11 @@ Pipeline: input → normalizer (LLM) → metrics engine (code) → planner (LLM)
 db:types:inspect` prints the hosted schema to stdout for reading; it
     deliberately does not write the file.
 - Every feature ships with tests in the same commit.
+- **A failed action tells the user one of three things, and logs a name plus a
+  bounded message — never the error object.** The rule and which error classes
+  are the user's business: `docs/adr/0028-what-a-failure-may-say.md`. It is here
+  because that rule had been found in review eight times and written down
+  nowhere.
 - Tests must pass with no API key present. Mock the gateway in unit tests.
 
 ## Comment style
