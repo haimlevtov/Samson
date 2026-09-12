@@ -2,15 +2,18 @@
 
 import { useActionState } from 'react';
 import { WEB_PLAN_MAX_BLOCK_WEEKS } from '@/src/llm/config';
-import { GOAL_LABEL, JOINT_LABEL, REPORTABLE_JOINTS } from '@/src/planner/request';
+import {
+  GOAL_LABEL,
+  JOINT_LABEL,
+  PLAN_DAYS_PER_WEEK,
+  REPORTABLE_JOINTS,
+} from '@/src/planner/request';
 import { trainingGoalSchema } from '@/src/planner/schema';
 import { requestPlan } from './actions';
-import { EMPTY_PLAN_REQUEST, type PlanOutcome, type PlanState } from './plan-state';
+import { EMPTY_PLAN, type PlanOutcome, type PlanState } from './plan-state';
 
 /** Derived from the schema, so a fifth goal renders without being listed here. */
 const GOALS = trainingGoalSchema.options;
-
-const DAYS = [2, 3, 4, 5, 6] as const;
 
 const WEEK_CHOICES = Array.from({ length: WEB_PLAN_MAX_BLOCK_WEEKS }, (_, i) => i + 1);
 
@@ -18,12 +21,14 @@ const WEEK_CHOICES = Array.from({ length: WEB_PLAN_MAX_BLOCK_WEEKS }, (_, i) => 
  * What each outcome says. Code's words, every one of them — ADR 0027 §4 and
  * `docs/specs/mobile-interface.md` §4: a spinner that stops is not a state.
  *
- * `accepted` is absent on purpose. The block is a `plan_runs` row and the page
- * re-reads it, so the successful state is the plan itself appearing rather than
- * a sentence about it — see `plan-state.ts` for why a block never travels
- * through client state.
+ * `accepted` has a sentence too, and it did not at first. The block is a
+ * `plan_runs` row that the page re-reads after `revalidatePath`, so the plan
+ * itself is the real success state — but leaving this branch empty made the
+ * whole outcome depend on a cache rule holding, and if it ever did not the user
+ * would see the press do nothing at all. FOUND IN REVIEW.
  */
-const SAID: Record<Exclude<PlanOutcome, 'idle' | 'accepted'>, string> = {
+const SAID: Record<Exclude<PlanOutcome, 'idle'>, string> = {
+  accepted: 'Your plan is ready — it is below.',
   rejected_rules:
     'The plan it wrote broke the safety rules, so it was not accepted. Pressing again asks for a different one — the rules are arithmetic rather than opinion, and they do not negotiate.',
   rejected_critic:
@@ -34,6 +39,8 @@ const SAID: Record<Exclude<PlanOutcome, 'idle' | 'accepted'>, string> = {
   'no-equipment':
     'The planner can only choose exercises you can actually do, and there is nothing on record about your equipment yet.',
   invalid: 'Those answers did not add up to a request.',
+  'already-running':
+    'A plan is already being written for you, or one just was. Give it a minute and reload this page — a second attempt would cost you twice for the same thing.',
 };
 
 /**
@@ -41,9 +48,10 @@ const SAID: Record<Exclude<PlanOutcome, 'idle' | 'accepted'>, string> = {
  *
  * WHY this exists at all, given `docs/specs/coach-chat.md` §1 argued against it:
  * a stakeholder decision, taken with the limits named. The limits are real and
- * the ADR states them — one iteration, a four-week ceiling, and a deadline that
- * can expire mid-generation — so **pressing this does not guarantee a plan.**
- * Every way it can fail says so in words rather than leaving a spinner behind.
+ * the ADR states them — one iteration, one attempt, a four-week ceiling, and a
+ * deadline that can expire mid-generation — so **pressing this does not
+ * guarantee a plan.** Every way it can fail says so in words rather than leaving
+ * a spinner behind.
  *
  * The four questions are the four `ContextInput` fields the app cannot read for
  * itself. Equipment is not among them: it is filtered in SQL before the model
@@ -52,11 +60,8 @@ const SAID: Record<Exclude<PlanOutcome, 'idle' | 'accepted'>, string> = {
  * Nothing here is a control. The rules and the critic run on the server inside
  * the planner loop; this component posts four answers and renders a result.
  */
-export function PlanRequest() {
-  const [state, formAction, pending] = useActionState<PlanState, FormData>(
-    requestPlan,
-    EMPTY_PLAN_REQUEST
-  );
+export function PlanRequestForm() {
+  const [state, formAction, pending] = useActionState<PlanState, FormData>(requestPlan, EMPTY_PLAN);
 
   return (
     <div className="card">
@@ -82,13 +87,14 @@ export function PlanRequest() {
         <label>
           <span className="label">Days a week</span>
           {/*
-           * 2 to 6, tighter than the planner schema's 1 to 7: one day is not a
-           * block and seven leaves no rest day, which the rules reject anyway.
-           * The bound that produces an answerable request is tighter than the one
-           * that produces a valid request — src/planner/request.ts.
+           * Derived from the schema's own bound, never re-typed — FOUND IN
+           * REVIEW, and it was the one control here that listed its options by
+           * hand. The range is tighter than the planner schema's 1 to 7: one day
+           * is not a block and seven leaves no rest day, which the rules reject
+           * anyway.
            */}
           <select name="days_per_week" defaultValue="3" disabled={pending}>
-            {DAYS.map((days) => (
+            {PLAN_DAYS_PER_WEEK.map((days) => (
               <option key={days} value={days}>
                 {days}
               </option>
@@ -146,26 +152,40 @@ export function PlanRequest() {
 
       {pending ? (
         <p className="muted small" role="status">
+          {/*
+           * FOUND IN REVIEW: this said leaving the page cancels the run, and it
+           * does not. A server action is not aborted by navigation — it runs to
+           * completion, spends what it spends, and writes its row. Telling the
+           * user otherwise invited them to leave, assume nothing happened, and
+           * pay for a second run.
+           */}
           This takes most of a minute: one model writes the block, the rules check every number in
-          it, and a second model reads it before anything is saved. Leaving the page cancels it.
+          it, and a second model reads it before anything is saved. Leaving the page loses the
+          result, not the run — an accepted plan will be here when you come back.
         </p>
       ) : null}
 
-      {state.outcome !== 'idle' && state.outcome !== 'accepted' ? (
+      {state.outcome !== 'idle' ? (
         <div className="card" role="status">
           <p>{SAID[state.outcome]}</p>
 
           {/*
-           * The gateway's own message, which it already bounds, or the loop's
-           * deadline sentence. Never a raw database or provider string — the
-           * action's allowlist is what makes that true.
+           * Only the planner loop's own constants reach here — the action maps
+           * everything else to null, because a gateway message embeds up to 500
+           * characters of upstream response body.
            */}
           {state.error !== null ? <p className="muted small">{state.error}</p> : null}
 
           {state.rejectionCount > 0 ? (
             <p className="muted small">
+              {/*
+               * FOUND IN REVIEW: this said "and the Hub tab lists them". Nothing
+               * in the app reads `plan_runs.rejections` — the Hub's rejected
+               * list is the challenge validator's, a different table — so the
+               * card was sending the user to a page that does not exist.
+               */}
               {state.rejectionCount} {state.rejectionCount === 1 ? 'finding was' : 'findings were'}{' '}
-              recorded, and the Hub tab lists them.
+              recorded against it.
             </p>
           ) : null}
 

@@ -33,14 +33,24 @@ export type PlanOutcome =
   /** Refused before any call: no equipment rows, so no candidates — ADR 0027 §5. */
   | 'no-equipment'
   /** The form did not validate. Nothing was sent. */
-  | 'invalid';
+  | 'invalid'
+  /**
+   * A run of this user's started moments ago and may still be in flight, so this
+   * one was refused before spending — `startedPlanRunRecently`.
+   */
+  | 'already-running';
 
 export interface PlanState {
   outcome: PlanOutcome;
   /**
    * How many findings the rules or the critic raised, when that is why it
-   * stopped. A count rather than the findings themselves: the rejections are
-   * already stored on the row, and the Hub renders them.
+   * stopped. A count rather than the findings themselves, because the findings
+   * are planner-internal — rule codes and constraint objects — and a card is not
+   * where they would be readable.
+   *
+   * FOUND IN REVIEW: this said the Hub renders them. Nothing in the app reads
+   * `plan_runs.rejections`; the Hub's rejected list belongs to the challenge
+   * validator, which is a different table.
    */
   rejectionCount: number;
   /**
@@ -51,7 +61,7 @@ export interface PlanState {
   error: string | null;
 }
 
-export const EMPTY_PLAN_REQUEST: PlanState = {
+export const EMPTY_PLAN: PlanState = {
   outcome: 'idle',
   rejectionCount: 0,
   error: null,

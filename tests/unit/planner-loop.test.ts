@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEOUT_MS, PLANNER_TIMEOUT_MS } from '../../src/llm/config';
-import { generatePlan } from '../../src/planner/loop';
+import { PLAN_NOT_RECORDED, generatePlan } from '../../src/planner/loop';
 import type { RuleContext } from '../../src/planner/rules';
 import type { CriticVerdict, PlannerInput, TrainingBlock } from '../../src/planner/schema';
 import type { PlanRunInsert, PlanRunStore, PlannerDeps } from '../../src/planner/types';
@@ -537,9 +537,14 @@ describe('generatePlan with a budget', () => {
       h.restore();
     }
 
-    // The planner asked first, with the whole budget available, so it is capped
-    // by the budget rather than by PLANNER_TIMEOUT_MS (120s).
-    expect(h.captured[0]?.timeoutMs).toBe(30_000);
+    /*
+     * The planner asked first, so it is capped by the budget rather than by
+     * PLANNER_TIMEOUT_MS (120s) — MINUS the critic's reserve. That subtraction
+     * arrived with a review finding: without it the planner could take the whole
+     * budget and leave the critic nothing, and a block that had already passed
+     * the arithmetic was then discarded as failed.
+     */
+    expect(h.captured[0]?.timeoutMs).toBe(30_000 - 12_000);
     // The planner call consumed 10s, so the critic sees 20s — not the 60s
     // default, which alone would exceed a 60s function ceiling.
     expect(h.captured[1]?.timeoutMs).toBe(20_000);
@@ -551,12 +556,18 @@ describe('generatePlan with a budget', () => {
      * mid-call: no ledger row, no plan_runs row, and a spinner that never
      * resolves — the one outcome ADR 0027 §4 forbids.
      */
-    const h = timed([CLEAN_BLOCK, APPROVED], 9_000);
+    /*
+     * 40s is enough to start the planner (15s floor + 12s reserve) and the
+     * planner then burns 30s of it, leaving 10s — below the critic's 12s floor.
+     * So the critic is refused rather than started, which is the whole point:
+     * starting it would buy a predictable timeout, charged to the user.
+     */
+    const h = timed([CLEAN_BLOCK, APPROVED], 30_000);
     let result;
     try {
       result = await generatePlan('user-1', plannerInput(), context(), h.deps, {
         maxIterations: 1,
-        deadlineMs: 10_000,
+        deadlineMs: 40_000,
       });
     } finally {
       h.restore();
@@ -564,8 +575,6 @@ describe('generatePlan with a budget', () => {
 
     expect(result.status).toBe('failed');
     expect(result.error).toMatch(/time/i);
-    // The planner ran and consumed 9s of 10s; the critic was never asked,
-    // because 1s is below what a call needs to be worth starting.
     expect(h.captured.map((c) => c.stage)).toEqual(['planner']);
     expect(h.written).toHaveLength(1);
     expect(h.written[0]?.status).toBe('failed');
@@ -578,12 +587,12 @@ describe('generatePlan with a budget', () => {
      * plan: the critic is the second opinion the whole pipeline is built around,
      * and "the rules liked it" is half the check.
      */
-    const h = timed([CLEAN_BLOCK, APPROVED], 9_000);
+    const h = timed([CLEAN_BLOCK, APPROVED], 30_000);
     let result;
     try {
       result = await generatePlan('user-1', plannerInput(), context(), h.deps, {
         maxIterations: 1,
-        deadlineMs: 10_000,
+        deadlineMs: 40_000,
       });
     } finally {
       h.restore();
@@ -609,5 +618,133 @@ describe('generatePlan with a budget', () => {
     expect(result.costCredits).toBe(0);
     // Still recorded: a run that was refused is a run.
     expect(h.written).toHaveLength(1);
+  });
+});
+
+describe('generatePlan budget — the corrections review found', () => {
+  function timed(script: Scripted[], msPerCall: number) {
+    const h = harness(script);
+    let now = 1_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const inner = h.deps.call;
+    const deps: PlannerDeps = {
+      plans: h.deps.plans,
+      call: async (options) => {
+        now += msPerCall;
+        return inner(options);
+      },
+    };
+    return { ...h, deps, restore: () => spy.mockRestore() };
+  }
+
+  it('caps the gateway ATTEMPTS, not only the per-attempt timeout', async () => {
+    /*
+     * THE FINDING, and the whole deadline depended on it. `timeoutMs` is a
+     * per-attempt abort inside the gateway, which retries a timed-out call up to
+     * three times — so a 45s allowance permitted ~136s against a 60s ceiling.
+     * A budget that does not pass `maxAttempts` is not a budget.
+     */
+    const h = harness([CLEAN_BLOCK, APPROVED]);
+    await generatePlan('user-1', plannerInput(), context(), h.deps, {
+      maxIterations: 1,
+      maxAttempts: 1,
+      deadlineMs: 45_000,
+    });
+
+    for (const call of h.captured) expect(call.maxAttempts).toBe(1);
+  });
+
+  it('passes no attempt cap when the budget sets none, so the eval is untouched', async () => {
+    const h = harness([CLEAN_BLOCK, APPROVED]);
+    await generatePlan('user-1', plannerInput(), context(), h.deps);
+    for (const call of h.captured) expect(call.maxAttempts).toBeUndefined();
+  });
+
+  it('keeps time back for the critic instead of letting the planner eat it all', async () => {
+    /*
+     * FOUND IN REVIEW: the planner was granted `min(120s, everything left)`, so a
+     * planner call that returned a rules-clean block near the end of the budget
+     * left the critic nothing — and the run was discarded as failed after paying
+     * full price for a block that had already passed the arithmetic.
+     */
+    const h = timed([CLEAN_BLOCK, APPROVED], 0);
+    try {
+      await generatePlan('user-1', plannerInput(), context(), h.deps, {
+        maxIterations: 1,
+        deadlineMs: 45_000,
+      });
+    } finally {
+      h.restore();
+    }
+
+    // The planner's allowance is short of the full budget by the critic's floor.
+    expect(h.captured[0]?.timeoutMs).toBeLessThan(45_000);
+    // And the critic actually got to run.
+    expect(h.captured.map((c) => c.stage)).toEqual(['planner', 'critic']);
+  });
+
+  it('starts a call when exactly the floor is left, rather than refusing it', async () => {
+    // The positive boundary. A floor that refused at exactly its own value would
+    // throw away runs that could have finished.
+    const h = timed([CLEAN_BLOCK, APPROVED], 0);
+    let result;
+    try {
+      result = await generatePlan('user-1', plannerInput(), context(), h.deps, {
+        maxIterations: 1,
+        deadlineMs: 15_000 + 12_000,
+      });
+    } finally {
+      h.restore();
+    }
+    expect(result.status).toBe('accepted');
+  });
+
+  it('refuses a NaN deadline rather than handing NaN to an abort signal', async () => {
+    /*
+     * Every comparison with NaN is false, so `left < floor` would have ADMITTED
+     * it and passed NaN to `AbortSignal.timeout`, which coerces to 0 — three
+     * instant aborts and three ledger rows. The same shape the budget gate uses.
+     */
+    const h = harness([CLEAN_BLOCK, APPROVED]);
+    const result = await generatePlan('user-1', plannerInput(), context(), h.deps, {
+      deadlineMs: Number.NaN,
+    });
+
+    expect(result.status).toBe('failed');
+    expect(h.captured).toEqual([]);
+  });
+
+  it('keeps an accepted block when its plan_runs row cannot be written', async () => {
+    /*
+     * FOUND IN REVIEW. `insertPlanRun` throws deliberately, and letting it
+     * propagate threw away an ACCEPTED block: both calls paid for, both gates
+     * passed, and the caller told the user nothing was saved and to try again —
+     * a second full-price run for a plan that had already been produced.
+     */
+    const h = harness([CLEAN_BLOCK, APPROVED]);
+    const failing: PlannerDeps = {
+      call: h.deps.call,
+      plans: {
+        async insertPlanRun() {
+          throw new Error('plan_runs insert failed: connection reset');
+        },
+      },
+    };
+
+    const result = await generatePlan('user-1', plannerInput(), context(), failing);
+
+    expect(result.status).toBe('accepted');
+    expect(result.block).toEqual(CLEAN_BLOCK);
+    expect(result.recorded).toBe(false);
+    // A sayable constant, never the database's own words.
+    expect(result.error).toBe(PLAN_NOT_RECORDED);
+    expect(result.error).not.toMatch(/connection reset|plan_runs/);
+  });
+
+  it('reports a written run as recorded', async () => {
+    const h = harness([CLEAN_BLOCK, APPROVED]);
+    const result = await generatePlan('user-1', plannerInput(), context(), h.deps);
+    expect(result.recorded).toBe(true);
+    expect(result.error).toBeNull();
   });
 });

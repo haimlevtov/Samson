@@ -9,6 +9,7 @@ import { WEB_PLAN_MAX_BLOCK_WEEKS } from '../llm/config';
 import {
   GOAL_LABEL,
   JOINT_LABEL,
+  PLAN_DAYS_PER_WEEK,
   REPORTABLE_JOINTS,
   planRequestFrom,
   planRequestSchema,
@@ -48,6 +49,26 @@ describe('the joint vocabulary', () => {
     // And no label for a joint that does not exist, which would be a control
     // offering something the rules ignore.
     expect(Object.keys(JOINT_LABEL).sort()).toEqual([...REPORTABLE_JOINTS].sort());
+  });
+
+  it('offers exactly the days the schema accepts', () => {
+    /*
+     * The fourth derivation test. FOUND IN REVIEW: the form listed its day
+     * options by hand while the goals, the weeks and the joints were all derived,
+     * so the control and the schema could drift apart silently.
+     */
+    for (const days of PLAN_DAYS_PER_WEEK) {
+      expect(
+        planRequestSchema.safeParse({ ...valid, days_per_week: days }).success,
+        String(days)
+      ).toBe(true);
+    }
+
+    const days = [...PLAN_DAYS_PER_WEEK];
+    const below = Math.min(...days) - 1;
+    const above = Math.max(...days) + 1;
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: below }).success).toBe(false);
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: above }).success).toBe(false);
   });
 
   it('has a label for every goal the schema admits', () => {
@@ -95,7 +116,13 @@ describe('planRequestSchema', () => {
   });
 
   it('refuses a field the form did not have', () => {
-    // strictObject: a crafted POST cannot smuggle a fifth answer past it.
+    /*
+     * strictObject, for a DIRECT caller. FOUND IN REVIEW: this said "a crafted
+     * POST cannot smuggle a fifth answer past it", and a POST never reaches this
+     * schema with a fifth key — `planRequestFrom` reads exactly four named
+     * fields, and that allowlist is what stops the POST. Both are worth having;
+     * they stop different things.
+     */
     expect(planRequestSchema.safeParse({ ...valid, candidate_limit: 900 }).success).toBe(false);
   });
 

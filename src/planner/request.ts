@@ -71,14 +71,26 @@ export const GOAL_LABEL: Record<string, string> = {
  * fits inside a serverless function — ADR 0027 §3. A control that could ask for
  * eight weeks would be a control that could ask to be killed.
  *
- * WHY `days_per_week` is 2–6 rather than the schema's 1–7: one day is not a
- * block and seven leaves no rest day, which the rules would reject anyway. The
- * bound that produces an answerable request is tighter than the bound that
- * produces a valid one.
  */
+/**
+ * The days-a-week a plan may be asked for, smallest first.
+ *
+ * Exported so the control and the schema cannot disagree — FOUND IN REVIEW, it
+ * was the one option list on the form typed out by hand while the goals, the
+ * weeks and the joints were all derived.
+ *
+ * Tighter than the planner schema's 1–7: one day is not a block, and seven
+ * leaves no rest day, which the rules reject anyway. The bound that produces an
+ * ANSWERABLE request is tighter than the bound that produces a valid one.
+ */
+export const PLAN_DAYS_PER_WEEK = [2, 3, 4, 5, 6] as const;
+
+const MIN_DAYS = PLAN_DAYS_PER_WEEK[0];
+const MAX_DAYS = PLAN_DAYS_PER_WEEK[PLAN_DAYS_PER_WEEK.length - 1] as number;
+
 export const planRequestSchema = z.strictObject({
   goal: trainingGoalSchema,
-  days_per_week: z.coerce.number().int().min(2).max(6),
+  days_per_week: z.coerce.number().int().min(MIN_DAYS).max(MAX_DAYS),
   block_weeks: z.coerce.number().int().min(1).max(WEB_PLAN_MAX_BLOCK_WEEKS),
   /**
    * Deduplicated, because a form can send a checkbox name twice and two copies

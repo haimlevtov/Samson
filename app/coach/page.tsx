@@ -9,7 +9,7 @@ import { planSessionOptions } from '@/src/templates/plan';
 import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole } from './CoachConsole';
 import { CoachBox } from './CoachBox';
-import { PlanRequest } from './PlanRequest';
+import { PlanRequestForm } from './PlanRequestForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +80,7 @@ export default async function CoachPage() {
          * It renders no Voice card, which is how it already worked: a coach with
          * no plan has nothing to deliver.
          */
-        <PlanRequest />
+        <PlanRequestForm />
       ) : (
         <>
           {/*

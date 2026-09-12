@@ -63,6 +63,20 @@ for the eval, which has no ceiling and whose whole job is to find out what the
 planner can do. Lowering it globally would make the graded eval worse in order
 to fit a surface the eval does not run on.
 
+**A deadline through `timeoutMs` alone is not a deadline, and the first version
+of this ADR missed it.** `timeoutMs` is a **per-attempt** `AbortSignal.timeout`
+in the gateway, which retries a timed-out call up to `DEFAULT_MAX_ATTEMPTS` (3)
+with backoff. So a 45s allowance bounded one attempt and permitted ~136s — over
+twice the ceiling it was written to fit inside, with the function killed, no
+`plan_runs` row, no rendered state, and an in-flight attempt billed upstream
+whose `llm_calls` row was never written. The budget therefore also caps
+**attempts at 1**, and dividing the allowance by three was rejected: a third of
+45s is 15s, which is the low end of a planner call's measured generation time, so
+three attempts that each fit would each be certain to time out.
+
+The cost is §2's cost again: a schema-invalid first response ends the run where
+the eval would have retried it.
+
 ### 2. One iteration from the web, not three
 
 A block the deterministic rules reject is reported as rejected. It is **not**
@@ -112,14 +126,14 @@ a project that runs once, for one demo, on free tiers.
 
 ## What this does not guarantee, stated plainly
 
-| Claim                                              | Status                                                                                                                                                                |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The button never hangs                             | **Guaranteed** — the deadline is enforced in the loop, below the function ceiling                                                                                     |
-| A failure is always shown as a state               | **Guaranteed** — every status maps to a sentence                                                                                                                      |
-| Pressing it produces a plan                        | **NOT guaranteed.** One iteration, no retry, and a deadline that can expire mid-generation                                                                            |
-| A plan it produces passed the rules and the critic | **Guaranteed** — the same code path the eval uses, with fewer attempts at it                                                                                          |
-| A rejected plan tells the user why                 | **Guaranteed** — the rejections are already stored and rendered                                                                                                       |
-| It costs nothing when it fails                     | **False, and the user is told.** A timed-out planner call is charged `TIMEOUT_ASSUMED_COST_USD` against the weekly budget — ADR 0007 — because it was billed upstream |
+| Claim                                              | Status                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The button never hangs                             | **Guaranteed, after a correction.** The deadline is enforced in the loop below the function ceiling — but the first version of this ADR expressed it only through a PER-ATTEMPT timeout, so it bounded one attempt at ~136s against a 60s ceiling. The web budget caps attempts at 1. See §1                    |
+| A failure is always shown as a state               | **Guaranteed** — every status maps to a sentence                                                                                                                                                                                                                                                                |
+| Pressing it produces a plan                        | **NOT guaranteed.** One iteration, no retry, and a deadline that can expire mid-generation                                                                                                                                                                                                                      |
+| A plan it produces passed the rules and the critic | **Guaranteed** — the same code path the eval uses, with fewer attempts at it                                                                                                                                                                                                                                    |
+| A rejected plan tells the user why                 | **Partly.** The card names which gate refused it and how many findings there were. The findings themselves are stored on the plan_runs row and **rendered nowhere** — FOUND IN REVIEW, this row said "stored and rendered", and the Hub list it pointed at belongs to the challenge validator                   |
+| It costs nothing when it fails                     | **False.** A timed-out planner call is charged TIMEOUT_ASSUMED_COST_USD against the weekly budget — ADR 0007 — because it was billed upstream. **The user is NOT told**, and this row used to claim they were: no rendered string mentions the budget. The copy does say that a second press costs a second run |
 
 **The honest summary: this is a button that sometimes does not work, shipped
 deliberately, because a card explaining that plans come from a developer's

@@ -387,7 +387,7 @@ the reason every model-backed surface is scripted today.
   and review found it stops the delivery's reading too._
 - **The preview appears where the Voice card does**, which is once a plan has
   been accepted: it is heard before a coach DELIVERS the plan, not before a plan
-  exists. A user with no plan sees the "No accepted plan yet" card.
+  exists. A user with no plan sees the questionnaire (8b; it was a "No accepted plan yet" card before that).
 - **The browser pass needs a signed-in session**, which this agent does not
   create: it does not type passwords, the published demo one included. It goes
   on the plans README's browser-pass row rather than being claimed.

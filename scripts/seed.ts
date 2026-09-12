@@ -195,7 +195,7 @@ const PLAN_WEEKS = 4;
  * way that state is reachable on a seeded database. See the branch below for why
  * this archetype and not another.
  */
-const PLANLESS_ARCHETYPE = 'inconsistent';
+export const PLANLESS_ARCHETYPE = 'inconsistent';
 
 /**
  * Compound patterns first, so the seeded plan reads like training.
