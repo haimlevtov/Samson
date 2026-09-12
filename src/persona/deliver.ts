@@ -11,7 +11,7 @@
 import { PERSONA_MAX_TOKENS } from '../llm/config';
 import type { LlmCaller } from '../planner/types';
 import type { TrainingBlock } from '../planner/schema';
-import { stripInvisible } from '../llm/safety';
+import { SafetyBlockedError, safetyCorrection, scanOutput, stripInvisible } from '../llm/safety';
 import { InventedNumberError, assertNoInventedNumbers, deliveredText } from './guard';
 import {
   BANNED_PHRASE_CORRECTION,
@@ -174,6 +174,33 @@ export async function deliverPlan(
         role: 'user' as const,
         content: weekCountCorrection(input.block.weeks.length, delivered.week_notes.length),
       });
+      continue;
+    }
+
+    /*
+     * The delivery scanned AS IT IS READ, not only as it was parsed — FOUND IN
+     * REVIEW of the gateway's leaf scan, and it is that scan's one gap.
+     *
+     * `scanValue` scans each string on its own, deliberately: joining leaves
+     * would let the separator manufacture a match across two fields that neither
+     * field contains. The cost is that a phrase SPLIT across two fields is
+     * caught by nothing — and this stage is where that is reachable, because it
+     * is the one whose output is several prose fields rather than one.
+     * `{"opening":"you are so","week_notes":["weak", …]}` passes every leaf and
+     * reads as an insult on screen.
+     *
+     * Here the join is not a guess: `deliveredText` is the text the user
+     * actually reads, and `app/coach/CoachConsole.tsx` renders those fields in
+     * this order. So scanning it is scanning the output, and the no-joining rule
+     * in `scanValue` is unaffected.
+     *
+     * Retried like every other content rejection, and it fails closed into
+     * `lastError` rather than degrading — ADR 0006.
+     */
+    const findings = scanOutput(deliveredText(delivered));
+    if (findings.length > 0) {
+      lastError = new SafetyBlockedError(findings);
+      messages.push({ role: 'user' as const, content: safetyCorrection(findings) });
       continue;
     }
 

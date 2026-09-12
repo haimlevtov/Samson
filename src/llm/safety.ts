@@ -268,12 +268,18 @@ export function scanOutput(text: string): SafetyFinding[] {
  * `JSON.stringify(value)` and was wrong in a way worth keeping written down.
  * `JSON.stringify` decodes `\u0067` into `g`, which is what that version was
  * for, and then RE-ESCAPES every control character: a real newline comes back
- * out as two ordinary characters, a backslash and an n. Every pattern above
- * joins its words with `\s+`, and `scanOutput` replaces control characters
- * with a space precisely so a line break cannot split a phrase — so
- * `"you are\ngay"` survived a scan of the re-encoded document, at a cost of
- * one character to whoever wrote it. FOUND IN REVIEW, and measured end to end
- * through `callLLM` rather than argued.
+ * out as two ordinary characters, a backslash and an n — which the `\s+` in
+ * the multi-word patterns above does not match. So `"you are\nfat"` survived a
+ * scan of the re-encoded document, at a cost of one character to whoever wrote
+ * it. FOUND IN REVIEW, and measured end to end through `callLLM` rather than
+ * argued.
+ *
+ * (An earlier version of this paragraph said `scanOutput` folds control
+ * characters to a space "precisely so a line break cannot split a phrase". It
+ * does not: `CONTROL` above deliberately KEEPS tab and newline, and `\s+`
+ * matches them directly. The folding is for the characters `\s` does not
+ * match. Corrected rather than deleted, because the wrong mechanism is what a
+ * later edit would rely on.)
  *
  * So the leaves, decoded, are what is scanned. This keeps the property the
  * amendment argued for — no list of field names for a new field to be missing
@@ -284,11 +290,21 @@ export function scanOutput(text: string): SafetyFinding[] {
  *            the separator manufacture a match across two fields that neither
  *            field contains — a false positive that fails a call for a user who
  *            did nothing. The cost is that a phrase deliberately split across
- *            two fields is not caught; on every stage here the prose is one
- *            field and the rest are enums, so there is nothing to split across.
+ *            two fields is not caught HERE — and it is reachable, which an
+ *            earlier version of this comment denied. `persona` returns an
+ *            opening, up to twelve week notes and a closing, all prose and all
+ *            rendered in sequence. That stage scans its own joined, rendered
+ *            text for exactly this reason (`src/persona/deliver.ts`), which is
+ *            the one place a join is the output rather than a guess.
  *
  * Object KEYS are not scanned. They are text the schema chose rather than text
  * a model wrote, and there is nothing for a completion to hide in them.
+ *
+ * AI-NOTE: safe against a deeply nested value only because it runs AFTER schema
+ *          validation, and every output schema here is fixed-depth. A hostile
+ *          20,000-level tree would overflow the stack — which the gateway's
+ *          catch turns into a retried `http_error`, so it fails closed, but a
+ *          schema with a recursive shape would need an explicit depth bound.
  *
  * AI-NOTE: this walks own enumerable properties, so a `Map` or a `Set` would be
  *          walked as an empty object and its CONTENTS would go unscanned. No
@@ -316,6 +332,27 @@ export function scanValue(value: unknown): SafetyFinding[] {
 
   walk(value);
   return findings;
+}
+
+/**
+ * How a finding is written into `llm_calls.error`.
+ *
+ * INVARIANT: a `credential` finding never records the credential — FOUND IN
+ *            REVIEW. Every other code names a phrase the model wrote, which is
+ *            the thing worth reading back; this one names a SECRET that reached
+ *            the output, and copying it into a database column is the one
+ *            outcome the check exists to prevent. The shape is what identifies
+ *            it, and the shape is what is kept.
+ *
+ * AI-NOTE: the ledger row is scoped to its own user by RLS, which is not a
+ *          reason to store a key in it. If a new code is ever added whose match
+ *          is a secret rather than a sentence, add it here in the same change.
+ */
+export function describeFinding(finding: SafetyFinding): string {
+  if (finding.code === 'credential') {
+    return `credential: redacted, ${finding.match.length} chars`;
+  }
+  return `${finding.code}: ${finding.match}`;
 }
 
 /** The corrective message sent back on a retry, mirroring the schema-failure path. */

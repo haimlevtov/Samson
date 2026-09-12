@@ -813,10 +813,13 @@ describe('callLLM — an escaped completion', () => {
    *
    * The first scanned `JSON.stringify(value)`, which decodes `\\u0067` and then
    * RE-ESCAPES every control character. A real newline comes back out as a
-   * backslash and an n, every pattern in safety.ts joins its words with
-   * whitespace, and `scanOutput` normalises control characters to a space
-   * precisely so a line break cannot split a phrase. So this one — one
-   * character cheaper for whoever writes it — walked straight through the fix.
+   * backslash and an n, which the `\\s+` in the multi-word patterns does not
+   * match — so this one, one character cheaper for whoever writes it, walked
+   * straight through the fix.
+   *
+   * (The `scanOutput` normalisation does NOT cover it: `CONTROL` keeps tab and
+   * newline deliberately, and a real one is matched by `\\s+` directly. An
+   * earlier version of this comment credited the wrong mechanism.)
    */
   const NEWLINE = '{"summary":"you are\\nfat","sessions":4}';
 

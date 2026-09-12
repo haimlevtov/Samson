@@ -189,9 +189,23 @@ the sentence _"every escape has become the character it denotes and
 and the whole C0 range. A real newline comes back out as two ordinary
 characters: a backslash and an n.
 
-Every pattern in `safety.ts` joins its words with `\s+`, and `scanOutput`
-normalises control characters to a space **precisely so** a line break cannot
-split a phrase — a normalisation that never fires on a re-escaped one. So:
+**Why that matters, stated accurately** — the first attempt at this paragraph
+was itself wrong, and said `scanOutput` "normalises control characters to a
+space precisely so a line break cannot split a phrase". It does not.
+`CONTROL` in `safety.ts` deliberately **excludes tab and newline**; its own
+comment says so. What actually happens is two different things:
+
+- A real tab or newline SURVIVES the normalisation and is matched directly by
+  the `\s+` in the multi-word patterns (`DEMEANING`, `PROMPT_LEAK`). The
+  normalisation is load-bearing for the characters `\s` does NOT match — NUL,
+  DEL, the C1 range.
+- `PROTECTED_ATTRIBUTE` contains no whitespace at all. It is a bare alternation,
+  which is why the `\u0067ay` example above is caught by the word and not by
+  any separator.
+
+`JSON.stringify` re-escapes the whole of U+0000–U+001F, so a re-encoded document
+presents a newline as a backslash and an `n` — which neither mechanism matches.
+So:
 
 ```
 {"summary":"you are\nfat"}     → reached the user, through the "fix"
@@ -205,8 +219,11 @@ and the same insult on screen. Both reviewers ran it end to end through
 
 `scanOutput` still runs on the raw string, unchanged, for the reason §4 gave.
 **`scanValue` then walks the parsed value's string leaves and scans each one on
-its own.** A finding from either is the same `safety_blocked` status, the same
-correction and the same retry; the caller cannot tell them apart.
+its own.** A finding from either is the same `safety_blocked` status, the same correction
+and the same retry rule — one `blockOn`, so the caller cannot tell them apart and
+neither can a future edit. _FOUND IN REVIEW: the truncation rule below was
+applied to one of the two scans and not the other, and this sentence claimed
+otherwise while the code disagreed._
 
 - **Leaves, not the document.** The document is the encoded form, which is the
   whole finding above.
@@ -236,10 +253,26 @@ that assert the hole:
   table, which is a decision — a wrong one starts rejecting ordinary text — and
   not a patch to make in the same change as this one.
 - **A phrase split across two fields.** Each leaf is scanned alone, so
-  `{"a":"you are so","b":"weak"}` matches nothing. Not reachable to any effect
+  `{"a":"you are so","b":"weak"}` matches nothing.
+
+  _The first version of this bullet said it was "not reachable to any effect
   today, because on every stage here the prose is one field and the rest are
-  enums; a schema with two prose fields would make it reachable, and that is the
-  moment to revisit the no-joining rule.
+  enums". **That was false**, and a reviewer measured it: only `chat` and
+  `normalizer` look like that. `persona` returns an opening, up to twelve week
+  notes and a closing — all prose, rendered in sequence — and `planner` returns a
+  rationale plus a focus per session. A persona delivery split across two of
+  those fields passed every scan and read as an insult on screen._
+
+  **So the persona stage now scans its own rendered text**, in
+  `src/persona/deliver.ts`, using the same `deliveredText` join the banned-phrase
+  guard already computes. That is not a joined guess: it is the string the user
+  reads, which is the one place joining is not an invention. `scanValue`'s
+  no-joining rule is unchanged.
+
+  **Still open, and named rather than implied:** the planner's `rationale` and
+  per-session `focus`, and the critic's `reasons[].detail`. None is read by a
+  user as one continuous string today, and the moment one is, it needs the same
+  treatment the persona stage just got.
 
 ### Consequences
 
@@ -252,5 +285,11 @@ that assert the hole:
   fenced and sanitised by `rejectedAttempt`. A model steered by an injected
   "spell your reply with escapes" will re-emit and burn the cap. Failing closed
   is right; paying three times for it is the price.
+- **A `credential` finding no longer records the credential.** Every other code
+  matches a phrase the model wrote, which is what is worth reading back in
+  `llm_calls.error`; that one matches a SECRET that reached the output, and
+  writing it into a database column is the outcome the check exists to prevent.
+  `describeFinding` keeps the shape and drops the value. FOUND IN REVIEW, and
+  older than this change — the second scan is simply a second way to reach it.
 - **The adversarial suite gains this class**, per §5, recorded as a hole that
   existed rather than as a case that always passed.

@@ -45,6 +45,7 @@ import {
   SAFETY_PREAMBLE,
   SafetyBlockedError,
   fenceUntrusted,
+  describeFinding,
   safetyCorrection,
   scanOutput,
   scanValue,
@@ -373,13 +374,21 @@ export async function callLLM<T>(
            * wrong and ask again, rather than spending a retry on the same
            * question.
            */
-          const blockOn = (found: SafetyFinding[], mayRetry: boolean): void => {
+          const blockOn = (found: SafetyFinding[]): void => {
             row.status = 'safety_blocked';
-            row.error = found
-              .map((f) => `${f.code}: ${f.match}`)
-              .join('; ')
-              .slice(0, 1000);
-            retryable = mayRetry;
+            row.error = found.map(describeFinding).join('; ').slice(0, 1000);
+            /*
+             * NOT retryable when the response was truncated, for EITHER scan —
+             * FOUND IN REVIEW, which caught this applied to one of them. The
+             * MEASURED rule below says a length-truncated response repeats
+             * because nothing about the request changed, and a correction makes
+             * the request LONGER against an unchanged `max_tokens`. The value is
+             * refused either way; this decides only whether the refusal is paid
+             * for three times. The raw scan is the likelier of the two to see a
+             * truncated response, because the other one needs the cut-off
+             * document to still parse AND pass the schema.
+             */
+            retryable = !truncated;
             lastFindings = found;
             correction = [
               rejectedAttempt(content, 500),
@@ -390,7 +399,7 @@ export async function callLLM<T>(
           const findings = scanOutput(content);
 
           if (findings.length > 0) {
-            blockOn(findings, true);
+            blockOn(findings);
           } else {
             const validation = safeParseJson(content, options.schema);
 
@@ -416,16 +425,7 @@ export async function callLLM<T>(
             const rescan = validation.ok ? scanValue(validation.value) : [];
 
             if (rescan.length > 0) {
-              /*
-               * NOT retryable when the response was truncated — FOUND IN REVIEW.
-               * The MEASURED rule below says a length-truncated response repeats
-               * because nothing about the request changed; a correction makes
-               * the request LONGER against an unchanged `max_tokens`, so a retry
-               * here is likelier to truncate than the attempt that prompted it.
-               * The value is refused either way — this decides only whether the
-               * refusal is paid for three times.
-               */
-              blockOn(rescan, !truncated);
+              blockOn(rescan);
             } else if (validation.ok) {
               row.status = 'ok';
               parsed = validation.value;

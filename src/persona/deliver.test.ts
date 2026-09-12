@@ -9,8 +9,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CallOptions, LlmResult } from '../llm/types';
 import type { TrainingBlock } from '../planner/schema';
-import { InventedNumberError } from './guard';
+import { InventedNumberError, deliveredText } from './guard';
 import { BannedPhraseError, MAX_DELIVERY_ATTEMPTS, deliverPlan, phraseUsed } from './deliver';
+import { SafetyBlockedError, scanOutput } from '../llm/safety';
 import { GENTLE_OVERRIDE } from './tone';
 import type { DeliveredPlan, Persona } from './schema';
 
@@ -371,5 +372,56 @@ describe('the user gets their block when the prose is fine', () => {
         { call: harness([bad, bad]).call }
       )
     ).rejects.toBeInstanceOf(BannedPhraseError);
+  });
+});
+
+/**
+ * The gap the gateway's leaf scan leaves, closed on the one stage that has it.
+ *
+ * FOUND IN REVIEW of that scan. `scanValue` scans each string on its own — it
+ * must, or a join separator would manufacture matches across fields — and this
+ * is the only stage whose user-visible output is several prose fields. Neither
+ * half is a finding; the text on screen is.
+ */
+describe('a phrase split across the delivered fields', () => {
+  const split: DeliveredPlan = {
+    opening: 'Two weeks. Same lift, same 62.5 kg. You are so',
+    week_notes: ['weak that this is the only place to start.', 'Week 2: same again, cleaner.'],
+    closing: 'Log every set.',
+  };
+
+  it('is rejected, and retried with the content correction', async () => {
+    const h = harness([split, good]);
+    const result = await deliverPlan(
+      'u1',
+      { block: BLOCK, persona: RIVAL, userHumorMax: 'crude', tone: CALM },
+      { call: h.call }
+    );
+
+    // The clean second attempt is what the user gets.
+    expect(result.delivered).toEqual(good);
+    expect(result.attempts).toBe(2);
+
+    const retry = h.captured[1]!.messages.at(-1)!.content;
+    expect(retry).toContain('automated content check');
+    expect(retry).toContain('demeaning');
+  });
+
+  it('fails closed rather than delivering it when the model repeats', async () => {
+    // ADR 0006: a delivery that fails the guard is not a degraded delivery.
+    const h = harness(Array.from({ length: MAX_DELIVERY_ATTEMPTS }, () => split));
+    await expect(
+      deliverPlan(
+        'u1',
+        { block: BLOCK, persona: RIVAL, userHumorMax: 'crude', tone: CALM },
+        { call: h.call }
+      )
+    ).rejects.toBeInstanceOf(SafetyBlockedError);
+  });
+
+  it('says nothing about an ordinary delivery, which is the half that matters', () => {
+    // Each field alone and the joined text both have to stay clean, or this
+    // guard starts failing plans for users who did nothing.
+    expect(scanOutput(deliveredText(good))).toEqual([]);
   });
 });

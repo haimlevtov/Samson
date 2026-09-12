@@ -21,6 +21,7 @@ import {
   SAFETY_PREAMBLE,
   fenceUntrusted,
   sanitizeUntrusted,
+  describeFinding,
   scanOutput,
   scanValue,
 } from './safety';
@@ -374,9 +375,9 @@ describe('scanOutput and encoded text', () => {
   });
 
   it('is not rescued by re-encoding the document, which is what the first fix did', () => {
-    // MEASURED. `JSON.stringify` decodes g and re-escapes a newline, so
-    // the second of these is a backslash and an n to the scanner — and every
-    // pattern here joins its words with whitespace.
+    // MEASURED. `JSON.stringify` decodes `\u0067` and re-escapes a newline,
+    // so the second of these reaches the scanner as a backslash and an n, which
+    // the `\s+` in the multi-word patterns does not match.
     const escaped = JSON.parse('{"reply":"you are \\u0067ay"}') as unknown;
     const broken = JSON.parse('{"reply":"you are\\nfat"}') as unknown;
 
@@ -421,14 +422,16 @@ describe('scanValue', () => {
    * says the suite records what got through and not only what was blocked.
    * Neither is fixed here, and neither is claimed to be.
    */
-  it('HOLE: a phrase split across two fields is caught by nothing', () => {
+  it('HOLE: a phrase split across two fields is caught by nothing here', () => {
     // Each leaf is scanned on its own, deliberately — joining them would let
     // the separator manufacture a match across fields that neither contains,
     // which fails calls for users who did nothing. The cost is this.
     //
-    // Not currently reachable to any effect: on every stage here the prose is
-    // ONE field and the rest are enums, so there is no second field to hide the
-    // other half in. A schema with two prose fields would make it reachable.
+    // FOUND IN REVIEW: the first version of this said it was unreachable
+    // "because on every stage the prose is one field and the rest are enums".
+    // True of `chat` and `normalizer`, FALSE of the other three — `persona`
+    // returns an opening, up to twelve week notes and a closing. The persona
+    // stage scans its own rendered text for that reason, in deliver.ts.
     expect(scanValue({ a: 'you are so', b: 'weak' })).toEqual([]);
     expect(scanOutput('you are so weak')).not.toEqual([]);
   });
@@ -443,5 +446,21 @@ describe('scanValue', () => {
     expect(scanValue({ reply: 'you are g\u0430y' })).toEqual([]);
     expect(scanValue({ reply: 'you are \uFF47ay' })).toEqual([]);
     expect(scanOutput('you are gay')).not.toEqual([]);
+  });
+});
+
+describe('describeFinding', () => {
+  it('keeps the phrase for every code whose match is a sentence', () => {
+    expect(describeFinding({ code: 'demeaning', match: 'you are pathetic' })).toBe(
+      'demeaning: you are pathetic'
+    );
+  });
+
+  it('redacts the credential, which is the one match that is a secret', () => {
+    // FOUND IN REVIEW. This string goes into `llm_calls.error`, and writing a
+    // key into a database column is the outcome the check exists to prevent.
+    const line = describeFinding({ code: 'credential', match: 'sk-abcdefghij0123456789XYZ' });
+    expect(line).not.toContain('sk-');
+    expect(line).toBe('credential: redacted, 26 chars');
   });
 });
