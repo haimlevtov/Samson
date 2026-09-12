@@ -226,7 +226,9 @@ than quietly dropped.**
 | Cache hit rate measured and recorded                                                             | ❌ **unmet — needs a key** |
 | Cost per plan generation recorded per model tried                                                | ❌ **unmet — needs a key** |
 
-`npm run eval:planner --live` is written, wired and unrun. It signs in as each
+`npm run eval:planner -- --live` is written and wired. (The `--` matters: without
+it npm keeps the flag for itself and the run goes offline, silently proving
+nothing. It was missing here.) It signs in as each
 seeded archetype, runs the same thirty cases against real models, and reads the
 cache and cost figures back out of `llm_calls`. It needs `OPENROUTER_API_KEY`
 in `.env.local` and nothing else. Until it runs, the last two rows above stay
