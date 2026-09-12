@@ -18,13 +18,26 @@
  * that cannot be skipped and because it is what the coach calls you. Equipment
  * is late because it is the longest, and a long form early is where people
  * leave. The plan is last because it is the only step that spends money.
+ *
+ * `coach` is second for the same reason `name` is first: it is one tap, it costs
+ * nothing, and everything from here on is a coach asking you things — so it is
+ * worth knowing whose voice is asking. It is also the cheapest possible step to
+ * put in front of the two long ones.
  */
-export const ONBOARDING_STEPS = ['name', 'body', 'goal', 'equipment', 'plan'] as const;
+export const ONBOARDING_STEPS = ['name', 'coach', 'body', 'goal', 'equipment', 'plan'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 /** What the route knows about a user, as far as onboarding cares. */
 export interface OnboardingState {
   displayName: string | null;
+  /**
+   * The coach they picked, or null — `users.persona_slug`, rework PR 8.
+   *
+   * A slug rather than a boolean, because the question is WHICH coach. One
+   * naming a coach the picker no longer lists still counts as answered: the
+   * question WAS answered, and the surface falls back (`src/persona/choice.ts`).
+   */
+  personaSlug: string | null;
   /** True when all four the diet engine needs are present — ADR 0024. */
   hasBiometrics: boolean;
   dietGoal: string | null;
@@ -44,6 +57,12 @@ export function isAnswered(step: OnboardingStep, state: OnboardingState): boolea
   switch (step) {
     case 'name':
       return state.displayName !== null && state.displayName.trim() !== '';
+    case 'coach':
+      // Trimmed, like `name` above, and FOUND IN REVIEW for not being: an empty
+      // string is what a hand-written POST leaves, every surface would fall back
+      // to the first coach, and the user would be carried past a question they
+      // never answered. This file's own test comment already claimed it did.
+      return state.personaSlug !== null && state.personaSlug.trim() !== '';
     case 'body':
       return state.hasBiometrics;
     case 'goal':
@@ -99,6 +118,8 @@ export function progressFor(step: OnboardingStep): { position: number; total: nu
  * `name` is absent because it cannot be skipped.
  */
 export const SKIP_COST: Record<Exclude<OnboardingStep, 'name'>, string> = {
+  coach:
+    'The Coach tab starts you on the first coach in the list, and you can change it there whenever you like.',
   body: 'Without these the coach cannot work out a calorie target, and the diet answers will say so.',
   goal: 'The coach will assume you want to maintain. You can change it on the Coach tab, and it will remember.',
   equipment:

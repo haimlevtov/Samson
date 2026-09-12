@@ -79,11 +79,30 @@ export const GOAL_LABEL: Record<string, string> = {
  * was the one option list on the form typed out by hand while the goals, the
  * weeks and the joints were all derived.
  *
- * Tighter than the planner schema's 1–7: one day is not a block, and seven
- * leaves no rest day, which the rules reject anyway. The bound that produces an
- * ANSWERABLE request is tighter than the bound that produces a valid one.
+ * The planner schema's own 1–7, and it used to be 2–6 on this reasoning: "one
+ * day is not a block, and seven leaves no rest day, **which the rules reject
+ * anyway**".
+ *
+ * The second half of that was FALSE, and it is worth saying so rather than
+ * quietly widening the array. `src/planner/rules.ts` has six rules — weekly
+ * volume increase, ACWR band, deload cadence, equipment available, load ceiling,
+ * injured joint — and not one of them mentions a rest day. Nothing rejected a
+ * seven-day week; it was simply never offered, behind a comment that said it
+ * could not be had.
+ *
+ * The first half was an opinion about training rather than a bound, and it is
+ * the user's own training. So the control offers what the schema admits.
+ *
+ * RECORDED RESERVATION, because `docs/FRAMING.md` says the user's body is a
+ * stakeholder that cannot complain: seven days a week with no rest day is
+ * unwise, and this project has been careful about that class of advice — every
+ * persona bans "no pain no gain". What bounds it is arithmetic that still runs:
+ * `acwr_band` and `weekly_volume_increase` cap how fast load climbs however
+ * many days it is spread over. So it is unwise rather than unsafe, the user
+ * chose it, and the control says what seven means instead of pretending the
+ * option does not exist.
  */
-export const PLAN_DAYS_PER_WEEK = [2, 3, 4, 5, 6] as const;
+export const PLAN_DAYS_PER_WEEK = [1, 2, 3, 4, 5, 6, 7] as const;
 
 const MIN_DAYS = PLAN_DAYS_PER_WEEK[0];
 const MAX_DAYS = PLAN_DAYS_PER_WEEK[PLAN_DAYS_PER_WEEK.length - 1] as number;

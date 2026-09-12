@@ -5,6 +5,7 @@ import { HUMOR_LEVELS } from '@/src/persona/schema';
 import { THEMES } from '@/src/ui/theme';
 import { MAX_DISPLAY_NAME } from '@/src/db/leaderboard';
 import { EARLIEST_BIRTH_DATE, SEXES, type Sex } from '@/src/diet/biometrics';
+import { SEX_LABEL } from '@/src/ui/sex';
 import { updateSettings } from './actions';
 import { EMPTY_SETTINGS_FORM, type SettingsFormState } from './form-state';
 
@@ -20,13 +21,6 @@ const HUMOR_BLURB: Record<string, string> = {
   clean: 'No jokes. Straight coaching.',
   cheeky: 'Light ribbing. The default.',
   crude: 'Everything the personas have.',
-};
-
-/** The three the column constrains, in the user's words rather than the schema's. */
-const SEX_LABEL: Record<Sex, string> = {
-  male: 'Male',
-  female: 'Female',
-  unspecified: 'Prefer not to say',
 };
 
 export function SettingsForm({

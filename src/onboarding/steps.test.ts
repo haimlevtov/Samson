@@ -17,6 +17,7 @@ import {
 
 const EMPTY: OnboardingState = {
   displayName: null,
+  personaSlug: null,
   hasBiometrics: false,
   dietGoal: null,
   hasEquipment: false,
@@ -30,7 +31,10 @@ describe('nextStep', () => {
   });
 
   it('walks the steps in order as each is answered', () => {
-    const answered = { ...EMPTY, displayName: 'Noa' };
+    const named = { ...EMPTY, displayName: 'Noa' };
+    expect(nextStep(named)).toBe('coach');
+
+    const answered = { ...named, personaSlug: 'sergeant' };
     expect(nextStep(answered)).toBe('body');
     expect(nextStep({ ...answered, hasBiometrics: true })).toBe('goal');
     expect(nextStep({ ...answered, hasBiometrics: true, dietGoal: 'gain' })).toBe('equipment');
@@ -39,10 +43,38 @@ describe('nextStep', () => {
     ).toBe('plan');
   });
 
+  it('counts a coach as chosen by which one, not by whether the question was seen', () => {
+    /*
+     * The column is a slug and null means "has not chosen" — the same shape
+     * `diet_goal` uses, for the same reason. An empty string is what a
+     * hand-written POST leaves, and it is NOT an answer: the Coach tab would
+     * fall back to the first coach and the user would never have picked one.
+     */
+    const named = { ...EMPTY, displayName: 'Noa' };
+    expect(isAnswered('coach', named)).toBe(false);
+    expect(isAnswered('coach', { ...named, personaSlug: '' })).toBe(false);
+    expect(isAnswered('coach', { ...named, personaSlug: '   ' })).toBe(false);
+    expect(isAnswered('coach', { ...named, personaSlug: 'old-master' })).toBe(true);
+  });
+
+  it('treats a coach that no longer exists as chosen anyway', () => {
+    /*
+     * `is_active = false` retires a coach without deleting the row, so a stored
+     * slug can stop naming anything the picker lists. The question was still
+     * answered — asking it again would be the app second-guessing a choice the
+     * user made — and every reader falls back. That fallback is why the column
+     * carries no foreign key.
+     */
+    const named = { ...EMPTY, displayName: 'Noa', personaSlug: 'retired-coach' };
+    expect(isAnswered('coach', named)).toBe(true);
+    expect(nextStep(named)).toBe('body');
+  });
+
   it('is over when everything is answered', () => {
     expect(
       nextStep({
         displayName: 'Noa',
+        personaSlug: 'rival',
         hasBiometrics: true,
         dietGoal: 'maintain',
         hasEquipment: true,
@@ -53,7 +85,12 @@ describe('nextStep', () => {
   });
 
   it('passes over a step the user skipped, without marking it answered', () => {
-    const skipped = { ...EMPTY, displayName: 'Noa', skipped: ['body'] as const };
+    const skipped = {
+      ...EMPTY,
+      displayName: 'Noa',
+      personaSlug: 'physio',
+      skipped: ['body'] as const,
+    };
     expect(nextStep(skipped)).toBe('goal');
     // The distinction that matters: skipping is not answering, and anything
     // reading the stored data still sees an unanswered question.
@@ -65,7 +102,7 @@ describe('nextStep', () => {
       nextStep({
         ...EMPTY,
         displayName: 'Noa',
-        skipped: ['body', 'goal', 'equipment', 'plan'],
+        skipped: ['coach', 'body', 'goal', 'equipment', 'plan'],
       })
     ).toBeNull();
   });
@@ -91,8 +128,9 @@ describe('progressFor', () => {
   it('reports the position of the step, not the number completed', () => {
     // "Question 3 of 5" is where you are. "2 of 5 done" invites somebody who
     // skipped one to wonder why the number did not move.
-    expect(progressFor('name')).toEqual({ position: 1, total: 5 });
-    expect(progressFor('plan')).toEqual({ position: 5, total: 5 });
+    expect(progressFor('name')).toEqual({ position: 1, total: 6 });
+    expect(progressFor('coach')).toEqual({ position: 2, total: 6 });
+    expect(progressFor('plan')).toEqual({ position: 6, total: 6 });
   });
 
   it('covers every step', () => {

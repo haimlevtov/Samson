@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { equipmentCatalogue } from '@/src/db/equipment';
 import { userEquipment } from '@/src/db/exercises';
-import { latestAcceptedPlan } from '@/src/db/personas';
+import { latestAcceptedPlan, listPersonas } from '@/src/db/personas';
 import {
   ONBOARDING_STEPS,
   SKIP_COST,
@@ -13,7 +13,7 @@ import {
 import { EquipmentForm } from '../settings/EquipmentForm';
 import { PlanRequestForm } from '../coach/PlanRequestForm';
 import { finishOnboarding, skipStep } from './actions';
-import { BodyStep, GoalStep, NameStep } from './Steps';
+import { BodyStep, CoachStep, GoalStep, NameStep } from './Steps';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,19 +31,32 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ skip?: string }>;
+  // `finish` is the stamp failure's rendered owner — see finishOnboarding.
+  searchParams: Promise<{ skip?: string; finish?: string }>;
 }) {
   const db = await createServerDb();
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
-  const { skip } = await searchParams;
+  const { skip, finish } = await searchParams;
 
-  const [tags, owned, plan] = await Promise.all([
+  const [tags, owned, plan, personas] = await Promise.all([
     equipmentCatalogue(db),
     userEquipment(db, user.id),
     latestAcceptedPlan(db),
+    listPersonas(db),
   ]);
+
+  /*
+   * Three fields of each row, not the row. `systemPrompt` is the character
+   * description ADR 0006 fences into a message, and a client component has no
+   * use for it — so it does not cross into one.
+   */
+  const coaches = personas.map((persona) => ({
+    slug: persona.slug,
+    name: persona.name,
+    sampleLine: persona.sampleLine,
+  }));
 
   /*
    * The skip list is query-string input, so it is filtered against the known
@@ -58,6 +71,7 @@ export default async function WelcomePage({
 
   const step = nextStep({
     displayName: user.displayName,
+    personaSlug: user.personaSlug,
     // The four ADR 0024 needs. All four or none: a partial profile is what its
     // three refusals are about, and the step asks for all four together.
     hasBiometrics:
@@ -70,6 +84,37 @@ export default async function WelcomePage({
     hasPlan: plan !== null,
     skipped,
   });
+
+  /*
+   * The stamp failed — FOUND IN REVIEW, and it is checked BEFORE the branch
+   * below because that branch is what made it a loop. `/welcome` calls
+   * `finishOnboarding` during render when every question is answered, so a
+   * failing write sent the user to `/hub`, which sent them back here, which
+   * called it again: ERR_TOO_MANY_REDIRECTS, a blank page, and no message.
+   *
+   * A rendered state with a live retry instead. The user's answers are all
+   * still there; the only thing missing is the stamp.
+   */
+  if (finish === 'failed') {
+    return (
+      <>
+        <header className="welcome-head">
+          <h1>Welcome to Samson</h1>
+        </header>
+        <div className="card">
+          <p className="error" role="status">
+            Could not finish setting you up.
+          </p>
+          <p className="muted small">
+            Nothing you answered was lost. This is the last step — press it again.
+          </p>
+          <form action={finishOnboarding} className="welcome-form">
+            <button type="submit">Try again</button>
+          </form>
+        </div>
+      </>
+    );
+  }
 
   // Nothing left to ask. `finishOnboarding` stamps the flow and redirects, so
   // it never returns — arriving here with everything answered is the same thing
@@ -104,6 +149,29 @@ export default async function WelcomePage({
           <h2 className="section">What should the coach call you?</h2>
           <div className="card">
             <NameStep carried={carried} />
+          </div>
+        </>
+      ) : null}
+
+      {step === 'coach' ? (
+        <>
+          <h2 className="section">Who do you want in your corner?</h2>
+          <div className="card">
+            {/*
+             * A coach with no rows to offer would be a step with no answer, and
+             * the flow would stick on it — `isAnswered` wants a slug. The
+             * personas are shared content seeded by a migration, so an empty
+             * list means the catalogue is missing rather than that the user has
+             * nothing; either way the honest move is to say so and let them past.
+             */}
+            {coaches.length === 0 ? (
+              <p className="muted">
+                No coaches are available just now. You can pick one later on the Coach tab.
+              </p>
+            ) : (
+              <CoachStep coaches={coaches} carried={carried} />
+            )}
+            <SkipButton step="coach" carried={carried} />
           </div>
         </>
       ) : null}

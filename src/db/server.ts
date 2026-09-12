@@ -77,6 +77,15 @@ export interface SessionUser {
   /** The stored diet goal, or null when the user has not chosen — ADR 0032 §3. */
   dietGoal: string | null;
   /**
+   * The coach the user picked in onboarding, or null — rework PR 8, ADR 0031 §5.
+   *
+   * NOT validated against the persona rows here, deliberately: a round trip to
+   * the content table on every request, to turn a live slug into the same live
+   * slug, would be paid by every page. A slug naming no listed coach is a real
+   * state, and `src/persona/choice.ts` is where it is handled.
+   */
+  personaSlug: string | null;
+  /**
    * When the welcome flow was finished, or null — ADR 0032 §2 as amended.
    *
    * The ONE thing onboarding stores that is not derivable from the data. Which
@@ -104,7 +113,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
   const { data: profile } = await db
     .from('users')
     .select(
-      'display_name, timezone, unit_preference, humor_max_level, theme, leaderboard_opt_out, bodyweight_kg, height_cm, birth_date, sex, diet_goal, onboarded_at'
+      'display_name, timezone, unit_preference, humor_max_level, theme, leaderboard_opt_out, bodyweight_kg, height_cm, birth_date, sex, diet_goal, persona_slug, onboarded_at'
     )
     .eq('user_id', user.id)
     .maybeSingle();
@@ -142,6 +151,7 @@ export async function currentUser(db: Db): Promise<SessionUser | null> {
     // anything else means the constraint was dropped, and null is the safe read.
     sex: isSex(storedSex) ? storedSex : null,
     dietGoal: storedGoal,
+    personaSlug: profile?.persona_slug ?? null,
     onboardedAt: profile?.onboarded_at ?? null,
   };
 }

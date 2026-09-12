@@ -1,13 +1,13 @@
 'use client';
 
 import { useActionState } from 'react';
-import { SEXES } from '@/src/diet/biometrics';
 import { DIET_GOALS } from '@/src/diet/energy';
-import { saveBiometrics, saveGoal, saveName } from './actions';
+import { SEX_LABEL, WELCOME_SEXES } from '@/src/ui/sex';
+import { saveBiometrics, saveCoach, saveGoal, saveName } from './actions';
 import { EMPTY_WELCOME, type WelcomeState } from './welcome-state';
 
 /**
- * The three steps that can be refused — ADR 0032 §2.
+ * The four steps that can be refused — ADR 0032 §2.
  *
  * WHY these are client components when the rest of `/welcome` is not: the rule
  * in `docs/specs/mobile-interface.md` §4 is that a rejected form KEEPS ITS
@@ -93,11 +93,24 @@ export function BodyStep({ carried }: { carried: string }) {
         </label>
         <label>
           <span className="label">Sex</span>
-          <select name="sex" defaultValue={value('sex')}>
-            <option value="">Prefer not to say</option>
-            {SEXES.map((option) => (
+          {/*
+           * TWO OPTIONS — the owner's instruction, and `src/ui/sex.ts` carries
+           * why it is right: the BMR constant is selected by sex, so the number
+           * the diet block shows is only as honest as the answer behind it.
+           *
+           * The empty option is a PLACEHOLDER, not a third answer. A two-option
+           * select with no placeholder preselects the first, so a user who never
+           * looked at this field would be recorded as male; `required` plus an
+           * empty first option means the two values are the only two that can be
+           * submitted, and neither can be submitted by accident. The server
+           * refuses a blank anyway — `isCompleteBody` — because a required
+           * attribute is a convenience, never a control.
+           */}
+          <select name="sex" defaultValue={value('sex')} required>
+            <option value="">Choose one</option>
+            {WELCOME_SEXES.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {SEX_LABEL[option]}
               </option>
             ))}
           </select>
@@ -107,6 +120,79 @@ export function BodyStep({ carried }: { carried: string }) {
           {pending ? 'Saving…' : 'Continue'}
         </button>
       </form>
+    </>
+  );
+}
+
+/**
+ * A coach as the picker lists it — rework PR 8.
+ *
+ * Three fields rather than `ListedPersona`, and the omission is the point:
+ * `systemPrompt` is the character description the delivery stage fences into a
+ * message, and there is no reason for a browser to hold it. A client component
+ * receives what it renders.
+ */
+export interface CoachChoice {
+  slug: string;
+  name: string;
+  /** The row's own line, spoken elsewhere and read here. Null for a row without one. */
+  sampleLine: string | null;
+}
+
+/**
+ * Step 2 — which coach, the one question in this flow that is about taste.
+ *
+ * WHY radio cards rather than a `<select>` like the other two: a coach is
+ * chosen by how they sound, and the sample line is the only thing on the screen
+ * that conveys that. A dropdown shows one name at a time and hides the reason to
+ * prefer any of them.
+ *
+ * `required` on the group, so the browser refuses an empty submit before a round
+ * trip. The action checks the slug against the persona rows regardless — a
+ * required attribute is a convenience, never a control.
+ */
+export function CoachStep({ coaches, carried }: { coaches: CoachChoice[]; carried: string }) {
+  const [state, action, pending] = useActionState(saveCoach, EMPTY_WELCOME);
+
+  return (
+    <>
+      <Problem state={state} />
+      <form action={action} className="welcome-form">
+        <fieldset className="coach-set">
+          <legend className="label">Pick a coach</legend>
+          {coaches.map((coach) => (
+            <label key={coach.slug} className="choice-row coach-choice">
+              {/* Keeps the pick through a refusal — mobile-interface.md §4.
+                  React 19 resets an uncontrolled form once a function action
+                  resolves, so without this a transient save failure clears the
+                  choice and the five sample lines have to be read again. */}
+              <input
+                type="radio"
+                name="personaSlug"
+                value={coach.slug}
+                defaultChecked={state.values['personaSlug'] === coach.slug}
+                required
+                disabled={pending}
+              />
+              <span>
+                <strong>{coach.name}</strong>
+                {/* The row's own words. Rendered as text, never as markup. */}
+                {coach.sampleLine === null ? null : (
+                  <span className="muted small">{coach.sampleLine}</span>
+                )}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <input type="hidden" name="skipped" value={carried} />
+        <button type="submit" disabled={pending}>
+          {pending ? 'Saving…' : 'Continue'}
+        </button>
+      </form>
+      <p className="muted small">
+        You can change your mind on the Coach tab. It changes how the coach talks to you, never what
+        it tells you to lift.
+      </p>
     </>
   );
 }

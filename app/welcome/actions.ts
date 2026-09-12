@@ -4,9 +4,16 @@ import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { logLine } from '@/src/llm/failure';
 import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
-import { onboardingBodySchema, readBodyForm } from '@/src/onboarding/schema';
+import {
+  INCOMPLETE_BODY_MESSAGE,
+  isCompleteBody,
+  onboardingBodySchema,
+  readBodyForm,
+} from '@/src/onboarding/schema';
+import { listPersonas } from '@/src/db/personas';
 import { ONBOARDING_STEPS, type OnboardingStep } from '@/src/onboarding/steps';
 import { INVALID_MESSAGE, SAVE_FAILED_MESSAGE, type WelcomeState } from './welcome-state';
 
@@ -77,7 +84,7 @@ export async function saveName(_previous: WelcomeState, formData: FormData): Pro
 }
 
 /**
- * Step 2 — the four the diet engine needs, validated by the schema that already
+ * Step 3 — the four the diet engine needs, validated by the schema that already
  * owns their bounds (ADR 0024). Not re-stated here: two definitions of "a
  * plausible height" is how they come to disagree.
  */
@@ -104,21 +111,30 @@ export async function saveBiometrics(
   const parsed = onboardingBodySchema.safeParse(readBodyForm(formData));
   if (!parsed.success) return { error: INVALID_MESSAGE, values: typed };
 
+  /*
+   * ALL FOUR, or the Skip button. The rule and its reasoning live in
+   * `src/onboarding/schema.ts` — nothing under `app/` is in the unit suite, so a
+   * guard written here is one no test can hold. A DIFFERENT sentence from the
+   * bounds refusal above, per ADR 0028: "that did not look right" is the wrong
+   * thing to tell somebody whose three answers were all fine.
+   */
+  const body = parsed.data;
+  if (!isCompleteBody(body)) return { error: INCOMPLETE_BODY_MESSAGE, values: typed };
+
   // INVARIANT: calendar questions use the user's local date — CLAUDE.md #9.
-  if (
-    parsed.data.birthDate !== null &&
-    isFutureBirthDate(parsed.data.birthDate, localDateFor(user.timezone))
-  ) {
+  // The null check this used to carry is `isCompleteBody`'s job — it is a type
+  // predicate, so the narrowing is the compiler's rather than a second check.
+  if (isFutureBirthDate(body.birthDate, localDateFor(user.timezone))) {
     return { error: 'That date has not happened yet.', values: typed };
   }
 
   const { error } = await db.from('users').upsert(
     {
       user_id: user.id,
-      bodyweight_kg: parsed.data.bodyweightKg,
-      height_cm: parsed.data.heightCm,
-      birth_date: parsed.data.birthDate,
-      sex: parsed.data.sex,
+      bodyweight_kg: body.bodyweightKg,
+      height_cm: body.heightCm,
+      birth_date: body.birthDate,
+      sex: body.sex,
     },
     { onConflict: 'user_id' }
   );
@@ -133,7 +149,7 @@ export async function saveBiometrics(
 }
 
 /**
- * Step 3 — the diet goal, which now has a column to live in (ADR 0032 §3).
+ * Step 4 — the diet goal, which now has a column to live in (ADR 0032 §3).
  *
  * `.catch` rather than a rejection, matching `askTheCoach`: an unrecognised goal
  * is not worth a message, and maintain is the safe direction.
@@ -161,6 +177,67 @@ export async function saveGoal(_previous: WelcomeState, formData: FormData): Pro
   if (error) {
     console.error('onboarding goal failed', { code: error.code, hint: error.hint });
     return { error: SAVE_FAILED_MESSAGE, values: {} };
+  }
+
+  revalidatePath('/', 'layout');
+  redirect(nextUrl(formData));
+}
+
+/**
+ * Step 2 — which coach, stored in `users.persona_slug` (rework PR 8).
+ *
+ * INVARIANT: the slug is checked against the rows `listPersonas` returns, not
+ *            against a list in code. Personas are rows (CLAUDE.md #7), the
+ *            column carries no foreign key — the migration argues why — and this
+ *            read is the integrity that replaces one. `personas_read` scopes it
+ *            to the shared coaches plus the user's own, so a slug belonging to
+ *            somebody else's persona is not in the list and is refused.
+ *
+ * It also excludes inactive coaches, which an FK could not have: a retired coach
+ * is `is_active = false` rather than a deleted row.
+ */
+export async function saveCoach(
+  _previous: WelcomeState,
+  formData: FormData
+): Promise<WelcomeState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const chosen = String(formData.get('personaSlug') ?? '');
+
+  /*
+   * A read before a write, and worth its round trip: the alternative is trusting
+   * a posted string into a column every voice and delivery path then reads.
+   * `listPersonas` throws rather than returning empty on a failure, so a broken
+   * read cannot quietly become "no coach matched".
+   */
+  /*
+   * Echoed back on every refusal — mobile-interface.md §4, and the INVARIANT
+   * `welcome-state.ts` states. FOUND IN REVIEW: this returned `values: {}` and
+   * the radios carried no `defaultChecked`, so a transient failure cleared the
+   * pick and left five sample lines to read again. The other three steps in
+   * this file have echoed since they shipped; this one did not.
+   */
+  const typed = { personaSlug: chosen };
+
+  let offered: string[];
+  try {
+    offered = (await listPersonas(db)).map((persona) => persona.slug);
+  } catch (cause) {
+    console.error('onboarding coach list failed', logLine(cause));
+    return { error: SAVE_FAILED_MESSAGE, values: typed };
+  }
+
+  if (!offered.includes(chosen)) return { error: INVALID_MESSAGE, values: typed };
+
+  const { error } = await db
+    .from('users')
+    .upsert({ user_id: user.id, persona_slug: chosen }, { onConflict: 'user_id' });
+
+  if (error) {
+    console.error('onboarding coach failed', { code: error.code, hint: error.hint });
+    return { error: SAVE_FAILED_MESSAGE, values: typed };
   }
 
   revalidatePath('/', 'layout');
@@ -213,9 +290,26 @@ export async function finishOnboarding(): Promise<void> {
       { onConflict: 'user_id' }
     );
 
-  // Not worth stopping for: the worst case is the welcome flow asking again,
-  // which is where they already are and which costs them one press.
-  if (error) console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
+  /*
+   * FOUND IN REVIEW, and the comment that was here was the bug. It said "not
+   * worth stopping for: the worst case is the welcome flow asking again, which
+   * is where they already are and which costs them one press".
+   *
+   * The worst case is an INFINITE REDIRECT. `/welcome` calls this function
+   * during render when every question is answered, so: stamp fails → `/hub` →
+   * `onboardedAt` is null → `/welcome` → nothing left to ask → stamp fails →
+   * `/hub` → … Both are server redirects, so the browser follows until it gives
+   * up with ERR_TOO_MANY_REDIRECTS: a blank page, no message, no way back, for
+   * a user whose data is perfectly intact.
+   *
+   * So the failure gets a rendered owner. `/welcome` reads this flag BEFORE it
+   * decides there is nothing left to ask, which is what stops the loop
+   * re-entering the same call.
+   */
+  if (error) {
+    console.error('onboarding stamp failed', { code: error.code, hint: error.hint });
+    redirect('/welcome?finish=failed');
+  }
 
   /*
    * NO `revalidatePath` — FOUND IN REVIEW, and it was a runtime error rather

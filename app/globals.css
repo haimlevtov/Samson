@@ -970,7 +970,8 @@ button.set-prev.copy:hover:not(:disabled) {
 }
 
 .humor,
-.equipment-set {
+.equipment-set,
+.coach-set {
   display: grid;
   gap: 2px;
   margin: 0;
@@ -979,7 +980,8 @@ button.set-prev.copy:hover:not(:disabled) {
   border-radius: var(--radius-sm);
 }
 .humor legend,
-.equipment-set legend {
+.equipment-set legend,
+.coach-set legend {
   padding: 0 4px;
 }
 /* Three abreast: the choice is small and comparing them is the whole task. */
@@ -2512,19 +2514,30 @@ details.quick-log[open] > summary {
  * the flex row never applied at all, so `gap` and `align-items` did nothing and
  * the box sat above its label rather than beside it.
  */
-.settings-form label.check-row {
+.settings-form label.check-row,
+label.choice-row {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: var(--tap);
 }
 
-.settings-form label.check-row input[type='checkbox'] {
+.settings-form label.check-row input[type='checkbox'],
+label.choice-row input {
   width: auto;
   min-height: 0;
   /* A 44px target for the pair comes from .check-row's min-height; the box
      itself is sized by the platform, which is what people recognise. */
   accent-color: var(--accent-text);
+}
+
+/* Select-all — it governs the list rather than belonging to it, so it is ruled
+   off from the items below. Nothing else here differs: it is a .check-row, and
+   copying that row's layout would be the third copy of one thing in this file. */
+.check-all {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-weight: 600;
 }
 
 /*
@@ -2994,18 +3007,50 @@ details.quick-log[open] > summary {
   margin: 0;
 }
 
-/* The demo reset — ADR 0032 §4. The only irreversible control on a tab, so it
-   says so with a border rather than relying on the copy alone. */
-.danger-card {
-  border-color: var(--bad);
+/*
+ * Picking a coach — rework PR 8.
+ *
+ * Radio ROWS rather than a select, because the sample line is the reason to
+ * prefer one, and a dropdown shows one name at a time with no room for it. The
+ * frame is the shared bordered fieldset (`.humor`); only the row is here.
+ *
+ * `label.coach-choice` rather than the bare class: `.welcome-form` has no
+ * `label { display: block }` rule to outrank today, but `.settings-form` does
+ * (0,1,1), and this component is the kind that gets reused onto that surface.
+ * The same trap is recorded twice already in this sheet, at
+ * `.settings-form label.check-row` and `.settings-form label.equipment-load`.
+ */
+label.coach-choice {
+  /* `.choice-row` above carries the flex row, the gap and the 44px minimum —
+     the sheet's own recorded rule (`.equipment-set` folded into `.humor`) is
+     that a primitive is shared rather than restated. Only what differs is here:
+     the text wraps to several lines, so the control aligns to the first one
+     instead of to the middle of the block. */
+  align-items: flex-start;
+  padding: 6px 0;
+  cursor: pointer;
 }
-.danger-card p {
-  margin: 0 0 10px;
+label.coach-choice + label.coach-choice {
+  border-top: 1px solid var(--border);
 }
-.reset-form {
-  align-items: flex-end;
-  gap: 10px;
+.coach-choice input[type='radio'] {
+  /* `label.choice-row input` above already resets the base 44px min-height and
+     sets the accent — the same reset `.check-row` needed. Only the nudge that
+     lines a radio up with the first line of wrapped text is here. */
+  margin-top: 4px;
 }
-.reset-form .grow {
-  flex: 1 1 10rem;
+/* Name over line, so the line reads as the coach talking rather than as a
+   caption on a control. */
+.coach-choice > span {
+  display: grid;
+  gap: 2px;
 }
+
+/* The demo reset's card WAS HERE — `.danger-card`, `.reset-form` and its
+   `.grow` label, for a bordered card with a typed confirmation in it.
+
+   ADR 0032's second amendment replaced all of that with one button in the
+   fixture table on `/sign-in`, which needs no rule of its own: it is a
+   `.secondary` button in a table cell. Deleted rather than left, because an
+   unused selector in a hand-written sheet is a rule the next person has to
+   prove nothing uses. */

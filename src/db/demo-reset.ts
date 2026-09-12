@@ -27,73 +27,84 @@ import type { Db } from './client';
  * A constant rather than a column: it exists for a demo, and a column would
  * invite the question of who may set it.
  *
- * AI-NOTE: FOUR copies of one fact, and only two are held together by a test.
- *          This constant, `reset_demo_account()` in the migration (held by
- *          `tests/db/demo-reset.test.ts`, which calls it as a user who is not
- *          the demo account and expects a refusal), `FRESH_ACCOUNT.email` in
- *          `src/seed/archetypes.ts`, and the sign-in page's fixture list. A
- *          change has to reach all four.
+ * AI-NOTE: TWO copies of one fact, and NOTHING holds them together. This
+ *          constant, and `FRESH_ACCOUNT.email` in `src/seed/archetypes.ts`.
+ *          A change has to reach both.
+ *
+ *          It said three until review recounted it, naming the gate inside
+ *          `reset_demo_account()` as one of them. That function has not gated
+ *          on the address since `20260912200000`, whose own header says "the
+ *          email is no longer load-bearing anywhere in this function" — and
+ *          `tests/db/demo-reset.test.ts` deliberately declines to test the
+ *          address, for the reason written out at its impostor case. A count
+ *          recited rather than rechecked is how this note has been wrong twice.
+ *
+ *          It was four before that: the sign-in page had the address typed into
+ *          its fixture list, and it imports this constant now.
  */
 export const DEMO_ACCOUNT_EMAIL = 'fresh@samson.test';
 
 /**
- * What the confirmation names, in the order the function deletes it.
+ * The published fixture password — `scripts/seed.ts` creates every demo account
+ * with it and the sign-in page prints it.
  *
- * AI-NOTE: this list is what the user is SHOWN, and the function is what runs.
- *          A table in one and not the other is either a deletion nobody was told
- *          about or a promise nothing keeps — the second of which is what review
- *          found here. `workout_template_items` is named because it goes by
- *          cascade from `workout_templates`, which is still a deletion.
+ * Here so that `app/` has ONE copy: the sign-in page had it typed twice and the
+ * reset action would have been a third. It is not a secret in any sense — the
+ * page it serves displays it in a `<code>` block on purpose, so the demo runs.
+ *
+ * AI-NOTE: `scripts/seed.ts`, `scripts/eval-planner.ts`, `tests/db/helpers.ts`
+ *          and `tests/db/candidates.test.ts` each still hold their own copy.
+ *          They cannot import this module — it reaches for the app's `Db` type —
+ *          so changing the password means changing five files, not one.
  */
-export const RESET_TABLES = [
-  'name and body measurements',
-  'sets',
-  'workouts',
-  'workout_templates',
-  'workout_template_items',
-  'plan_runs',
-  'challenges',
-  'achievement_events',
-  'xp_events',
-  'coach_notes',
-  'user_equipment',
-] as const;
+export const DEMO_FIXTURE_PASSWORD = 'samson-demo-fixture';
 
-/**
- * What is deliberately kept, and why — ADR 0032's Consequences.
+/*
+ * WHAT THE RESET REMOVES, and the note that should never have gone with the
+ * arrays below.
  *
- * `llm_calls` stays: the weekly budget is computed from it (ADR 0026), so
- * clearing those rows would turn this button into a way to refill the project's
- * spend limit on demand. The demo account resets its training; not its bill.
+ * It clears the nine training tables AND the eight content tables that carry a
+ * `user_id` and a write policy the app never uses — `exercises`,
+ * `equipment_tags`, `exercise_equipment`, `progression_nodes`, `personas`,
+ * `achievements`, `tonnage_comparisons`, `supplement_evidence`. A hand-written
+ * POST can put a row in any of them, and until 20260912220000 the reset left
+ * every one behind.
  *
- * SOME settings stay — timezone, theme, humour ceiling, leaderboard opt-out.
- * They are preferences about using the app rather than training data, and a
- * reset that silently moved somebody's timezone would be doing something nobody
- * asked for.
+ * FOUND IN REVIEW, and the finding was as much about the note as the gap: the
+ * AI-NOTE on `RESET_KEEPS` had documented this residue precisely, naming
+ * `exercises` as the one that mattered because `exercises_read` admits a
+ * user's own row into the planner's candidate set (CLAUDE.md #5). Deleting the
+ * arrays took the note with it and left the gap recorded nowhere.
  *
- * The PROFILE fields do not: name, bodyweight, height, date of birth and sex are
- * cleared, because they are the answers onboarding asks for and the flow has to
- * ask again. FOUND IN REVIEW — this list said "your settings" while the function
- * nulled five of the eight fields on the settings form, which is the promise-
- * nothing-keeps half of this module's own AI-NOTE.
+ * It matters here more than the note implied, because this account is SHARED:
+ * the password is on the sign-in page and the reset is one unauthenticated
+ * button, so a row planted under it greets whoever demos next — and the welcome
+ * flow's coach step renders `listPersonas`, which includes the caller's own.
  *
- * The account stays: what goes is everything the app wrote, so the next sign-in
- * lands on `/welcome` again, which is the entire point.
+ * AI-NOTE: a new table with a `user_id` and a write policy belongs in that
+ *          function, and a new onboarding question's column belongs in its
+ *          UPDATE. `src/onboarding/steps.ts` reads those columns to decide
+ *          whether a step is answered.
  *
- * AI-NOTE: "everything the app wrote" is exact and is doing work. Eight tables
- *          carry a `user_id` and a write policy the app never uses — `exercises`,
- *          `equipment_tags`, `exercise_equipment`, `progression_nodes`,
- *          `personas`, `achievements`, `tonnage_comparisons`,
- *          `supplement_evidence`. A hand-written POST can put a row in any of
- *          them, and this reset will not remove it. `exercises` is the one that
- *          would matter: `exercises_read` admits `user_id = auth.uid()`, so such
- *          a row reaches the planner's candidate set (CLAUDE.md #5).
+ * ---------------------------------------------------------------------------
+ *
+ * `RESET_TABLES` and `RESET_KEEPS` WERE HERE, and they are deleted rather than
+ * left for a future reader to wire back up.
+ *
+ * They existed to hold one pair of facts together: what the confirmation card
+ * told the user it would delete, and what the function actually deleted. Review
+ * found those two disagreeing twice, so the arrays were worth their weight
+ * while a card rendered them.
+ *
+ * The card is gone — ADR 0032's second amendment: the reset is one button on the
+ * sign-in page, with no explanation and no confirmation, which is what the owner
+ * asked for. Two arrays nothing renders, under an AI-NOTE describing a screen
+ * that no longer exists, are a worse guard than none: they read as maintained.
+ *
+ * What the function deletes is now stated in one place — the migration — and
+ * asserted in one place: `tests/db/demo-reset.test.ts`, which counts rows in
+ * every table afterwards.
  */
-export const RESET_KEEPS = [
-  'your sign-in',
-  'your timezone, theme and humour setting',
-  "the app's own usage log",
-] as const;
 
 /**
  * Runs the reset for the signed-in caller.

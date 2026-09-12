@@ -14,6 +14,7 @@ import { loadHistory } from '@/src/db/training';
 import { loadEvidence } from '@/src/db/evidence';
 import { loadNotes, rememberNote } from '@/src/db/notes';
 import { coachVoice, listPersonas } from '@/src/db/personas';
+import { openingCoach } from '@/src/persona/choice';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
 import { computeEnergy, dietFacts } from '@/src/diet/energy';
@@ -439,15 +440,25 @@ export async function askDuringSession(
         : (answer.text ?? SUPPLEMENT_ANSWER_TURN);
 
     /*
-     * The first SHARED, VOICED persona alphabetically — ADR 0031 §5.
-     * `listPersonas` orders by name and `voiced` requires `user_id is null`.
+     * THE COACH THE USER PICKED, when that coach can speak — `users.persona_slug`.
      *
-     * This comment used to end "so this is the coach the Coach tab opens with",
-     * which ADR 0031 §5 itself records as a claim a review falsified: that tab
-     * defaults to `personas[0]`, which includes a user's own rows and unvoiced
-     * ones. There is no stored persona choice anywhere to make the two agree.
+     * ADR 0031 §5 settled for "the first shared, voiced persona alphabetically"
+     * and said why it was a settle: there was no column. There is one now, so
+     * the settle became the FALLBACK and the stored choice became the answer.
+     *
+     * Eligibility is decided here rather than inside `openingCoach`: only a
+     * shared, voiced coach can be performed, so the stored slug is resolved
+     * against that subset. A user whose coach has no voice gets the voiced
+     * default rather than silence — which is the same thing every user got
+     * before the column existed.
+     *
+     * FOUND IN REVIEW: this comment used to end "there is no stored persona
+     * choice anywhere to make the two agree", and the PR that added the column
+     * left it standing.
      */
-    const voiced = personas.find((p) => p.voiced) ?? null;
+    const voicedSlugs = personas.filter((p) => p.voiced).map((p) => p.slug);
+    const speaking = openingCoach(voicedSlugs, user.personaSlug);
+    const voiced = personas.find((p) => p.voiced && p.slug === speaking) ?? null;
 
     if (!speak) {
       return { asked, reply, audio: null, silent: 'not-asked', coach: null, error: null };

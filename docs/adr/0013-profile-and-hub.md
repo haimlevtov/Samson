@@ -134,15 +134,24 @@ it is the classic failure here, and it is a test rather than a hope.
 
 ## Consequences
 
-> **Amended 2026-09-12 by [ADR 0032](0032-a-user-who-starts-from-nothing.md).**
-> Hub carries one control this table does not give it: **Reset this demo
-> account**, which renders for a single seeded address and for nobody else. It is
-> an account action, and by the boundary above it belongs on Profile — the
-> owner asked for it on the main page because it exists to be pressed between
-> demo runs, and one you have to navigate to mid-demo is friction in the moment
-> it was added to remove. Recorded here rather than only beside the code, because
+> **Amended 2026-09-12 by [ADR 0032](0032-a-user-who-starts-from-nothing.md),
+> and the exception ENDED the same day.** Hub briefly carried one control this
+> table does not give it: **Reset this demo account**, which rendered for a
+> single seeded address and nobody else. It was an account action, and by the
+> boundary above it belonged on Profile; the owner asked for it on the main page
+> because it exists to be pressed between demo runs.
+>
+> It is gone from Hub. Not moved to Profile either — it is one button on
+> `/sign-in`, beside the account it belongs to, because the reason it could not
+> stay was not the ownership boundary: **the only account that has it cannot
+> reach this tab.** Hub sends a user whose `onboarded_at` is null to `/welcome`,
+> and that account's is null by design. ADR 0032 §4's second amendment carries
+> the whole argument.
+>
+> **The table above is therefore exact again**, which is the state this
+> amendment existed to avoid pretending. It is kept rather than deleted because
 > `docs/specs/mobile-interface.md` §4 says an exception argued in a comment has
-> stopped being an exception.
+> stopped being an exception — and one silently un-recorded is no better.
 
 **Hub is briefly emptier than before.** Between this change and the challenge
 and leaderboard work that follows, Hub holds challenges and a placeholder. That

@@ -90,7 +90,12 @@ export default async function CoachPage() {
            * speak (docs/specs/mobile-interface.md §4). Only the yes or no
            * crosses to the browser, never the key.
            */}
-          <CoachConsole personas={personas} weekLabels={weekLabels} voiceAvailable={hasApiKey()} />
+          <CoachConsole
+            personas={personas}
+            chosenSlug={user.personaSlug}
+            weekLabels={weekLabels}
+            voiceAvailable={hasApiKey()}
+          />
 
           {/*
            * The plan is revealed, not served — the user's own request, and the

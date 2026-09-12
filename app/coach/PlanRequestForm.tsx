@@ -89,9 +89,9 @@ export function PlanRequestForm() {
           {/*
            * Derived from the schema's own bound, never re-typed — FOUND IN
            * REVIEW, and it was the one control here that listed its options by
-           * hand. The range is tighter than the planner schema's 1 to 7: one day
-           * is not a block and seven leaves no rest day, which the rules reject
-           * anyway.
+           * hand. The range is now the schema's own 1 to 7; `PLAN_DAYS_PER_WEEK`
+           * carries why it was 2 to 6, and which half of that reasoning was
+           * simply untrue.
            */}
           <select name="days_per_week" defaultValue="3" disabled={pending}>
             {PLAN_DAYS_PER_WEEK.map((days) => (
@@ -100,6 +100,15 @@ export function PlanRequestForm() {
               </option>
             ))}
           </select>
+          {/*
+           * Said rather than blocked. Seven is offered because nothing rejects
+           * it and it is the user's own training; what it costs is a fact they
+           * should have before they pick it, not after.
+           */}
+          <span className="muted small">
+            Seven leaves no rest day. The rules still cap how fast the load climbs, but recovery is
+            when you actually get stronger — most people want at least one.
+          </span>
         </label>
 
         <label>
@@ -190,9 +199,14 @@ export function PlanRequestForm() {
           ) : null}
 
           {state.outcome === 'no-equipment' ? (
+            /*
+             * This said "it needs an equipment list, which the app does not
+             * collect". It collects one — ADR 0029 shipped the picker — so the
+             * card was telling a user there was nothing they could do, on the
+             * one failure they can fix in a minute.
+             */
             <p className="muted small">
-              Nothing you can do about this from here yet — it needs an equipment list, which the
-              app does not collect.
+              Tick what you can train with on Settings, or in the welcome questions, and try again.
             </p>
           ) : null}
         </div>

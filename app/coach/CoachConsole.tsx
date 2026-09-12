@@ -12,6 +12,7 @@ import {
   type ShownReason,
 } from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
+import { openingCoach } from '@/src/persona/choice';
 
 /**
  * What the card says beside a coach's line when it is shown instead of heard —
@@ -55,16 +56,43 @@ const SHOWN_TEXT: Record<ShownReason, string> = {
  */
 export function CoachConsole({
   personas,
+  chosenSlug,
   weekLabels,
   voiceAvailable,
 }: {
   personas: ListedPersona[];
+  /**
+   * The coach this user picked in onboarding — `users.persona_slug`, PR 8.
+   *
+   * Null for somebody who has not chosen, and for a slug that no longer names a
+   * listed coach the fallback below catches it. That case is real rather than
+   * defensive: `is_active = false` retires a coach without deleting the row,
+   * which is why the column carries no foreign key.
+   */
+  chosenSlug: string | null;
   /** One label per week of the block, so notes can be shown against them. */
   weekLabels: string[];
   /** Whether the server can speak at all — false with no key configured. */
   voiceAvailable: boolean;
 }) {
-  const [selected, setSelected] = useState(personas[0]?.slug ?? '');
+  /*
+   * The stored choice first, and the first LISTED coach as the fallback — which
+   * on this tab means the first row `listPersonas` returned, user-owned and
+   * unvoiced rows included. That is NOT ADR 0031 §5's "first shared, voiced
+   * coach alphabetically": §5 records a review correcting precisely that
+   * conflation, because the two surfaces then name different coaches. What §5
+   * gives this is the reason the column had to exist at all.
+   *
+   * Changing it here still lasts one page: persisting the PICKER is PR 6's, and
+   * it needs the voice switch beside it to be worth the write. What changes now
+   * is only which coach the page opens on.
+   */
+  const [selected, setSelected] = useState(
+    openingCoach(
+      personas.map((p) => p.slug),
+      chosenSlug
+    )
+  );
   const [voice, setVoice] = useState<PlayerState>(EMPTY_PLAYER);
   const player = useRef<CoachPlayer | null>(null);
 

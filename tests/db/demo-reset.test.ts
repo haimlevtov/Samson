@@ -103,12 +103,18 @@ async function furnish(id: string, marker: string): Promise<void> {
     if (error) throw new Error(`${table}: ${error.message}`);
   };
 
-  const { error: profileError } = await admin
-    .from('users')
-    .upsert(
-      { user_id: id, display_name: marker, bodyweight_kg: 80, diet_goal: 'gain' },
-      { onConflict: 'user_id' }
-    );
+  const { error: profileError } = await admin.from('users').upsert(
+    {
+      user_id: id,
+      display_name: marker,
+      bodyweight_kg: 80,
+      diet_goal: 'gain',
+      // Every onboarding ANSWER, because the reset's job is to make the flow
+      // ask again — see the assertions below.
+      persona_slug: 'old-master',
+    },
+    { onConflict: 'user_id' }
+  );
   if (profileError) throw new Error(`users: ${profileError.message}`);
 
   await put('coach_notes', { text: `${marker} note` });
@@ -290,6 +296,55 @@ describe('reset_demo_account', () => {
     expect(await countIn('xp_events', other.id)).toBeGreaterThan(0);
   });
 
+  it('clears content the app never writes but a POST can', async () => {
+    /*
+     * FOUND IN REVIEW — 20260912220000. The function cleared nine training
+     * tables and left eight content ones, each carrying a `user_id` and a write
+     * policy the application never uses.
+     *
+     * It matters because this account is SHARED: its password is printed on the
+     * sign-in page and its reset is one unauthenticated button, so a row planted
+     * under it is a row the next person to demo the app meets. `personas` is
+     * rendered by the welcome flow's coach step (`personas_read` admits the
+     * caller's own rows) and `exercises` reaches the planner's candidate set.
+     *
+     * Written through the USER'S OWN CLIENT, not the service role, because the
+     * point of the finding is that a signed-in user can do this.
+     */
+    const planted = await demo.client
+      .from('personas')
+      .insert({
+        user_id: demo.id,
+        slug: `planted-${Date.now()}`,
+        name: 'Planted Coach',
+        system_prompt: 'A coach nobody shipped.',
+      })
+      .select('id')
+      .single();
+    if (planted.error) throw new Error(`planting a persona: ${planted.error.message}`);
+
+    const lift = await demo.client
+      .from('exercises')
+      .insert({
+        user_id: demo.id,
+        slug: `planted-lift-${Date.now()}`,
+        name: 'Planted Lift',
+        category: 'strength',
+        primary_muscle: 'chest',
+      })
+      .select('id')
+      .single();
+    if (lift.error) throw new Error(`planting an exercise: ${lift.error.message}`);
+
+    await resetDemoData(demo.client);
+
+    const admin = adminClient();
+    const after = await admin.from('personas').select('id').eq('user_id', demo.id);
+    expect(after.data ?? []).toHaveLength(0);
+    const lifts = await admin.from('exercises').select('id').eq('user_id', demo.id);
+    expect(lifts.data ?? []).toHaveLength(0);
+  });
+
   it('clears the profile and the onboarding stamp, and keeps the settings', async () => {
     await furnish(demo.id, 'demo');
     const admin = adminClient();
@@ -302,13 +357,22 @@ describe('reset_demo_account', () => {
 
     const { data } = await admin
       .from('users')
-      .select('display_name, bodyweight_kg, diet_goal, onboarded_at, timezone')
+      .select('display_name, bodyweight_kg, diet_goal, persona_slug, onboarded_at, timezone')
       .eq('user_id', demo.id)
       .maybeSingle();
 
     expect(data?.display_name).toBeNull();
     expect(data?.bodyweight_kg).toBeNull();
     expect(data?.diet_goal).toBeNull();
+    /*
+     * The chosen coach, and the reason it is asserted beside the others rather
+     * than trusted: a column `src/onboarding/steps.ts` reads to decide whether a
+     * step is answered, left behind by the reset, silently shortens the flow the
+     * reset exists to restore. That is not hypothetical — a surviving
+     * `plan_runs` row did exactly this in PR 4, and the plan step was never
+     * offered again.
+     */
+    expect(data?.persona_slug).toBeNull();
     // Cleared, or the next sign-in would skip the welcome flow entirely.
     expect(data?.onboarded_at).toBeNull();
     // Kept: a preference about using the app, not training data.

@@ -17,12 +17,27 @@ the numbers in it.
 Four fields on `users`, all of which existed as columns from the phase-0 schema
 and none of which anything read or wrote before phase 6.
 
-| Column          | Type            | Constraint after this PR                | Asked for as                    |
-| --------------- | --------------- | --------------------------------------- | ------------------------------- |
-| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms                       |
-| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres                     |
-| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date                          |
-| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select: blank, plus the three |
+| Column          | Type            | Constraint after this PR                | Asked for as         |
+| --------------- | --------------- | --------------------------------------- | -------------------- |
+| `bodyweight_kg` | `numeric(6, 2)` | `> 0 and < 1000`                        | kilograms            |
+| `height_cm`     | `numeric(5, 1)` | `> 0 and < 300`                         | centimetres          |
+| `birth_date`    | `date`          | `between '1900-01-01' and '2100-01-01'` | a date               |
+| `sex`           | `text`          | `in ('male', 'female', 'unspecified')`  | a select — see below |
+
+**`sex` is asked for differently on the two surfaces**, and the column is the
+same on both.
+
+- **Settings** offers a blank ("Not set") plus the three, because clearing a
+  field is a thing a settings form must allow and because a row that already
+  holds `unspecified` has to be displayable.
+- **`/welcome` offers two**, male and female, behind an empty "Choose one" that
+  cannot be submitted. The owner's instruction, and the reason is this table:
+  the BMR constant is selected by sex, so a target computed from `unspecified`
+  is derived from a value nobody stated. Safe — it takes the higher constant —
+  and not an answer. Declining is the Skip button, not a value.
+
+Labels live in `src/ui/sex.ts`; the welcome step used to render the raw column
+values, which showed somebody the word "unspecified".
 
 **The bounds are not cosmetic.** `'NaN'::numeric > 0` is TRUE in PostgreSQL —
 measured against this hosted project and recorded in

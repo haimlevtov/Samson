@@ -43,11 +43,12 @@ would have found it the hard way.
 cannot infer:
 
 1. **Name** — what the coach calls you.
-2. **Age, weight, height, sex** — the four the diet engine needs, with the bounds
+2. **Coach** — which persona. Added by rework PR 8; see the amendment below.
+3. **Age, weight, height, sex** — the four the diet engine needs, with the bounds
    `src/diet/biometrics.ts` already enforces.
-3. **Diet goal** — cut, maintain or gain.
-4. **Equipment** — ADR 0029's picker, reused rather than rebuilt.
-5. **Plan** — 8b's questionnaire and 8b's action, unchanged.
+4. **Diet goal** — cut, maintain or gain.
+5. **Equipment** — ADR 0029's picker, reused rather than rebuilt.
+6. **Plan** — 8b's questionnaire and 8b's action, unchanged.
 
 **Each step writes its own table before the next one renders**, which is what
 makes it resumable: a closed tab loses nothing, and the route works out where you
@@ -85,6 +86,13 @@ one it is working from. The code's fallback is unchanged — `normaliseGoal` sti
 lands on maintain — so nothing that reads it changes behaviour.
 
 ### 4. The reset is on the main page, for one account, and deletes only its own rows
+
+> **Superseded in part — read the two amendments below this section before
+> relying on anything in it.** The placement changed twice on 2026-09-12 (it is
+> one button on `/sign-in` now), the typed confirmation is gone, and the gate is
+> `raw_app_meta_data` rather than an email. The bullets below are kept as
+> written, because what they argued is why the later decisions went the way they
+> did — but three of them no longer describe the shipped control.
 
 The owner asked for it on the main page, for demo convenience. The plan that led
 here moved it to Profile and flagged the departure for an overrule; **the
@@ -146,7 +154,131 @@ other user reaching a capability the policies deliberately withhold.
 
 **Both properties now hold, and they are different.** The function cannot be
 pointed at another user, because it takes no argument. And it cannot be called by
-another user at all, because it checks the caller's own address.
+another user at all, because it checks a mark on the caller's own account.
+
+_That sentence said "checks the caller's own address" until 2026-09-12, and it
+was already false when it was written down here: the migration that replaced the
+email gate says in as many words "the email is no longer load-bearing anywhere in
+this function". An ADR that names the wrong gate invites the next reader to
+restore it._
+
+### The main page was the wrong main page — amended 2026-09-12, rework PR 8
+
+§4 above says the reset ships on the main page, and it did: `app/hub/page.tsx`,
+last on the tab. The owner then asked where the reset button was.
+
+**It was unreachable by the only account that has it.** `HubPage` redirects a
+user whose `onboarded_at` is null to `/welcome` — §2's own rule, and correct —
+and the demo account's `onboarded_at` is null by design, because that is what
+makes it the fixture. So the control that exists to restart the demo could only
+be reached by somebody who had already finished the demo.
+
+Neither decision was wrong on its own. The fault is in the pair, and it is the
+kind only a user finds: two rules that each hold, composing into a control with
+no path to it.
+
+**The fix is placement, not the gate.** The card renders on `/welcome` as well —
+for that account `/welcome` IS the main page until the flow is done — and its
+refusals redirect back to whichever page it was pressed on, because sending them
+to `/hub` would bounce straight back here with the message stripped off the URL.
+The Hub copy stays for the case after onboarding. Nothing about the authority
+changes: `reset_demo_account()` still takes no argument and still reads
+`raw_app_meta_data`.
+
+### And then it moved to the sign-in page — amended 2026-09-12, same day
+
+The owner saw the fix and asked for something simpler: **the reset goes on the
+sign-in page, next to that account, as one button with no explanation and no
+confirmation.** That supersedes §4's placement and the amendment above it; both
+are kept because the reasoning is what a reader needs, not the destination.
+
+It is better than either, and for a reason neither version could reach:
+
+- **No redirect can strand it.** Hub and `/welcome` are both behind a session,
+  so where the button lives depends on where the app has decided to send this
+  user. `/sign-in` is the one page with no such decision in front of it.
+- **The action signs in and resets in one press**, landing on `/welcome` — which
+  is the state the button exists to produce. Pressing it IS starting the demo.
+- **It needs no gate of its own.** The old card rendered on an email match; this
+  button is one row of a list of published fixtures.
+
+**The confirmation goes, and that is the owner's call taken with the cost
+named.** A typed RESET stood in front of an irreversible delete. What it guarded
+is one seeded demo account whose password is printed on the same page, so
+anybody who can press the button can already sign in and empty it by hand. The
+button adds no capability that page did not have; it removes the friction the
+owner asked twice to be rid of.
+
+**What does not change is the only thing that was ever the control.**
+`reset_demo_account()` is `security definer`, takes no argument, and refuses any
+caller whose `raw_app_meta_data` is not marked. A signed-in user cannot write
+that column. An unauthenticated POST to this action signs in as a published
+fixture and resets that fixture's own rows; it reaches nothing else.
+
+**`RESET_TABLES` and `RESET_KEEPS` are deleted with the card.** They existed so
+that what the user was SHOWN and what the function DID could be held together —
+review found them disagreeing twice. With nothing rendering them they were two
+dead arrays and an AI-NOTE describing a screen that no longer exists, which is a
+worse guard than none: it reads as maintained.
+
+### Sex is two options, because the calorie target is computed from it
+
+The owner asked for "male or female only". I shipped three — the two plus
+`unspecified` under the label "Prefer not to say" — arguing that a health
+profile should carry a way to decline, and wrote that argument into this ADR.
+
+**The owner overruled it, with the reason: "this is for scientific calculation,
+its a must".** That is correct on the merits and my version was the weaker one.
+`mifflinStJeor` selects its constant by sex (ADR 0024 §3), so a calorie target
+computed from `unspecified` is a figure derived from a value nobody stated. It
+is SAFE — `unspecified` takes the higher of the two constants, so it never
+under-feeds anybody — and being safe is not the same as being an answer. This
+project's whole position is that a number the user sees is computed from real
+inputs; a shrug is not one.
+
+So onboarding collects male or female and the step stays skippable, which is
+where declining lives.
+
+**The control needs one thing the instruction does not mention, and it is not a
+third option.** A two-option `<select>` with no placeholder preselects the
+first, so a user who never touched the field would be recorded as male. The
+control starts on an empty "Choose one" and is `required`, so exactly two values
+can be submitted and neither can be submitted by accident. The server refuses a
+blank regardless — `isCompleteBody` — because a required attribute is a
+convenience rather than a control.
+
+**`unspecified` remains a valid COLUMN value**, and that is deliberate rather
+than an oversight: the CHECK admits it, `src/diet/energy.ts` has a constant for
+it, rows already carry it, and Settings must be able to show what is stored. The
+ban is on COLLECTING it in onboarding.
+
+### A sixth question, and the column three things had been waiting for
+
+Onboarding asks which coach you want, and that needs `users.persona_slug`.
+
+[ADR 0031](0031-talking-during-a-session.md) §5 settles for "the first shared,
+voiced coach alphabetically" for the session voice and says in as many words
+that persisting the choice _"is a column and a settings control, and it belongs
+with whatever change wants it on more than one screen"_. This is that change:
+the Coach tab's picker dies with the page, and PR 6 wants the same answer.
+
+**Nullable**, like `diet_goal` and for the same reason — "has not chosen" is not
+"chose the first one" — so nothing changes behaviour by the column existing.
+
+**No foreign key**, which the plan for PR 8 said there would be and which the
+schema does not allow: `personas` is unique on `(user_id, slug)`, so there is no
+unique on `slug` alone to reference, and adding one would forbid a user-owned
+persona from sharing a slug with a shared one. It would not buy much either — a
+coach is retired with `is_active = false` rather than deleted, so a stored slug
+can stop naming anything the picker lists while the constraint is fully
+satisfied. Readers fall back regardless. The integrity is the welcome step's own
+check of the posted slug against the rows `listPersonas` returned.
+
+**It is cleared by the reset**, with the rest of the onboarding answers, and that
+is a rule rather than a detail: every column `src/onboarding/steps.ts` reads to
+decide whether a step is answered must be cleared, or the reset silently
+shortens the flow it exists to restore. A surviving `plan_runs` row did exactly
+that before review caught it.
 
 ## What this does not guarantee
 

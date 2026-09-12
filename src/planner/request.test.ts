@@ -97,11 +97,32 @@ describe('planRequestSchema', () => {
     ).toBe(true);
   });
 
-  it('refuses one day a week and seven days a week', () => {
-    // One day is not a block; seven leaves no rest day, which the rules reject
-    // anyway. Both are inside the planner schema's own 1–7.
-    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 1 }).success).toBe(false);
-    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 7 }).success).toBe(false);
+  it('admits one day a week and seven days a week', () => {
+    /*
+     * This test used to assert the opposite, on the comment "one day is not a
+     * block; seven leaves no rest day, which the rules reject anyway".
+     *
+     * The second clause was FALSE. `src/planner/rules.ts` holds six rules —
+     * weekly volume increase, ACWR band, deload cadence, equipment available,
+     * load ceiling, injured joint — and none of them looks at rest days. Nothing
+     * rejected a seven-day week; the form simply never offered one, behind a
+     * comment saying it could not be had. The owner asked for 1–7 and the reason
+     * it was refused did not exist.
+     *
+     * The first clause was an opinion about somebody else's training. It is
+     * recorded in `PLAN_DAYS_PER_WEEK` and said on the control, which is where
+     * an opinion belongs.
+     */
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 1 }).success).toBe(true);
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 7 }).success).toBe(true);
+  });
+
+  it('refuses nought days and eight days, which the planner schema refuses too', () => {
+    // The bound is still a bound. It is now the same one `planInputSchema` has,
+    // rather than a tighter one — so the two cannot disagree about what a
+    // week is.
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 0 }).success).toBe(false);
+    expect(planRequestSchema.safeParse({ ...valid, days_per_week: 8 }).success).toBe(false);
   });
 
   it('refuses a goal outside the enum', () => {
