@@ -113,7 +113,11 @@ function harness(script: CoachReply[]): Harness {
 const ask = (
   h: Harness,
   message: string,
-  over: { diet?: DietFacts | null; evidence?: readonly EvidenceRow[] } = {}
+  over: {
+    diet?: DietFacts | null;
+    evidence?: readonly EvidenceRow[];
+    notes?: readonly string[];
+  } = {}
 ) =>
   askCoach(
     'u1',
@@ -123,29 +127,40 @@ const ask = (
       message,
       diet: over.diet === undefined ? DIET : over.diet,
       evidence: over.evidence ?? EVIDENCE,
+      notes: over.notes ?? [],
     },
     { call: h.call }
   );
 
 /*
- * Every route carries `supplement_slug`, because the schema requires it on all
- * four — a nullable field would give the model a second way to return nothing.
+ * Every route carries `supplement_slug` and `remember`, because the schema
+ * requires both on all four — a nullable field would give the model a second way
+ * to return nothing. `remember` defaults to the empty sentinel here; the tests
+ * that care about memory set it themselves.
  */
 const training = (reply: string): CoachReply => ({
   route: 'training',
   reply,
   supplement_slug: NO_MATCH,
+  remember: '',
 });
 const offTopic = (reply: string): CoachReply => ({
   route: 'off_topic',
   reply,
   supplement_slug: NO_MATCH,
+  remember: '',
 });
-const diet = (reply: string): CoachReply => ({ route: 'diet', reply, supplement_slug: NO_MATCH });
+const diet = (reply: string): CoachReply => ({
+  route: 'diet',
+  reply,
+  supplement_slug: NO_MATCH,
+  remember: '',
+});
 const supplement = (slug: string, reply = 'ignored on this route'): CoachReply => ({
   route: 'supplement',
   reply,
   supplement_slug: slug,
+  remember: '',
 });
 
 describe('each route returns its own shape', () => {
@@ -308,7 +323,8 @@ describe('the allowlist is the schema', () => {
     // any code in reply.ts runs — ADR 0023 kept through the merge into one box.
     const schema = h.captured[0]?.schema;
     const parse = (slug: string) =>
-      schema?.safeParse({ route: 'supplement', reply: 'x', supplement_slug: slug }).success;
+      schema?.safeParse({ route: 'supplement', reply: 'x', supplement_slug: slug, remember: '' })
+        .success;
 
     expect(parse('bcaa')).toBe(true);
     expect(parse('creatine')).toBe(true);

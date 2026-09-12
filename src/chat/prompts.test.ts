@@ -53,7 +53,7 @@ const contentOf = (messages: ChatMessage[]): string => messages.map((m) => m.con
  * the wrong string.
  */
 const payload = (history: ChatTurn[], message: string) =>
-  chatMessages(FACTS, history, message, { diet: null, evidence: [] });
+  chatMessages(FACTS, history, message, { diet: null, evidence: [], notes: [] });
 const msgs = (history: ChatTurn[], message: string) => payload(history, message).messages;
 const allowedFor = (history: ChatTurn[], message: string) => payload(history, message).allowed;
 
@@ -402,6 +402,7 @@ describe('coachReplySchema', () => {
       route: 'supplement',
       reply: 'x',
       supplement_slug: NO_MATCH,
+      remember: '',
     });
     expect(parsed.success).toBe(true);
   });
@@ -416,5 +417,47 @@ describe('coachReplySchema', () => {
       extra: 'anything',
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+/**
+ * The notes block — ADR 0030 §3, and the one property that matters about it.
+ */
+describe('chatMessages — what the coach was told before', () => {
+  const build = (notes: readonly string[]) =>
+    chatMessages(FACTS, [], 'how is it going?', { diet: null, evidence: [], notes });
+
+  it('fences the notes, like every other untrusted block', () => {
+    const { messages } = build(['reported a sore left shoulder']);
+    const block = messages.find((m) => m.content.includes('reported a sore left shoulder'));
+
+    expect(block).toBeDefined();
+    expect(block!.role).toBe('user');
+    // A note is the user's own words, kept by a model's judgement. Both halves
+    // of that are reasons it is data rather than instruction.
+    expect(block!.content).toContain('SAMSON-UNTRUSTED');
+  });
+
+  it('sends no block at all when there is nothing to remember', () => {
+    const { messages } = build([]);
+    expect(messages.some((m) => m.content.includes('kept as notes'))).toBe(false);
+  });
+
+  it('adds nothing to the quotable set', () => {
+    /*
+     * INVARIANT: notes contribute NOTHING to `allowed` — the same reasoning
+     * that keeps coach turns out of it. `acceptableNote` already refuses any
+     * numeral, so a note carrying one can only arrive from a row written before
+     * that rule existed or around it; either way it must not license a figure.
+     */
+    const clean = build([]).allowed;
+    const withNotes = build(['squats 987 kg', 'benched 654 kg last week']).allowed;
+
+    // The set equality is the assertion; the two below name the figures, and
+    // both are absent from FACTS so they can only have come from a note.
+    expect([...withNotes].sort()).toEqual([...clean].sort());
+    expect(clean.has(987)).toBe(false);
+    expect(withNotes.has(987)).toBe(false);
+    expect(withNotes.has(654)).toBe(false);
   });
 });

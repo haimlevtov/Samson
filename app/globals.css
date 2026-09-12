@@ -2103,6 +2103,31 @@ details.quick-log[open] > summary {
   gap: 16px;
 }
 
+/* What the coach remembers — ADR 0030 §4.
+   One row per note: the sentence takes the free width and the control keeps its
+   own, which is the same shape .persona-picker uses. Wrapping rather than
+   truncating, because a note the user cannot read is a note they cannot decide
+   about — and the whole point of the list is deciding. */
+.note-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.note-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.note-list li > span {
+  flex: 1 1 12rem;
+}
+.note-list form {
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .plan-disclosure > summary::after {
     transition: none;

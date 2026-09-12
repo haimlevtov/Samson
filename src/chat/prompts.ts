@@ -21,6 +21,7 @@ import { numbersIn } from '../persona/guard';
 import type { DietFacts } from '../diet/energy';
 import type { EvidenceRow } from '../db/evidence';
 import { factNumbers, type CoachFacts } from './facts';
+import { MAX_NOTE_CHARS } from './notes';
 import { NO_MATCH, type ChatTurn } from './schema';
 
 /**
@@ -44,6 +45,7 @@ WHAT YOU RETURN
   - "supplement" — whether a specific supplement works, or what the evidence says about one. A list of the supplements you may name follows.
   - "off_topic" — everything else.
 - reply: your answer, at most 700 characters.
+- remember: one short sentence worth keeping about this user beyond this conversation, or "" for nothing. Most turns are "". Keep what they told you about themselves — a sore shoulder, a body part they want to bring up, a lift they dislike, a constraint on their week. Do not keep the question, your answer, or anything you worked out. AT MOST ${MAX_NOTE_CHARS} CHARACTERS AND NO DIGITS AT ALL, in any script: a remembered figure is a figure the application did not compute, and it would be handed back to you every turn as though it had. Write "reported a sore left shoulder", never "squats 100 kg". Do not repeat something already in the notes you were given. A note that breaks any of these is discarded silently and your answer is still used.
 - supplement_slug: on the "supplement" route, the slug of the one row that answers the question, from the list supplied. "${NO_MATCH}" if no row does — a near miss is a miss, so do not name the closest row because it is closest. "${NO_MATCH}" on every other route.
 
 Decide the route first, then write the reply. Each route is checked differently, and the check that runs is the one for the route you named.
@@ -72,6 +74,7 @@ const USER_TURN = 'earlier, the user said';
 const FACTS_LABEL = 'facts about this user, computed by the app';
 const DIET_LABEL = 'this user’s diet situation, as categories — no figures';
 const CURRENT_TURN = 'the message to answer';
+const NOTES_LABEL = 'what this user has told the coach before, kept as notes';
 
 /**
  * The diet categories, as the model sees them — ADR 0024 §1.
@@ -134,6 +137,30 @@ export function candidatesBlock(
   }));
 
   return fenceUntrusted(CANDIDATES_LABEL, JSON.stringify(candidates), MAX_PAYLOAD_CHARS);
+}
+
+/**
+ * What the coach has been told before — ADR 0030 §3.
+ *
+ * INVARIANT: fenced, and it contributes NOTHING to the quotable number set. A
+ *            note is the user's own words about themselves, kept by a model's
+ *            judgement, and a figure that slipped into one would otherwise
+ *            license itself in every later reply — the same reasoning that
+ *            keeps coach turns out of `allowed`. `acceptableNote` already
+ *            refuses any numeral, so this is belt and braces rather than the
+ *            only thing standing there.
+ *
+ * Bounded per note rather than only per payload, and the arithmetic is why the
+ * payload cap is passed explicitly: twenty notes at `MAX_NOTE_CHARS` plus JSON
+ * is under 3 kB, comfortably inside `MAX_PAYLOAD_CHARS`, whereas
+ * `fenceUntrusted`'s DEFAULT cap is `MAX_UNTRUSTED_CHARS` (2,000) — which twenty
+ * full-length notes would exceed, truncating the block mid-sentence. A note cut
+ * in half can invert its meaning, which is exactly what `MAX_CLAIM_CHARS`
+ * records happening to the evidence rows.
+ */
+export function notesBlock(notes: readonly string[]): string {
+  const safe = notes.map((note) => sanitizeUntrusted(note, MAX_NOTE_CHARS));
+  return fenceUntrusted(NOTES_LABEL, JSON.stringify(safe), MAX_PAYLOAD_CHARS);
 }
 
 /**
@@ -200,7 +227,7 @@ export function chatMessages(
    * produce a target at all (a missing biometric, an under-18 user), which is
    * the one case where there is nothing to explain.
    */
-  context: { diet: DietFacts | null; evidence: readonly EvidenceRow[] }
+  context: { diet: DietFacts | null; evidence: readonly EvidenceRow[]; notes: readonly string[] }
 ): ChatPayload {
   const messages: ChatMessage[] = [];
   const allowed = factNumbers(facts);
@@ -219,7 +246,8 @@ export function chatMessages(
    * The other two routes' context, before the transcript so the newest turn
    * stays last.
    *
-   * INVARIANT: neither contributes to `allowed`. The diet block holds no
+   * INVARIANT: none of the three contributes to `allowed`. The notes are covered
+   *            in `notesBlock`. The diet block holds no
    *            figures by construction, and the diet route's guard admits no
    *            numeral whatever is in this set. The candidates are catalogue
    *            text — supplement names and claims somebody else wrote — and
@@ -227,6 +255,17 @@ export function chatMessages(
    *            a dose written into a claim is not a figure about this user's
    *            training and must not become quotable on the training route.
    */
+  /*
+   * The notes, before the other two blocks: they are standing context about the
+   * person, where the diet categories and the supplement rows are context for a
+   * question that has not been classified yet.
+   *
+   * INVARIANT: `quotable: false` — see `notesBlock`.
+   */
+  if (context.notes.length > 0) {
+    messages.push({ role: 'user', content: notesBlock(context.notes) });
+  }
+
   if (context.diet !== null) messages.push({ role: 'user', content: dietBlock(context.diet) });
   if (context.evidence.length > 0) {
     messages.push({ role: 'user', content: candidatesBlock(context.evidence) });

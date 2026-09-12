@@ -7,6 +7,7 @@ import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { readSettingsForm, settingsSchema } from '@/src/settings/schema';
 import { equipmentCatalogue, replaceEquipment } from '@/src/db/equipment';
 import { equipmentSelection } from '@/src/settings/equipment';
+import { forgetNote } from '@/src/db/notes';
 import { logLine } from '@/src/llm/failure';
 import type { SettingsFormState } from './form-state';
 
@@ -194,4 +195,36 @@ export async function saveEquipment(
    */
   revalidatePath('/', 'layout');
   return { error: null, saved: true };
+}
+
+/**
+ * Removes one thing the coach remembers — ADR 0030 §4.
+ *
+ * INVARIANT: `user_id` comes from the verified session, and `coach_notes_own`
+ *            independently rejects a delete of anyone else's row — CLAUDE.md
+ *            #10. The id from the form is a filter, never an authorisation.
+ *
+ * WHY it returns void rather than a form state: this is a bare `<form action>`
+ * on a server component, which is what keeps /settings free of client state. A
+ * note that fails to delete is logged by name and bounded message (ADR 0028);
+ * the page re-renders either way and the note is either gone or still listed,
+ * which is the honest report of what happened.
+ */
+export async function forgetCoachNote(formData: FormData): Promise<void> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const id = String(formData.get('noteId') ?? '');
+  if (id === '') return;
+
+  try {
+    await forgetNote(db, user.id, id);
+  } catch (cause) {
+    console.error('coach note not deleted', logLine(cause));
+  }
+
+  // The coach reads these on the next message, and Settings lists them.
+  revalidatePath('/settings');
+  revalidatePath('/coach');
 }

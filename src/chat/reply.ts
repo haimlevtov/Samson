@@ -22,6 +22,7 @@ import type { EvidenceRow } from '../db/evidence';
 import type { DietFacts } from '../diet/energy';
 
 import type { CoachFacts } from './facts';
+import { acceptableNote } from './notes';
 import {
   CHAT_SYSTEM,
   calorieFigureCorrection,
@@ -185,6 +186,11 @@ export interface AskCoachInput {
   diet: DietFacts | null;
   /** The rows the supplement route may name. RLS-scoped, shared rows only. */
   evidence: readonly EvidenceRow[];
+  /**
+   * What the coach already remembers, newest first — ADR 0030. Fenced into the
+   * payload, and the duplicate check is made against it.
+   */
+  notes: readonly string[];
 }
 
 export interface CoachAnswer {
@@ -202,6 +208,15 @@ export interface CoachAnswer {
    * words. The surface does not distinguish them; the ledger analysis does.
    */
   substituted: boolean;
+  /**
+   * A note to store, or null — ADR 0030 §2. Already checked: the caller writes
+   * it and does not re-examine it.
+   *
+   * WHY the stage returns it rather than writing it: this file has no I/O, which
+   * is what lets the adversarial suite run it with no key and no database. The
+   * write is one insert in `app/coach/actions.ts`, under the caller's session.
+   */
+  remember: string | null;
   attempts: number;
   costCredits: number;
   modelUsed: string | null;
@@ -229,6 +244,7 @@ export async function askCoach(
   const { messages, allowed } = chatMessages(input.facts, input.history, input.message, {
     diet: input.diet,
     evidence: input.evidence,
+    notes: input.notes,
   });
 
   // INVARIANT: the allowlist IS the schema — ADR 0023, kept through the merge.
@@ -260,9 +276,27 @@ export async function askCoach(
     costCredits += result.costCredits;
     modelUsed = result.modelUsed;
 
-    const { route, reply, supplement_slug: slug } = result.data;
+    const { route, reply, supplement_slug: slug, remember } = result.data;
     lastRoute = route;
-    const spent = { route, attempts: attempt, costCredits, modelUsed };
+
+    /*
+     * The note is checked once, here, and the result travels with the answer —
+     * ADR 0030 §2.
+     *
+     * INVARIANT: taken on the two routes where the user is talking about
+     *            themselves, and on neither of the others. An `off_topic` turn's
+     *            prose is discarded WITHOUT BEING READ (§3 of ADR 0015) and its
+     *            note is discarded for the same reason: a memory harvested from
+     *            a message the coach refused to answer is a memory of an attempt
+     *            to steer it. The `supplement` route reads no prose at all.
+     *
+     * A failed check costs nothing: `null` here, and the reply below is returned
+     * exactly as it would have been.
+     */
+    const note =
+      route === 'training' || route === 'diet' ? acceptableNote(remember, input.notes) : null;
+
+    const spent = { route, attempts: attempt, costCredits, modelUsed, remember: note };
 
     if (route === 'off_topic') {
       /*
@@ -377,6 +411,12 @@ export async function askCoach(
     text: lastRoute === 'diet' ? UNEXPLAINED_DIET_REPLY : UNVERIFIED_NUMBER_REPLY,
     row: null,
     substituted: true,
+    /*
+     * Nothing is remembered from a turn the user never saw an answer to. The
+     * last attempt failed its guard, so its note is a note about a reply that
+     * was refused — and the user has no way to know it was kept.
+     */
+    remember: null,
     attempts: MAX_CHAT_ATTEMPTS,
     costCredits,
     modelUsed,

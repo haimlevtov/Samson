@@ -15,6 +15,7 @@ import { MAX_CHAT_MESSAGE_CHARS, MissingApiKeyError } from '@/src/llm/config';
 import { z } from 'zod';
 import { DIET_GOALS, computeEnergy, dietFacts } from '@/src/diet/energy';
 import { loadEvidence } from '@/src/db/evidence';
+import { loadNotes, rememberNote } from '@/src/db/notes';
 import { BudgetExceededError } from '@/src/llm/types';
 import { coachFacts } from '@/src/chat/facts';
 import { SUPPLEMENT_ANSWER_TURN, askCoach } from '@/src/chat/reply';
@@ -210,7 +211,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * message, and an escaped rejection would bypass the generic error state
      * the rest of this action is careful to build.
      */
-    const { rows } = await loadEvidence(db);
+    const [{ rows }, notes] = await Promise.all([loadEvidence(db), loadNotes(db)]);
 
     const answer = await askCoach(
       user.id,
@@ -222,6 +223,7 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
         // panel renders the refusal in the app's own words instead.
         diet: result.kind === 'ok' ? dietFacts(result) : null,
         evidence: rows,
+        notes: notes.map((note) => note.text),
       },
       { call: (options) => callLLM(options, createGatewayDeps(createSupabaseLedger(db))) }
     );
@@ -233,6 +235,29 @@ export async function askTheCoach(previous: CoachState, formData: FormData): Pro
      * a row was found, which is exactly when there is something else to render.
      */
     const spoken = answer.text ?? SUPPLEMENT_ANSWER_TURN;
+
+    /*
+     * The one write this stage can cause — ADR 0030, and the reason ADR 0015's
+     * "no database write path" sentence is retired rather than reworded.
+     *
+     * `answer.remember` has already passed `acceptableNote`; nothing here
+     * re-examines it. `user.id` is the verified session's, never a field.
+     *
+     * WHY its own try/catch: a note is a side effect of an answer the user is
+     * waiting for. A failed insert must not turn a reply they can read into an
+     * error they cannot act on, so it is logged by name and bounded message —
+     * ADR 0028 — and the answer is returned regardless.
+     */
+    if (answer.remember !== null) {
+      try {
+        await rememberNote(db, user.id, answer.remember);
+      } catch (cause) {
+        console.error(
+          'coach note not stored',
+          cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
+        );
+      }
+    }
 
     return {
       turns: trim([...withUser, { role: 'coach', text: spoken }]),
