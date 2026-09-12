@@ -158,9 +158,12 @@ the count adds nothing to any of them:
 1. **No enumeration.** A single integer cannot be walked. There is no per-row
    result to page through and no id to probe.
 2. **No subject selection.** No parameter. The caller counts for themselves.
-3. **Fails closed.** A null `auth.uid()` joins no events, so a signed-out caller
-   would count every hidden badge — a number, not a definition — and `revoke …
-from public, anon` stops it reaching them anyway.
+3. **Fails closed, deliberately and explicitly.** A null `auth.uid()` would
+   join no events, so the naive count would return EVERY hidden badge to a
+   signed-out caller — failing open. The function returns 0 when there is no
+   caller, and `revoke … from public, anon` keeps it out of their reach besides.
+   _A first draft of this amendment headed that point "fails closed" over text
+   describing it failing open; the function is what makes the heading true._
 4. **No forgery.** It reads `achievement_events` and `achievements` and writes
    nothing.
 
