@@ -29,15 +29,38 @@ planner that breaks every rule. The second run is the interesting one — it mus
 reject all thirty cases, and reject them by _arithmetic_, before the critic
 model is ever consulted.
 
-| What                                           | Command                                | Cost              |
-| ---------------------------------------------- | -------------------------------------- | ----------------- |
-| Everything that can be checked without a model | `npm run verify`                       | **free**          |
-| One real plan, end to end through both models  | `npm run demo:llm`                     | ~/usr/bin/bash.05 |
-| The full live golden set                       | `npm run eval:planner -- --live --all` | ~.50              |
+| What                                           | Command                                              | Cost            |
+| ---------------------------------------------- | ---------------------------------------------------- | --------------- |
+| Everything that can be checked without a model | `npm run verify`                                     | **free**        |
+| One real plan, end to end through both models  | `npm run demo:llm`                                   | ~$0.10 measured |
+| The full live golden set                       | `npm run eval:planner -- --live --all --max-spend 4` | ~$3 expected    |
 
-`demo:llm` is the cheap proof that real models are involved: one case, one
-planner call, one critic call, a hard /usr/bin/bash.15 abort, and the cost printed at the
-end. It needs `OPENROUTER_API_KEY` in `.env.local`.
+`demo:llm` is the cheap proof that real models are involved: one case, and the
+cost printed at the end. It needs `OPENROUTER_API_KEY` in `.env.local`.
+
+**Both figures are sourced, and only one of them is measured.** One live case
+cost **$0.09934** on 2026-09-02 — `docs/plans/phase-2.md`, two planner+critic
+iterations. Thirty of those is the ~$3 in the second row, so that one is
+arithmetic over a measurement rather than a measurement.
+
+Two things worth knowing before spending either:
+
+- **`demo:llm` is up to three planner+critic rounds, not one.** It passes no
+  iteration budget, so `MAX_PLAN_ITERATIONS` applies. Its `--max-spend 0.15` is a
+  **run** cap, checked between cases — with a single case it is never consulted,
+  so it is a declaration rather than a brake. What actually bounds one case is
+  `max_tokens` per stage and the per-user weekly budget in the gateway.
+- **`--max-spend 4` is in the second command because the default is $0.75.**
+  Without it the run stops around case eight and `report()` prints the accepted
+  rate over the cases that ran, in the same format as a complete run — a partial
+  result that does not look partial.
+
+**The full set has been run live exactly once**, on 2026-09-01: $2.54, one
+accepted plan out of thirty (`scripts/eval-planner.ts`, which is why live
+defaults to five cases). That was before ADR 0008 fixed the correction channel
+and while the candidate list was 120, so it is not a number to plan against —
+but "never measured" would be wrong, and the acceptance rate it produced is the
+reason the default is what it is.
 
 **Why the free path is the important one.** The deterministic floor — six rules
 in `src/planner/rules.ts` — is what makes the plans safe, and none of it needs

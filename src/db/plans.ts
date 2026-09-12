@@ -57,7 +57,7 @@ export const PLAN_RUN_COOLDOWN_SECONDS = 75;
  * (or a second tab, or an impatient double-click) could start N concurrent runs,
  * and `enforceBudget` reads spend and then allows, so all N read the same stale
  * trailing figure and all N pass. The chat stage made that worth 400 tokens a
- * press; the planner makes it 6,000, at roughly $0.06 a call against a $0.50
+ * press; the planner makes it 6,000, at roughly $0.05 a planner call — measured $0.047 after the candidate-limit cut — against a $0.50
  * weekly ceiling.
  *
  * WHY a recency read rather than a lock or a queue: CLAUDE.md puts queues out of
