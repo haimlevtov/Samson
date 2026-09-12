@@ -3,15 +3,15 @@
 Four changes, four branches, in this order. `main` is green at `3409c59`, the
 rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 
-| PR  | What                                                                                                 | Branch                  | State                                                              |
-| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
-| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12) |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)          |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)  |
-| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | planned                                                            |
-| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                            |
-| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                            |
-| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                            |
+| PR  | What                                                                                                 | Branch                  | State                                                                |
+| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
+| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12)   |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)            |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)    |
+| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12) |
+| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                              |
+| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                              |
+| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                              |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -638,3 +638,56 @@ not. _Partially discharged on 2026-09-12: the voice switch was rendered against
 the real stylesheet at 375x812 in both themes and its tap target, role and focus
 ring measured. That is the CONTROL, not the feature — nothing signed in, and no
 microphone held._
+
+### PR 4 — a user who starts from nothing, 2026-09-12
+
+Shipped as [#63](https://github.com/haimlevtov/Samson/pull/63), with
+[ADR 0032](../adr/0032-a-user-who-starts-from-nothing.md) first. A sixth account
+with no `users` row at all, a five-step welcome flow, and a reset on the main
+page where the owner asked for it.
+
+**The design decision everything else followed from:** starting from nothing
+means no profile row, not a row of nulls. `currentUser` already read with
+`maybeSingle` and defaulted every field, so the path existed and nothing had
+walked it — and walking it surfaced a live bug rather than a quirk.
+`updateSettings` wrote with `.update().eq(…)`, and an UPDATE matching no rows is
+a silent success, so a real sign-up's settings would have appeared to save and
+not.
+
+**Four review rounds and two Docker sessions. Three findings are worth keeping:**
+
+- **The reset could not delete four of the nine tables it named.** I read the
+  policies for `public.users`, found it had no delete, wrote a paragraph about
+  it — and assumed `for all` for the rest. `achievement_events`, `xp_events` and
+  `challenges` are select-only; `plan_runs` is select and insert. RLS filters
+  such a delete to zero rows and PostgREST returns SUCCESS, so the app reported a
+  reset while the XP, the badges and the accepted plan survived — and the card
+  had named them. Because `plan_runs` survived, onboarding decided the plan step
+  was answered and never offered it.
+- **The fix's own gate was a string an attacker could claim.** The
+  `security definer` function keyed on `auth.users.email`. Sign-up is open and
+  confirmations are off, so anybody could register `fresh@samson.test` and call a
+  function that deletes `achievement_events` — whose unique constraint is what
+  makes a badge once-only. **I rejected `..._delete_own` policies for exactly
+  that cheat and then rebuilt it behind a weaker gate.** Verified free on hosted
+  at the time. It reads `raw_app_meta_data` now, which only the service role can
+  write.
+- **My own test was holding the door open.** It deleted whoever held the address
+  and recreated it, and `tests/db/helpers.ts` records that a machine without
+  Docker runs that suite against HOSTED. Running the tests freed the address.
+
+**And a test that could not exist where it mattered.** The replacement — an
+impostor holding the address without the mark — failed in CI, because CI seeds
+first and the address is legitimately taken there. It asserts the sharper
+property instead: an account that marked ITSELF, in the column a user can write,
+is refused.
+
+**Two things CI caught that local runs did not**, both because I ran one file
+rather than the suite: a definer function revoked `from public` where every other
+one here revokes `from public, anon`, and a fixture that inserted a composite-PK
+row twice. The revoke needed its own migration, because the first had already
+been pushed and an applied migration is not re-run — an edit in place would have
+fixed every fresh build and left the deployed database wrong forever.
+
+**Not opened in a browser**, and this is the PR that most needs it: it is almost
+entirely surface, and the whole point is meeting empty states nobody has seen.
