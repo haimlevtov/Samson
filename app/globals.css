@@ -2727,3 +2727,38 @@ details.quick-log[open] > summary {
   grid-column: 1 / -1;
   margin: 6px 0 0;
 }
+
+/*
+ * The equipment picker — ADR 0029.
+ *
+ * One column, not the two `.joint-set` uses: each row can grow a weight input
+ * under it when ticked, and a two-column grid would make the page reflow
+ * sideways every time somebody checked a box.
+ *
+ * The 44px target comes from `.settings-form label.check-row`'s own min-height,
+ * which these labels carry — docs/specs/mobile-interface.md.
+ */
+.equipment-set {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.equipment-set legend {
+  padding: 0 4px;
+}
+
+/* The weight input is indented under its checkbox so the pair reads as one
+   item rather than as a new question. */
+.equipment-load {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 8px 34px;
+}
+.equipment-load input {
+  /* Narrower than a full-width field: it holds at most four characters, and a
+     full-width number box reads as the most important control on the page. */
+  max-width: 9rem;
+}

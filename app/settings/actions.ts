@@ -5,6 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { readSettingsForm, settingsSchema } from '@/src/settings/schema';
+import {
+  MAX_LOAD_KG,
+  equipmentCatalogue,
+  equipmentSelection,
+  replaceEquipment,
+} from '@/src/db/equipment';
+import { logLine } from '@/src/llm/failure';
 import type { SettingsFormState } from './form-state';
 
 /**
@@ -108,6 +115,66 @@ export async function updateSettings(
   // Every surface reads the display name, the timezone decides what "today"
   // means on all of them (CLAUDE.md #9), and the theme is stamped by the layout
   // itself. Revalidate the layout, not one page.
+  revalidatePath('/', 'layout');
+  return { error: null, saved: true };
+}
+
+/**
+ * The equipment picker — ADR 0029.
+ *
+ * INVARIANT: `user_id` comes from the verified session, never from a form field,
+ *            and `user_equipment_own` independently rejects a write to anyone
+ *            else's rows — CLAUDE.md #10. No service role.
+ *
+ * INVARIANT: the selection is filtered against the SHARED catalogue this request
+ *            read, so a crafted slug reaches no insert — ADR 0029 §3. The
+ *            planner's candidate join reads that catalogue, and a user-authored
+ *            tag in it would be a user-authored input to invariant #5.
+ *
+ * The schema and the form reader are in `src/db/equipment.ts` rather than here,
+ * for the reason `updateSettings` records: a `'use server'` module may export
+ * only async functions, so anything declared in this file cannot be tested.
+ */
+export async function saveEquipment(
+  _previous: SettingsFormState,
+  formData: FormData
+): Promise<SettingsFormState> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  try {
+    const tags = await equipmentCatalogue(db);
+    const parsed = equipmentSelection(formData, tags);
+
+    if (!parsed.success) {
+      /*
+       * The only reachable failure is a ceiling outside its bound, because
+       * unknown slugs are dropped rather than rejected. So the message names
+       * the bound rather than the field — there is only one kind of field it
+       * could be about.
+       */
+      return {
+        error: `A heaviest weight has to be a number between 1 and ${MAX_LOAD_KG} kg, or blank.`,
+        saved: false,
+      };
+    }
+
+    await replaceEquipment(db, user.id, parsed.data, tags);
+  } catch (cause) {
+    // ADR 0028: a code-owned sentence and a bounded log line, never the object
+    // and never the database's own words.
+    console.error('equipment save failed', logLine(cause));
+    return { error: 'Could not save that. Try again in a moment.', saved: false };
+  }
+
+  /*
+   * Not `revalidatePath('/settings')`: what this changes is which exercises the
+   * app will offer. The picker on `/workout/new` is filtered by it, and `/coach`
+   * refuses a plan without it (ADR 0027 §5), so both are stale the moment this
+   * returns. Revalidating the layout is the same call `updateSettings` makes for
+   * the same reason.
+   */
   revalidatePath('/', 'layout');
   return { error: null, saved: true };
 }

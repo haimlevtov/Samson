@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { equipmentCatalogue, ownedEquipment } from '@/src/db/equipment';
+import { EquipmentForm } from './EquipmentForm';
 import { SettingsForm } from './SettingsForm';
 import { SignOutButton } from './SignOutButton';
 
@@ -47,6 +49,8 @@ export default async function SettingsPage() {
   const user = await currentUser(db);
   if (!user) redirect('/sign-in');
 
+  const [tags, owned] = await Promise.all([equipmentCatalogue(db), ownedEquipment(db)]);
+
   const zones = knownTimezones();
   // A stored zone this runtime does not list would otherwise vanish from the
   // select and be silently replaced on the next save.
@@ -89,6 +93,21 @@ export default async function SettingsPage() {
           screen — which is why the bodyweight and height above are asked for in metric rather than
           following a preference nothing reads.
         </p>
+      </div>
+
+      {/*
+       * Equipment — ADR 0029. Its own card and its own form, because it saves
+       * to a different table and because the rest of this page is one `users`
+       * row while this is a set of rows.
+       *
+       * WHY it belongs on Settings at all: equipment is filtered in SQL before
+       * the planner sees anything (invariant #5), so it is a fact about the
+       * user rather than a planner input — which is what the rework plan said
+       * when it declined to put it in the plan questionnaire.
+       */}
+      <h2 className="section">Equipment</h2>
+      <div className="card settings-body">
+        <EquipmentForm tags={tags} owned={owned} />
       </div>
 
       {/*
