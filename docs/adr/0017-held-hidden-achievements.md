@@ -116,6 +116,84 @@ reward — is invisible. Profile marks a held hidden badge with a `found` chip.
   Anything written into those columns for a hidden row is user-visible once
   earned, which is the point, and is worth remembering when authoring one.
 
+## Amendment 2026-09-12 — the catalogue, and how many are left to find
+
+Rework PR 7 adds a catalogue: every badge, what unlocks it, and whether you hold
+it. It changes nothing above, and needs one thing this ADR did not provide.
+
+**What the catalogue shows, by case:**
+
+| Badge                | Shown                                                      |
+| -------------------- | ---------------------------------------------------------- |
+| Visible, held        | Everything, marked as earned                               |
+| Visible, not held    | Name, description and tier — the description is the unlock |
+| Hidden, held         | Everything — `unlocked_achievements()`, as decided above   |
+| Hidden, **not** held | **Nothing but that it exists** — a count, and no row       |
+
+The owner decided on 2026-09-12 to show the count rather than omit those rows
+silently: a catalogue that quietly drops rows teaches people the list is
+complete when it is not, and "two more to find" is better copy than a short
+list.
+
+### The count is not reachable through the policy, and the plan said it would be
+
+`docs/plans/coach-memory-voice-onboarding.md` said the catalogue needs "no new
+policy: the existing one already returns exactly the rows the user may see". That
+is true of the ROWS and false of the COUNT. `achievements_read_visible`
+withholds a locked hidden row entirely, which is its job — so a client counting
+what it can see counts zero hidden badges, and cannot tell "none exist" from
+"none are visible to you".
+
+So the count needs a function. **`public.hidden_achievements_remaining()`** — a
+`security definer` function taking **no parameter**, returning **one integer**:
+shared hidden achievements the caller holds no unlock event for.
+
+### Why a number is not a definition
+
+This ADR's criterion is that hidden **definitions** are never sent to somebody
+who has not earned them. The function returns none: no name, no slug, no id, no
+description, no tier, no predicate. The four properties above still hold, and
+the count adds nothing to any of them:
+
+1. **No enumeration.** A single integer cannot be walked. There is no per-row
+   result to page through and no id to probe.
+2. **No subject selection.** No parameter. The caller counts for themselves.
+3. **Fails closed.** A null `auth.uid()` joins no events, so a signed-out caller
+   would count every hidden badge — a number, not a definition — and `revoke …
+from public, anon` stops it reaching them anyway.
+4. **No forgery.** It reads `achievement_events` and `achievements` and writes
+   nothing.
+
+**What it does disclose, stated plainly:** that hidden badges exist, and how many.
+That is information, and a small amount. It is the owner's call, taken with that
+named — and the Profile badge count already implies the same order of magnitude.
+
+### Rejected, again
+
+**Relaxing the policy so a client can count hidden rows.** The same alternative
+this ADR rejected, for the same reason: it moves the exception inside the
+control, and every future query against `achievements` inherits it. A
+single-purpose function that can only ever return a number keeps the exception
+outside the policy, where it cannot be widened by accident.
+
+**Hard-coding the count in the component.** Content lives in the database
+(CLAUDE.md #7), and a number typed into a component is wrong the day a hidden
+achievement is added.
+
+### Two things the catalogue must not do
+
+- **It never selects `predicate`.** That column is the SQL an achievement is
+  evaluated with (ADR 0009) and `achievements_read_visible` grants the row, so a
+  careless `select('*')` would hand every visible badge's SQL to the browser. The
+  `description` is what a person reads as the unlock condition; the predicate is a
+  description of the schema.
+- **It respects the user's humour ceiling for badges they have NOT earned.** Every
+  shipped achievement is `clean` or `cheeky` today, so this changes nothing yet —
+  but the catalogue is the first surface to show UNEARNED names, and a future
+  `crude` row would otherwise reach a user who chose `clean`. An earned badge is
+  shown regardless: Profile already shows it, and hiding something a person holds
+  would be the failure this ADR was written to end.
+
 ## Related
 
 - `.claude/skills/add-achievement/SKILL.md` — §4's rule that a hidden
