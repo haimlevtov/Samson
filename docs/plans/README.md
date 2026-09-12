@@ -53,7 +53,7 @@ whether the feature exists.
 | [phase-5-content-fill.md](phase-5-content-fill.md)                   | plan, first          | What phase 5 was briefed to build, done afterwards              | shipped                      |
 | [phase-6.md](phase-6.md)                                             | plan, first          | The diet advisor on the Coach tab; file import                  | shipped, one criterion unmet |
 | [rework-hub-history-coach.md](rework-hub-history-coach.md)           | plan, first          | Hub, graphs, demo data and the Coach — after the phases         | 12 of 12 shipped             |
-| [coach-memory-voice-onboarding.md](coach-memory-voice-onboarding.md) | plan, first          | Coach memory, a voice in a session, and a user who starts empty | 5 of 9 shipped               |
+| [coach-memory-voice-onboarding.md](coach-memory-voice-onboarding.md) | plan, first          | Coach memory, a voice in a session, and a user who starts empty | 6 of 9 shipped               |
 
 ## Phase 5 is three documents, and here is why
 

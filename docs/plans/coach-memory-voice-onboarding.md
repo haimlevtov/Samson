@@ -3,17 +3,17 @@
 Four changes, four branches, in this order. `main` is green at `3409c59`, the
 rework plan closed at twelve of twelve, and hosted was reseeded on 2026-09-12.
 
-| PR  | What                                                                                                 | Branch                  | State                                                                         |
-| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
-| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12)            |
-| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)                     |
-| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)             |
-| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12)          |
-| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | planned                                                                       |
-| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                       |
-| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                       |
-| 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12) |
-| 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | planned                                                                       |
+| PR  | What                                                                                                 | Branch                  | State                                                                              |
+| --- | ---------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
+| 1   | [The persona picker is a menu](#pr-1--the-persona-picker-is-a-menu)                                  | `coach-persona-menu`    | shipped 09-12, [↓](#pr-1--the-persona-picker-is-a-menu-2026-09-12)                 |
+| 2   | [The coach remembers](#pr-2--the-coach-remembers)                                                    | `coach-memory`          | shipped 09-12, [↓](#pr-2--the-coach-remembers-2026-09-12)                          |
+| 3   | [Talk to it during a session](#pr-3--talk-to-it-during-a-session)                                    | `session-talk`          | shipped 09-12, [↓](#pr-3--talk-to-it-during-a-session-2026-09-12)                  |
+| 4   | [A user who starts from nothing](#pr-4--a-user-who-starts-from-nothing)                              | `fresh-user-onboarding` | shipped 09-12, [↓](#pr-4--a-user-who-starts-from-nothing-2026-09-12)               |
+| 5   | [A sixth coach, and a voice you can tell apart](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart) | `austrian-persona`      | shipped 09-12, [↓](#pr-5--a-sixth-coach-and-a-voice-you-can-tell-apart-2026-09-12) |
+| 6   | [The coach tab speaks too](#pr-6--the-coach-tab-speaks-too)                                          | `coach-tab-voice`       | planned                                                                            |
+| 7   | [Every badge, and how to get it](#pr-7--every-badge-and-how-to-get-it)                               | `badge-catalogue`       | planned                                                                            |
+| 8   | [The welcome flow, after somebody used it](#pr-8--the-welcome-flow-after-somebody-used-it)           | `welcome-second-pass`   | shipped 09-12, [↓](#pr-8--the-welcome-flow-after-somebody-used-it-2026-09-12)      |
+| 9   | [Date of birth is three dropdowns](#pr-9--date-of-birth-is-three-dropdowns)                          | `welcome-birth-date`    | planned                                                                            |
 
 Ordered smallest-risk first, and PR 4 near the end because it is the one that
 consumes the others: a brand-new user meets the persona menu, then the onboarding
@@ -970,3 +970,83 @@ both an accepted plan (which is what makes that console render) and a stored
 coach. Persisting a change made with that picker is PR 6's, and ADR 0031 §5 now
 records that only half of what it asked for shipped: a column with one writer,
 and no settings control.
+
+### PR 5 — a sixth coach, and a voice you can tell apart, 2026-09-12
+
+Shipped as [#65](https://github.com/haimlevtov/Samson/pull/65). Three things
+asked for, a fourth asked for while it was open, and twenty-seven review
+findings across four reviewers.
+
+**The finding worth keeping is not about the new coach at all.**
+
+`phraseUsed` replaces every run of non-alphanumerics with a space before
+matching, so **a full stop is not a word boundary** and a banned phrase can be
+assembled out of the end of one sentence and the start of the next. `man up`
+fires on "you moved that like a man. Up you get". `deliverPlan` has no fallback
+by design (ADR 0006), so a hit rejects the delivery, retries, rejects again and
+hands the user an error instead of the block the critic already approved.
+
+The Austrian shipped with `man up` and `ill be back`, and the comment three lines
+above the array argued the exact rule it was breaking. **But the Sergeant has
+carried `man up` since 2026-09-08**, and nothing caught it — because
+`tests/db/personas.test.ts`'s VOCABULARY paragraph, which exists for precisely
+this class after the `weak`/"weakness" outage, contained no sentence that could
+fire it.
+
+_A regression test whose fixture cannot reach the bug passes and protects
+nothing._ That is the lesson, and it generalises past this file: the guard was
+written, reviewed and green for four days while the defect it was written for sat
+in a shipped row.
+
+**And the fix had to be a second migration.** The first was already pushed to
+hosted, and an applied migration is never re-run — editing its array would have
+corrected every fresh build and left the deployed database wrong forever. That
+trap is recorded in `docs/plans/rework-hub-history-coach.md` and it caught this
+PR anyway, one commit after the push.
+
+### The rest of what review found
+
+- **`hearCoach` was the only paid action in the app with no recency guard**, and
+  this PR put six of its buttons on the onboarding step — which is where
+  `/sign-in`'s credential-free demo button lands. A scripted loop could spend the
+  demo account's week, silencing the planner and the chat with it. It has the
+  guard its two siblings already had, filtered to `stage = 'speech'` so a chat
+  question and a preview do not take each other's cooldown.
+- **The race six buttons actually run had no test.** Every existing supersede
+  case went through `select()` or a cached replay; the welcome step calls
+  neither, because picking a radio there is deliberately independent of the
+  audio. One uncached press overtaking another was uncovered.
+- **The refusal sentence was inside the radio's `<label>`**, so it joined the
+  control's accessible name — with no key configured, six radios each announced
+  with "The coach voices are not set up here" on the end.
+- **The player only existed after the effect flushed**, so a press landing before
+  that did nothing at all: no "Finding…", no sentence, no log.
+
+**Three things this PR argued for and then did not do**, all caught: `canHear`
+was written twice and differently (one spelling trimmed the line, one did not);
+the Try button's markup was copied while its sentences were single-sourced,
+under a comment explaining why sentences must not be copied; and `.coach-row`
+restated a flex primitive the sheet records sharing four separate times.
+
+**And a roster that forgot a coach for the second time.** `src/persona/tone.test.ts`
+enumerates every persona to prove the gentle override applies regardless of which
+one is selected. It missed the Austrian — under an AI-NOTE claiming the database
+test checks the mirror, which it does not: that test asserts the slug SET, not
+the per-slug intensity and humour. The note now says so.
+
+### Two decisions, recorded rather than taken quietly
+
+**The archetype, not the man.** The owner asked for a coach as close as possible
+to a particular Austrian bodybuilder. What shipped is a former champion from a
+village in Styria — the accent, the cadence, the unembarrassed love of the work,
+and no name, no title, no film lines. `add-persona` and the achievement skill
+both say to twist a reference toward lifting rather than quote it, and a persona
+row speaks to users in the app's voice.
+
+**Every coach is male-voiced now.** Five of the six already were; the two recasts
+the owner asked for made it six, so the product has no female-voiced coach. ADR
+0025 records it as a content decision waiting to be taken rather than one this PR
+took.
+
+**Verified in a browser at 375px**, and one Try press spent $0.02 against the
+$5 key to prove the paid path end to end — one press, not six.
