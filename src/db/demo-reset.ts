@@ -46,7 +46,7 @@ export const DEMO_ACCOUNT_EMAIL = 'fresh@samson.test';
  *          cascade from `workout_templates`, which is still a deletion.
  */
 export const RESET_TABLES = [
-  'your name and body measurements',
+  'name and body measurements',
   'sets',
   'workouts',
   'workout_templates',
@@ -79,6 +79,15 @@ export const RESET_TABLES = [
  *
  * The account stays: what goes is everything the app wrote, so the next sign-in
  * lands on `/welcome` again, which is the entire point.
+ *
+ * AI-NOTE: "everything the app wrote" is exact and is doing work. Eight tables
+ *          carry a `user_id` and a write policy the app never uses — `exercises`,
+ *          `equipment_tags`, `exercise_equipment`, `progression_nodes`,
+ *          `personas`, `achievements`, `tonnage_comparisons`,
+ *          `supplement_evidence`. A hand-written POST can put a row in any of
+ *          them, and this reset will not remove it. `exercises` is the one that
+ *          would matter: `exercises_read` admits `user_id = auth.uid()`, so such
+ *          a row reaches the planner's candidate set (CLAUDE.md #5).
  */
 export const RESET_KEEPS = [
   'your sign-in',

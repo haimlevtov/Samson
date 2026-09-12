@@ -7,7 +7,7 @@ import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { DIET_GOALS } from '@/src/diet/energy';
 import { isFutureBirthDate } from '@/src/diet/biometrics';
 import { onboardingBodySchema, readBodyForm } from '@/src/onboarding/schema';
-import type { OnboardingStep } from '@/src/onboarding/steps';
+import { ONBOARDING_STEPS, type OnboardingStep } from '@/src/onboarding/steps';
 import { INVALID_MESSAGE, SAVE_FAILED_MESSAGE, type WelcomeState } from './welcome-state';
 
 /**
@@ -175,7 +175,16 @@ export async function saveGoal(_previous: WelcomeState, formData: FormData): Pro
  * should be asked again rather than carried past a question they never answered.
  */
 export async function skipStep(formData: FormData): Promise<void> {
-  const step = String(formData.get('step') ?? '') as OnboardingStep;
+  // A server action is an endpoint. Nothing here is exploitable — the path is a
+  // literal and the value is encoded — but an unauthenticated POST should not
+  // turn into a multi-kilobyte redirect, and the allowlist costs one line.
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  const raw = String(formData.get('step') ?? '');
+  if (!(ONBOARDING_STEPS as readonly string[]).includes(raw)) redirect('/welcome');
+  const step = raw as OnboardingStep;
   const already = String(formData.get('skipped') ?? '')
     .split(',')
     .filter((value) => value !== '');

@@ -34,21 +34,30 @@ type Client = ReturnType<typeof createClient<Database>>;
 let demo: { id: string; client: Client };
 let other: TestUser;
 
-/** The demo account, at its exact address — the function checks it by name. */
+/**
+ * A throwaway account MARKED as a demo one.
+ *
+ * FOUND IN REVIEW, and the first version of this helper was itself the
+ * vulnerability's open door: it deleted whoever held `fresh@samson.test` and
+ * recreated it, and `helpers.ts` records that a workstation without Docker runs
+ * this suite against the HOSTED project. So running the tests freed the address
+ * the gate keyed on, for anybody who wanted to sign up as it.
+ *
+ * The gate is `raw_app_meta_data` now — service-role-only — so this fixture uses
+ * a random address like every other test user and stamps the mark instead. The
+ * canonical address is never touched.
+ */
 async function createDemoAccount(): Promise<{ id: string; client: Client }> {
   const admin = adminClient();
   const password = 'fixture-password-not-a-secret';
-
-  // A previous run, or a seed, may already hold the address.
-  const { data: existing } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  for (const user of existing?.users ?? []) {
-    if (user.email === DEMO_ACCOUNT_EMAIL) await admin.auth.admin.deleteUser(user.id);
-  }
+  const email = `reset-demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@samson.test`;
 
   const created = await admin.auth.admin.createUser({
-    email: DEMO_ACCOUNT_EMAIL,
+    email,
     password,
     email_confirm: true,
+    // The mark the function reads. A signed-in user cannot write this column.
+    app_metadata: { demo_reset: true },
   });
   if (created.error || !created.data.user) {
     throw new Error(`creating the demo account: ${created.error?.message}`);
@@ -57,7 +66,7 @@ async function createDemoAccount(): Promise<{ id: string; client: Client }> {
   const anon = createClient<Database>(SUPABASE_URL, ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const signIn = await anon.auth.signInWithPassword({ email: DEMO_ACCOUNT_EMAIL, password });
+  const signIn = await anon.auth.signInWithPassword({ email, password });
   if (signIn.error || !signIn.data.session) {
     throw new Error(`signing in the demo account: ${signIn.error?.message}`);
   }
@@ -111,13 +120,32 @@ async function furnish(id: string, marker: string): Promise<void> {
    */
   await put('challenges', {
     slug: `fixture-${marker.replace(/s+/gu, '-')}`,
-    kind: 'sessions',
+    kind: 'weekly',
     spec: { target: 3 },
     status: 'offered',
     window_start: '2026-09-01',
     window_end: '2026-09-07',
   });
-  await put('workouts', { local_date: '2026-09-01', status: 'completed' });
+  const workout = await admin
+    .from('workouts')
+    .insert({ user_id: id, local_date: '2026-09-01', status: 'completed' })
+    .select('id')
+    .single();
+  if (workout.error) throw new Error(`workouts: ${workout.error.message}`);
+
+  // `sets` and `workout_templates` are named to the user too, and were the last
+  // two the fixture did not reach — FOUND IN REVIEW, the same gap class twice.
+  const { data: lift } = await admin.from('exercises').select('id').is('user_id', null).limit(1);
+  if (lift?.[0]) {
+    await put('sets', {
+      workout_id: workout.data.id,
+      exercise_id: lift[0].id,
+      set_index: 1,
+      reps: 5,
+      weight_kg: 60,
+    });
+  }
+  await put('workout_templates', { name: `fixture ${marker}`, source: 'user' });
   // 'failed' rather than 'accepted': the accepted state requires a block (a CHECK
   // pairs the two), and what this fixture needs is a row rather than a plan.
   await put('plan_runs', { status: 'failed', iterations: 1 });
@@ -194,15 +222,60 @@ describe('reset_demo_account', () => {
     expect(await countIn('achievement_events', demo.id)).toBe(0);
     expect(await countIn('coach_notes', demo.id)).toBe(0);
     expect(await countIn('workouts', demo.id)).toBe(0);
+    expect(await countIn('sets', demo.id)).toBe(0);
+    expect(await countIn('workout_templates', demo.id)).toBe(0);
     expect(await countIn('user_equipment', demo.id)).toBe(0);
   });
 
-  it('refuses anybody who is not the demo account', async () => {
+  it('refuses an unmarked account', async () => {
     await furnish(other.id, 'theirs');
 
     await expect(resetDemoData(other.client)).rejects.toThrow();
     expect(await countIn('coach_notes', other.id)).toBe(1);
     expect(await countIn('xp_events', other.id)).toBe(1);
+  });
+
+  it('refuses an account that merely holds the demo ADDRESS', async () => {
+    /*
+     * The finding this test exists for. The gate used to be the email, which a
+     * signed-up user chooses — `enable_signup` is true and confirmations are
+     * off — so claiming the address was enough to call a `security definer`
+     * function that deletes `achievement_events`. That table's unique
+     * constraint is what makes a badge once-only, so the reward was re-earning
+     * every badge and being paid its XP again.
+     *
+     * This creates exactly that impostor: the right address, no mark.
+     */
+    const admin = adminClient();
+    const password = 'fixture-password-not-a-secret';
+    const impostor = await admin.auth.admin.createUser({
+      email: DEMO_ACCOUNT_EMAIL,
+      password,
+      email_confirm: true,
+    });
+    if (impostor.error || !impostor.data.user) {
+      throw new Error(`creating the impostor: ${impostor.error?.message}`);
+    }
+
+    try {
+      const anon = createClient<Database>(SUPABASE_URL, ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const signIn = await anon.auth.signInWithPassword({ email: DEMO_ACCOUNT_EMAIL, password });
+      if (signIn.error || !signIn.data.session) throw new Error('impostor could not sign in');
+
+      const client = createClient<Database>(SUPABASE_URL, ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: `Bearer ${signIn.data.session.access_token}` } },
+      });
+
+      await furnish(impostor.data.user.id, 'impostor');
+      await expect(resetDemoData(client)).rejects.toThrow();
+      expect(await countIn('achievement_events', impostor.data.user.id)).toBe(1);
+    } finally {
+      // The address goes back to nobody, which is how it should be found.
+      await admin.auth.admin.deleteUser(impostor.data.user.id);
+    }
   });
 
   it('takes no argument, so it cannot be pointed anywhere', async () => {
