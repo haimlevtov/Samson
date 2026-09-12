@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { DEMO_ACCOUNT_EMAIL, resetDemoData } from '../../src/db/demo-reset';
+import { resetDemoData } from '../../src/db/demo-reset';
 import type { Database } from '../../src/db/types';
 import {
   ANON_KEY,
@@ -235,46 +235,46 @@ describe('reset_demo_account', () => {
     expect(await countIn('xp_events', other.id)).toBe(1);
   });
 
-  it('refuses an account that merely holds the demo ADDRESS', async () => {
+  it('refuses an account that marked ITSELF, which is the column a user can write', async () => {
     /*
-     * The finding this test exists for. The gate used to be the email, which a
-     * signed-up user chooses — `enable_signup` is true and confirmations are
-     * off — so claiming the address was enough to call a `security definer`
-     * function that deletes `achievement_events`. That table's unique
-     * constraint is what makes a badge once-only, so the reward was re-earning
-     * every badge and being paid its XP again.
+     * The finding this test exists for, in the form that survives CI.
      *
-     * This creates exactly that impostor: the right address, no mark.
+     * The gate used to be `auth.users.email`, which a signed-up user chooses —
+     * `enable_signup` is true and confirmations are off — so claiming the demo
+     * address was enough to call a `security definer` function that deletes
+     * `achievement_events`. That table's unique constraint is what makes a badge
+     * once-only, so the reward was re-earning every badge and being paid its XP
+     * again.
+     *
+     * It reads `raw_app_meta_data` now. The property that makes that a control
+     * rather than a longer string is that a user CANNOT WRITE IT: the client
+     * SDK's `updateUser` writes `raw_user_meta_data`, a different column. So the
+     * sharpest assertion is an account carrying the mark in the column it can
+     * reach, and a refusal anyway.
+     *
+     * WHY NOT an account holding the demo ADDRESS: it cannot be built where it
+     * matters. CI seeds before this suite runs, so `fresh@samson.test` is
+     * already held there — by the legitimate marked account. An earlier version
+     * of this test deleted that holder to make room, which is precisely the door
+     * the review found standing open, because a workstation without Docker runs
+     * this suite against the HOSTED project.
      */
     const admin = adminClient();
-    const password = 'fixture-password-not-a-secret';
-    const impostor = await admin.auth.admin.createUser({
-      email: DEMO_ACCOUNT_EMAIL,
-      password,
-      email_confirm: true,
+    const impostor = await createTestUser('reset-impostor');
+
+    const marked = await admin.auth.admin.updateUserById(impostor.id, {
+      // The user-writable twin of the column the function reads.
+      user_metadata: { demo_reset: true },
     });
-    if (impostor.error || !impostor.data.user) {
-      throw new Error(`creating the impostor: ${impostor.error?.message}`);
-    }
+    if (marked.error) throw new Error(`marking the impostor: ${marked.error.message}`);
 
     try {
-      const anon = createClient<Database>(SUPABASE_URL, ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-      const signIn = await anon.auth.signInWithPassword({ email: DEMO_ACCOUNT_EMAIL, password });
-      if (signIn.error || !signIn.data.session) throw new Error('impostor could not sign in');
-
-      const client = createClient<Database>(SUPABASE_URL, ANON_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${signIn.data.session.access_token}` } },
-      });
-
-      await furnish(impostor.data.user.id, 'impostor');
-      await expect(resetDemoData(client)).rejects.toThrow();
-      expect(await countIn('achievement_events', impostor.data.user.id)).toBe(1);
+      await furnish(impostor.id, 'impostor');
+      await expect(resetDemoData(impostor.client)).rejects.toThrow();
+      expect(await countIn('achievement_events', impostor.id)).toBe(1);
+      expect(await countIn('coach_notes', impostor.id)).toBe(1);
     } finally {
-      // The address goes back to nobody, which is how it should be found.
-      await admin.auth.admin.deleteUser(impostor.data.user.id);
+      await deleteTestUsers(impostor);
     }
   });
 
