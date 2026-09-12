@@ -420,9 +420,16 @@ So "all available badges and how to unlock them" cannot mean all of them:
   list is complete when it is not, and "there are three more to find" is better
   copy than a short list anyway.
 
-_The count of unearned hidden badges is itself information, and a small amount.
-It is worth it — and if the owner would rather it were invisible, that is a
-one-line change and a note in this plan._
+**Decided by the owner on 2026-09-12: show the count.** The alternative was
+omitting hidden unearned rows entirely, which reads as a complete list and is
+not one. So the panel says how many are left to find and nothing about what they
+are — which is the same information the badge count on Profile already implies,
+and rather more fun than a silent gap.
+
+_What this does NOT change: [ADR 0017](../adr/0017-held-hidden-achievements.md)
+still governs the DEFINITIONS. A hidden badge the user does not hold sends no
+name, no description and no unlock condition — the RLS policy is what enforces
+that, not the panel, and the db test asserts it._
 
 ### What the unlock condition says
 
