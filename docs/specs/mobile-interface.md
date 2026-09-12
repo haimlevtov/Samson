@@ -80,12 +80,12 @@ against "how did last month go" and could only lose.
 
 **Hub — `/hub`** — ADR 0013 moved everything personal off this tab.
 
-| Rank | What                                                                                                                                                                        |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Challenges you can accept or are part-way into                                                                                                                              |
-| 2    | The leaderboard — ADR 0016                                                                                                                                                  |
-| 3    | Challenges the validator declined, and why                                                                                                                                  |
-| 4    | **Reset this demo account** — one seeded address only, and last on the page. An irreversible control on a tab is a departure from ADR 0013, argued there and in ADR 0032 §4 |
+| Rank                                                                                                                                                                                                                                                                                                             | What                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1                                                                                                                                                                                                                                                                                                                | Challenges you can accept or are part-way into |
+| 2                                                                                                                                                                                                                                                                                                                | The leaderboard — ADR 0016                     |
+| 3                                                                                                                                                                                                                                                                                                                | Challenges the validator declined, and why     |
+| _The demo reset was rank 4 here. It is one button on `/sign-in` now, beside the account it belongs to — ADR 0032 §4 as amended twice. It could not be reached from this tab by the only account that has it: Hub sends a user whose `onboarded_at` is null to `/welcome`, and that account's is null by design._ |
 
 **Profile — `/profile`**
 

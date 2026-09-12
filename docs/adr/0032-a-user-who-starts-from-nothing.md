@@ -208,6 +208,26 @@ review found them disagreeing twice. With nothing rendering them they were two
 dead arrays and an AI-NOTE describing a screen that no longer exists, which is a
 worse guard than none: it reads as maintained.
 
+### Sex is asked for as three options, not two
+
+The owner asked for "male or female only" and the plan entry for this PR wrote
+that down as "the welcome control offers the two". It offers three, and the
+departure is recorded here rather than left in a source comment.
+
+What was there was worse than either reading: a blank option ON TOP of `SEXES`
+rendered raw, so the list read "Prefer not to say / male / female /
+unspecified" — four entries, two of which mean the same thing, and only one of
+those two counting as an answer. Blank writes null, `hasBiometrics` wants a
+value, and the step then re-renders with nothing said.
+
+So the two SEXES are the two on offer, and the third entry is named as a
+declining rather than as a sex. The value behind it is `unspecified`, which has
+existed since ADR 0024 §3 with a defined behaviour — it takes the higher of the
+two Mifflin constants, so it never under-feeds anybody. A health profile with no
+way to decline is not something this project will ask for, and it does not have
+to: Settings keeps its blank, and `/welcome` cannot, because on that surface
+blank leaves the step unanswered.
+
 ### A sixth question, and the column three things had been waiting for
 
 Onboarding asks which coach you want, and that needs `users.persona_slug`.
