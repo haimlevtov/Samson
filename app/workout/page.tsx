@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createServerDb, currentUser } from '@/src/db/server';
-import { activeWorkout } from '@/src/db/training';
+import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
+import { activeWorkout, workoutsOn } from '@/src/db/training';
 import { listTemplates } from '@/src/db/templates';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { startWorkout } from '../history/actions';
-import { startFromTemplate } from './actions';
+import { logRestDay, startFromTemplate } from './actions';
+import { restToday } from '@/src/ui/rest';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,10 +46,17 @@ export default async function TemplatesPage() {
   // Promise.all would discard the templates with it and take the whole Workout
   // tab down. Falling back to null offers Start, which is wrong-but-usable
   // rather than blank.
-  const [templates, active] = await Promise.all([
+  const [templates, active, todays] = await Promise.all([
     listTemplates(db),
     activeWorkout(db).catch(() => null),
+    /*
+     * Degrades like the read above: without it the tab offers Rest today, and
+     * the action reads the day again before it writes, so a day that already
+     * has a rest day or a session still is not given a second — ADR 0034.
+     */
+    workoutsOn(db, localDateFor(user.timezone)).catch(() => []),
   ]);
+  const rest = restToday(todays);
 
   return (
     <>
@@ -81,6 +89,33 @@ export default async function TemplatesPage() {
           <form action={startWorkout} className="start-empty">
             <button type="submit">Start an empty workout</button>
           </form>
+
+          {/*
+           * Rest today — ADR 0034. The other answer to "what am I doing today",
+           * so it sits here, secondary to training. It sends no date: the action
+           * reads the user's own. Every state says something, spec §4.
+           */}
+          {rest.kind === 'offer' ? (
+            <form action={logRestDay} className="start-empty rest-today">
+              <button type="submit" className="secondary">
+                Rest today
+              </button>
+              <p className="muted small">
+                Keeps your streak, and pays what a session in its place would.
+              </p>
+            </form>
+          ) : rest.kind === 'rested' ? (
+            <div className="rest-today">
+              <p className="muted small">Today is logged as a rest day.</p>
+              <Link href={`/history/${rest.workoutId}/kept`} className="button-link secondary">
+                See the rest day
+              </Link>
+            </div>
+          ) : (
+            <p className="muted small rest-today">
+              You have a session today, so it is not a rest day.
+            </p>
+          )}
         </>
       ) : (
         <>

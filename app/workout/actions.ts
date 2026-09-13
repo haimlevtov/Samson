@@ -11,7 +11,10 @@ import {
   listTemplates,
 } from '@/src/db/templates';
 import { latestAcceptedPlan } from '@/src/db/personas';
-import { activeWorkout, loadWorkout } from '@/src/db/training';
+import { activeWorkout, insertRestDay, loadWorkout, workoutsOn } from '@/src/db/training';
+import { awardSessionXp } from '@/src/db/gamification';
+import { logLine } from '@/src/llm/failure';
+import { restToday } from '@/src/ui/rest';
 import { templateDraftSchema } from '@/src/templates/schema';
 import { templateFromSession } from '@/src/templates/derive';
 import { templateFromPlannedSession } from '@/src/templates/plan';
@@ -51,6 +54,65 @@ function explain(cause: unknown, fallback: string): string {
     cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : 'unknown'
   );
   return fallback;
+}
+
+/**
+ * Today, as a rest day — ADR 0034.
+ *
+ * INVARIANT: the form sends nothing. The date is the user's local date, computed
+ *            here from `users.timezone` — CLAUDE.md #9 — so a rest day cannot be
+ *            logged for any day but today.
+ *
+ * INVARIANT: the workout is written under RLS, and what it earns is written by
+ *            `award_session_xp` alone — ADR 0009 §1. Nothing here says how much
+ *            a rest day is worth.
+ */
+export async function logRestDay(): Promise<void> {
+  const db = await createServerDb();
+  const user = await currentUser(db);
+  if (!user) redirect('/sign-in');
+
+  // The Workout tab gives a running session the whole of Quick start; a press
+  // that arrives anyway goes back to it, as Start's does.
+  const active = await activeWorkout(db);
+  if (active !== null) redirect(`/history/${active.id}`);
+
+  const today = localDateFor(user.timezone);
+  const decision = restToday(await workoutsOn(db, today));
+  if (decision.kind === 'rested') redirect(`/history/${decision.workoutId}/kept`);
+  // A day with a session in it is not a day off — ADR 0034 §4. The tab says so.
+  if (decision.kind === 'trained') redirect('/workout');
+
+  const workoutId = await insertRestDay(db, user.id, today);
+  if (workoutId === null) {
+    // A second press won the race to the one rest day a day allows — §3. Land
+    // where the first press lands.
+    const again = restToday(await workoutsOn(db, today));
+    redirect(again.kind === 'rested' ? `/history/${again.workoutId}/kept` : '/workout');
+  }
+
+  /*
+   * WHY a failed award is swallowed, as `finishWorkout` swallows it: the rest
+   * day is saved. An error page would read as if it were not, and a second
+   * press would only land on this day's receipt.
+   */
+  let unlocked: string[] = [];
+  try {
+    unlocked = (await awardSessionXp(db, workoutId)).unlocked;
+  } catch (cause) {
+    console.error('award_session_xp failed for a rest day', logLine(cause));
+  }
+
+  revalidatePath('/workout');
+  revalidatePath('/history');
+  revalidatePath('/hub');
+  revalidatePath('/profile');
+
+  // To the day's receipt, where a badge fires — the same parameter and the same
+  // gate `finishWorkout` uses.
+  const first = unlocked[0];
+  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
+  redirect(first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`);
 }
 
 /** Build one by hand: the items come from the browser as JSON and are re-parsed. */
