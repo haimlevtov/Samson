@@ -2041,7 +2041,8 @@ details.quick-log[open] > summary {
  */
 .badge-card .chip,
 .badge-card .chip-on,
-.quest-meta .chip {
+.quest-meta .chip,
+.label-chips .chip {
   display: inline-block;
   min-height: 0;
   min-width: 0;
@@ -3597,13 +3598,10 @@ label.coach-choice {
   gap: 6px;
   margin: 8px 0 0;
 }
-/* Labels, not controls — the exemption .badge-card .chip already has. */
+/* Labels, not controls: the label-chip reset sizes them. Squarer, and in body
+   ink, because each is a figure rather than a category. */
 .label-chips .chip {
-  min-height: 0;
-  min-width: 0;
-  padding: 3px 8px;
   border-radius: 6px;
-  font-size: 12px;
   color: var(--text);
 }
 
