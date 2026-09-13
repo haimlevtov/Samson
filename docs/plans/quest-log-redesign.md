@@ -245,19 +245,20 @@ row-link with an emblem, and a medal shelf: earned badges in their tier's metal,
 held hidden ones in obsidian with "hidden · found" in words, and locked slots for
 visible badges not yet earned. Three reviewers.
 
-**The locked slots nearly cost the page.** They come from —
-four reads, one of which throws on an empty result by design, for 's
+**The locked slots nearly cost the page.** They come from `loadBadgeCatalogue` —
+four reads, one of which throws on an empty result by design, for `/badges`'s
 sake. On Profile that would have replaced the level, the streak and the only
 reliable way into Settings with an error page for the sake of a row of padlocks.
 Held badges are read as before and still throw; the catalogue degrades to a
-sentence pointing at .
+sentence pointing at `/badges`.
 
-**A second list of unearned badges owed the first list's honesty.** counts the badges above the humour setting; the new shelf dropped them without a
+**A second list of unearned badges owed the first list's honesty.** `/badges`
+counts the badges above the humour setting; the new shelf dropped them without a
 word, which ADR 0017 and spec §4 both forbid. It counts them now.
 
 **A padlock is not a word.** The lock icon is hidden from screen readers, so a
 locked card and an earned card read identically. Locked cards say "locked".
 
 **Changed on purpose, and said in the PR:** a Profile badge card no longer shows
-its description or earned date; both are one tap away on . The stat
+its description or earned date; both are one tap away on `/badges`. The stat
 tiles are equal in size now, so order alone carries their rank — spec §2 says so.
