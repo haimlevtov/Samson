@@ -12,13 +12,13 @@ The instruction that came with it:
 > apply the redesign while making sure nothing breaks, all features stays where
 > they are, leaderboard in hub will be on top by design
 
-| PR  | What                                                                           | Branch                   | State                                                              |
-| --- | ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------ |
-| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13) |
-| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                      |
-| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | planned                                                            |
-| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned                                                            |
-| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                            |
+| PR  | What                                                                           | Branch                   | State                                                                |
+| --- | ------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------- |
+| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13)   |
+| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                        |
+| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | shipped 09-13, [↓](#pr-3--the-unlock-sheet-and-the-trees-2026-09-13) |
+| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned                                                              |
+| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                              |
 
 Ordered so the primitives land with their first consumer, then one surface per
 PR. Each is presentation: **no migration, no RPC, no policy and no new number.**
@@ -262,3 +262,40 @@ locked card and an earned card read identically. Locked cards say "locked".
 **Changed on purpose, and said in the PR:** a Profile badge card no longer shows
 its description or earned date; both are one tap away on `/badges`. The stat
 tiles are equal in size now, so order alone carries their rank — spec §2 says so.
+
+### PR 3 — the unlock sheet and the trees, 2026-09-13
+
+Shipped as [#71](https://github.com/haimlevtov/Samson/pull/71). A badge fires as a
+sheet over History in its tier's metal, and the progression trees read top rung
+first with a hex and a word per state. Three reviewers.
+
+**A dismissed badge came back on Back.** Closing dropped `?unlocked=` from the
+address, but Next keeps a page as it was rendered, and Back restored History with
+the sheet still in it — so the most natural path after finishing, looking at the
+session and going back, fired the same badge twice. The sheet now opens only while
+the router's own search params name the badge, and `replaceState` passes `null`
+state so the router sees the change rather than treating it as its own. Checked in
+the browser: Continue, a session, Back — no sheet.
+
+**The handoff's `role="status"` became a dialog.** It covers the page and eats the
+backdrop's clicks, so it is modal whatever its role says. Focus lands on Continue,
+stays inside, and returns to the page heading on close; the dialog is labelled by
+what happened as well as by the badge. Continue is a link to `/history`, so a
+sheet rendered open on the server still lets somebody out if the JavaScript never
+arrives.
+
+**What the handoff drew and this did not ship, on purpose:**
+
+- **No "+75 XP" chip.** An achievement's XP goes through the weekly ceiling, so a
+  flat 75 could be untrue.
+- **No "most recent unlock" tile.** Unlocks are recomputed from sets and never
+  stored, so nothing knows when a rung opened. The tiles jump to their ladders
+  instead.
+- **The title stays "Progression trees"**, not "Progression": ADR 0020's naming
+  keeps the words together, because ADR 0014 owns "progression" for the e1RM chart.
+- **The explainer stays whole**; the first version shortened it.
+
+**The gate and the fields that cross to the browser are tested now.** They lived
+in components, and nothing under `app/` is in the unit suite; `src/ui/unlock.ts`
+holds the ownership check, the field list and the URL cleanup. History also stopped
+reading held badges on every visit — only when one might fire, and degrading.
