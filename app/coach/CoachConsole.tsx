@@ -81,6 +81,7 @@ export function CoachConsole({
     deliverForPersona,
     EMPTY_DELIVERY
   );
+  const deliverer = deliveredBy(personas, state.personaSlug);
 
   /*
    * A native `<select>` fires `change` only when the value actually changes, so
@@ -150,7 +151,8 @@ export function CoachConsole({
              * keyboard focus. The mismatch it looked like it prevented — a plan
              * rendered under a coach who did not deliver it — is not prevented
              * by it either, since the choice is free again the moment the
-             * delivery lands.
+             * delivery lands. The delivery below answers it instead, by naming
+             * the coach who wrote it.
              */}
             <select value={selected} onChange={(event) => choose(event.target.value)}>
               {personas.map((p) => (
@@ -221,28 +223,49 @@ export function CoachConsole({
 
         {state.error ? <p className="error small">{state.error}</p> : null}
 
-        {state.gentle ? (
-          // The user should know why the coach sounds different today, or the
-          // tone change reads as the app being inconsistent.
-          <p className="muted small">
-            Gentler tone: your recent notes or attendance suggest this is not a week to push.
-          </p>
-        ) : null}
-
+        {/*
+         * A delivery shown under a menu that has moved on names the coach who
+         * wrote it (`deliverer`, from the slug the delivery returned) rather than
+         * being hidden whenever `state.personaSlug` differs from `selected`.
+         *
+         * WHY not hide: the menu stays live after a delivery on purpose (the
+         * comment on the select), and the reason to move it is to Try the other
+         * voices. Hiding would make the plan somebody waited a model call for
+         * vanish on the first menu change, with nothing on screen saying where it
+         * went — every state renders something, docs/specs/mobile-interface.md §4
+         * — and nobody would guess that moving the menu back restores it. A label
+         * keeps the words and says whose they are.
+         *
+         * The gentle note is inside the same condition and names the same coach:
+         * it describes this prose, and above a menu showing somebody else a bare
+         * "Gentler tone" read as the new coach's. It stays OUTSIDE the box, and
+         * says "in what X says" rather than "from X", because the tone is not the
+         * coach's choice: code sets it from the log whichever coach is asked —
+         * ADR 0006.
+         */}
         {state.delivered ? (
-          <div className="delivered">
-            <span className="label delivered-by">
-              What {deliveredBy(personas, state.personaSlug)} says
-            </span>
-            <p>{state.delivered.opening}</p>
-            {state.delivered.week_notes.map((note, i) => (
-              <p key={weekLabels[i] ?? i}>
-                <span className="label">{weekLabels[i] ?? `Week ${i + 1}`}</span>
-                {note}
+          <>
+            {state.gentle ? (
+              // The user should know why the coach sounds different today, or the
+              // tone change reads as the app being inconsistent.
+              <p className="muted small gentle-note">
+                Gentler tone in what {deliverer} says: your recent notes or attendance suggest this
+                is not a week to push.
               </p>
-            ))}
-            <p>{state.delivered.closing}</p>
-          </div>
+            ) : null}
+
+            <div className="delivered">
+              <span className="label delivered-by">What {deliverer} says</span>
+              <p>{state.delivered.opening}</p>
+              {state.delivered.week_notes.map((note, i) => (
+                <p key={weekLabels[i] ?? i}>
+                  <span className="label">{weekLabels[i] ?? `Week ${i + 1}`}</span>
+                  {note}
+                </p>
+              ))}
+              <p>{state.delivered.closing}</p>
+            </div>
+          </>
         ) : null}
       </div>
     </>

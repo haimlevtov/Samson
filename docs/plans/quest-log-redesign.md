@@ -344,7 +344,9 @@ says the coach "speaks the plan", on a card whose Try button plays audio, while 
 delivered plan is not read aloud (ADR 0025 §4). It says "explains" now. And the new
 "What <coach> says" label named whoever the menu showed, which the menu lets change
 after a delivery — so a delivery could be credited to a coach who did not write it.
-It names the coach the delivery returned.
+It names the coach the delivery returned. _The gentle-tone note beside it still said
+a bare "Gentler tone"; [#75](https://github.com/haimlevtov/Samson/pull/75) names it
+too, 2026-09-13._
 
 **What this entry said and did not ship:** "the transcript as two kinds of turn" was
 already true; "the SpeakSwitch beside Send" was not done, because coach-chat.md §1

@@ -4023,7 +4023,8 @@ button.send {
 }
 /* A coach's name can be a user's own row, with no length limit. */
 .voice-name,
-.delivered-by {
+.delivered-by,
+.gentle-note {
   overflow-wrap: anywhere;
 }
 .voice-name {
