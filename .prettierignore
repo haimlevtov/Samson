@@ -7,3 +7,7 @@ src/db/types.ts
 # reformatting it would make every future upstream diff unreadable.
 .claude
 .agents
+
+# A design handoff, copied as it arrived. Its tables are its author's, and a
+# reformat would make it a document nobody handed over.
+docs/design

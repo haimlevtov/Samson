@@ -17,12 +17,12 @@ committed alongside its implementation cannot show it came first. So these
 documents are not interchangeable, and merging them into one file would destroy
 the distinction each of them spends its opening paragraph establishing:
 
-| Genre                             | Written                                        | Documents                                                                                                       |
-| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md`; `coach-memory-voice-onboarding.md` |
-| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                                                     |
-| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                                                                   |
-| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                                                    |
+| Genre                             | Written                                        | Documents                                                                                                                                |
+| --------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Plan, committed first**         | documents-only, ahead of the code it governs   | phases 2, 3, 4, 6; `phase-5-content-fill.md`; `rework-hub-history-coach.md`; `coach-memory-voice-onboarding.md`; `quest-log-redesign.md` |
+| **Plan, committed with its code** | in the same commit as the implementation       | phases 0, 1                                                                                                                              |
+| **Plan, committed late**          | mid-sequence, kept verbatim rather than tidied | `rework-profile-hub-coach.md`                                                                                                            |
+| **Record**                        | after the fact, and says so                    | `phase-5.md`                                                                                                                             |
 
 **The second row is a finding rather than a category anyone chose**, and it came
 out of checking this table instead of writing it from the filenames. `phase-0.md`
@@ -54,6 +54,7 @@ whether the feature exists.
 | [phase-6.md](phase-6.md)                                             | plan, first          | The diet advisor on the Coach tab; file import                  | shipped, one criterion unmet |
 | [rework-hub-history-coach.md](rework-hub-history-coach.md)           | plan, first          | Hub, graphs, demo data and the Coach — after the phases         | 12 of 12 shipped             |
 | [coach-memory-voice-onboarding.md](coach-memory-voice-onboarding.md) | plan, first          | Coach memory, a voice in a session, and a user who starts empty | 9 of 9 shipped               |
+| [quest-log-redesign.md](quest-log-redesign.md)                       | plan, first          | The owner's Quest Log redesign, one surface per PR              | 0 of 5 shipped               |
 
 ## Phase 5 is three documents, and here is why
 
