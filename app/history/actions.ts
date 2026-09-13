@@ -172,7 +172,9 @@ export async function finishWorkout(formData: FormData): Promise<void> {
   revalidatePath('/workout');
 
   /*
-   * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".
+   * To the session's receipt — the Quest Log redesign — where the badge reveal
+   * fires: phase 4's "a badge visibly fires in the UI on unlock", on the screen
+   * the user lands on.
    *
    * WHY a query parameter is safe here: it selects which badge to REVEAL, and
    * the page renders it only after finding a matching row in this user's own
@@ -180,7 +182,8 @@ export async function finishWorkout(formData: FormData): Promise<void> {
    * the event has to exist. No schema change and no "seen" column.
    */
   const first = unlocked[0];
-  redirect(first === undefined ? '/history' : `/history?unlocked=${encodeURIComponent(first)}`);
+  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
+  redirect(first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`);
 }
 
 /**

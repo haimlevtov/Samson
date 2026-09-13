@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { LoggedSet, PreviousSet, PreviousSets } from '@/src/db/training';
 import type { DraftRow } from './session-draft';
+import { Icon } from '@/src/ui/icons';
 
 export interface LiftGroup {
   id: string;
@@ -42,19 +43,6 @@ function previousLabel(previous: PreviousSet | undefined): string {
 /** Empty string rather than "null" in the box when there is nothing to suggest. */
 function placeholderFor(value: number | null | undefined): string {
   return value === null || value === undefined ? '' : String(value);
-}
-
-function ChartIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        d="M2 13h12M4 11V6M8 11V3M12 11V8"
-        fill="none"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 export function LiftBlock({
@@ -128,7 +116,7 @@ export function LiftBlock({
           href={`/history/exercise/${group.id}`}
           aria-label={`${group.name} progression`}
         >
-          <ChartIcon />
+          <Icon name="chart-line" size={17} />
         </Link>
         {editable && group.sets.length === 0 ? (
           <button

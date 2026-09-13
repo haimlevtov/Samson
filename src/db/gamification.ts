@@ -196,6 +196,25 @@ export async function loadBadgeCatalogue(db: Db, userId: string): Promise<Catalo
 }
 
 /**
+ * One session's own XP rows, for its receipt — the Quest Log's finish moment.
+ *
+ * RLS scopes `xp_events` to the caller, and a session writes a handful of rows,
+ * so the select-and-sum this file avoids for LIFETIME totals (PostgREST's row
+ * cap) cannot bite here. The sum itself is `sessionXp`, tested.
+ */
+export async function loadSessionXpRows(
+  db: Db,
+  workoutId: string
+): Promise<{ amount: number; source: string }[]> {
+  const { data, error } = await db
+    .from('xp_events')
+    .select('amount, source')
+    .eq('workout_id', workoutId);
+  if (error) throw new Error(`loading this session's xp: ${error.message}`);
+  return data ?? [];
+}
+
+/**
  * This user's assigned challenges, including rejected ones.
  *
  * WHY rejected challenges are returned rather than filtered out: PLAN.md phase

@@ -374,7 +374,8 @@ h2.section.with-hint > svg:first-child {
  */
 .badge-shelf > .card + .card,
 .medal-shelf > .card + .card,
-.tree-tiles > .card + .card {
+.tree-tiles > .card + .card,
+.kept-rows > .card + .card {
   margin-top: 0;
 }
 
@@ -458,7 +459,10 @@ textarea:focus {
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-button {
+/* `.button-link` is an anchor that navigates, drawn as a button — the finish
+   moment's Done. It joins every button rule rather than copying them. */
+button,
+.button-link {
   cursor: pointer;
   background: var(--accent);
   color: #fff;
@@ -473,11 +477,13 @@ button {
   /* Stops a double tap zooming the page instead of pressing twice. */
   touch-action: manipulation;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.button-link:hover {
   background: var(--accent-strong);
 }
 /* A small press. Cheap, and it makes the thing feel like a game rather than a form. */
-button:active:not(:disabled) {
+button:active:not(:disabled),
+.button-link:active {
   transform: translateY(2px);
   box-shadow: 0 0 0 var(--accent-strong);
 }
@@ -486,14 +492,16 @@ button:disabled {
   cursor: progress;
 }
 
-button.secondary {
+button.secondary,
+.button-link.secondary {
   background: var(--surface-2);
   color: var(--text);
   border-color: var(--border-strong);
   box-shadow: 0 2px 0 var(--border-strong);
   font-weight: 600;
 }
-button.secondary:hover:not(:disabled) {
+button.secondary:hover:not(:disabled),
+.button-link.secondary:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -576,7 +584,8 @@ button.secondary:hover:not(:disabled) {
 /* ---- the session bar --------------------------------------------------- */
 
 /*
- * Back, the clock, and the way out. Sticky rather than scrolled away: the clock
+ * Back, the clock with the session's name, and the way out. Sticky rather than
+ * scrolled away: the clock
  * is rank 4 and would not earn the space on its own, but "finish" being
  * unreachable at the bottom of a forty-row grid is a worse failure than a pill
  * costing 56px.
@@ -604,7 +613,6 @@ button.secondary:hover:not(:disabled) {
   min-height: var(--tap);
   border-radius: 999px;
   color: var(--text);
-  font-size: 19px;
 }
 .bar-back:hover {
   background: var(--accent-soft);
@@ -612,10 +620,29 @@ button.secondary:hover:not(:disabled) {
 }
 .session-clock {
   text-align: center;
-  font-size: 19px;
+  font-family: var(--display);
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1.1;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
+}
+/* The Quest Log's light coat: the clock over what the session is. */
+.bar-center {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+}
+.bar-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .bar-finish {
   border-radius: 999px;
@@ -661,6 +688,7 @@ button.secondary:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
   margin: 0;
+  font-family: var(--display);
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -959,6 +987,7 @@ button.set-prev.copy:hover:not(:disabled) {
 .rest-count {
   flex: 1;
   text-align: center;
+  font-family: var(--display);
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -3671,22 +3700,8 @@ label.coach-choice {
 .unlock-actions > * {
   min-height: 48px;
 }
-/* Both actions are links — Continue so it still leaves without JavaScript. */
-.unlock-continue {
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  border: 1.5px solid var(--accent);
-  box-shadow: 0 2px 0 var(--accent-strong);
-  color: var(--on-emblem);
-  font-weight: 700;
-  text-decoration: none;
-}
-.unlock-continue:hover {
-  background: var(--accent-strong);
-  text-decoration: none;
-}
+/* Both actions are links — Continue so it still leaves without JavaScript; it
+   wears .button-link, the finish moment's. */
 .unlock-secondary {
   display: grid;
   place-items: center;
@@ -3848,4 +3863,110 @@ label.coach-choice {
   background: var(--warn-soft);
   color: var(--warn);
   border-color: var(--warn);
+}
+
+/* ---- The session's light coat --------------------------------------------
+ * docs/plans/quest-log-redesign.md PR 4. The set grid is untouched — ADR 0011.
+ */
+
+/* The quest this session counts toward, under the bar. A line of words beside
+   an emblem — nothing in it is pressed. */
+.quest-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ---- The finish moment ----------------------------------------------------- */
+
+.kept {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  padding-top: 8px;
+}
+.kept-kicker {
+  margin: 0 0 6px;
+}
+.kept-earned {
+  display: grid;
+  gap: 2px;
+}
+.kept-earned small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.kept-earned strong {
+  font-size: 40px;
+  line-height: 1;
+}
+.kept-title {
+  margin: 6px 0 0;
+  font-size: 26px;
+  line-height: 1.15;
+}
+.kept-sentence {
+  margin: 0;
+  max-width: 34ch;
+}
+
+/* The cards keep the page's own left alignment inside a centred column. */
+.kept-week,
+.kept-rows {
+  width: 100%;
+  text-align: left;
+}
+.kept-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.kept-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+}
+.kept-row strong {
+  display: block;
+}
+.kept-met {
+  border-color: var(--good);
+}
+.kept-figure {
+  font-size: 20px;
+  color: var(--accent-text);
+}
+.kept-met .kept-figure {
+  color: var(--good);
+}
+.kept-foot {
+  margin: 4px 0 0;
+}
+
+.kept-actions {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+}
+/* What an anchor needs that a button has by default: centred content, no
+   underline, and the finish moment's 48px. The rest is the button rules above. */
+.button-link {
+  display: grid;
+  place-items: center;
+  min-height: 48px;
+  text-decoration: none;
+}
+.button-link:hover {
+  text-decoration: none;
 }
