@@ -738,7 +738,11 @@ keeping here:
   delivered plan rendered under a coach who did not deliver it — is free again
   the instant the delivery lands. It also contradicted the button's own reason
   for staying live, six lines below it. That mismatch is real and older than this
-  PR, and is left as its own task.
+  PR, and is left as its own task. _Closed 2026-09-13: quest-log PR 5
+  ([#73](https://github.com/haimlevtov/Samson/pull/73)) named the delivery for the
+  coach it returned, and [#75](https://github.com/haimlevtov/Samson/pull/75) put
+  the gentle-tone note under the same name — labelled rather than hidden,
+  [mobile-interface.md](../specs/mobile-interface.md) §4._
 - **The plan's Files line named a spec that does not exist**, which is why two
   docs that DID name the control were missed: §4's state table one row below the
   row that was updated, and `.claude/skills/add-persona/SKILL.md`, which tells

@@ -81,8 +81,6 @@ export function CoachConsole({
     deliverForPersona,
     EMPTY_DELIVERY
   );
-  // Whose words the delivery below is — from the slug it returned, never from
-  // `selected`. The JSX comment above the delivery says why it is a label.
   const deliverer = deliveredBy(personas, state.personaSlug);
 
   /*
@@ -226,32 +224,33 @@ export function CoachConsole({
         {state.error ? <p className="error small">{state.error}</p> : null}
 
         {/*
-         * Named for the coach the delivery RETURNED, never the one the menu shows
-         * now — of the two ways to stop a delivery reading as another coach's
-         * words, the label, not hiding it whenever `state.personaSlug` differs
-         * from `selected`.
+         * A delivery shown under a menu that has moved on names the coach who
+         * wrote it (`deliverer`, from the slug the delivery returned) rather than
+         * being hidden whenever `state.personaSlug` differs from `selected`.
          *
          * WHY not hide: the menu stays live after a delivery on purpose (the
          * comment on the select), and the reason to move it is to Try the other
          * voices. Hiding would make the plan somebody waited a model call for
-         * vanish on the first Try, with nothing on screen saying where it went —
-         * every state renders something, docs/specs/mobile-interface.md §4 — and
-         * nobody would guess that moving the menu back restores it. A label keeps
-         * the words and says whose they are, which is all ADR 0006 asks.
+         * vanish on the first menu change, with nothing on screen saying where it
+         * went — every state renders something, docs/specs/mobile-interface.md §4
+         * — and nobody would guess that moving the menu back restores it. A label
+         * keeps the words and says whose they are.
          *
          * The gentle note is inside the same condition and names the same coach:
-         * it describes this prose, and above a menu showing somebody else, a bare
-         * "Gentler tone" read as the new coach's. It stays OUTSIDE the box because
-         * it is the app's sentence, not the coach's — ADR 0006 again.
+         * it describes this prose, and above a menu showing somebody else a bare
+         * "Gentler tone" read as the new coach's. It stays OUTSIDE the box, and
+         * says "in what X says" rather than "from X", because the tone is not the
+         * coach's choice: code sets it from the log whichever coach is asked —
+         * ADR 0006.
          */}
         {state.delivered ? (
           <>
             {state.gentle ? (
               // The user should know why the coach sounds different today, or the
               // tone change reads as the app being inconsistent.
-              <p className="muted small">
-                Gentler tone from {deliverer}: your recent notes or attendance suggest this is not a
-                week to push.
+              <p className="muted small gentle-note">
+                Gentler tone in what {deliverer} says: your recent notes or attendance suggest this
+                is not a week to push.
               </p>
             ) : null}
 

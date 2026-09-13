@@ -6,6 +6,10 @@
  * menu after a delivery, which the menu deliberately allows. ADR 0006 keeps the
  * coach's words and the plan's numbers apart so a reader can tell whose is whose;
  * a label naming the wrong coach undoes that. FOUND IN REVIEW.
+ *
+ * AI-NOTE: every line on the Coach tab that names the delivery's coach — the
+ *          "What X says" label and the gentle-tone note — uses this, never the
+ *          selected persona's name. The note was the second, in #75.
  */
 
 /** The name of the coach who delivered, from the slug the delivery returned. */
