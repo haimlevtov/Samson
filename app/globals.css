@@ -69,7 +69,15 @@
    * AI-NOTE: `--emblem` is built from the accent tokens, so it DOES follow the
    *          theme. Everything else in this block does not.
    */
-  --display: var(--font-display, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+  /*
+   * The committed face's three subsets, then its one metric-matched fallback —
+   * ADR 0033 §2. A glyph outside one face's unicode-range skips to the next; while
+   * none has arrived, the fallback holds the heading's size.
+   */
+  --display:
+    var(--font-display-latin, ui-sans-serif), var(--font-display-latin-ext, ui-sans-serif),
+    var(--font-display-vietnamese, ui-sans-serif), 'Bricolage Grotesque Fallback', ui-sans-serif,
+    system-ui, sans-serif;
   --hex: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
   --emblem: linear-gradient(135deg, var(--accent), var(--accent-strong));
   --on-emblem: #ffffff;
@@ -201,6 +209,29 @@
 }
 :root[data-theme='light'] {
   color-scheme: light;
+}
+
+/*
+ * The display face's fallback while it loads — ADR 0033 §2. Local Arial, sized to
+ * Bricolage Grotesque, so a heading does not jump when the real face swaps in.
+ * The figures are the ones `next/font/google` produced for this family from
+ * Next's `capsize-font-metrics.json` before the files were committed, kept so
+ * headings lay out exactly as they did; `next/font/local` would read 91.48% /
+ * 26.56% / 101.66% from the subset files themselves.
+ *
+ * AI-NOTE: this face is used only because every `localFont` call in
+ *          app/layout.tsx sets `adjustFontFallback: false` — otherwise each call
+ *          brings its own Arial, and the first catches glyphs the later faces own.
+ *          The family name is repeated in `--display` above, after the three
+ *          `--font-display-*` variables layout.tsx sets.
+ */
+@font-face {
+  font-family: 'Bricolage Grotesque Fallback';
+  src: local('Arial');
+  ascent-override: 88.21%;
+  descent-override: 25.61%;
+  line-gap-override: 0%;
+  size-adjust: 105.43%;
 }
 
 * {

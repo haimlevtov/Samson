@@ -6,3 +6,6 @@
 *.png binary
 *.jpg binary
 *.ico binary
+# Fonts carry stray CR and LF bytes; if the text rule above ever stops
+# auto-detecting, a checkout would rewrite them and corrupt the face.
+*.woff2 binary

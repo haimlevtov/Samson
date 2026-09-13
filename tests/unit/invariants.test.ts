@@ -5,6 +5,7 @@
  *      commits. These tests are the cheapest thing in phase 0 and the reason
  *      the rules stay true. They need no database, network, or API key.
  */
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -440,5 +441,121 @@ describe('a badge on Profile opens its own card in the catalogue', () => {
     const cards = page.match(/<article\b[^>]*className="card badge-card[^"]*"/g) ?? [];
     expect(cards.length).toBeGreaterThanOrEqual(2);
     for (const card of cards) expect(card).toContain('id={badge.slug}');
+  });
+});
+
+describe('ADR 0033 §2 — a build fetches no font, and the fonts are the ones recorded', () => {
+  /*
+   * WHY: the display face is committed in app/fonts/ so that `next build` needs
+   * no route to Google Fonts, and no browser is sent there either. A
+   * `next/font/google` import, or a stylesheet or link naming Google's font hosts,
+   * would bring that back silently — it compiles, it renders.
+   */
+  const FONT_DIR = join(ROOT, 'app', 'fonts');
+
+  it('names Google Fonts nowhere a build or a browser would reach', () => {
+    const candidates = [
+      ...walk(join(ROOT, 'src')),
+      ...walk(join(ROOT, 'app')),
+      ...readdirSync(join(ROOT, 'app'))
+        .filter((f) => f.endsWith('.css'))
+        .map((f) => join(ROOT, 'app', f)),
+      ...['next.config.ts', 'proxy.ts']
+        .map((f) => join(ROOT, f))
+        .filter((f) => {
+          try {
+            return statSync(f).isFile();
+          } catch {
+            return false;
+          }
+        }),
+    ];
+    const offenders = candidates
+      .map((path) => ({
+        rel: relative(ROOT, path).split(sep).join('/'),
+        text: readFileSync(path, 'utf8'),
+      }))
+      .filter((f) => f.rel !== SELF)
+      .filter((f) =>
+        /from\s+['"]next\/font\/google['"]|fonts\.googleapis\.com|fonts\.gstatic\.com/.test(f.text)
+      )
+      .map((f) => f.rel);
+    expect(offenders).toEqual([]);
+  });
+
+  /*
+   * The bytes recorded in app/fonts/SOURCE.md — FOUND IN REVIEW: a font diff is
+   * "binary file changed", and a truncated download or a Git LFS pointer builds
+   * green (next/font/local only logs when it cannot read a file's metrics) and
+   * ships headings in the fallback. Replacing a file means changing its row there
+   * and its hash here, together.
+   */
+  const PINNED: Record<string, string> = {
+    'bricolage-grotesque-latin.woff2':
+      'a79fdb52d4a5c76552452f69202add96e287401fff03d3e8c0e38b4dcb5a99cd',
+    'bricolage-grotesque-latin-ext.woff2':
+      '776f6dcaf03636cd69a5802c94808cc8896c0a66c8e9ce0fe147231b6ee01957',
+    'bricolage-grotesque-vietnamese.woff2':
+      'b50a9d90a5264f20d1e45be0b948fe947ddb3644557f1e85ef5d3bd06427c944',
+  };
+
+  it('serves exactly the files it pins, each a whole woff2', () => {
+    const layout = readFileSync(join(ROOT, 'app', 'layout.tsx'), 'utf8');
+    const referenced = [...layout.matchAll(/src:\s*'\.\/fonts\/([^']+)'/g)]
+      .map((m) => m[1]!)
+      .sort();
+    expect(referenced).toEqual(Object.keys(PINNED).sort());
+
+    for (const name of referenced) {
+      const bytes = readFileSync(join(FONT_DIR, name));
+      expect(bytes.subarray(0, 4).toString('latin1'), name).toBe('wOF2');
+      // The header's own length field, at offset 8, is the whole file's.
+      expect(bytes.readUInt32BE(8), name).toBe(bytes.length);
+      expect(createHash('sha256').update(bytes).digest('hex'), name).toBe(PINNED[name]);
+    }
+  });
+
+  it('draws the display face from the committed files, then the one fallback', () => {
+    const layout = readFileSync(join(ROOT, 'app', 'layout.tsx'), 'utf8');
+    // The negative check above passes on a tree it failed to read; this cannot.
+    expect(layout).toMatch(/from\s+'next\/font\/local'/);
+    // WHY every call: a call without it brings its own metric Arial, which sits
+    // before the later faces in --display and draws the glyphs they own.
+    // Anchored to code, not the doc comment above the calls, which names both.
+    const calls = layout.match(/=\s*localFont\(/g) ?? [];
+    const noAdjust = layout.match(/^\s*adjustFontFallback:\s*false,/gm) ?? [];
+    expect(calls.length).toBe(Object.keys(PINNED).length);
+    expect(noAdjust.length).toBe(calls.length);
+
+    const variables = [...layout.matchAll(/variable:\s*'(--font-display-[a-z-]+)'/g)].map(
+      (m) => m[1]!
+    );
+    expect(variables).toHaveLength(calls.length);
+    const css = readFileSync(join(ROOT, 'app', 'globals.css'), 'utf8');
+    const display = /--display:([^;]+);/.exec(css)?.[1] ?? '';
+    const order = [...variables, "'Bricolage Grotesque Fallback'"].map((name) =>
+      display.indexOf(name)
+    );
+    expect(
+      order.every((at) => at >= 0),
+      display
+    ).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(css).toMatch(/@font-face\s*\{\s*font-family:\s*'Bricolage Grotesque Fallback'/);
+  });
+
+  it('ships the licence and the record of where the files came from', () => {
+    const files = readdirSync(FONT_DIR);
+    // The SIL Open Font License requires its text to travel with the fonts.
+    expect(files).toContain('OFL.txt');
+    const licence = readFileSync(join(FONT_DIR, 'OFL.txt'), 'utf8');
+    expect(licence).toMatch(/SIL Open Font License/);
+    // Condition 2 of the licence: the copyright notice travels too.
+    expect(licence).toMatch(/Copyright \d{4} The Bricolage Grotesque Project Authors/);
+    const source = readFileSync(join(FONT_DIR, 'SOURCE.md'), 'utf8');
+    for (const [name, hash] of Object.entries(PINNED)) {
+      expect(source, name).toContain(name);
+      expect(source, name).toContain(hash);
+    }
   });
 });

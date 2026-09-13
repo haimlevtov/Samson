@@ -355,8 +355,9 @@ diet card, Save as a template — is still there.
 
 ## What the redesign as a whole left
 
-- **Builds need Google Fonts** (ADR 0033). A committed woff2 through `next/font/local`
-  removes it if it ever bites.
+- **Builds needed Google Fonts** (ADR 0033) — until the owner asked for the files
+  to be committed, the same day. They are, in `app/fonts/`, through
+  `next/font/local`; ADR 0033 §2's amendment says how.
 - **Nothing under `app/` is unit-tested**, so each PR moved its decisions into
   `src/ui/` to test them — `quests`, `tiers`, `segments`, `trees`, `unlock`,
   `finish`, `coach`. The layout itself was checked in a browser at 375px, dark and

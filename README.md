@@ -204,10 +204,10 @@ on your machine.
 Vercel applies environment variables at build time, so **redeploy after adding
 them** — an existing deployment will not pick them up.
 
-**A build fetches one font.** `next/font/google` downloads Bricolage Grotesque
-during `next build` and serves it from the app's own origin — no user's browser
-asks Google for anything — but a build with no route to Google Fonts fails. ADR
-0033 says why it is accepted and what removes it.
+**The display font is in the repository.** Bricolage Grotesque's three woff2
+subsets live in `app/fonts/` with their licence and a record of where each came
+from, served by `next/font/local`, so a build needs no network for it and no
+browser asks Google for anything — ADR 0033 §2.
 
 The `keepalive` workflow needs GitHub Actions secrets: `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, and `APP_HEALTH_URL` set to
