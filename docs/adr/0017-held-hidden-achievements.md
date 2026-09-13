@@ -105,7 +105,8 @@ buys nothing: a badge whose definition was withheld arrives looking like every
 other badge, and the fact that you found something unannounced — the whole
 reward — is invisible. `/badges` marks a held hidden badge with a `found` chip,
 and Profile, since the Quest Log redesign, draws it in obsidian and says "hidden ·
-found" in words.
+found" in words. The unlock sheet says it the moment it happens: "Something
+hidden, found", obsidian, and the same two words.
 
 ## Consequences
 

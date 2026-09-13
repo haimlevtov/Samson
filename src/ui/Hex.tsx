@@ -4,8 +4,8 @@ import type { Metal } from './tiers';
 /**
  * The hexagonal emblem the Quest Log draws everything in — ADR 0033.
  *
- * `tone` is the ground; a metal `rim` wraps it in a 4px band of that metal —
- * on the podium around the `core` tone, which is what makes a rim read as metal.
+ * `tone` is the ground; a `rim` wraps it in a band — a metal on the podium, or the
+ * unlock sheet's violet `reveal` — 4px unless `band` says otherwise.
  *
  * WHY `clip-path` rather than an SVG: the emblem holds text and icons that are
  * ordinary DOM, so it inherits colour and font like anything else, and the shape
@@ -20,13 +20,17 @@ export function Hex({
   size,
   tone = 'emblem',
   rim,
+  band = 4,
   label,
   className,
   children,
 }: {
   size: number;
   tone?: HexTone;
-  rim?: Metal;
+  /** A metal band, or the unlock sheet's violet one. */
+  rim?: Metal | 'reveal';
+  /** The rim's width in px. The unlock sheet's is 7: a 98px badge in a 112px rim. */
+  band?: number;
   label?: string;
   className?: string;
   children?: ReactNode;
@@ -53,7 +57,7 @@ export function Hex({
     >
       <span
         className={`hex hex-${tone}`}
-        style={{ '--hex-size': `${size - 8}px` } as CSSProperties}
+        style={{ '--hex-size': `${size - band * 2}px` } as CSSProperties}
       >
         {children}
       </span>

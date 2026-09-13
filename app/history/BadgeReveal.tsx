@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import type { UnlockedAchievement } from '@/src/db/gamification';
+import { unlockSheetProps } from '@/src/ui/unlock';
+import { UnlockSheet } from './UnlockSheet';
 
 /**
  * The badge reveal — PLAN.md phase 4's "a badge visibly fires in the UI on
@@ -22,37 +23,10 @@ export function BadgeReveal({
   slug: string | undefined;
   badges: readonly UnlockedAchievement[];
 }) {
-  if (slug === undefined) return null;
+  // The gate and the field list are `unlockSheetProps`, tested in src/ui/unlock.test.ts.
+  const props = unlockSheetProps(slug, badges);
+  if (props === null) return null;
 
-  const badge = badges.find((b) => b.slug === slug);
-  if (badge === undefined) return null;
-
-  return (
-    <div className="badge-reveal" role="status" aria-live="polite">
-      <div className="badge-reveal-mark" aria-hidden="true">
-        ★
-      </div>
-      <div className="badge-reveal-body">
-        {/*
-         * A hidden badge reaches this component for the first time now that the
-         * reader returns held ones — ADR 0017. Before, it was filtered out and
-         * the reveal rendered nothing at all after a secret unlock.
-         *
-         * The kicker changes because the reveal IS the reward for that tier:
-         * there was no announcement, no progress bar and no name in the list
-         * beforehand, so "you found something" is the whole difference between
-         * this badge and every other one.
-         */}
-        <p className="badge-reveal-kicker">
-          {badge.hidden ? 'Something hidden, found' : 'Achievement unlocked'}
-        </p>
-        <h2>{badge.name}</h2>
-        <p className="muted small">{badge.description}</p>
-      </div>
-      {/* Badges live on Profile since ADR 0013. This link followed them. */}
-      <Link href="/profile" className="chip">
-        All badges
-      </Link>
-    </div>
-  );
+  // Keyed by slug, so a different badge is a fresh sheet rather than a closed one.
+  return <UnlockSheet key={props.slug} {...props} />;
 }

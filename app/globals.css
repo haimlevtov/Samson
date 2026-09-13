@@ -97,6 +97,17 @@
   --board-gold-text: #f3d27a;
   --board-silver-text: #b9bfd0;
   --board-bronze-text: #e0a473;
+
+  /* The unlock sheet — dark in both themes, like the board (ADR 0033 §4). */
+  --sheet-backdrop: rgba(14, 13, 21, 0.66);
+  --sheet-ground: radial-gradient(140% 90% at 50% 0%, #4a3a7a 0%, #1c1530 55%, #0b0810 100%);
+  --sheet-border: #6b57b8;
+  --sheet-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
+  --sheet-kicker: #b5a3ff;
+  --sheet-chip: #262040;
+  --sheet-chip-edge: #4c31c9;
+  --sheet-secondary: #201e2c;
+  --reveal-rim: linear-gradient(145deg, #8d7ad6, #2a2046 45%, #0b0810);
 }
 
 /*
@@ -362,7 +373,8 @@ h2.section.with-hint > svg:first-child {
  * 12px lower than the first. The grid gap is the spacing there.
  */
 .badge-shelf > .card + .card,
-.medal-shelf > .card + .card {
+.medal-shelf > .card + .card,
+.tree-tiles > .card + .card {
   margin-top: 0;
 }
 
@@ -1964,82 +1976,14 @@ details.quick-log[open] > summary {
   font-size: 0.85em;
 }
 
-/* The unlock banner on /workouts. */
-.badge-reveal {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  box-shadow: var(--shadow-lift);
-}
-
-.badge-reveal-mark {
-  flex: none;
-  width: var(--tap);
-  height: var(--tap);
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 1.4rem;
-}
-
-.badge-reveal-body {
-  flex: 1 1 200px;
-  min-width: 0;
-}
-
-.badge-reveal-body h2 {
-  margin: 2px 0 0;
-  font-size: 1.05rem;
-}
-
-.badge-reveal-body p {
-  margin: 0;
-}
-
-.badge-reveal-kicker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-
-/* WHY this is not an animation by default: a badge that only announces itself
-   by moving is invisible to anyone who has asked the system to stop moving
-   things. The banner is legible with no motion at all; the pop is a bonus. */
-@media (prefers-reduced-motion: no-preference) {
-  .badge-reveal {
-    animation: badge-in 320ms ease-out;
-  }
-
-  @keyframes badge-in {
-    from {
-      opacity: 0;
-      transform: translateY(-6px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-}
-
 /*
  * Chips used as LABELS rather than controls.
  *
  * `.chip` carries min-height/min-width of var(--tap) because most chips in this
  * app are pressed with a thumb between sets. The tier and kind markers on a
- * badge card or a quest card, and the XP chips on Profile's level card, are
- * spans — nothing taps them — so the 44px floor only makes them collide with
- * what sits under them.
+ * badge card or a quest card, the XP chips on Profile's level card and a rung's
+ * state on the progression trees are spans — nothing taps them — so the 44px
+ * floor only makes them collide with what sits under them.
  *
  * WHY this is not "shrinking a tap target": a non-interactive label has no tap
  * target to shrink. The 44px rule applies to things you press.
@@ -2047,7 +1991,8 @@ details.quick-log[open] > summary {
 .badge-card .chip,
 .badge-card .chip-on,
 .quest-meta .chip,
-.label-chips .chip {
+.label-chips .chip,
+.tree-chips .chip {
   display: inline-block;
   min-height: 0;
   min-width: 0;
@@ -2535,7 +2480,8 @@ details.quick-log[open] > summary {
  * and two chips in a row with identical fills read as one label that wrapped —
  * so it is an outline against the card rather than a second filled block.
  */
-.chip-found {
+.chip-found,
+.chip-next {
   background: var(--surface);
   color: var(--accent-text);
   border-color: var(--accent-text);
@@ -2575,79 +2521,6 @@ label.choice-row input {
   font-weight: 600;
 }
 
-/*
- * The progression trees — ADR 0020.
- *
- * An ordered list rather than a drawn graph: every tree in this project is a
- * single chain, so a list IS the shape, and it stays readable at 375px where a
- * node-and-edge diagram would need horizontal scroll — the thing
- * docs/specs/mobile-interface.md exists to prevent.
- *
- * A rung IS a `.card`, with this class adding only the row layout. FOUND IN
- * REVIEW: it used to hand-roll four of that primitive's five declarations and
- * got one of them wrong — `var(--line)` is not a token in this sheet, so the
- * whole `border` shorthand was invalid at computed-value time, `border-style`
- * fell back to `none`, and `.is-next` had no border left to colour. The "what
- * to work on next" affordance never drew, and a browser check that read classes
- * and text rather than computed styles did not see it. Reusing the primitive
- * makes that class of mistake unavailable.
- */
-.tree {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.tree-rung {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-}
-
-.tree-rung + .tree-rung {
-  margin-top: 8px;
-}
-
-/* The rung the user is working on. Border only, and the word "next" beside it
-   is what actually carries the state — so this is emphasis rather than the
-   signal, and docs/specs/mobile-interface.md §3's "never colour alone" holds
-   without it. */
-.tree-rung.is-next {
-  border-color: var(--accent-text);
-}
-
-.tree-mark {
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.tree-rung.is-unlocked .tree-mark {
-  color: var(--accent-text);
-}
-
-.tree-body h3 {
-  margin: 0 0 2px;
-  font-size: 15px;
-}
-
-.tree-body p {
-  margin: 2px 0 0;
-}
-
-/* Chips inside a rung are labels, not controls, so they lose the 44px floor
-   .chip carries for thumbs — the same exemption .badge-card makes, copied in
-   FULL. An earlier version dropped `display` and `font-size`, which left the
-   chips inline with padding that had no line box to affect. */
-.tree-rung .chip,
-.tree-rung .chip-on {
-  display: inline-block;
-  min-height: 0;
-  min-width: 0;
-  padding: 2px 8px;
-  margin-right: 6px;
-  font-size: 0.75rem;
-}
-
 /* A whole card that is one link. Profile uses it to reach the progression
    trees; the chevron is the affordance, and the tap target is the card itself,
    which clears 44px from its own padding — docs/specs/mobile-interface.md. */
@@ -2660,7 +2533,8 @@ label.choice-row input {
   color: inherit;
 }
 
-.row-link:hover {
+.row-link:hover,
+.tree-tile:hover {
   border-color: var(--accent-text);
 }
 
@@ -3704,4 +3578,274 @@ label.coach-choice {
 .medal-foot {
   margin: 10px 0 0;
   font-size: 12px;
+}
+
+/* ---- History: the unlock sheet ------------------------------------------ */
+
+/*
+ * Scrolls rather than clipping — FOUND IN REVIEW: in landscape, or with larger
+ * text, the sheet is taller than the screen, and a centred grid clipped Continue
+ * with no way to reach it. `margin: auto` on the sheet centres it when it fits;
+ * `overscroll-behavior` keeps a swipe from scrolling History behind it.
+ */
+.unlock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 20px;
+  background: var(--sheet-backdrop);
+}
+
+.unlock-sheet {
+  width: 100%;
+  max-width: 360px;
+  margin: auto;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 28px 22px 20px;
+  border-radius: 22px;
+  background: var(--sheet-ground);
+  border: 1px solid var(--sheet-border);
+  box-shadow: var(--sheet-shadow);
+  color: var(--board-text);
+}
+.hex-reveal {
+  background: var(--reveal-rim);
+}
+
+.unlock-kicker {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sheet-kicker);
+}
+.unlock-sheet h2 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+.unlock-description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--board-muted);
+}
+.unlock-hint {
+  margin: 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--board-faint);
+}
+.unlock-chips {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+.unlock-chip {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--sheet-chip);
+  color: var(--sheet-kicker);
+  border: 1px solid var(--sheet-chip-edge);
+}
+.unlock-chip-found {
+  background: transparent;
+  border-color: var(--sheet-kicker);
+}
+
+.unlock-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.unlock-actions > * {
+  min-height: 48px;
+}
+/* Both actions are links — Continue so it still leaves without JavaScript. */
+.unlock-continue {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 2px 0 var(--accent-strong);
+  color: var(--on-emblem);
+  font-weight: 700;
+  text-decoration: none;
+}
+.unlock-continue:hover {
+  background: var(--accent-strong);
+  text-decoration: none;
+}
+.unlock-secondary {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--sheet-secondary);
+  border: 1.5px solid var(--board-border);
+  color: var(--board-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.unlock-secondary:hover {
+  text-decoration: none;
+  border-color: var(--sheet-kicker);
+}
+
+/*
+ * WHY the motion is gated: a badge that only announces itself by moving is
+ * invisible to anyone who has asked the system to stop moving things. The sheet
+ * is legible with no motion at all; the short rise and fade are a bonus.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .unlock-sheet {
+    animation: badge-in 320ms ease-out;
+  }
+
+  @keyframes badge-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* ---- Progression trees --------------------------------------------------- */
+
+/* A chip carrying an icon beside its word; its flex and 44px floor are .chip's. */
+.chip-back {
+  gap: 4px;
+}
+
+.tree-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.tree-tile {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  text-align: center;
+  color: inherit;
+  text-decoration: none;
+}
+.tree-tile:hover {
+  text-decoration: none;
+}
+.tree-tile-name {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+.tree-tile-count {
+  font-size: 11px;
+}
+
+.tree-explainer {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+/* A jump from a tile lands the heading below the top edge. */
+.tree-section {
+  scroll-margin-top: 12px;
+}
+
+/*
+ * The climb — ADR 0020. An ordered list rather than a drawn graph: every tree in
+ * this project is a single chain, so a list IS the shape, and it stays readable
+ * at 375px where a node-and-edge diagram would need horizontal scroll.
+ *
+ * A rung is a row — hex, then words — and the one to work on is a raised card
+ * using the `.card` primitive itself. FOUND IN REVIEW before the redesign: rungs
+ * that hand-rolled the primitive got a token wrong and lost the "next" border.
+ */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tree-rung {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+}
+.tree-rung.card {
+  margin: 4px -10px;
+  padding: 12px 10px;
+  border-color: var(--accent-text);
+}
+/*
+ * The connector between two rungs: a 2px line in the hex column, from the rung
+ * above down to this one's hex. Accent between two open rungs, the strong border
+ * otherwise. Decoration — the chips say the state.
+ */
+.tree-rung + .tree-rung::before {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: -6px;
+  height: 16px;
+  width: 2px;
+  background: var(--border-strong);
+}
+/* Only the raised card is shifted by its own -10px margin and 10px padding —
+   FOUND IN REVIEW: the rung after it was nudged too, off its hex column. */
+.tree-rung + .tree-rung.card::before {
+  left: 31px;
+}
+.tree-rung.is-unlocked + .tree-rung.is-unlocked::before {
+  background: var(--accent);
+}
+.tree-mark {
+  display: grid;
+  justify-items: center;
+}
+.tree-rung.is-locked .hex {
+  opacity: 0.7;
+}
+
+.tree-body {
+  min-width: 0;
+}
+.tree-body h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+}
+.tree-rung.is-locked .tree-body h3 {
+  color: var(--muted);
+}
+.tree-body p {
+  margin: 2px 0 0;
+}
+
+.tree-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: var(--warn);
 }

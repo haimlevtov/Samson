@@ -64,8 +64,8 @@ least prominent, because an unknown tier drawn gold would be a claim.
 _This said the test caught a ninth tier "rather than rendering unstyled", while
 it read only the migration that created the table; review caught both halves._
 
-**A HELD hidden badge is obsidian whatever its tier**, on Profile — the finding is
-the reward, and obsidian is how the shelf says it. Both shipped hidden badges have
+**A HELD hidden badge is obsidian whatever its tier**, on Profile's shelf and on the
+unlock sheet — the finding is the reward, and obsidian is how both say it. Both shipped hidden badges have
 tier `hidden` today, so the rule and the table agree.
 
 A badge's icon is keyed by slug with `medal` as the default, for the same reason:

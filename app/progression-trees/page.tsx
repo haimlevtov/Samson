@@ -4,6 +4,9 @@ import { createServerDb, currentUser } from '@/src/db/server';
 import { loadProgressionTrees, loadUnlockSets } from '@/src/db/progression';
 import { unlockStates, type UnlockState } from '@/src/gamification/unlocks';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
+import { RUNG_ICON, RUNG_TONE, rungState, treeIcon } from '@/src/ui/trees';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,15 +64,48 @@ export default async function ProgressionTreesPage() {
     <>
       <header className="top">
         <div>
+          <span className="kicker">Skill trees</span>
+          {/* "Progression trees", not the handoff's "Progression" — ADR 0020's
+              Naming section keeps the two words together, because ADR 0014 owns
+              "progression" for the e1RM chart. */}
           <h1>Progression trees</h1>
           <span className="muted small">
-            {unlockedCount} of {states.length} unlocked
+            {unlockedCount} of {states.length} rungs open
           </span>
         </div>
-        <Link href="/profile" className="chip">
+        <Link href="/profile" className="chip chip-back">
+          <Icon name="chevron-left" size={16} />
           Profile
         </Link>
       </header>
+
+      {/*
+       * One tile per tree, each a link to its ladder below — the Quest Log. The
+       * handoff lit the tree with the most recent unlock; nothing here knows
+       * WHEN a rung opened (unlocks are recomputed, never stored — ADR 0020),
+       * so no tile claims to be the latest.
+       */}
+      <nav className="tree-tiles" aria-label="Trees">
+        {trees.map((tree) => {
+          const rungs = byTree.get(tree) ?? [];
+          const open = rungs.filter((r) => r.unlocked).length;
+          return (
+            <a key={tree} href={`#tree-${tree}`} className="card tree-tile">
+              <Hex size={40} tone="soft">
+                <Icon name={treeIcon(tree)} size={20} />
+              </Hex>
+              <span className="tree-tile-name">{tree}</span>
+              {/* "2 / 4" to the eye; "2 of 4 rungs open" to a screen reader. */}
+              <span className="muted tree-tile-count" aria-hidden="true">
+                {open} / {rungs.length}
+              </span>
+              <span className="sr-only">
+                {open} of {rungs.length} rungs open
+              </span>
+            </a>
+          );
+        })}
+      </nav>
 
       {/*
        * Said out loud rather than swallowed. A truncated read can only
@@ -84,7 +120,13 @@ export default async function ProgressionTreesPage() {
         </p>
       )}
 
-      <p className="card muted small">
+      {trees.length === 0 ? (
+        // mobile-interface.md §4: a state, not an empty row of tiles.
+        <p className="card muted">No progression trees to show yet.</p>
+      ) : null}
+
+      {/* The explainer the page has always carried, now under the tiles. */}
+      <p className="muted tree-explainer">
         Each rung opens when you have done the one below it. The requirement is{' '}
         <strong>sets in a single session</strong>, not a total — three sets of ten across three
         months does not say whether the next step is reachable.
@@ -94,8 +136,9 @@ export default async function ProgressionTreesPage() {
         const rungs = byTree.get(tree) ?? [];
 
         return (
-          <section key={tree}>
+          <section key={tree} id={`tree-${tree}`} className="tree-section">
             <h2 className="section with-hint">
+              <Icon name={treeIcon(tree)} size={14} />
               {tree}
               <FieldHint title={`The ${tree} tree`}>
                 Unlocks are worked out from your logged sets, in code, every time this page loads —
@@ -103,8 +146,14 @@ export default async function ProgressionTreesPage() {
               </FieldHint>
             </h2>
 
-            <ol className="tree">
-              {rungs.map((state) => (
+            {/*
+             * Top rung first, read as a climb — the handoff — so the order a screen
+             * reader hears is the order drawn. No numbers are drawn or spoken; the
+             * words on each rung carry its state. `role="list"` because WebKit
+             * drops list semantics from a list with its markers removed.
+             */}
+            <ol className="tree" role="list">
+              {[...rungs].reverse().map((state) => (
                 <Rung key={state.node.slug} state={state} />
               ))}
             </ol>
@@ -116,7 +165,7 @@ export default async function ProgressionTreesPage() {
 }
 
 function Rung({ state }: { state: UnlockState }) {
-  const { node, unlocked, met } = state;
+  const { node } = state;
   // Narrowed on the kind rather than on the presence of one: a node whose
   // jsonb did not parse falls back to { kind: 'never' }, which has a kind and
   // no requirement to print — src/db/progression.ts.
@@ -124,16 +173,18 @@ function Rung({ state }: { state: UnlockState }) {
     'kind' in node.criteria && node.criteria.kind === 'sets_at' ? node.criteria : null;
   const unparseable = 'kind' in node.criteria && node.criteria.kind === 'never';
 
+  const drawn = rungState(state);
+
   return (
-    <li
-      className={`card tree-rung${unlocked ? ' is-unlocked' : ''}${state.next ? ' is-next' : ''}`}
-    >
-      <span className="tree-mark" aria-hidden="true">
-        {unlocked ? '●' : '○'}
+    <li className={`tree-rung is-${drawn}${state.next ? ' card' : ''}`}>
+      <span className="tree-mark">
+        <Hex size={36} tone={RUNG_TONE[drawn]}>
+          <Icon name={RUNG_ICON[drawn]} size={18} />
+        </Hex>
       </span>
 
       <div className="tree-body">
-        <h3>{node.name}</h3>
+        <h3 className="display">{node.name}</h3>
 
         {criteria === null ? (
           <p className="muted small">
@@ -158,15 +209,20 @@ function Rung({ state }: { state: UnlockState }) {
           </p>
         )}
 
-        <p className="muted small">
-          {unlocked && <span className="chip chip-on">unlocked</span>}
-          {state.next && <span className="chip">next</span>}
-          {/*
-           * `met` without `unlocked` is the interesting case and worth saying
-           * out loud: the criteria are cleared but a rung below is not, so the
-           * tree is telling the user to go back rather than refusing silently.
-           */}
-          {met && !unlocked && <span className="chip">cleared — finish the rung below</span>}
+        {/*
+         * The state in words — shown for the three a user acts on, and for
+         * "locked" read by a screen reader only, where the glyph is the visible
+         * signal (mobile-interface.md §3: a word or an icon). `cleared` is the
+         * interesting case: the criteria are met but a rung below is not, so the
+         * tree is telling the user to go back rather than refusing silently.
+         */}
+        <p className="tree-chips">
+          {drawn === 'unlocked' && <span className="chip chip-on">unlocked</span>}
+          {drawn === 'next' && <span className="chip chip-next">next</span>}
+          {drawn === 'cleared' && (
+            <span className="chip chip-warn">cleared — finish the rung below</span>
+          )}
+          {drawn === 'locked' && <span className="sr-only">locked</span>}
         </p>
       </div>
     </li>
