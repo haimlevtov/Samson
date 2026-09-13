@@ -10,7 +10,9 @@ import { nextFocusIndex, withoutUnlocked, type UnlockSheetProps } from '@/src/ui
 /**
  * The badge unlock as a sheet over History — the Quest Log redesign.
  *
- * Everything it shows was decided on the server by `unlockSheetProps`. This
+ * It opens over History and over a session's receipt — wherever `finishWorkout`
+ * lands somebody. Everything it shows was decided on the server by
+ * `unlockSheetProps`. This
  * component owns one thing: being dismissed, once.
  *
  * WHY a dialog, when the handoff drew `role="status"`: it covers the page and
@@ -60,7 +62,8 @@ export function UnlockSheet({
      * there was no control to return to, and a keyboard user would otherwise
      * start again from the top of the document.
      */
-    const heading = document.querySelector<HTMLElement>('header.top h1');
+    // The page's first heading — History's in its header, the receipt's on its own.
+    const heading = document.querySelector<HTMLElement>('.shell h1');
     if (heading) {
       heading.setAttribute('tabindex', '-1');
       heading.focus();

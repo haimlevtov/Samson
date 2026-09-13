@@ -374,7 +374,8 @@ h2.section.with-hint > svg:first-child {
  */
 .badge-shelf > .card + .card,
 .medal-shelf > .card + .card,
-.tree-tiles > .card + .card {
+.tree-tiles > .card + .card,
+.kept-rows > .card + .card {
   margin-top: 0;
 }
 
@@ -458,7 +459,10 @@ textarea:focus {
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-button {
+/* `.button-link` is an anchor that navigates, drawn as a button — the finish
+   moment's Done. It joins every button rule rather than copying them. */
+button,
+.button-link {
   cursor: pointer;
   background: var(--accent);
   color: #fff;
@@ -473,11 +477,13 @@ button {
   /* Stops a double tap zooming the page instead of pressing twice. */
   touch-action: manipulation;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.button-link:hover {
   background: var(--accent-strong);
 }
 /* A small press. Cheap, and it makes the thing feel like a game rather than a form. */
-button:active:not(:disabled) {
+button:active:not(:disabled),
+.button-link:active {
   transform: translateY(2px);
   box-shadow: 0 0 0 var(--accent-strong);
 }
@@ -486,14 +492,16 @@ button:disabled {
   cursor: progress;
 }
 
-button.secondary {
+button.secondary,
+.button-link.secondary {
   background: var(--surface-2);
   color: var(--text);
   border-color: var(--border-strong);
   box-shadow: 0 2px 0 var(--border-strong);
   font-weight: 600;
 }
-button.secondary:hover:not(:disabled) {
+button.secondary:hover:not(:disabled),
+.button-link.secondary:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -576,7 +584,8 @@ button.secondary:hover:not(:disabled) {
 /* ---- the session bar --------------------------------------------------- */
 
 /*
- * Back, the clock, and the way out. Sticky rather than scrolled away: the clock
+ * Back, the clock with the session's name, and the way out. Sticky rather than
+ * scrolled away: the clock
  * is rank 4 and would not earn the space on its own, but "finish" being
  * unreachable at the bottom of a forty-row grid is a worse failure than a pill
  * costing 56px.
@@ -604,7 +613,6 @@ button.secondary:hover:not(:disabled) {
   min-height: var(--tap);
   border-radius: 999px;
   color: var(--text);
-  font-size: 19px;
 }
 .bar-back:hover {
   background: var(--accent-soft);
@@ -680,6 +688,7 @@ button.secondary:hover:not(:disabled) {
   flex: 1;
   min-width: 0;
   margin: 0;
+  font-family: var(--display);
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -978,6 +987,7 @@ button.set-prev.copy:hover:not(:disabled) {
 .rest-count {
   flex: 1;
   text-align: center;
+  font-family: var(--display);
   font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -3859,15 +3869,6 @@ label.coach-choice {
  * docs/plans/quest-log-redesign.md PR 4. The set grid is untouched — ADR 0011.
  */
 
-.lift-name {
-  font-family: var(--display);
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-.rest-count {
-  font-family: var(--display);
-}
-
 /* The quest this session counts toward, under the bar. A line of words beside
    an emblem — nothing in it is pressed. */
 .quest-hint {
@@ -3929,9 +3930,6 @@ label.coach-choice {
   display: grid;
   gap: 10px;
 }
-.kept-rows > .card + .card {
-  margin-top: 0;
-}
 .kept-row {
   display: grid;
   grid-template-columns: 44px 1fr auto;
@@ -3961,36 +3959,14 @@ label.coach-choice {
   display: grid;
   gap: 10px;
 }
-/*
- * A link drawn as the app's button — the finish moment's two ways on are
- * navigations, not submissions, so they are anchors. Same ground, border and
- * 48px as a primary button; `.secondary` as button.secondary.
- */
+/* What an anchor needs that a button has by default: centred content, no
+   underline, and the finish moment's 48px. The rest is the button rules above. */
 .button-link {
   display: grid;
   place-items: center;
   min-height: 48px;
-  padding: 11px 16px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  border: 1.5px solid var(--accent);
-  box-shadow: 0 2px 0 var(--accent-strong);
-  color: var(--on-emblem);
-  font-weight: 700;
   text-decoration: none;
 }
 .button-link:hover {
-  background: var(--accent-strong);
   text-decoration: none;
-}
-.button-link.secondary {
-  background: var(--surface-2);
-  border-color: var(--border-strong);
-  box-shadow: 0 2px 0 var(--border-strong);
-  color: var(--text);
-  font-weight: 600;
-}
-.button-link.secondary:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
 }

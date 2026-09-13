@@ -69,8 +69,8 @@ export default async function WorkoutsPage({
         </div>
       </header>
 
-      {/* Finishing a session redirects here with ?unlocked=, so the badge fires
-          on the screen you land on. */}
+      {/* Finishing a session lands on its receipt, where a badge fires now. This
+          still reveals one for a ?unlocked= link — the same sheet, the same gate. */}
       <BadgeReveal slug={unlocked} badges={badges} />
 
       <div className="card">

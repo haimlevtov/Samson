@@ -1,44 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { earnedSentence, sessionHeadline } from './finish';
-
-describe('sessionHeadline', () => {
-  it('counts the session in words up to ten', () => {
-    expect(sessionHeadline(1)).toBe('First session this week');
-    expect(sessionHeadline(3)).toBe('Third session this week');
-    expect(sessionHeadline(10)).toBe('Tenth session this week');
-  });
-
-  it('uses digits with the right suffix past ten', () => {
-    expect(sessionHeadline(11)).toBe('11th session this week');
-    expect(sessionHeadline(12)).toBe('12th session this week');
-    expect(sessionHeadline(21)).toBe('21st session this week');
-    expect(sessionHeadline(22)).toBe('22nd session this week');
-    expect(sessionHeadline(23)).toBe('23rd session this week');
-  });
-
-  it('says nothing it cannot count', () => {
-    expect(sessionHeadline(0)).toBe('Session kept');
-    expect(sessionHeadline(Number.NaN)).toBe('Session kept');
-    expect(sessionHeadline(2.5)).toBe('Session kept');
-  });
-});
+import { earnedSentence, sessionXp } from './finish';
 
 describe('earnedSentence', () => {
   it('explains the taper when something was earned', () => {
-    expect(earnedSentence({ earned: 70, thisWeek: 280, ceiling: 500 })).toMatch(
+    expect(earnedSentence({ earned: 70, weekXp: 280, ceiling: 500 })).toMatch(
       /less than the one before/
     );
   });
 
   it('names the cap only when the cap is what stopped it', () => {
-    expect(earnedSentence({ earned: 0, thisWeek: 500, ceiling: 500 })).toMatch(/cap is reached/);
+    expect(earnedSentence({ earned: 0, weekXp: 500, ceiling: 500 })).toMatch(/cap was reached/);
   });
 
-  it('never blames the cap for nothing recorded below it', () => {
-    // An award call that failed is swallowed by finishWorkout; the page must
-    // not invent a reason.
-    const sentence = earnedSentence({ earned: 0, thisWeek: 200, ceiling: 500 });
+  it('never blames the cap, or promises a retry, for nothing recorded below it', () => {
+    // A failed award is swallowed by finishWorkout and never retried.
+    const sentence = earnedSentence({ earned: 0, weekXp: 200, ceiling: 500 });
     expect(sentence).not.toMatch(/cap/);
+    expect(sentence).not.toMatch(/\byet\b/);
     expect(sentence).toMatch(/streak and adherence/);
+  });
+});
+
+describe('sessionXp', () => {
+  it('adds every row the award wrote for the session', () => {
+    expect(
+      sessionXp([
+        { amount: 64, source: 'adherence' },
+        { amount: 50, source: 'streak' },
+        { amount: 75, source: 'achievement' },
+      ])
+    ).toEqual({ earned: 189, milestone: true });
+  });
+
+  it('is nothing, and no milestone, with no rows', () => {
+    expect(sessionXp([])).toEqual({ earned: 0, milestone: false });
   });
 });

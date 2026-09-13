@@ -172,18 +172,14 @@ export async function finishWorkout(formData: FormData): Promise<void> {
   revalidatePath('/workout');
 
   /*
-   * The badge reveal — phase 4's "a badge visibly fires in the UI on unlock".
+   * To the session's receipt — the Quest Log redesign — where the badge reveal
+   * fires: phase 4's "a badge visibly fires in the UI on unlock", on the screen
+   * the user lands on.
    *
    * WHY a query parameter is safe here: it selects which badge to REVEAL, and
    * the page renders it only after finding a matching row in this user's own
    * achievement_events (scoped by RLS). A forged slug shows nothing, because
    * the event has to exist. No schema change and no "seen" column.
-   */
-  /*
-   * To the finish moment first — the Quest Log redesign — carrying the same
-   * `?unlocked=` it always carried. That page's Done goes on to History with it,
-   * so a badge still fires where it fired before; the finish moment only reads
-   * what was just written and shows it.
    */
   const first = unlocked[0];
   const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
