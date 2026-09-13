@@ -235,7 +235,8 @@ history._
 ### 5.5 Progression and rewards — **Built** (phases 4–5)
 
 XP from adherence with a weekly ceiling and diminishing returns. Streaks that
-count planned days, so scheduled rest sustains them. Achievements as database
+count planned days, so scheduled rest sustains them — a rest day is logged for
+today from the Workout tab ([ADR 0034](adr/0034-logging-a-rest-day.md)). Achievements as database
 rows with SQL predicates — including hidden ones, and calendar-triggered ones
 that fire on _your_ local date rather than the server's. Daily quests and weekly
 challenges from a validated pool. Progression trees for push, pull, legs and

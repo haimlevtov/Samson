@@ -56,6 +56,9 @@ not divide cleanly, so they are re-cut:
 | **Workout** | `/workout` | Templates. Picking one is what starts a session              |
 | **Profile** | `/profile` | Who you are and the settings that change how the app behaves |
 
+_Amended 2026-09-13: Workout also logs today as a rest day, the other answer to
+"what am I doing today" — [ADR 0034](0034-logging-a-rest-day.md)._
+
 **Every tab is its own route, named after itself.** `/workouts` and
 `/templates` were the names those pages happened to grow up with, and a tab bar
 makes the mismatch visible: four tabs matched their label and two did not. A
