@@ -1059,7 +1059,7 @@ in a shipped row.
 **And the fix had to be a second migration.** The first was already pushed to
 hosted, and an applied migration is never re-run — editing its array would have
 corrected every fresh build and left the deployed database wrong forever. That
-trap is recorded in `docs/plans/rework-hub-history-coach.md` and it caught this
+trap is recorded in `docs/plans/rework-2.md` and it caught this
 PR anyway, one commit after the push.
 
 ### The rest of what review found

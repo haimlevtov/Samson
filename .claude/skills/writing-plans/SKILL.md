@@ -15,7 +15,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Context:** If working in an isolated worktree, it should have been created via the `superpowers:using-git-worktrees` skill at execution time.
 
-**Save plans to:** `docs/plans/phase-N.md` for a numbered phase of docs/PLAN.md, or `docs/plans/YYYY-MM-DD-<feature-name>.md` for anything else. NOT `docs/superpowers/plans/` — this project keeps one plan directory
+**Save plans to:** `docs/plans/phase-N.md` for a numbered phase of docs/PLAN.md, or `docs/plans/rework-N.md` for anything else — the number after the last row of `docs/plans/README.md`'s naming table, with a row added there. Never a descriptive filename: the owner renamed the four that had one (2026-09-13). NOT `docs/superpowers/plans/` — this project keeps one plan directory
 - (User preferences for plan location override this default)
 
 ## Scope Check

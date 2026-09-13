@@ -1,7 +1,7 @@
 -- Samson 0060 — each coach speaks in a voice cast for it
 --
 -- ADR 0025, and its correction before the code. Plan:
--- docs/plans/rework-hub-history-coach.md, PR 6b. Skill:
+-- docs/plans/rework-2.md, PR 6b. Skill:
 -- .claude/skills/add-persona/SKILL.md §2.
 --
 -- INVARIANT: content lives in the database, not in code — CLAUDE.md #7. How a

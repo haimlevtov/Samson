@@ -9,7 +9,7 @@ The owner handed over a full redesign of the game layer on 2026-09-13 — "Quest
 Log", option 2a, made with Claude Design. The handoff
 ([`docs/design/quest-log-handoff.md`](../design/quest-log-handoff.md)) is
 explicit that it is presentation: no data model, RPC, policy or number changes.
-The plan is [`docs/plans/quest-log-redesign.md`](../plans/quest-log-redesign.md).
+The plan is [`docs/plans/rework-4.md`](../plans/rework-4.md).
 
 Most of it is layout, and layout needs no record. Five things do, because they
 are decisions a future change could quietly undo, or ones this repository had

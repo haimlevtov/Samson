@@ -372,7 +372,7 @@ describe('ADR 0009 and ADR 0017 — application code never selects an achievemen
    * WHY: `achievements_read_visible` grants the ROW, and `predicate` is a column
    * on it — the SQL `evaluate_achievements` runs. A `select('*')` on that table
    * typechecks, renders correctly, and hands every visible badge's SQL to the
-   * page. The badge catalogue (PR 7 of coach-memory-voice-onboarding.md) was the
+   * page. The badge catalogue (PR 7 of rework-3.md) was the
    * first surface to read the table directly; this holds every read after it.
    *
    * WHAT THIS DOES NOT PROMISE, and the title used to: that the predicate never

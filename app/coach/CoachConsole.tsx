@@ -111,7 +111,7 @@ export function CoachConsole({
         {/*
          * The coach at the head of the card — the Quest Log. The menu below it
          * is still how the coach is chosen; the handoff's "Change" chip would
-         * have hidden a control that ships (docs/plans/quest-log-redesign.md).
+         * have hidden a control that ships (docs/plans/rework-4.md).
          */}
         <div className="voice-head">
           <Hex size={52}>

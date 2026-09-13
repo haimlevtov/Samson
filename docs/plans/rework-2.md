@@ -4,7 +4,7 @@ Planned 2026-09-09, before any of the code below. Eight PRs: this plan, then
 seven changes in the order given.
 
 **This is a rework, not a phase.** Phase 6 was the last one and it is closed.
-`rework-profile-hub-coach.md` is the precedent for the shape: a list of changes
+`rework-1.md` is the precedent for the shape: a list of changes
 that came from using the app rather than from `docs/PLAN.md`, planned together
 because several of them touch the same surface.
 

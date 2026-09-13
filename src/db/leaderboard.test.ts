@@ -174,7 +174,7 @@ describe('clampDisplayName — names that are nothing at all', () => {
  * The level is derived from XP in TypeScript, and this is what fails if anyone
  * moves it into the view.
  *
- * `docs/plans/rework-hub-history-coach.md` PR 2: the request was to rank by
+ * `docs/plans/rework-2.md` PR 2: the request was to rank by
  * level rather than XP, and the finding was that no migration is needed —
  * `levelForXp` is monotonic non-decreasing, so the view's ordering already
  * agrees with a level ordering. What changed is the figure a reader sees.

@@ -10,9 +10,10 @@ Gamified strength-training app with an LLM coach. Class project.
   building.
 
 **The artifact trail is graded, and so is its order.** A phase plan goes in
-`docs/plans/phase-N.md`, a decision in `docs/adr/`, a written contract in
-`docs/specs/`. Plan-mode writes to `~/.claude/plans/` — that file is scratch, not
-an artifact. Copy it into `docs/plans/` and commit it **before** the code it
+`docs/plans/phase-N.md`, a plan outside the phases in `docs/plans/rework-N.md`
+(the next number, with a row in `docs/plans/README.md`), a decision in
+`docs/adr/`, a written contract in `docs/specs/`. Plan-mode writes to
+`~/.claude/plans/` — that file is scratch, not an artifact. Copy it into `docs/plans/` and commit it **before** the code it
 plans, in its own commit. A plan committed alongside its implementation cannot
 show it came first.
 

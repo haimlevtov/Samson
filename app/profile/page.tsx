@@ -297,7 +297,7 @@ export default async function ProfilePage() {
        * target. It sits with Badges because both answer "what have I got".
        *
        * No rung count, which the handoff drew: it needs every logged set, and
-       * this page does not otherwise read the trees — docs/plans/quest-log-redesign.md.
+       * this page does not otherwise read the trees — docs/plans/rework-4.md.
        */}
       <h2 className="section">
         <Icon name="route" size={14} />

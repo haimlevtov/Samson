@@ -121,9 +121,9 @@ hidden, found", obsidian, and the same two words.
 
 ## Amendment 2026-09-12 — the catalogue, and how many are left to find
 
-PR 7 of `docs/plans/coach-memory-voice-onboarding.md` adds a catalogue: every
+PR 7 of `docs/plans/rework-3.md` adds a catalogue: every
 badge, what unlocks it, and whether you hold it. (Not the "rework PR 7" of
-`rework-hub-history-coach.md`, which was templates — both plans number from one.)
+`rework-2.md`, which was templates — both plans number from one.)
 It changes nothing above, and needs two things this ADR did not provide: a
 count, and an unlock condition written for somebody who does not hold the badge.
 
@@ -148,7 +148,7 @@ list.
 
 ### The count is not reachable through the policy, and the plan said it would be
 
-`docs/plans/coach-memory-voice-onboarding.md` said the catalogue needs "no new
+`docs/plans/rework-3.md` said the catalogue needs "no new
 policy: the existing one already returns exactly the rows the user may see". That
 is true of the ROWS and false of the COUNT. `achievements_read_visible`
 withholds a locked hidden row entirely, which is its job — so a client counting

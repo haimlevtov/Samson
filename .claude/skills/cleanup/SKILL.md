@@ -140,5 +140,6 @@ scope touches one of these, the paired doc must change in the same diff:
 | A migration in `supabase/migrations/` | `src/db/types.ts` regenerated — CI fails on a stale diff |
 | A decision with a rejected alternative | A new ADR in `docs/adr/` |
 | Work completing a phase | The Outcome section of `docs/plans/phase-N.md` |
+| Work completing a rework PR | The Outcome section of its `docs/plans/rework-N.md`, and its status in `docs/plans/README.md` |
 
 A missing update is a finding.
