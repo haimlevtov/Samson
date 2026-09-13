@@ -59,7 +59,8 @@ export default async function BadgesPage() {
               <p className="muted small">{badge.description}</p>
               <p className="muted small">
                 <span className="chip chip-on">{badge.tier}</span>
-                {/* The same marker Profile uses — see the comment there. */}
+                {/* The marker's reasoning is on .chip-found in globals.css. Profile says
+                    the same thing in words, "hidden · found", under an obsidian medal. */}
                 {badge.hidden && <span className="chip chip-found">found</span>} earned{' '}
                 {displayDate(badge.earnedOn)}
               </p>

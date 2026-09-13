@@ -326,7 +326,8 @@ h2.section.with-hint > svg:first-child {
  *
  * WHY this is needed at all: almost every pair of siblings on a page is
  * separated by an `h2.section`, which carries `margin: 22px 0 10px`. Where one
- * is absent — Profile's level card sitting straight on top of the stat tiles —
+ * is absent — Profile's level card sitting straight on top of the stat tiles, as
+ * it did when this was written —
  * the gap is exactly 0, and `.card` has a `box-shadow` reaching 10px down with
  * a 30px blur. The shadow then falls on the card below and reads as the two
  * overlapping.
@@ -340,15 +341,16 @@ h2.section.with-hint > svg:first-child {
  * rhythm as the tiles inside it.
  *
  * `.badge-shelf` is a grid without the class, so it is named here too — FOUND
- * IN REVIEW of coach-memory PR 7, where Profile's link into /badges put a card
- * directly above a shelf, and the hidden count on /badges sits directly below
- * one. Both met at 0.
+ * IN REVIEW of coach-memory PR 7, where Profile's link into /badges sat directly
+ * above a shelf and the hidden count on /badges sits directly below one. Both
+ * met at 0. Profile's shelf is `.medal-shelf` since the Quest Log redesign, and
+ * it joins this list rather than copying it.
  */
 .card + .card,
 .card + .grid,
 .grid + .card,
 .grid + .grid,
-.card + .badge-shelf,
+.card + .medal-shelf,
 .badge-shelf + .card {
   margin-top: 12px;
 }
@@ -359,7 +361,8 @@ h2.section.with-hint > svg:first-child {
  * between cards on a phone, and the second card of a two-column row sitting
  * 12px lower than the first. The grid gap is the spacing there.
  */
-.badge-shelf > .card + .card {
+.badge-shelf > .card + .card,
+.medal-shelf > .card + .card {
   margin-top: 0;
 }
 
@@ -368,18 +371,8 @@ h2.section.with-hint > svg:first-child {
   gap: 12px;
 }
 
-/*
- * The four stat tiles are not equal in rank — mobile-interface.md §2.
- * Adherence and streak are the retention mechanic (CLAUDE.md #4); tonnage and
- * acute:chronic are diagnostics. On a phone the first two get a full row each
- * and the diagnostics share one.
- */
-.grid.cols-4,
 .grid.cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.grid.cols-4 > :nth-child(-n + 2) {
-  grid-column: span 2;
 }
 
 .row {
@@ -1502,10 +1495,10 @@ code {
    * "growing rightwards always has room". At 375px the max-width below resolves
    * to 260px, so any hint whose button sits past x=115 overflows. What pushes a
    * button that far right is the LABEL beside it: "Adherence · 4 wks" put its
-   * hint at x=158, in a tile that spans the full width. (An earlier draft blamed
-   * the right-hand column of a four-up grid. There is no such column at this
-   * width — `.grid.cols-4` is two columns here and the first two children span
-   * both — and the tiles that do sit right carry no hint.)
+   * hint at x=158, in a tile that spanned the full width when this was measured.
+   * Since the Quest Log redesign the tiles are two equal columns and Adherence,
+   * which has a hint, sits in the right one — so the measured clamp below is now
+   * the only thing keeping its bubble on screen, rather than a margin of safety.
    *
    * `--hint-shift` is the pull back inside, measured by src/ui/FieldHint.tsx
    * because CSS cannot know how far this element is from the viewport edge —
@@ -1628,12 +1621,6 @@ code {
 
   .grid {
     gap: 14px;
-  }
-  .grid.cols-4 {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  }
-  .grid.cols-4 > :nth-child(-n + 2) {
-    grid-column: auto;
   }
 
   .stat {
@@ -1911,7 +1898,8 @@ details.quick-log[open] > summary {
  * the only breakpoints are min-width. See docs/specs/mobile-interface.md.
  * ------------------------------------------------------------------------- */
 
-/* The XP meter, reused for challenge progress. */
+/* A continuous meter — Hub's challenge progress past ten, since the Quest Log's
+   segmented meter took the weekly XP bar and the level bar. */
 .xp-meter {
   display: block;
   height: 10px;
@@ -1926,8 +1914,8 @@ details.quick-log[open] > summary {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  /* WHY a min-width: a 1% week would otherwise render as nothing at all, which
-     reads as "you earned no XP" rather than "you earned a little". */
+  /* WHY a min-width: 1% progress would otherwise render as nothing at all, which
+     reads as "nothing counted yet" rather than "a little". */
   min-width: 3px;
 }
 
@@ -2049,15 +2037,17 @@ details.quick-log[open] > summary {
  *
  * `.chip` carries min-height/min-width of var(--tap) because most chips in this
  * app are pressed with a thumb between sets. The tier and kind markers on a
- * badge card or a quest card are spans — nothing taps them — so the 44px floor
- * only makes them collide with the meter underneath.
+ * badge card or a quest card, and the XP chips on Profile's level card, are
+ * spans — nothing taps them — so the 44px floor only makes them collide with
+ * what sits under them.
  *
  * WHY this is not "shrinking a tap target": a non-interactive label has no tap
  * target to shrink. The 44px rule applies to things you press.
  */
 .badge-card .chip,
 .badge-card .chip-on,
-.quest-meta .chip {
+.quest-meta .chip,
+.label-chips .chip {
   display: inline-block;
   min-height: 0;
   min-width: 0;
@@ -2119,44 +2109,14 @@ details.quick-log[open] > summary {
 /* A badge still to get. Dashed rather than faded: the text on it is the
    instruction, and fading it would make the most useful words on the page the
    hardest to read. */
-.badge-locked {
+.badge-locked,
+.medal-locked {
   border-style: dashed;
 }
 
 /* /badges#slug lands the card below the top edge rather than flush against it. */
 .badge-card[id] {
   scroll-margin-top: 16px;
-}
-
-/* ---------------------------------------------------------------------------
- * ADR 0013 — the level card, and settings behind a cog.
- * Phone-first: base rules are the narrow layout, min-width only.
- * ------------------------------------------------------------------------- */
-
-.level-card {
-  display: grid;
-  gap: 10px;
-}
-
-.level-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.level-badge {
-  flex: none;
-  width: var(--tap);
-  height: var(--tap);
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #fff;
-  font-size: 1.25rem;
-  font-weight: 700;
-  /* The level is decoration here — the accessible name is on the meter below,
-     which carries the numbers. A screen reader reading "7" twice is noise. */
 }
 
 /* The diet advisor's figures — ADR 0024.
@@ -3586,4 +3546,162 @@ label.coach-choice {
 }
 .quest-progress strong {
   color: var(--text);
+}
+
+/* ---- Profile: the hero level ring --------------------------------------- */
+
+.level-hero {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+/*
+ * The ring is a conic gradient to --pct, which is levelProgress's own figure.
+ * The disc inside it is the card's ground, so the ring reads as a band in both
+ * themes rather than a pie.
+ */
+.level-ring {
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--accent) var(--pct), var(--surface-2) 0);
+}
+.level-ring-disc {
+  width: 86px;
+  height: 86px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+.level-digit {
+  font-size: 28px;
+}
+.level-words {
+  min-width: 0;
+}
+.level-next {
+  font-size: 22px;
+  line-height: 1.15;
+  margin: 2px 0 4px;
+}
+
+.label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+/* Labels, not controls: the label-chip reset sizes them. Squarer, and in body
+   ink, because each is a figure rather than a category. */
+.label-chips .chip {
+  border-radius: 6px;
+  color: var(--text);
+}
+
+/* ---- Profile: stat tiles ------------------------------------------------ */
+
+.stat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+}
+.stat-head .label {
+  margin-bottom: 0;
+}
+.stat-plate {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.stat .value.display {
+  font-size: 30px;
+}
+
+/* ---- Profile: this week's XP -------------------------------------------- */
+
+.week-xp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.week-xp-head .label {
+  margin: 0;
+}
+.week-xp-value {
+  font-size: 22px;
+}
+
+/* ---- row links with an emblem ------------------------------------------- */
+
+/* A row-link's middle takes the width; the emblem and the chevron keep theirs. */
+.row-link-words {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.row-link > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+/* ---- Profile: the medal shelf ------------------------------------------- */
+
+.medal-shelf {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.medal {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 6px;
+  text-align: center;
+}
+.medal h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.medal-tier {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.medal-found {
+  border-color: var(--accent-text);
+}
+.medal-found .medal-tier {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+/* Dashed, transparent and muted — and a lock, so "not yet" is not colour alone. */
+.medal-locked {
+  background: transparent;
+  box-shadow: none;
+  border-color: var(--border-strong);
+}
+.medal-locked h3 a {
+  color: var(--muted);
+}
+
+.medal-foot {
+  margin: 10px 0 0;
+  font-size: 12px;
 }

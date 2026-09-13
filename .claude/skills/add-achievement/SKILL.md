@@ -7,9 +7,9 @@ description: Add a new achievement to Samson. Use when adding, editing, or remov
 
 Achievements are database rows with SQL predicates, never hardcoded checks.
 Adding one is a migration plus a test — no application logic changes. The
-rendering code branches on the generic columns (`tier`, `hidden`, and on
-`/badges` `humor_level`), never on a slug, so a new row needs nothing in `src/`
-or `app/`.
+rendering code branches on the generic columns (`tier`, `hidden`, and — on
+`/badges` and Profile's badge shelf — `humor_level`), and on a slug only to pick
+an icon, with a default, so a new row needs nothing in `src/` or `app/`.
 
 **Two optional touches since the Quest Log redesign** (ADR 0033 §3), both in
 `src/ui/tiers.ts`: a badge draws a `medal` unless it has an icon there, keyed by
@@ -32,7 +32,7 @@ Insert into `achievements` via a new migration:
 | `tier`        | `volume`, `consistency`, `comeback`, `pr`, `recovery`, `variety`, `hidden`, `calendar` |
 | `humor_level` | `clean`, `cheeky`, or `crude`                                                          |
 | `hidden`      | if true, the definition is withheld until the user earns it — ADR 0017                 |
-| `source_hint` | optional playful nod to the reference, shown on an earned badge's card                 |
+| `source_hint` | optional playful nod to the reference, shown on an earned card on /badges              |
 
 ### 2. Write the predicate
 

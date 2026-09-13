@@ -1,8 +1,9 @@
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
-import { loadUnlockedAchievements, loadXpSummary } from '@/src/db/gamification';
+import { loadBadgeCatalogue, loadUnlockedAchievements, loadXpSummary } from '@/src/db/gamification';
 import { loadComparisonObjects } from '@/src/db/comparisons';
 import { acwr, acwrBand } from '@/src/metrics/acwr';
 import { adherence, currentStreak } from '@/src/metrics/adherence';
@@ -10,10 +11,16 @@ import { addDays } from '@/src/metrics/dates';
 import { exerciseBests } from '@/src/metrics/pr';
 import { tonnageByWeek, tonnageForWeekOf, totalTonnage } from '@/src/metrics/tonnage';
 import { compareTonnage } from '@/src/metrics/comparisons';
-import { levelProgress } from '@/src/gamification/level';
+import { levelProgress, xpForLevel } from '@/src/gamification/level';
 import { STREAK_MILESTONES } from '@/src/gamification/xp';
 import { comparisonPhrase, displayDate, displayShortDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
+import { SegmentMeter } from '@/src/ui/SegmentMeter';
+import { badgeIcon, metalFor } from '@/src/ui/tiers';
+import { aboveCeilingLine } from '@/src/gamification/catalogue';
+import { logLine } from '@/src/llm/failure';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,18 +49,40 @@ export default async function ProfilePage() {
   if (!user) redirect('/sign-in');
 
   const today = localDateFor(user.timezone);
-  const [history, xp, badges, comparisonObjects] = await Promise.all([
+  const [history, xp, badges, catalogue, comparisonObjects] = await Promise.all([
     loadHistory(db),
     loadXpSummary(db, today),
+    // What the user holds, read as Profile has always read it — and it still
+    // throws, because a page about what you have earned without it is not one.
     loadUnlockedAchievements(db),
+    /*
+     * The catalogue, for the Quest Log's locked slots only. ADR 0033 §5:
+     * through the SAME reader `/badges` uses, so a locked hidden badge never
+     * reaches this page and the humour ceiling applies to an unearned name here
+     * exactly as it does there.
+     *
+     * It DEGRADES — FOUND IN REVIEW. It is four reads, one of which throws on an
+     * empty result by design, and letting any of them take the page down would
+     * cost somebody their level, their streak and the only reliable way into
+     * Settings for the sake of a row of padlocks. On failure the shelf shows what
+     * is held and says the rest is on /badges, which fails closed: no unearned
+     * name is shown that the ceiling did not pass.
+     */
+    loadBadgeCatalogue(db, user.id).catch((cause: unknown) => {
+      // ADR 0028: the name and a bounded message, never the object.
+      console.error('badge catalogue unavailable', logLine(cause));
+      return null;
+    }),
     loadComparisonObjects(db),
   ]);
+  const toGet = catalogue?.toGet ?? [];
+  const hiddenHeld = badges.filter((b) => b.hidden).length;
 
   const first = history.workouts[0];
   const completed = history.workouts.filter((w) => w.status === 'completed').length;
 
-  // Every figure the level bar prints comes from this one call, so the bar and
-  // the label beside it cannot disagree — the spec's agreement property.
+  // The ring and the words beside it come from this call and from
+  // `xpForLevel` — the curve's own two functions — so they cannot disagree.
   const level = levelProgress(xp.lifetime);
   const levelPct = Math.round((level.intoLevel / level.span) * 100);
 
@@ -97,96 +126,136 @@ export default async function ProfilePage() {
          * reader. title gives the same string to a pointer user.
          */}
         <Link href="/settings" className="icon-btn" aria-label="Settings" title="Settings">
-          <span aria-hidden="true">⚙</span>
+          <Icon name="settings" size={18} />
         </Link>
       </header>
 
-      <div className="card level-card">
-        <div className="level-head">
-          <span className="level-badge" aria-hidden="true">
-            {level.level}
-          </span>
-          <div>
-            <div className="label with-hint">
-              Level {level.level}
-              <FieldHint title="Level">
-                Read from your lifetime XP, so it is never stored and never out of date. Each level
-                costs a quarter more than the one before — a linear curve would make level 30 as far
-                from 29 as 2 is from 1, and the number would stop meaning anything.
-              </FieldHint>
-            </div>
-            <div className="muted small">{level.toNext.toLocaleString()} XP to next level</div>
-          </div>
-        </div>
+      {/*
+       * The hero — the Quest Log. The level, the ring and "XP to Level n+1" come
+       * from `levelProgress` and `xpForLevel`, the curve's own functions, so they
+       * cannot disagree — the spec's agreement property. The lifetime chip is
+       * `loadXpSummary`'s total, the figure the curve was given.
+       */}
+      <div className="card level-hero">
         <div
-          className="xp-meter"
+          className="level-ring"
           role="img"
           aria-label={`${level.intoLevel} of ${level.span} XP into level ${level.level}`}
+          style={{ '--pct': `${levelPct}%` } as CSSProperties}
         >
-          <span style={{ width: `${levelPct}%` }} />
+          <span className="level-ring-disc">
+            <Hex size={62}>
+              <span className="display level-digit">{level.level}</span>
+            </Hex>
+          </span>
         </div>
-        <p className="muted small">
-          {level.intoLevel.toLocaleString()} of {level.span.toLocaleString()} · {levelPct}%
-        </p>
+        <div className="level-words">
+          <div className="kicker with-hint">
+            Level {level.level}
+            <FieldHint title="Level">
+              Read from your lifetime XP, so it is never stored and never out of date. Each level
+              costs a quarter more than the one before — a linear curve would make level 30 as far
+              from 29 as 2 is from 1, and the number would stop meaning anything.
+            </FieldHint>
+          </div>
+          <div className="display level-next">
+            {level.toNext.toLocaleString()} XP to Level {level.level + 1}
+          </div>
+          <p className="muted small">
+            {level.intoLevel.toLocaleString()} of {level.span.toLocaleString()} into this level ·{' '}
+            {levelPct}%
+          </p>
+          <p className="label-chips">
+            <span className="chip">{xp.lifetime.toLocaleString()} XP lifetime</span>
+            <span className="chip">
+              Level {level.level + 1} at {xpForLevel(level.level + 1).toLocaleString()} XP
+            </span>
+          </p>
+        </div>
       </div>
 
       {/*
-       * The first two tiles get a full row each (.grid.cols-4 nth-child(-n+2)),
-       * so this order IS the ranking — mobile-interface.md §2. Streak and
-       * adherence are the mechanic the product retains people with (invariant
-       * #4); a lifetime session count is vanity and sorts below them.
+       * Four equal tiles, two by two — the Quest Log. Order is still the ranking
+       * — mobile-interface.md §2: streak and adherence are the mechanic the
+       * product retains people with (invariant #4), and a lifetime session count
+       * is vanity and sorts below them. What changed is that they no longer
+       * differ in size.
        */}
-      <div className="grid cols-4">
+      <div className="grid cols-2">
         <div className="stat">
-          <div className="label with-hint">
-            Streak
-            <FieldHint title="Streak">
-              Planned sessions kept in a row, counting back from today. Rest days keep it alive; a
-              skipped session breaks it. Days with nothing scheduled are stepped over, so training
-              every other day does not reset it.
-            </FieldHint>
+          <div className="stat-head">
+            <div className="label with-hint">
+              Streak
+              <FieldHint title="Streak">
+                Planned sessions kept in a row, counting back from today. Rest days keep it alive; a
+                skipped session breaks it. Days with nothing scheduled are stepped over, so training
+                every other day does not reset it.
+              </FieldHint>
+            </div>
+            <span className="stat-plate">
+              <Icon name="flame" />
+            </span>
           </div>
-          <div className="value">{streak}</div>
+          <div className="value display">{streak}</div>
           <div className="muted small">
             {nextMilestone === null
               ? 'every milestone earned'
-              : `${nextMilestone - streak} to ${nextMilestone}`}
+              : `${nextMilestone - streak} to ${nextMilestone}`}{' '}
+            · rest days keep it alive
           </div>
         </div>
 
         <div className="stat">
-          <div className="label with-hint">
-            Adherence · 4 wks
-            <FieldHint title="Adherence">
-              Sessions you kept, out of those that have come due in the last four weeks. A scheduled
-              rest day counts as kept — resting on plan is following it. Sessions still in the
-              future count neither way.
-            </FieldHint>
+          <div className="stat-head">
+            <div className="label with-hint">
+              Adherence · 4 wks
+              <FieldHint title="Adherence">
+                Sessions you kept, out of those that have come due in the last four weeks. A
+                scheduled rest day counts as kept — resting on plan is following it. Sessions still
+                in the future count neither way.
+              </FieldHint>
+            </div>
+            <span className="stat-plate">
+              <Icon name="target" />
+            </span>
           </div>
-          <div className="value">
+          <div className="value display">
             {fourWeeks.rate === null ? '—' : `${Math.round(fourWeeks.rate * 100)}%`}
           </div>
           <div className="muted small">
-            {fourWeeks.kept} of {fourWeeks.resolved} sessions
+            {fourWeeks.kept} of {fourWeeks.resolved} sessions kept
           </div>
         </div>
 
         <div className="stat">
-          <div className="label">Sessions</div>
-          <div className="value">{completed}</div>
+          <div className="stat-head">
+            <div className="label">Sessions</div>
+            <span className="stat-plate">
+              <Icon name="dumbbell" />
+            </span>
+          </div>
+          <div className="value display">{completed}</div>
           <div className="muted small">
             {first ? `since ${displayDate(first.localDate)}` : 'nothing logged yet'}
           </div>
         </div>
 
         <div className="stat">
-          <div className="label">Badges</div>
-          <div className="value">{badges.length}</div>
-          <div className="muted small">unlocked</div>
+          <div className="stat-head">
+            <div className="label">Badges</div>
+            <span className="stat-plate">
+              <Icon name="medal" />
+            </span>
+          </div>
+          <div className="value display">{badges.length}</div>
+          <div className="muted small">
+            unlocked{hiddenHeld > 0 ? ` · ${hiddenHeld} of them hidden` : ''}
+          </div>
         </div>
       </div>
 
       <h2 className="section with-hint">
+        <Icon name="sparkles" size={14} />
         This week&rsquo;s XP
         <FieldHint title="Weekly XP">
           XP comes from adherence — keeping the sessions you planned — and never from how much you
@@ -196,15 +265,24 @@ export default async function ProfilePage() {
         </FieldHint>
       </h2>
       <div className="card">
-        <div
-          className="xp-meter"
-          role="img"
-          aria-label={`${xp.thisWeek} of ${xp.ceiling} XP earned this week`}
-        >
-          <span style={{ width: `${spentPct}%` }} />
+        <div className="week-xp-head">
+          <span>
+            <span className="display week-xp-value">{xp.thisWeek}</span>{' '}
+            <span className="muted">of {xp.ceiling}</span>
+          </span>
+          <span className="label">Weekly cap</span>
         </div>
+        {/* Ten segments, each a tenth of the ceiling; the partial one is drawn
+            as far as the week has reached. The label carries the figures. */}
+        <SegmentMeter
+          value={xp.thisWeek}
+          total={xp.ceiling}
+          count={10}
+          label={`${xp.thisWeek} of ${xp.ceiling} XP earned this week`}
+        />
         <p className="muted small">
-          {xp.thisWeek} of {xp.ceiling} · {spentPct}% · {xp.lifetime.toLocaleString()} lifetime
+          From kept sessions, never from load. Past the cap, more training earns nothing. {spentPct}
+          % of this week&rsquo;s cap.
         </p>
       </div>
 
@@ -217,17 +295,29 @@ export default async function ProfilePage() {
        * Here rather than at the foot of the page for the reason ADR 0013 gives
        * about this page's length — a control below every chart is a scroll
        * target. It sits with Badges because both answer "what have I got".
+       *
+       * No rung count, which the handoff drew: it needs every logged set, and
+       * this page does not otherwise read the trees — docs/plans/quest-log-redesign.md.
        */}
-      <h2 className="section">Progression</h2>
+      <h2 className="section">
+        <Icon name="route" size={14} />
+        Progression
+      </h2>
       <Link href="/progression-trees" className="card row-link">
-        <span>
-          <strong>Progression trees</strong>
-          <span className="muted small"> push · pull · legs · core</span>
+        <Hex size={40} tone="soft">
+          <Icon name="route" size={20} />
+        </Hex>
+        <span className="row-link-words">
+          <strong>Progression trees</strong>{' '}
+          <span className="muted small">push · pull · legs · core</span>
         </span>
-        <span aria-hidden="true">›</span>
+        <Icon name="chevron-right" size={18} />
       </Link>
 
-      <h2 className="section">Badges</h2>
+      <h2 className="section">
+        <Icon name="medal" size={14} />
+        Badges · {badges.length} earned
+      </h2>
       {/*
        * The way into /badges — ADR 0017's 2026-09-12 amendment. Above the shelf
        * rather than below it, so it is there for somebody who has earned nothing
@@ -235,48 +325,87 @@ export default async function ProfilePage() {
        */}
       <Link href="/badges" className="card row-link">
         <strong>Every badge, and how to earn it</strong>
-        <span aria-hidden="true">›</span>
+        <Icon name="chevron-right" size={18} />
       </Link>
       {badges.length === 0 ? (
         <p className="card muted">
           Nothing unlocked yet. Achievements come from consistency, not from a single heavy day.
         </p>
-      ) : (
-        <div className="badge-shelf">
-          {badges.map((b) => (
-            <article key={b.slug} className="card badge-card badge-linked">
-              {/*
-               * A badge is what somebody taps expecting to learn about it, so
-               * each one opens its place in the catalogue. The NAME is the link
-               * — a short accessible name — and `.badge-linked` stretches its
-               * target over the card, so the whole card is still one tap.
-               */}
-              <h3>
-                <Link href={`/badges#${b.slug}`}>{b.name}</Link>
-              </h3>
-              <p className="muted small">{b.description}</p>
-              <p className="muted small">
-                <span className="chip chip-on">{b.tier}</span>
+      ) : null}
+      {badges.length + toGet.length > 0 ? (
+        <div className="medal-shelf">
+          {badges.map((b) => {
+            const metal = b.hidden ? 'obsidian' : metalFor(b.tier);
+            return (
+              <article
+                key={b.slug}
+                className={`card medal badge-linked${b.hidden ? ' medal-found' : ''}`}
+              >
+                <Hex size={64} tone={metal}>
+                  <Icon name={badgeIcon(b.slug)} size={28} />
+                </Hex>
+                {/*
+                 * A badge is what somebody taps expecting to learn about it, so
+                 * each one opens its place in the catalogue. The NAME is the link
+                 * — a short accessible name — and `.badge-linked` stretches its
+                 * target over the card, so the whole card is still one tap.
+                 */}
+                <h3>
+                  <Link href={`/badges#${b.slug}`}>{b.name}</Link>
+                </h3>
                 {/*
                  * A hidden badge is shown to the person who earned it and to
-                 * nobody else — ADR 0017. The marker is the whole reward:
-                 * without it a badge whose definition was secret arrives
-                 * looking like any other, and the fact that you found something
-                 * nobody told you about is the point of the tier.
-                 *
-                 * .chip-found rather than a second .chip-on, for the reason
-                 * .chip-found gives in globals.css: two chips in one row that
-                 * look identical and mean different things read as one wrapped
-                 * label.
+                 * nobody else — ADR 0017. "found" is the whole reward: without
+                 * it a badge whose definition was secret arrives looking like any
+                 * other. Said in words, not only in the obsidian.
                  */}
-                {b.hidden && <span className="chip chip-found">found</span>} earned{' '}
-                {displayDate(b.localDate)}
-              </p>
-              {b.sourceHint !== null && <p className="muted small">{b.sourceHint}</p>}
+                <p className="medal-tier">{b.hidden ? 'hidden · found' : `${b.tier} · ${metal}`}</p>
+              </article>
+            );
+          })}
+          {/*
+           * Locked slots: visible badges not yet earned, within the humour
+           * setting — never a hidden one, which the catalogue never received.
+           * Dashed and muted, with a lock as well as the missing colour, so the
+           * state is not colour alone.
+           */}
+          {toGet.map((badge) => (
+            <article key={badge.slug} className="card medal medal-locked badge-linked">
+              <Hex size={64} tone="plain">
+                <Icon name="lock" size={24} />
+              </Hex>
+              <h3>
+                <Link href={`/badges#${badge.slug}`}>{badge.name}</Link>
+              </h3>
+              {/*
+               * "locked" in words — FOUND IN REVIEW. The lock is an aria-hidden
+               * icon, so to a screen reader a locked card and an earned one read
+               * the same. And no metal: a plain hex does not draw one.
+               */}
+              <p className="medal-tier">locked · {badge.tier}</p>
             </article>
           ))}
         </div>
-      )}
+      ) : null}
+      {catalogue === null ? (
+        // mobile-interface.md §4: a state, not a silent gap in the shelf.
+        <p className="muted small medal-foot">
+          The badges still to earn did not load just now — every one is on the badges page.
+        </p>
+      ) : catalogue.aboveCeiling > 0 ? (
+        /*
+         * Counted, not dropped — ADR 0017's amendment, and FOUND IN REVIEW: this
+         * shelf is a second list of unearned badges, and it silently left out
+         * the ones above the humour setting that /badges counts.
+         */
+        <p className="muted small medal-foot">{aboveCeilingLine(catalogue.aboveCeiling)}</p>
+      ) : null}
+      {badges.length + toGet.length > 0 ? (
+        <p className="muted small medal-foot">
+          Hidden badges are not listed until you find one. Metal is a reading of the tier, not a new
+          number.
+        </p>
+      ) : null}
 
       <h2 className="section with-hint">
         Training load

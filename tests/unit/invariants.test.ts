@@ -429,7 +429,10 @@ describe('a badge on Profile opens its own card in the catalogue', () => {
   const read = (...parts: string[]) => readFileSync(join(ROOT, ...parts), 'utf8');
 
   it('links each held badge by its slug', () => {
-    expect(read('app', 'profile', 'page.tsx')).toContain('href={`/badges#${b.slug}`}');
+    const profile = read('app', 'profile', 'page.tsx');
+    expect(profile).toContain('href={`/badges#${b.slug}`}');
+    // And each locked slot, which the Quest Log shelf added.
+    expect(profile).toContain('href={`/badges#${badge.slug}`}');
   });
 
   it('gives every card on /badges its slug as its id', () => {

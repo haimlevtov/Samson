@@ -160,7 +160,7 @@ it is the classic failure here, and it is a test rather than a hope.
 > that belongs to both tabs, because it is the figure the leaderboard prints
 > beside the reader's name — Hub shows where you stand among other people, and a
 > level is how the board says it. Everything else in the table stands, and
-> Profile still owns the level card, its progress and the XP behind it.
+> Profile still owns the level ring, its progress and the XP behind it.
 
 **Hub is briefly emptier than before.** Between this change and the challenge
 and leaderboard work that follows, Hub holds challenges and a placeholder. That
