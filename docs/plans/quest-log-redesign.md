@@ -12,13 +12,13 @@ The instruction that came with it:
 > apply the redesign while making sure nothing breaks, all features stays where
 > they are, leaderboard in hub will be on top by design
 
-| PR  | What                                                                           | Branch                   | State   |
-| --- | ------------------------------------------------------------------------------ | ------------------------ | ------- |
-| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | planned |
-| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | planned |
-| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | planned |
-| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned |
-| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned |
+| PR  | What                                                                           | Branch                   | State                                                              |
+| --- | ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------ |
+| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13) |
+| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | planned                                                            |
+| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | planned                                                            |
+| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned                                                            |
+| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                            |
 
 Ordered so the primitives land with their first consumer, then one surface per
 PR. Each is presentation: **no migration, no RPC, no policy and no new number.**
@@ -187,3 +187,52 @@ ones most likely to break in one of them. No paid calls: nothing here needs a
 coach to speak. Reviewers per the standing workflow, including
 `convention-compliance-reviewer` for the tokens, tap targets and the "state never
 by colour alone" rule the handoff repeats.
+
+## Outcomes
+
+### PR 1 — the visual layer, and the Hub, 2026-09-13
+
+Shipped as [#69](https://github.com/haimlevtov/Samson/pull/69). The leaderboard is
+first on Hub as a podium, quests are cards with emblems, and every page's title
+has the display face. Four reviewers; nothing blocking, and the findings worth
+keeping are below.
+
+**What shipped where the plan said otherwise.** `isoWeek` went to
+`src/metrics/dates.ts`, beside `startOfWeek` and under the coverage threshold,
+not `src/ui/format.ts`. `challengeTitle` and three more helpers went to a new
+`src/ui/quests.ts`. `app/hub/Board.tsx` and `src/ui/SegmentMeter.tsx` were not
+in the file list. None of it changes a decision; all of it is recorded here, which
+is where this repository records it.
+
+**A title that restated the rule, and still said a different one.** The handoff's
+copy was "Three sessions this week", and the first version shipped it. But
+`evaluateChallenge` counts the last seven days ending today, and the same PR put
+the ISO calendar week in the header — so on a Monday, a challenge met Friday to
+Sunday read "this week · complete" under "WEEK 38". Titles say "in seven days"
+now. It is the one place this PR departs from the handoff's words on purpose.
+
+### What review found
+
+- **A tie for first was drawn as a difference.** `rank()` ties, and the crown, the
+  gold digits and the centre slot followed whichever tied lifter Postgres returned
+  first — which could swap on a reload. Everything that claims a place now follows
+  rank; only the layout follows position. The same tie gave two rows one React key,
+  inherited from the table this replaced, whose comment said rank was unique.
+- **A display name could say "YOU".** On the podium the chip was the only mark,
+  and its fill was one of the board ground's own colours. The reader's tile has an
+  outline a name cannot produce.
+- **A failed board read told a named user to set a name**, because it rendered the
+  empty board's sentence. It has its own now — and the board sits at the top of the
+  tab, where that mistake would have been the first thing read.
+- **ADR 0033 claimed three things the code did not do**: that the tier test caught
+  a ninth tier (it read one migration), that the welcome flow's title had the new
+  face (its rule was missed), and that `src/ui` only divides (`remainingPhrase`
+  subtracts). The test and the CSS were fixed; the ADR's wording was, for the third.
+- **Hub now shows one personal figure**, the reader's level, and ADR 0013 said Hub
+  was other people. Recorded there as an amendment rather than noticed later.
+- **The build now needs Google Fonts.** `next/font/google` fetches at build time
+  and fails the build if it cannot; CI does not build, so Vercel's preview was the
+  first place it ran. It passed. ADR 0033 records the fix if it ever does not.
+
+**Verified in a browser at 375px against hosted**, dark and light, as the
+beginner fixture. No paid calls.
