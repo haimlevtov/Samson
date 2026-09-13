@@ -16,12 +16,13 @@ close-out, and what review found in every one of those PRs, is in
 [`plans/phase-6.md`](plans/phase-6.md).
 
 **Work continues after the phases, and it is not phase 7.**
-[`plans/rework-2.md`](plans/rework-2.md) plans
-eight PRs that came from using the app rather than from this brief — the
-leaderboard by level, challenges in the Hub, readable graphs, furnished demo
-users, and a Coach with one question box and a plan you can ask for.
-`rework-1.md` is the precedent: a rework is not a phase, and
-filing it as one would make this document claim to have briefed it.
+[`plans/rework-2.md`](plans/rework-2.md) plans eight PRs that came from using
+the app rather than from this brief — the leaderboard by level, challenges in the
+Hub, readable graphs, furnished demo users, and a Coach with one question box and
+a plan you can ask for — and [`rework-3.md`](plans/rework-3.md) and
+[`rework-4.md`](plans/rework-4.md) followed it; [`plans/README.md`](plans/README.md)
+indexes them. `rework-1.md` is the precedent: a rework is not a phase, and filing
+it as one would make this document claim to have briefed it.
 
 Phases 0 to 5 are complete; each has a plan and a
 recorded outcome in `docs/plans/`, and

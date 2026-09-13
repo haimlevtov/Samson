@@ -12,10 +12,13 @@ map. Where this file and a plan disagree, the plan is right and this is stale.
 
 ## How the files are named
 
-- **`phase-N.md`** is phase N of [`docs/PLAN.md`](../PLAN.md). Phase 5 has two, and
-  a rework plan in the middle of it, which the section below untangles.
+- **`phase-N.md`** is phase N of [`docs/PLAN.md`](../PLAN.md). Phase 5 has
+  `phase-5.md` and `phase-5-content-fill.md`, with `rework-1.md` in the middle;
+  [Phase 5 is three documents](#phase-5-is-three-documents-and-here-is-why)
+  untangles them.
 - **`rework-N.md`** is a plan made outside the phase sequence, numbered in the
-  order it was written. The next one is `rework-5.md`.
+  order it was written. A new one takes the number after the last row below, and
+  adds a row here and under [Every plan](#every-plan).
 
 | File          | Was named                          | First committed |
 | ------------- | ---------------------------------- | --------------- |
@@ -27,8 +30,23 @@ map. Where this file and a plan disagree, the plan is right and this is stale.
 The four were renamed on 2026-09-13, on the owner's instruction, because the
 descriptive names did not say which came first. **Commit messages and pull
 requests from before then use the old names**; `git log --follow` finds the
-history under the new ones. Inside the documents, the titles and "rework PR N" /
-"quest-log PR N" are as they were written.
+history under the new ones.
+
+**The PR shorthand predates the numbers, and is kept as written** — in these
+plans, in code comments, ADRs and migrations. Three of the plans number their
+PRs from one, so "rework PR N" and "rework plan PR N" mean whichever plan was
+running when the line was written (`git log -S` on it says when):
+
+| Written                                               | Means                                       |
+| ----------------------------------------------------- | ------------------------------------------- |
+| 2026-09-07                                            | `rework-1.md` — PRs 1–5, shipped in #11–#17 |
+| 09-09 to 09-12, and every lettered PR (6b–6d, 8a, 8b) | `rework-2.md`                               |
+| 09-12 or 09-13, and "coach-memory PR N"               | `rework-3.md`                               |
+| "quest-log PR N"                                      | `rework-4.md`                               |
+
+Both `rework-2.md` and `rework-3.md` shipped PRs on 09-12, so a line from that
+day is settled by the PR's title in the plan — "rework PR 7" is the templates in
+one and the badge catalogue in the other.
 
 ## The four genres, because they are graded differently
 
@@ -109,15 +127,15 @@ None of the three carries this list end to end.
 | [#8](https://github.com/haimlevtov/Samson/pull/8)   | 09-07  | A distinct device voice per coach                       | [phase-5.md](phase-5.md)                     |
 | [#9](https://github.com/haimlevtov/Samson/pull/9)   | 09-05  | The training page rebuilt as a set grid                 | [phase-5.md](phase-5.md)                     |
 | [#10](https://github.com/haimlevtov/Samson/pull/10) | 09-05  | Five-tab navigation, a theme, consistent routes         | [phase-5.md](phase-5.md)                     |
-| [#11](https://github.com/haimlevtov/Samson/pull/11) | 09-07  | Profile owns what you earned; Hub owns other people     | [rework](rework-1.md) PR 1                   |
-| [#12](https://github.com/haimlevtov/Samson/pull/12) | 09-07  | Accepting a challenge is what puts it in play           | [rework](rework-1.md) PR 2                   |
-| [#13](https://github.com/haimlevtov/Samson/pull/13) | 09-07  | Exercise progression charts in History                  | [rework](rework-1.md) PR 3                   |
-| [#14](https://github.com/haimlevtov/Samson/pull/14) | 09-07  | The coach chat                                          | [rework](rework-1.md) PR 4                   |
-| [#15](https://github.com/haimlevtov/Samson/pull/15) | 09-07  | Settings as a route, and `OWNED_BY`                     | [rework](rework-1.md), unplanned             |
-| [#16](https://github.com/haimlevtov/Samson/pull/16) | 09-07  | A running session kept out of History                   | [rework](rework-1.md), unplanned             |
-| [#17](https://github.com/haimlevtov/Samson/pull/17) | 09-07  | The leaderboard                                         | [rework](rework-1.md) PR 5                   |
-| [#18](https://github.com/haimlevtov/Samson/pull/18) | 09-07  | The skills `CLAUDE.md` advertised and did not have      | [rework](rework-1.md), unplanned             |
-| [#19](https://github.com/haimlevtov/Samson/pull/19) | 09-07  | Two cards that met with no space between them           | [rework](rework-1.md), unplanned             |
+| [#11](https://github.com/haimlevtov/Samson/pull/11) | 09-07  | Profile owns what you earned; Hub owns other people     | [rework-1](rework-1.md) PR 1                 |
+| [#12](https://github.com/haimlevtov/Samson/pull/12) | 09-07  | Accepting a challenge is what puts it in play           | [rework-1](rework-1.md) PR 2                 |
+| [#13](https://github.com/haimlevtov/Samson/pull/13) | 09-07  | Exercise progression charts in History                  | [rework-1](rework-1.md) PR 3                 |
+| [#14](https://github.com/haimlevtov/Samson/pull/14) | 09-07  | The coach chat                                          | [rework-1](rework-1.md) PR 4                 |
+| [#15](https://github.com/haimlevtov/Samson/pull/15) | 09-07  | Settings as a route, and `OWNED_BY`                     | [rework-1](rework-1.md), unplanned           |
+| [#16](https://github.com/haimlevtov/Samson/pull/16) | 09-07  | A running session kept out of History                   | [rework-1](rework-1.md), unplanned           |
+| [#17](https://github.com/haimlevtov/Samson/pull/17) | 09-07  | The leaderboard                                         | [rework-1](rework-1.md) PR 5                 |
+| [#18](https://github.com/haimlevtov/Samson/pull/18) | 09-07  | The skills `CLAUDE.md` advertised and did not have      | [rework-1](rework-1.md), unplanned           |
+| [#19](https://github.com/haimlevtov/Samson/pull/19) | 09-07  | Two cards that met with no space between them           | [rework-1](rework-1.md), unplanned           |
 | [#20](https://github.com/haimlevtov/Samson/pull/20) | 09-07  | The phase-5 record itself                               | [phase-5.md](phase-5.md)                     |
 | [#21](https://github.com/haimlevtov/Samson/pull/21) | 09-08  | The content-fill plan, committed before its code        | [content-fill](phase-5-content-fill.md) PR 1 |
 | [#22](https://github.com/haimlevtov/Samson/pull/22) | 09-08  | Achievements across every tier                          | [content-fill](phase-5-content-fill.md) PR 2 |
@@ -135,11 +153,11 @@ Two things the table makes visible that the individual files do not:
 
 - **The PR numbers and the plan numbers do not line up, in both directions.**
   Content-fill PR 6 shipped as #28 and PR 7 as #26, because PR 7 was inserted
-  from a direct product request after PR 6 had been planned. The rework plan's
+  from a direct product request after PR 6 had been planned. rework-1's
   five PRs are #11–#14 and #17, with **#15 and #16 interleaved between them** and
   **#18 and #19 after the last of them** — none of those four is in any plan.
 - **#15, #16, #18 and #19 were not planned anywhere**, and that is the pattern
-  the rework Outcome names: _a tab rework is not finished when the tabs are
+  rework-1's Outcome names: _a tab rework is not finished when the tabs are
   right._ Each was invisible until there were enough surfaces for the navigation
   to be wrong about. (Named rather than counted, because "four of the last five"
   is also true of #26–#30 further down the table, which those words do not
@@ -156,7 +174,7 @@ Two things the table makes visible that the individual files do not:
 
 **Waiting on live model runs, not on work** — seven of the nineteen open items
 below, and worth grouping. _This said "blocked on an OpenRouter key", closed by
-one `.env.local` line; a funded key exists since 2026-09-11 (rework PR 6b), so
+one `.env.local` line; a funded key exists since 2026-09-11 (rework-2 PR 6b), so
 each now needs a run that spends it._
 
 | From                     | Item                                                                                                                               |
@@ -222,7 +240,7 @@ to think of the case first. `phase-6.md`'s close-out has the table.
 
 - [`docs/PLAN.md`](../PLAN.md) — the phase brief and its acceptance criteria.
   The plans here say how a phase was executed; PLAN.md says what it owed.
-- [`docs/adr/`](../adr/) — the decisions. Thirty-two of them, and several
+- [`docs/adr/`](../adr/) — the decisions. Thirty-three of them, and several
   carry the honest note that they were written after their code at a reviewer's
   prompting rather than before it.
 - [`docs/specs/`](../specs/) — the written contracts tests are built from.
