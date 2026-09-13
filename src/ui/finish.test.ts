@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { earnedSentence, sessionXp } from './finish';
+import { earnedSentence, receiptFor, sessionXp } from './finish';
 
 describe('earnedSentence', () => {
   it('explains the taper when something was earned', () => {
@@ -18,6 +18,46 @@ describe('earnedSentence', () => {
     expect(sentence).not.toMatch(/cap/);
     expect(sentence).not.toMatch(/\byet\b/);
     expect(sentence).toMatch(/streak and adherence/);
+  });
+});
+
+describe('earnedSentence for a rest day — ADR 0034', () => {
+  it('says a rest day, not a session, in every case', () => {
+    for (const input of [
+      { earned: 100, weekXp: 100, ceiling: 500 },
+      { earned: 0, weekXp: 500, ceiling: 500 },
+      { earned: 0, weekXp: 0, ceiling: 500 },
+    ]) {
+      const sentence = earnedSentence({ ...input, noun: 'rest day' });
+      expect(sentence, JSON.stringify(input)).toMatch(/rest day/);
+      expect(sentence, JSON.stringify(input)).not.toMatch(
+        /\bsession (still|in a week)|this session/
+      );
+    }
+  });
+});
+
+describe('receiptFor', () => {
+  it('gives a finished session its receipt, with the session to review', () => {
+    expect(receiptFor('completed')).toEqual({
+      title: 'Session kept',
+      noun: 'session',
+      reviewable: true,
+    });
+  });
+
+  it('gives a rest day a receipt too — the screen its badge fires on — with nothing to review', () => {
+    expect(receiptFor('rest')).toEqual({
+      title: 'Rest day kept',
+      noun: 'rest day',
+      reviewable: false,
+    });
+  });
+
+  it('gives nothing that has not resolved as kept a receipt', () => {
+    for (const status of ['planned', 'in_progress', 'skipped'] as const) {
+      expect(receiptFor(status), status).toBeNull();
+    }
   });
 });
 

@@ -12,7 +12,7 @@ import { evaluateChallenge } from '@/src/gamification/challenge';
 import { levelProgress } from '@/src/gamification/level';
 import { STREAK_MILESTONES } from '@/src/gamification/xp';
 import { currentStreak } from '@/src/metrics/adherence';
-import { earnedSentence, sessionXp } from '@/src/ui/finish';
+import { earnedSentence, receiptFor, sessionXp } from '@/src/ui/finish';
 import { displayDate } from '@/src/ui/format';
 import { Hex } from '@/src/ui/Hex';
 import { Icon } from '@/src/ui/icons';
@@ -58,8 +58,10 @@ export default async function KeptPage({
   const workout = await loadWorkout(db, id);
   // RLS: another user's workout and a missing one are the same 404.
   if (!workout) notFound();
-  // Not finished yet: there is no receipt, so go back to the session.
-  if (workout.status !== 'completed') redirect(`/history/${id}`);
+  // Not kept yet: there is no receipt, so go back to the session. A rest day has
+  // one — ADR 0034 §6.
+  const receipt = receiptFor(workout.status);
+  if (receipt === null) redirect(`/history/${id}`);
 
   const today = localDateFor(user.timezone);
   /*
@@ -135,9 +137,9 @@ export default async function KeptPage({
         </span>
       </Hex>
 
-      <h1 className="display kept-title">Session kept</h1>
+      <h1 className="display kept-title">{receipt.title}</h1>
       <p className="muted small kept-sentence">
-        {earnedSentence({ earned, weekXp: xp.thisWeek, ceiling: xp.ceiling })}
+        {earnedSentence({ earned, weekXp: xp.thisWeek, ceiling: xp.ceiling, noun: receipt.noun })}
       </p>
 
       <div className="card kept-week">
@@ -223,9 +225,11 @@ export default async function KeptPage({
         <Link href="/history" className="button-link">
           Done
         </Link>
-        <Link href={`/history/${id}`} className="button-link secondary">
-          Review the session
-        </Link>
+        {receipt.reviewable ? (
+          <Link href={`/history/${id}`} className="button-link secondary">
+            Review the session
+          </Link>
+        ) : null}
       </div>
     </div>
   );

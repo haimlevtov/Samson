@@ -601,3 +601,27 @@ describe("ADR 0026's 2026-09-13 amendment — one account at a higher ceiling", 
     expect(latest!.sql, latest!.f).toContain(`'${EVALUATOR_EMAIL}'`);
   });
 });
+
+describe('ADR 0034 — a rest day is today, and paid by the award', () => {
+  /*
+   * WHY a source check: nothing under app/ is in the unit suite, and the two
+   * things that make Rest today safe are properties of the action's shape — it
+   * takes no form data, so it cannot be handed a date, and it reads the user's
+   * own. tests/db/rest-days.test.ts holds the rest in the database.
+   */
+  const actions = readFileSync(join(ROOT, 'app', 'workout', 'actions.ts'), 'utf8');
+  const body = /export async function logRestDay\(([^)]*)\)[^{]*\{([\s\S]*?)\n\}/.exec(actions);
+
+  it('takes nothing from the form, and dates the day from the user timezone', () => {
+    expect(body, 'logRestDay is missing or has changed shape').not.toBeNull();
+    // CLAUDE.md #9: no date field to forge, and not the server's clock.
+    expect(body![1]!.trim()).toBe('');
+    expect(body![2]).toMatch(/localDateFor\(user\.timezone\)/);
+    expect(body![2]).not.toMatch(/new Date\(\)\.toISOString\(\)\.slice/);
+  });
+
+  it('writes no ledger row itself — ADR 0009 §1', () => {
+    expect(body![2]).toMatch(/awardSessionXp\(db, workoutId\)/);
+    expect(body![2]).not.toMatch(/xp_events|achievement_events/);
+  });
+});

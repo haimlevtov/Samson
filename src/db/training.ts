@@ -152,6 +152,54 @@ export async function activeWorkout(db: Db, now: Date = new Date()): Promise<Act
 }
 
 /**
+ * One local day's workouts, whatever their status — the rest-day decision in
+ * `src/ui/rest.ts` reads them. RLS scopes the read to the caller.
+ *
+ * INVARIANT: `localDate` is the user's local date, computed by the caller from
+ *            `users.timezone` — CLAUDE.md #9.
+ */
+export async function workoutsOn(
+  db: Db,
+  localDate: string
+): Promise<{ id: string; status: WorkoutStatus }[]> {
+  const { data, error } = await db
+    .from('workouts')
+    .select('id, status')
+    .eq('local_date', localDate);
+  if (error) throw new Error(`loading the day's workouts: ${error.message}`);
+  return (data ?? []).map((w) => ({ id: w.id, status: w.status as WorkoutStatus }));
+}
+
+/** The index that makes a rest day one a day — migration 20260913100000. */
+const ONE_REST_A_DAY = 'workouts_one_rest_a_day';
+
+/**
+ * Logs a rest day — ADR 0034. Returns the new row's id, or null when that day
+ * already has one: the unique index refused it, which is a second press racing
+ * the first rather than an error.
+ *
+ * INVARIANT: the request-scoped, RLS-bound client, and a `userId` from the
+ *            verified session — CLAUDE.md #10. It writes the workout and nothing
+ *            else: what the day earns is `award_session_xp`'s — ADR 0009.
+ */
+export async function insertRestDay(
+  db: Db,
+  userId: string,
+  localDate: string
+): Promise<string | null> {
+  const { data, error } = await db
+    .from('workouts')
+    .insert({ user_id: userId, local_date: localDate, status: 'rest' })
+    .select('id')
+    .single();
+
+  // Named, not just 23505: a different unique violation is a bug to surface.
+  if (error?.code === '23505' && error.message.includes(ONE_REST_A_DAY)) return null;
+  if (error) throw new Error(`logging a rest day: ${error.message}`);
+  return data.id;
+}
+
+/**
  * The workout list, newest first, with a set count for each.
  *
  * `excludeId` leaves out the session currently being performed: History is

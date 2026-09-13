@@ -1215,6 +1215,16 @@ button.set-prev.copy:hover:not(:disabled) {
   min-height: 52px;
   font-size: 16px;
 }
+/* Rest today, under Start — ADR 0034. Its sentence sits with the button it explains. */
+.rest-today {
+  margin-top: 10px;
+}
+.rest-today p {
+  margin: 6px 0 0;
+}
+.rest-today .button-link {
+  margin-top: 8px;
+}
 
 /* ---- the workout tab's template cards ----------------------------------- */
 

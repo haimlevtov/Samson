@@ -5,6 +5,28 @@
  *            from the metrics engine. They choose a sentence or a link; they
  *            compute no reward, and none of them can make a session worth more.
  */
+import type { WorkoutStatus } from '../metrics/types';
+
+/** What the receipt is about, and whether there is a session behind it to review. */
+export interface Receipt {
+  title: string;
+  noun: 'session' | 'rest day';
+  reviewable: boolean;
+}
+
+/**
+ * Which workouts get a receipt, and what it says — null for one that has not
+ * resolved as kept, which the page sends back to the session.
+ *
+ * WHY a rest day gets one — ADR 0034 §6: `award_session_xp` pays it and may
+ * unlock a badge on it, and the receipt is the screen a badge fires on. It has
+ * no "Review the session": there is no session.
+ */
+export function receiptFor(status: WorkoutStatus): Receipt | null {
+  if (status === 'completed') return { title: 'Session kept', noun: 'session', reviewable: true };
+  if (status === 'rest') return { title: 'Rest day kept', noun: 'rest day', reviewable: false };
+  return null;
+}
 
 /**
  * The sentence under the emblem.
@@ -16,14 +38,23 @@
  * what it knows. _It said "yet" until review pointed out nothing ever retries a
  * failed award, so "yet" promised a later that does not come._
  */
-export function earnedSentence(input: { earned: number; weekXp: number; ceiling: number }): string {
+export function earnedSentence(input: {
+  earned: number;
+  weekXp: number;
+  ceiling: number;
+  noun?: Receipt['noun'];
+}): string {
+  const noun = input.noun ?? 'session';
   if (input.earned > 0) {
-    return 'Each session in a week pays a little less than the one before. Load never changes the number.';
+    // A rest day sits on the same curve as a session — migration 20260902100000.
+    return noun === 'rest day'
+      ? 'A rest day pays what a session in its place would. Load never changes the number.'
+      : 'Each session in a week pays a little less than the one before. Load never changes the number.';
   }
   if (input.weekXp >= input.ceiling) {
-    return "That week's cap was reached — the session still counts for your streak and adherence.";
+    return `That week's cap was reached — the ${noun} still counts for your streak and adherence.`;
   }
-  return 'No XP is recorded for this session. It still counts for your streak and adherence.';
+  return `No XP is recorded for this ${noun}. It still counts for your streak and adherence.`;
 }
 
 /**
