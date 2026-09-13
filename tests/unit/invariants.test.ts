@@ -571,6 +571,8 @@ describe("ADR 0026's 2026-09-13 amendment — one account at a higher ceiling", 
    * one run sees together. The seeder writes it on a fresh stack; a migration
    * wrote it to the hosted row. The db suite checks the seeded row, and only
    * this can tell that the migration and the archetype still agree.
+   *
+   * AI-NOTE: reverting the amendment removes this block with the constants.
    */
   it('raises the ceiling on exactly one archetype, the one the sign-in page fills in', () => {
     const raised = ARCHETYPES.filter((a) => a.weeklyBudgetUsd !== undefined);
@@ -581,17 +583,21 @@ describe("ADR 0026's 2026-09-13 amendment — one account at a higher ceiling", 
     expect(page).toMatch(/defaultValue=\{EVALUATOR_EMAIL\}/);
   });
 
-  it('wrote the same address and figure to the hosted row', () => {
-    const sql = readFileSync(
-      join(ROOT, 'supabase', 'migrations', '20260913090000_evaluator_budget.sql'),
-      'utf8'
-    );
-    const update =
-      /set llm_weekly_budget_usd = ([\d.]+)\s+where user_id = \(select id from auth\.users where email = '([^']+)'\)/.exec(
-        sql
-      );
-    expect(update, 'the migration no longer has the shape this test reads').not.toBeNull();
-    expect(Number(update![1])).toBe(EVALUATOR_WEEKLY_BUDGET_USD);
-    expect(update![2]).toBe(EVALUATOR_EMAIL);
+  it('left the hosted row where the archetype says — the latest migration that sets a ceiling', () => {
+    // The LATEST, by filename: a figure changed by a new migration is checked
+    // against that one, and a migration that moves the row without the archetype
+    // fails here. `:=` in the guard trigger's body is not a SET and is skipped.
+    const dir = join(ROOT, 'supabase', 'migrations');
+    const setting = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => ({ f, sql: readFileSync(join(dir, f), 'utf8') }))
+      .filter(({ sql }) => /\bset\s+llm_weekly_budget_usd\s*=\s*[\d.]+/i.test(sql));
+    const latest = setting.at(-1);
+    expect(latest, 'no migration sets a ceiling').toBeDefined();
+
+    const figure = /\bset\s+llm_weekly_budget_usd\s*=\s*([\d.]+)/i.exec(latest!.sql)![1];
+    expect(Number(figure), latest!.f).toBe(EVALUATOR_WEEKLY_BUDGET_USD);
+    expect(latest!.sql, latest!.f).toContain(`'${EVALUATOR_EMAIL}'`);
   });
 });

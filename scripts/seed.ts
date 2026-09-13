@@ -45,6 +45,9 @@ config({ path: '.env.local', quiet: true });
 /** Fixed so the database is byte-identical on every run. */
 const SEED = 42;
 
+/** The `app_metadata` key every account this script creates carries — see `clean()`. */
+const FIXTURE_MARK = 'fixture';
+
 /** Shared by every archetype, and shown on the sign-in page — docs/FRAMING.md. */
 const DEMO_PASSWORD = 'samson-demo-fixture';
 const SNAPSHOT = resolve(process.cwd(), 'data/exercises.snapshot.json');
@@ -103,7 +106,20 @@ async function clean(admin: Admin): Promise<void> {
   const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (error) throw new Error(`listing users: ${error.message}`);
 
-  const seeded = data.users.filter((u) => u.email?.endsWith('@samson.test'));
+  /*
+   * By address, and by the fixture mark — ADR 0026's 2026-09-13 amendment.
+   *
+   * WHY the mark: every fixture's password is published, so a session holding
+   * one may change the account's address (the auth settings make it hard, not
+   * impossible). By address alone this would miss the renamed account, leave it
+   * under its new address with whatever it held — the $2.00 ceiling included —
+   * and create a second copy beside it. `app_metadata` is writable only by the
+   * service role, so a session cannot remove the mark. Accounts seeded before
+   * it existed are still caught by address, as before.
+   */
+  const seeded = data.users.filter(
+    (u) => u.email?.endsWith('@samson.test') || u.app_metadata?.[FIXTURE_MARK] !== undefined
+  );
   for (const user of seeded) {
     /*
      * FOUND IN REVIEW: this discarded the result. deleteUser RETURNS an error
@@ -258,6 +274,8 @@ async function seedArchetype(
     email: archetype.email,
     password: DEMO_PASSWORD,
     email_confirm: true,
+    // What `clean()` finds a fixture by when its address has changed — see there.
+    app_metadata: { [FIXTURE_MARK]: archetype.key },
   });
   if (created.error || !created.data.user) {
     throw new Error(`creating ${archetype.email}: ${created.error?.message}`);
@@ -284,8 +302,10 @@ async function seedArchetype(
     height_cm: archetype.heightCm,
     birth_date: archetype.birthDate,
     sex: archetype.sex,
-    // ADR 0026's amendment: the service role may set a ceiling, and this is the
-    // only writer that does. Absent, the column's default applies.
+    // ADR 0026's amendment. The only service-role writer of the ceiling in
+    // application scripts; migration 20260913090000 set the row that already
+    // existed on hosted — see the AI-NOTE on EVALUATOR_WEEKLY_BUDGET_USD.
+    // Absent, the column's default applies.
     ...(archetype.weeklyBudgetUsd === undefined
       ? {}
       : { llm_weekly_budget_usd: archetype.weeklyBudgetUsd }),
@@ -879,7 +899,7 @@ async function main(): Promise<void> {
      * anybody could claim `fresh@samson.test` and call a `security definer`
      * function that deletes gamification rows the client may not write.
      */
-    app_metadata: { demo_reset: true },
+    app_metadata: { demo_reset: true, [FIXTURE_MARK]: FRESH_ACCOUNT.key },
   });
   if (fresh.error || !fresh.data.user) {
     throw new Error(`creating ${FRESH_ACCOUNT.email}: ${fresh.error?.message}`);

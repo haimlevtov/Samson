@@ -17,8 +17,11 @@
 -- `authenticated`, and a migration runs as the database owner.
 --
 -- AI-NOTE: the address and the figure are EVALUATOR_EMAIL and
---          EVALUATOR_WEEKLY_BUDGET_USD in src/seed/archetypes.ts.
---          tests/unit/invariants.test.ts fails if they disagree with this file.
+--          EVALUATOR_WEEKLY_BUDGET_USD in src/seed/archetypes.ts, and
+--          tests/unit/invariants.test.ts fails while the latest migration that
+--          sets a ceiling disagrees with them. Do not copy this lookup into a
+--          later one: by then the address is only a claim — ADR 0026's
+--          amendment says how to change or revert the figure.
 
 update public.users
    set llm_weekly_budget_usd = 2.00
