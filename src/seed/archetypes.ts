@@ -815,6 +815,9 @@ export function generateHistory(
     /*
      * INVARIANT: a scheduled rest day maintains a streak — CLAUDE.md #4.
      *
+     * AI-NOTE: one rest day per date per user — `workouts_one_rest_a_day`,
+     *          ADR 0034. The loop below writes each non-training day once.
+     *
      * WHY every non-training day, and not one token Saturday: a programme is
      * seven days long, and the days it does not train are rest days rather than
      * gaps. That is the whole content of "rest maintains a streak".

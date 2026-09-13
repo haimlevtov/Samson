@@ -138,6 +138,12 @@ Every achievement ships with a test in the same commit asserting:
 Use the seeder's synthetic users where one fits; add a fixture only if none
 does.
 
+**A rest-day fixture takes one date per rest row.** `workouts_one_rest_a_day`
+refuses a second `rest` row for a user on one `local_date`, whether it is
+inserted or updated into one (ADR 0034). The app logs a rest day for today only
+and not on a day with training, but a fixture may write any date and put a
+session beside it.
+
 ### 5. Verify
 
 ```bash

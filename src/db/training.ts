@@ -151,6 +151,14 @@ export async function activeWorkout(db: Db, now: Date = new Date()): Promise<Act
     : { id: row.id, localDate: row.local_date, startedAt: row.started_at };
 }
 
+/** One workout of a day, as the rest-day decision in `src/ui/rest.ts` reads it. */
+export interface DayWorkout {
+  id: string;
+  status: WorkoutStatus;
+  /** Sets logged into it. An empty session is not training — ADR 0034 §4. */
+  setCount: number;
+}
+
 /**
  * One local day's workouts, whatever their status — the rest-day decision in
  * `src/ui/rest.ts` reads them. RLS scopes the read to the caller.
@@ -158,19 +166,25 @@ export async function activeWorkout(db: Db, now: Date = new Date()): Promise<Act
  * INVARIANT: `localDate` is the user's local date, computed by the caller from
  *            `users.timezone` — CLAUDE.md #9.
  */
-export async function workoutsOn(
-  db: Db,
-  localDate: string
-): Promise<{ id: string; status: WorkoutStatus }[]> {
+export async function workoutsOn(db: Db, localDate: string): Promise<DayWorkout[]> {
   const { data, error } = await db
     .from('workouts')
-    .select('id, status')
+    .select('id, status, sets(count)')
     .eq('local_date', localDate);
   if (error) throw new Error(`loading the day's workouts: ${error.message}`);
-  return (data ?? []).map((w) => ({ id: w.id, status: w.status as WorkoutStatus }));
+  return (data ?? []).map((w) => ({
+    id: w.id,
+    status: w.status as WorkoutStatus,
+    setCount: (w.sets as unknown as { count: number }[])[0]?.count ?? 0,
+  }));
 }
 
-/** The index that makes a rest day one a day — migration 20260913100000. */
+/**
+ * The index that makes a rest day one a day — migration 20260913100000.
+ *
+ * AI-NOTE: matched by name below. Renaming the index means changing this, the
+ *          migration, and tests/db/rest-days.test.ts together.
+ */
 const ONE_REST_A_DAY = 'workouts_one_rest_a_day';
 
 /**

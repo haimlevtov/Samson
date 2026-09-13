@@ -1,6 +1,6 @@
 # ADR 0012 — Five tabs at the bottom, and what lives behind each
 
-**Status:** accepted, phase 5 — ownership table superseded by [ADR 0013](0013-profile-and-hub.md)
+**Status:** accepted, phase 5 — ownership table superseded by [ADR 0013](0013-profile-and-hub.md); Workout row amended 2026-09-13 by [ADR 0034](0034-logging-a-rest-day.md)
 **Date:** 2026-09-05
 
 ## Context

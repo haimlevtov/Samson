@@ -240,7 +240,7 @@ to think of the case first. `phase-6.md`'s close-out has the table.
 
 - [`docs/PLAN.md`](../PLAN.md) — the phase brief and its acceptance criteria.
   The plans here say how a phase was executed; PLAN.md says what it owed.
-- [`docs/adr/`](../adr/) — the decisions. Thirty-three of them, and several
+- [`docs/adr/`](../adr/) — the decisions. Thirty-four of them, and several
   carry the honest note that they were written after their code at a reviewer's
   prompting rather than before it.
 - [`docs/specs/`](../specs/) — the written contracts tests are built from.

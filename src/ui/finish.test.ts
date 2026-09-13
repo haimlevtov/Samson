@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { earnedSentence, receiptFor, sessionXp } from './finish';
+import { earnedSentence, keptPath, receiptFor, sessionXp } from './finish';
 
 describe('earnedSentence', () => {
   it('explains the taper when something was earned', () => {
@@ -34,6 +34,19 @@ describe('earnedSentence for a rest day — ADR 0034', () => {
         /\bsession (still|in a week)|this session/
       );
     }
+  });
+});
+
+describe('keptPath', () => {
+  it('lands on the receipt, with no parameter when nothing unlocked', () => {
+    expect(keptPath('w-1', [])).toBe('/history/w-1/kept');
+  });
+
+  it('carries the first unlocked badge, encoded, so the sheet fires there', () => {
+    expect(keptPath('w-1', ['ten-rest-days', 'first-full-week'])).toBe(
+      '/history/w-1/kept?unlocked=ten-rest-days'
+    );
+    expect(keptPath('a/b', ['x&y'])).toBe('/history/a%2Fb/kept?unlocked=x%26y');
   });
 });
 

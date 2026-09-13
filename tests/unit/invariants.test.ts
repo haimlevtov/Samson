@@ -606,22 +606,32 @@ describe('ADR 0034 — a rest day is today, and paid by the award', () => {
   /*
    * WHY a source check: nothing under app/ is in the unit suite, and the two
    * things that make Rest today safe are properties of the action's shape — it
-   * takes no form data, so it cannot be handed a date, and it reads the user's
-   * own. tests/db/rest-days.test.ts holds the rest in the database.
+   * takes no form data, so it cannot be handed a date, and the date it writes is
+   * the user's own. tests/db/rest-days.test.ts holds the rest in the database.
    */
-  const actions = readFileSync(join(ROOT, 'app', 'workout', 'actions.ts'), 'utf8');
-  const body = /export async function logRestDay\(([^)]*)\)[^{]*\{([\s\S]*?)\n\}/.exec(actions);
+  const source = () => readFileSync(join(ROOT, 'app', 'workout', 'actions.ts'), 'utf8');
+  const fn = (name: string) => {
+    const match = new RegExp(
+      `(?:export )?async function ${name}\\(([^)]*)\\)[^{]*\\{([\\s\\S]*?)\\n\\}`
+    ).exec(source());
+    expect(match, `${name} is missing or has changed shape`).not.toBeNull();
+    return { params: match![1]!.trim(), body: match![2]! };
+  };
+  // Comments may name anything; the checks read code.
+  const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
-  it('takes nothing from the form, and dates the day from the user timezone', () => {
-    expect(body, 'logRestDay is missing or has changed shape').not.toBeNull();
+  it('takes nothing from the form, and writes the date it read from the user timezone', () => {
+    const { params, body } = fn('logRestDay');
     // CLAUDE.md #9: no date field to forge, and not the server's clock.
-    expect(body![1]!.trim()).toBe('');
-    expect(body![2]).toMatch(/localDateFor\(user\.timezone\)/);
-    expect(body![2]).not.toMatch(/new Date\(\)\.toISOString\(\)\.slice/);
+    expect(params).toBe('');
+    expect(code(body)).toMatch(
+      /const today = localDateFor\(user\.timezone\);[\s\S]*insertRestDay\(db, user\.id, today\)/
+    );
+    expect(code(body)).not.toMatch(/new Date\(/);
   });
 
   it('writes no ledger row itself — ADR 0009 §1', () => {
-    expect(body![2]).toMatch(/awardSessionXp\(db, workoutId\)/);
-    expect(body![2]).not.toMatch(/xp_events|achievement_events/);
+    expect(code(fn('payAndLand').body)).toMatch(/awardSessionXp\(db, workoutId\)/);
+    expect(code(source())).not.toMatch(/from\(\s*'(xp_events|achievement_events)'/);
   });
 });

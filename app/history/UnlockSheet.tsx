@@ -10,8 +10,8 @@ import { nextFocusIndex, withoutUnlocked, type UnlockSheetProps } from '@/src/ui
 /**
  * The badge unlock as a sheet over History — the Quest Log redesign.
  *
- * It opens over History and over a session's receipt — wherever `finishWorkout`
- * lands somebody. Everything it shows was decided on the server by
+ * It opens over History and over a receipt — wherever `finishWorkout` or
+ * `logRestDay` lands somebody. Everything it shows was decided on the server by
  * `unlockSheetProps`. This
  * component owns one thing: being dismissed, once.
  *

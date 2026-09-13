@@ -74,7 +74,7 @@ export interface WeekWindow {
  * Statuses that earn.
  *
  * WHY `rest` earns the same as `completed`: a scheduled rest day is the plan
- * being followed. This is the same set `adherence()` treats as kept, and the two
+ * being followed — logged for today on the Workout tab, ADR 0034. This is the same set `adherence()` treats as kept, and the two
  * must not drift — a rest day that counted for adherence but earned no XP would
  * teach the user that resting is punished, which is invariant #4 defeated by
  * arithmetic instead of by prompt.

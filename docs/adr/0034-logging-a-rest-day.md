@@ -1,6 +1,6 @@
 # ADR 0034 — A rest day is logged on the Workout tab, for today only
 
-**Status:** accepted
+**Status:** accepted, unplanned — the rest-day gap the badge catalogue exposed (docs/plans/rework-3.md PR 7)
 **Date:** 2026-09-13
 
 > Written before the code it governs, in its own commit.
@@ -11,8 +11,8 @@
 scheduled rest day maintains a streak". Everything downstream already honours it:
 
 - `award_session_xp` pays a rest day exactly what a training day earns at the
-  same position in the week (migration `20260902100000`), and evaluates
-  achievements on it (`20260902100100`).
+  same position in the week, and evaluates achievements on it (migration
+  `20260902100000`).
 - `adherence()` and `currentStreak()` in `src/metrics/adherence.ts` count it as
   kept.
 - Five achievement predicates count it. `ten-rest-days` counts nothing else;
@@ -74,18 +74,30 @@ is the day it is where the user lives.
 
 ### 3. One rest day a day, and the database says so
 
-A partial unique index: `(user_id, local_date) where status = 'rest'`.
+A partial unique index, `workouts_one_rest_a_day`: `(user_id, local_date) where
+status = 'rest'`. It is checked on every insert AND update, so a row changed into
+a second rest day is refused too. It covers the rows that are `rest` now: an
+update or delete that stops a row being one frees its date.
 
 - **Why the database and not the action.** The action reads, then writes, so a
   double press races it. The API skips the action entirely. Without the index,
   ten presses are ten rest days, which is §3 of the context.
-- **A duplicate is not an error to the user.** The action treats the unique
-  violation as "today is already a rest day" and lands on that day's receipt.
+- **A duplicate is not an error to the user.** `insertRestDay` matches the
+  violation by the index's name and returns "already a rest day"; the action
+  lands on that day's receipt. Any other refusal still throws.
 
-### 4. Not on a day that already has a session
+### 4. Not on a day that already has training in it
 
-If today has a `completed` or `in_progress` workout, the action refuses, and the
-tab says why in place of the button: a day you trained is not a day off.
+If today has a `completed` or `in_progress` workout **with sets in it**, the
+action refuses, and the tab says why in place of the button: a day you trained
+is not a day off.
+
+**An empty session does not count** — FOUND IN REVIEW. The first version counted
+any such row, and an empty one is a mis-tap on Start (just above Rest today) or a
+session abandoned before its first set. Nothing in the app deletes either, so
+that version blocked Rest today for the rest of the day with no way out. A
+session still running never reaches the rule: Quick start is Resume only, and
+the action sends a press back to it.
 
 **The reverse is allowed.** Starting a session on a day already logged as rest
 is the plan changing, and the rest day stays. The ledger is append-only, and a
@@ -111,6 +123,20 @@ An award that fails is logged by name and bounded message
 ([ADR 0028](0028-what-a-failure-may-say.md)) and not thrown. The day is saved,
 exactly as `finishWorkout` reasons it.
 
+**Every press that finds the day's rest row pays it, not only the press that
+wrote it** — FOUND IN REVIEW. The award is safe to repeat, since one adherence
+award per workout is an index and a second call returns nothing. Repeating it
+does three jobs:
+
+- A press racing the first waits on the award's week lock, so its receipt reads
+  what the first press committed instead of "No XP".
+- An award that failed on the first press is paid by the next one.
+- So is a day whose insert committed but whose response was lost.
+
+The button also ignores a press while one is pending. A second tap would
+otherwise replace the first press's navigation with a receipt that carries no
+`?unlocked=`, and lose the tenth rest day's badge reveal.
+
 ### 6. It lands on the receipt, where a badge fires
 
 `/history/[id]/kept` (the Quest Log's finish moment) takes a `rest` workout as
@@ -118,8 +144,12 @@ well as a `completed` one. It says **"Rest day kept"**, shows what the day earne
 and the week against its cap, and drops "Review the session", since there is no
 session to review. `?unlocked=` fires a badge there as it does for sessions, so
 the tenth rest day shows `ten-rest-days` on the screen it lands on. Which
-statuses get a receipt, and what it is titled, is a tested helper in
-`src/ui/finish.ts`.
+statuses get a receipt, what it is titled, and the URL both actions land on
+(`keptPath`) are tested helpers in `src/ui/finish.ts`.
+
+**In History a rest day is a row like any day in the log**, badged `rest`. It
+opens the session page the seeded rest days already opened: the badge, no sets,
+nothing to edit. History owns the log's past days, and a rest day is one of them.
 
 ### 7. No undo, on purpose
 
@@ -134,29 +164,64 @@ asked for it.
 `ten-rest-days`'s `how_to_earn` names the button. A card that says how to earn a
 badge, and only now can be followed, should also say where.
 
+The four cards that accept a rest day OR a session (`first-full-week`,
+`twenty-of-twenty-eight`, `new-years-day`, `one-year-on`) keep their wording.
+Both halves of what they ask for start on the Workout tab, and "a planned rest
+day" is now something a user can log. `ten-rest-days` is the only card about
+resting alone.
+
 ## What this does not guarantee
 
 - **That a rest day was planned.** There is no schedule to check it against
   (context §1). It is the user's word, as a finished session is.
 - **That the API follows §2 or §4.** A session can still insert a rest row for
-  another date, or beside a session. §3 still holds there, and so do the award's
-  ceiling and its one-award-per-workout index.
+  another date, or beside a session. FOUND IN REVIEW: an earlier version of this
+  bullet claimed more than holds.
+  - **§3 holds at a moment, not over time.** Deleting a rest row, or changing its
+    status or date, frees that date for another.
+  - **The weekly ceiling bounds a week, and the caller chooses the week.** The
+    award reads it from the row's own `local_date`, so rows written into other
+    weeks each get their own 500. That is older than this ADR (ADR 0009 does not
+    state it); it bears on lifetime XP, which the leaderboard shows.
+  - **So `ten-rest-days` and the calendar badges are still a scripted minute
+    away** for somebody with the API. What §3 closes is the button, and what the
+    database can say about a day is one rest row at a time.
+- **That "today" is a day of the real calendar.** It is today in the timezone
+  on the user's profile, which Settings lets them change. Switching between
+  UTC+14 and UTC−11 logs two rest days in one real day, as `startWorkout` could
+  already log two sessions.
+
+A real control for both would be a trigger refusing a rest row whose
+`local_date` is outside a window around the database's own clock, and refusing
+changes to a rest row's date. It is not built here. It changes what the API
+allows and what fixtures can write, which makes it a decision of its own, and
+the rest of the log would still be self-reported.
 
 ## Consequences
 
 - `20260902100000`'s note that nothing in the application creates a `rest`
   workout is no longer true. Migrations are history, so this ADR is where that
   is recorded.
-- ADR 0012's Workout row gains the rest day. `docs/specs/mobile-interface.md`
-  gains it in the Workout ranking and three states in §4. The PRD's rewards
-  section says where a rest day comes from.
+- ADR 0012's Workout row gains the rest day, and ADR 0009 §1 now says the award
+  accepts `rest`. `docs/specs/mobile-interface.md` gains it in the user flow, the
+  Workout ranking, and four states in §4. The XP spec and the PRD's rewards
+  section say where a rest day comes from.
 - **Tests.**
-  - `tests/db/rest-days.test.ts`, through the user's own client:
-    - a rest day inserts under RLS and not for someone else;
-    - it awards once however often the award runs;
-    - a second rest row that day is refused;
-    - the tenth rest day unlocks `ten-rest-days`;
-    - a session on a rest day is still allowed.
-  - Unit tests for the tab's decision and the receipt's title.
+  - `tests/db/rest-days.test.ts`, through the user's own client, calling
+    `insertRestDay`, `workoutsOn` and `restToday` where the property is theirs:
+    - a rest day inserts under RLS, and not for someone else;
+    - a second press returns "already a rest day" and resolves to the first;
+    - the index refuses a second rest day by insert and by update, by name;
+    - any other refusal throws;
+    - `workoutsOn` reads only the caller's day;
+    - a session on a rest day is still allowed;
+    - a rest day is awarded once, however often the award runs;
+    - the tenth rest day unlocks `ten-rest-days`, once, dated that day;
+    - the catalogue says where.
+  - Unit tests:
+    - `src/ui/rest.test.ts`, the tab's decision, including an empty session;
+    - `src/ui/finish.test.ts`, the receipt's title and sentence, and `keptPath`;
+    - `tests/unit/invariants.test.ts`, that `logRestDay` takes no form data,
+      writes the date it read from `user.timezone`, and writes no ledger row.
 - `src/db/types.ts` does not change: an index and a content update add no column
   and no function.
