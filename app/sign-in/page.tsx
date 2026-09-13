@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic';
  * and one that stalls on a forgotten address.
  * AI-NOTE: if this ever serves real users, delete this list rather than hiding
  *          it behind an env flag — the fixtures should not exist in that build.
+ *          The account filled in below also has a $2.00 weekly ceiling (ADR
+ *          0026's amendment); that build reverts it by migration too.
  */
 const FIXTURES = [
   { email: EVALUATOR_EMAIL, label: 'Noa — beginner, clean linear progression' },
@@ -66,8 +68,9 @@ export default async function SignInPage({
         <code>npm run migrate &amp;&amp; npm run seed</code> if they are missing.{' '}
         {/* ADR 0026's amendment: say which account can spend more, so an
             evaluator who meets the ceiling on another knows where to go. */}
-        <code>{EVALUATOR_EMAIL}</code>, filled in above, can spend $
-        {EVALUATOR_WEEKLY_BUDGET_USD.toFixed(2)} a week on the coach; the others have the default.
+        <code>{EVALUATOR_EMAIL}</code>, filled in above, has a{' '}
+        {`$${EVALUATOR_WEEKLY_BUDGET_USD.toFixed(2)}`} weekly coaching budget; the other accounts
+        have a smaller one.
       </p>
       <div className="card">
         {/*

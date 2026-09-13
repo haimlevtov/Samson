@@ -113,9 +113,10 @@ limit.**
   `before insert` only. None does today.
 - A user can still see and write their own ledger rows, and can only ever
   charge themselves more.
-- **Whether sign-up is open on the hosted project is for the owner to check.**
-  The app has no sign-up page; with sign-up off, decision 3 guards a path
-  nobody can reach.
+- **Sign-up is open on the hosted project, with no confirmation step** —
+  answered by migration `20260912200000`, which found it so. The app has no
+  sign-up page, but the auth API does, so every registration adds another $0.50
+  a week and only the key's own credit limit bounds the total.
 - ADR 0025's addendum listed these holes as closing here; they are.
 
 ## Amendment, 2026-09-13 — the account the sign-in page fills in gets $2.00
@@ -138,21 +139,56 @@ account, seeded or not, keeps the column's $0.50.
   address to decide a budget. On a fresh stack it matches nothing, because
   migrations run before the seed — which is why the seeder carries the figure
   too.
+- **Checked on hosted after the push:** exactly one profile has a ceiling
+  other than $0.50 — `beginner@samson.test`, "Noa (beginner)", created by the
+  seed run of 2026-09-12 13:19 UTC, with the seeder's 83 workouts. The migration
+  hit the seeded account and not an address somebody had claimed.
 - **The risk, accepted by the owner:** the account's password is printed on
   the public sign-in page (the fixtures are published by design), so **anyone
   with the URL can spend up to $2.00 a week** of the project's credit through
-  it — four times what any single account could before. The other ceilings are
-  unchanged, so the most the seeded accounts together can spend in a week goes
-  from $3.00 to $4.50. Decision 4 still holds: the key's own credit limit is
-  the backstop, and a burst in parallel can overshoot the $2.00 as it could the
-  $0.50.
+  it — four times what any single account could before.
+  - The six seeded accounts together go from $3.00 a week to $4.50. That is not
+    the project's ceiling: sign-up is open (Consequences), so each new
+    registration adds $0.50, and the key's own credit limit is the backstop.
+  - A burst in parallel overshoots the $2.00 by what the concurrent calls cost,
+    exactly as it could the $0.50 (decision 4).
+  - **The headroom is shared.** Anybody can spend the $2.00 before the lecturer
+    does, and the page says which account has it. A separate account with an
+    unpublished password, handed to the lecturer, avoids that; the owner chose
+    the published default instead.
+  - **The published password also opens the account's settings.** With the
+    anon key, a session can set a new password (`secure_password_change` is off
+    in `supabase/config.toml`) and lock the lecturer out — true of every fixture
+    since they were published, and worth more to a vandal now. An address change
+    needs confirming at the old address too (`double_confirm_changes`), which
+    `samson.test` cannot receive, so a renamed account keeping the $2.00 is
+    unlikely; neither was tested on hosted, whose settings may differ. The app
+    ships the anon key to no browser (README, "Deploying"), so either needs the
+    key itself. **Recovery is `npm run seed`**, and so that it recovers even
+    from a renamed account, the seeder now marks every account it creates with
+    `app_metadata.fixture`, which only the service role can write, and deletes
+    marked accounts as well as `@samson.test` addresses. The accounts on hosted
+    were seeded before the mark and carry it from the next seed.
+  - **Vercel Preview deployments** add public URLs, not budget: the ceiling is
+    the one hosted database's, as long as Preview points at that project.
 - **Why this account and not a new one:** it is already the default, its twelve
   weeks of clean linear progression exercise every surface — "everything works",
   in the seeder's own words — and a new account would add a published
   password without removing one.
 
-AI-NOTE: the figure lives in `src/seed/archetypes.ts` (the seeder's copy) and
-in migration `20260913090000` (the hosted row). Changing it means a new
-migration as well as the archetype; `tests/db/budget.test.ts` checks the seeded
-row and `tests/unit/invariants.test.ts` that the sign-in page fills in the same
-account.
+**No end date was set.** Reverting it after the evaluation takes two changes
+together, or the next seed grants it again:
+
+1. A migration that selects by VALUE, not by address — `update public.users set
+llm_weekly_budget_usd = 0.50 where llm_weekly_budget_usd <> 0.50` — which
+   also catches a renamed copy.
+2. `weeklyBudgetUsd`, `EVALUATOR_WEEKLY_BUDGET_USD` and the invariant test's
+   block for this amendment removed from the code.
+
+AI-NOTE: the figure lives in `src/seed/archetypes.ts` (the seeder's copy) and in
+the latest migration that sets `llm_weekly_budget_usd` (the hosted row),
+`20260913090000` today. `tests/unit/invariants.test.ts` reads the LATEST such
+migration and fails unless it writes the constant's figure and names the
+constant's address; `tests/db/budget.test.ts` checks the seeded rows. A later
+migration that changes the figure must not find the account by address alone —
+check the `user_id` on hosted first, or select by value.

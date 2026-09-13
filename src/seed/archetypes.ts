@@ -376,20 +376,23 @@ export const FRESH_ACCOUNT = {
   summary: 'Nobody yet — the empty account a new user meets',
 } as const;
 
+/** The account the sign-in form is filled in with — ADR 0026's 2026-09-13 amendment. */
+export const EVALUATOR_EMAIL = 'beginner@samson.test';
+
 /**
- * The account the sign-in form is filled in with, and its weekly ceiling —
- * ADR 0026's 2026-09-13 amendment, so the lecturer can evaluate the app without
- * meeting the default one.
+ * That account's weekly LLM ceiling, so the lecturer can evaluate the app
+ * without meeting the default one — ADR 0026's 2026-09-13 amendment.
  *
  * WHY the password stays the published one: every fixture's is, by design
  * (app/sign-in/page.tsx). So anyone with the URL can spend this much a week
  * through it — the risk the amendment records and the owner accepted.
  *
- * AI-NOTE: migration 20260913090000 wrote the same address and figure to the
- *          hosted row. Changing either means a new migration as well;
- *          tests/unit/invariants.test.ts fails while they disagree.
+ * AI-NOTE: the hosted row was set by migration, 20260913090000 today. Changing
+ *          the figure means a new migration too, and it must not find the
+ *          account by address alone — the amendment says why and how to revert.
+ *          tests/unit/invariants.test.ts reads the latest migration that sets a
+ *          ceiling and fails unless it agrees with this and EVALUATOR_EMAIL.
  */
-export const EVALUATOR_EMAIL = 'beginner@samson.test';
 export const EVALUATOR_WEEKLY_BUDGET_USD = 2;
 
 export const ARCHETYPES: Archetype[] = [
