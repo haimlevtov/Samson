@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/db/types';
 import { createSupabaseLedger } from '../../src/db/ledger';
 import { SPEECH_ASSUMED_COST_USD, TIMEOUT_ASSUMED_COST_USD } from '../../src/llm/config';
+import { ARCHETYPES } from '../../src/seed/archetypes';
 import {
   ANON_KEY,
   SUPABASE_URL,
@@ -55,6 +56,22 @@ const ledgerRow = (as: TestUser, over: Record<string, unknown> = {}) => ({
   models_requested: ['x/y'],
   latency_ms: 10,
   ...over,
+});
+
+describe('the seeded ceilings — ADR 0026, amended 2026-09-13', () => {
+  it('gives the account the sign-in page fills in its ceiling, and every other archetype the default', async () => {
+    // Requires `npm run seed`, like candidates.test.ts. Read through the
+    // service role: this is a fact about the rows, not about what a user can do.
+    const admin = adminClient();
+    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) throw new Error(error.message);
+
+    for (const archetype of ARCHETYPES) {
+      const account = data.users.find((u) => u.email === archetype.email);
+      expect(account, `${archetype.email} is not seeded — run npm run seed`).toBeDefined();
+      expect(await budgetOf(account!.id), archetype.email).toBe(archetype.weeklyBudgetUsd ?? 0.5);
+    }
+  });
 });
 
 describe('the ceiling', () => {

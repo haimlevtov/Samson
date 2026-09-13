@@ -11,6 +11,11 @@ import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { STAGE_MODELS } from '../../src/llm/models';
 import { OWNED_BY } from '../../src/ui/tabs';
+import {
+  ARCHETYPES,
+  EVALUATOR_EMAIL,
+  EVALUATOR_WEEKLY_BUDGET_USD,
+} from '../../src/seed/archetypes';
 
 const ROOT = join(__dirname, '..', '..');
 const SEARCH_DIRS = ['src', 'app', 'scripts', 'tests'];
@@ -557,5 +562,36 @@ describe('ADR 0033 §2 — a build fetches no font, and the fonts are the ones r
       expect(source, name).toContain(name);
       expect(source, name).toContain(hash);
     }
+  });
+});
+
+describe("ADR 0026's 2026-09-13 amendment — one account at a higher ceiling", () => {
+  /*
+   * WHY a unit test for a database figure: it is written in two places that no
+   * one run sees together. The seeder writes it on a fresh stack; a migration
+   * wrote it to the hosted row. The db suite checks the seeded row, and only
+   * this can tell that the migration and the archetype still agree.
+   */
+  it('raises the ceiling on exactly one archetype, the one the sign-in page fills in', () => {
+    const raised = ARCHETYPES.filter((a) => a.weeklyBudgetUsd !== undefined);
+    expect(raised.map((a) => a.email)).toEqual([EVALUATOR_EMAIL]);
+    expect(raised[0]!.weeklyBudgetUsd).toBe(EVALUATOR_WEEKLY_BUDGET_USD);
+
+    const page = readFileSync(join(ROOT, 'app', 'sign-in', 'page.tsx'), 'utf8');
+    expect(page).toMatch(/defaultValue=\{EVALUATOR_EMAIL\}/);
+  });
+
+  it('wrote the same address and figure to the hosted row', () => {
+    const sql = readFileSync(
+      join(ROOT, 'supabase', 'migrations', '20260913090000_evaluator_budget.sql'),
+      'utf8'
+    );
+    const update =
+      /set llm_weekly_budget_usd = ([\d.]+)\s+where user_id = \(select id from auth\.users where email = '([^']+)'\)/.exec(
+        sql
+      );
+    expect(update, 'the migration no longer has the shape this test reads').not.toBeNull();
+    expect(Number(update![1])).toBe(EVALUATOR_WEEKLY_BUDGET_USD);
+    expect(update![2]).toBe(EVALUATOR_EMAIL);
   });
 });
