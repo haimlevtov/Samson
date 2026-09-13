@@ -54,7 +54,7 @@ whether the feature exists.
 | [phase-6.md](phase-6.md)                                             | plan, first          | The diet advisor on the Coach tab; file import                  | shipped, one criterion unmet |
 | [rework-hub-history-coach.md](rework-hub-history-coach.md)           | plan, first          | Hub, graphs, demo data and the Coach — after the phases         | 12 of 12 shipped             |
 | [coach-memory-voice-onboarding.md](coach-memory-voice-onboarding.md) | plan, first          | Coach memory, a voice in a session, and a user who starts empty | 9 of 9 shipped               |
-| [quest-log-redesign.md](quest-log-redesign.md)                       | plan, first          | The owner's Quest Log redesign, one surface per PR              | 4 of 5 shipped               |
+| [quest-log-redesign.md](quest-log-redesign.md)                       | plan, first          | The owner's Quest Log redesign, one surface per PR              | 5 of 5 shipped               |
 
 ## Phase 5 is three documents, and here is why
 

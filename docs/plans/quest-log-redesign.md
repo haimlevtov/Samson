@@ -18,7 +18,7 @@ The instruction that came with it:
 | 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                           |
 | 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | shipped 09-13, [↓](#pr-3--the-unlock-sheet-and-the-trees-2026-09-13)    |
 | 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | shipped 09-13, [↓](#pr-4--the-session-and-the-finish-moment-2026-09-13) |
-| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                                 |
+| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | shipped 09-13, [↓](#pr-5--coach-2026-09-13)                             |
 
 Ordered so the primitives land with their first consumer, then one surface per
 PR. Each is presentation: **no migration, no RPC, no policy and no new number.**
@@ -333,3 +333,33 @@ is still "×"; this session's segment on the meter is not outlined. The finish
 redirect was not exercised by finishing a new session, to keep the fixture account
 unwritten; the receipt was checked against a completed session this week, with a
 badge.
+
+### PR 5 — Coach, 2026-09-13
+
+Shipped as [#73](https://github.com/haimlevtov/Samson/pull/73). The last of five.
+**This closes the plan at five of five.**
+
+**Two lines of copy said something the app does not do.** The handoff's Voice card
+says the coach "speaks the plan", on a card whose Try button plays audio, while the
+delivered plan is not read aloud (ADR 0025 §4). It says "explains" now. And the new
+"What <coach> says" label named whoever the menu showed, which the menu lets change
+after a delivery — so a delivery could be credited to a coach who did not write it.
+It names the coach the delivery returned.
+
+**What this entry said and did not ship:** "the transcript as two kinds of turn" was
+already true; "the SpeakSwitch beside Send" was not done, because coach-chat.md §1
+and spec §4 put the switch above the field, and the entry was wrong to move it. The
+plan's length moved into the plan disclosure only, rather than repeating in the
+header. Every control the handoff omitted — the menu, Try, the bio, Deliver, the
+diet card, Save as a template — is still there.
+
+## What the redesign as a whole left
+
+- **Builds need Google Fonts** (ADR 0033). A committed woff2 through `next/font/local`
+  removes it if it ever bites.
+- **Nothing under `app/` is unit-tested**, so each PR moved its decisions into
+  `src/ui/` to test them — `quests`, `tiers`, `segments`, `trees`, `unlock`,
+  `finish`, `coach`. The layout itself was checked in a browser at 375px, dark and
+  light, and nowhere else.
+- **"Rework PR N" still names two plans' PRs** — this plan says "quest-log PR N" to
+  avoid a third.
