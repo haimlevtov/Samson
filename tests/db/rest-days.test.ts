@@ -8,29 +8,31 @@
  * would still pass if the action were deleted, and they would fail if the index
  * or the award's handling of 'rest' were.
  *
- * Dates are far from other suites' fixtures, and each test has its own user, so
- * none of them shares a week's ceiling or a held badge with another.
+ * Where a test calls the application's own functions — `insertRestDay`,
+ * `workoutsOn`, `restToday` — it is because the property is theirs to keep:
+ * reading the index's refusal as "already a rest day" is code, not schema.
+ * FOUND IN REVIEW: the first version copied the insert, and so tested nothing
+ * the action does with its result.
+ *
+ * Dates are far from other suites' fixtures. The award tests each have their own
+ * user; the RLS tests share alice and bob, on different dates, and award nothing,
+ * so none of them shares a week's ceiling or a held badge with another.
  */
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createTestUser, deleteTestUser, deleteTestUsers, type TestUser } from './helpers';
+import { insertRestDay, workoutsOn } from '../../src/db/training';
+import { restToday } from '../../src/ui/rest';
 
 interface Award {
   awarded: number;
   unlocked: string[];
 }
 
-/** The insert `insertRestDay` makes, through the user's own client. */
-const logRest = (user: TestUser, localDate: string) =>
-  user.client
-    .from('workouts')
-    .insert({ user_id: user.id, local_date: localDate, status: 'rest' })
-    .select('id')
-    .single();
-
+/** A rest day through the action's own insert, which must not report a duplicate. */
 async function restDay(user: TestUser, localDate: string): Promise<string> {
-  const { data, error } = await logRest(user, localDate);
-  if (error || !data) throw new Error(`logging a rest day on ${localDate}: ${error?.message}`);
-  return data.id;
+  const id = await insertRestDay(user.client, user.id, localDate);
+  if (id === null) throw new Error(`${localDate} already had a rest day`);
+  return id;
 }
 
 async function award(user: TestUser, workoutId: string): Promise<Award> {
@@ -63,19 +65,62 @@ describe('a rest day under RLS', () => {
     expect(data ?? []).toEqual([]);
   });
 
-  it('is one a day: a second rest row for the same date is refused', async () => {
-    await restDay(alice, '2027-02-03');
+  it('is one a day: a second press on the same date comes back as the first day', async () => {
+    const first = await restDay(alice, '2027-02-03');
 
-    const { error } = await logRest(alice, '2027-02-03');
-    expect(error, 'two rest days on one date').not.toBeNull();
-    // Named, as `insertRestDay` matches it: a unique violation on THIS index,
-    // not any refusal — RLS or a check would also produce an error.
-    expect(error!.code).toBe('23505');
-    expect(error!.message).toContain('workouts_one_rest_a_day');
+    // insertRestDay reads the index's refusal as "already a rest day", not an error.
+    expect(await insertRestDay(alice.client, alice.id, '2027-02-03')).toBeNull();
+    expect(restToday(await workoutsOn(alice.client, '2027-02-03'))).toEqual({
+      kind: 'rested',
+      workoutId: first,
+    });
 
     // The next day is a different day, and another user's same date is theirs.
     await restDay(alice, '2027-02-04');
     await restDay(bob, '2027-02-03');
+  });
+
+  it('refuses a second rest day by NAME, which is what insertRestDay matches', async () => {
+    await restDay(alice, '2027-02-08');
+
+    const { error } = await alice.client
+      .from('workouts')
+      .insert({ user_id: alice.id, local_date: '2027-02-08', status: 'rest' });
+    expect(error, 'two rest days on one date').not.toBeNull();
+    expect(error!.code).toBe('23505');
+    // AI-NOTE: the index name, as ONE_REST_A_DAY in src/db/training.ts has it.
+    expect(error!.message).toContain('workouts_one_rest_a_day');
+  });
+
+  it('refuses a second rest day made by UPDATE, not only by insert', async () => {
+    // FOUND IN REVIEW: ADR 0034 §3 holds for any row that is 'rest', however it became one.
+    await restDay(alice, '2027-02-10');
+    const { data: session, error: sessionError } = await alice.client
+      .from('workouts')
+      .insert({ user_id: alice.id, local_date: '2027-02-10', status: 'completed' })
+      .select('id')
+      .single();
+    if (sessionError) throw new Error(sessionError.message);
+
+    const { error } = await alice.client
+      .from('workouts')
+      .update({ status: 'rest' })
+      .eq('id', session!.id);
+    expect(error, 'an update made a second rest day').not.toBeNull();
+    expect(error!.code).toBe('23505');
+    expect(error!.message).toContain('workouts_one_rest_a_day');
+  });
+
+  it('throws on any other refusal, instead of reading it as a rest day that exists', async () => {
+    // RLS refuses a row for someone else. That is not "already rested".
+    await expect(insertRestDay(alice.client, bob.id, '2027-02-12')).rejects.toThrow(
+      /logging a rest day/
+    );
+  });
+
+  it("reads only the caller's own day", async () => {
+    await restDay(bob, '2027-02-14');
+    expect(await workoutsOn(alice.client, '2027-02-14')).toEqual([]);
   });
 
   it('does not stop a session on the same day — ADR 0034 §4 allows it', async () => {

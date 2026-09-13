@@ -24,11 +24,12 @@ import { BadgeReveal } from '../../BadgeReveal';
 export const dynamic = 'force-dynamic';
 
 /**
- * The finish moment — the Quest Log redesign, docs/plans/rework-4.md PR 4.
+ * The finish moment — the Quest Log redesign, docs/plans/rework-4.md PR 4 — and
+ * a rest day's receipt, ADR 0034 §6.
  *
- * `finishWorkout` redirects here, once, with the `?unlocked=` it has always
- * carried, and a badge fires HERE — on the screen the user lands on, as it always
- * has. FOUND IN REVIEW: the first version passed the parameter on through Done
+ * `finishWorkout` and `logRestDay` redirect here, once, through `keptPath` and
+ * the `?unlocked=` it carries, and a badge fires HERE — on the screen the user
+ * lands on, as it always has. FOUND IN REVIEW: the first version passed the parameter on through Done
  * only, so "Review the session" or any tab lost the badge for good.
  *
  * INVARIANT: this page READS what `award_session_xp` already wrote and what the
@@ -37,9 +38,9 @@ export const dynamic = 'force-dynamic';
  *            this workout's own `xp_events`, adds rows the award function wrote
  *            for it.
  *
- * WHY a route rather than state inside `FinishForm`: the session is already
+ * WHY a route rather than state inside `FinishForm`: the workout is already
  * saved by the time anything here renders, and a route is a thing a refresh can
- * come back to. Reloading shows this session's XP and its week again — the streak
+ * come back to. Reloading shows this workout's XP and its week again — the streak
  * and quests are as of the reload — and awards nothing, because nothing here
  * writes.
  */
@@ -65,7 +66,7 @@ export default async function KeptPage({
 
   const today = localDateFor(user.timezone);
   /*
-   * The week is the SESSION's week, not today's — FOUND IN REVIEW. The first
+   * The week is the WORKOUT's week, not today's — FOUND IN REVIEW. The first
    * version redirected any session from an earlier week to its own page, which
    * dropped `?unlocked=` and skipped the receipt for two real paths: a session
    * begun at 23:40 on a Sunday and finished after midnight, and a loose end from
@@ -75,9 +76,9 @@ export default async function KeptPage({
    */
 
   /*
-   * The receipt's own figures — what this session earned and the week against
+   * The receipt's own figures — what this workout earned and the week against
    * its cap — are required; without them there is no receipt. The streak and the
-   * quests DEGRADE: the session is saved by the time this renders, and an error
+   * quests DEGRADE: the workout is saved by the time this renders, and an error
    * page for the sake of a quest row would read as if the save had failed.
    */
   const [rows, xp, history, challenges, badges] = await Promise.all([
@@ -154,7 +155,7 @@ export default async function KeptPage({
           value={xp.thisWeek}
           total={xp.ceiling}
           count={10}
-          label={`${xp.thisWeek} of ${xp.ceiling} XP earned in the session's week`}
+          label={`${xp.thisWeek} of ${xp.ceiling} XP earned that week`}
         />
         <p className="muted small">
           Level {level.level} · {level.intoLevel.toLocaleString()} of {level.span.toLocaleString()}{' '}

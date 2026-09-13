@@ -210,9 +210,9 @@ export default async function ProfilePage() {
             <div className="label with-hint">
               Adherence · 4 wks
               <FieldHint title="Adherence">
-                Sessions you kept, out of those that have come due in the last four weeks. A
-                scheduled rest day counts as kept — resting on plan is following it. Sessions still
-                in the future count neither way.
+                Sessions you kept, out of those that have come due in the last four weeks. A rest
+                day you log on the Workout tab counts as kept — resting is part of the plan.
+                Sessions still in the future count neither way.
               </FieldHint>
             </div>
             <span className="stat-plate">

@@ -31,6 +31,7 @@ import { isUserFacing, logLine, userFacingError } from '@/src/llm/failure';
 import { parseEntry } from '@/src/normalizer/parse';
 import { normalizedSetSchema } from '@/src/normalizer/schema';
 import { EMPTY_PARSE, type ParseState } from './parse-state';
+import { keptPath } from '@/src/ui/finish';
 
 /**
  * Every write in this file runs on the request-scoped, RLS-bound client.
@@ -176,14 +177,10 @@ export async function finishWorkout(formData: FormData): Promise<void> {
    * fires: phase 4's "a badge visibly fires in the UI on unlock", on the screen
    * the user lands on.
    *
-   * WHY a query parameter is safe here: it selects which badge to REVEAL, and
-   * the page renders it only after finding a matching row in this user's own
-   * achievement_events (scoped by RLS). A forged slug shows nothing, because
-   * the event has to exist. No schema change and no "seen" column.
+   * Why the `?unlocked=` parameter is safe is on `keptPath`, which `logRestDay`
+   * lands through too. No schema change and no "seen" column.
    */
-  const first = unlocked[0];
-  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
-  redirect(first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`);
+  redirect(keptPath(workoutId, unlocked));
 }
 
 /**

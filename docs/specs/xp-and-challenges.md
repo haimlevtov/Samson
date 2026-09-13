@@ -31,7 +31,8 @@ Three consequences follow, and all three are testable:
 1. **A rest day earns the same as a training day**, when both were planned.
    `adherence()` already treats `rest` as kept. _The app has no schedule, so a
    rest day is one the user logs for today on the Workout tab — at most one a
-   day, never on a day with a session — and it is paid through `award_session_xp`
+   day, not logged on a day that already has training (a session may follow one)
+   — and it is paid through `award_session_xp`
    like a finished session: [ADR 0034](../adr/0034-logging-a-rest-day.md)._
 2. **Diminishing returns within a week.** The seventh session of a week earns
    materially less than the first, so there is no reward for cramming.

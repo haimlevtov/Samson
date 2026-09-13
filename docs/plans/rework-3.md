@@ -1235,7 +1235,10 @@ predicate on hosted and required on shared rows by a CHECK.
 no code path writes `workouts.status = 'rest'` — only the seeder does. So
 `ten-rest-days` cannot be earned by a real user, and the rest-day halves of four
 other badges are unreachable. The catalogue now prints instructions nobody can
-follow, which at least makes the gap visible. Not fixed here.
+follow, which at least makes the gap visible. Not fixed here. _Closed 2026-09-13:
+[ADR 0034](../adr/0034-logging-a-rest-day.md) and
+[#78](https://github.com/haimlevtov/Samson/pull/78) — Rest today on the Workout
+tab._
 
 ### What review found
 

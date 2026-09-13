@@ -10,7 +10,8 @@ import type { LocalDate, WorkoutRecord, WorkoutStatus } from './types';
 
 /**
  * WHY 'rest' counts as adherent: a scheduled rest day is the plan being
- * followed, not skipped. Counting it against the user would make the app reward
+ * followed, not skipped. The app has no schedule, so a rest day is one the user
+ * logs for today on the Workout tab — ADR 0034. Counting it against the user would make the app reward
  * training through a deload, which is the exact behaviour invariant #4 exists to
  * prevent.
  */

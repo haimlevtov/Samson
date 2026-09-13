@@ -7,6 +7,7 @@ import { FieldHint } from '@/src/ui/FieldHint';
 import { startWorkout } from '../history/actions';
 import { logRestDay, startFromTemplate } from './actions';
 import { restToday } from '@/src/ui/rest';
+import { RestTodayButton } from './RestTodayButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,8 @@ const GROUPS = [
 /**
  * The Workout tab — ADR 0012.
  *
- * Two things and no more: start something, or pick a template. The three ways
+ * Three things and no more: start something, rest today (ADR 0034), or pick a
+ * template. The three ways
  * to *create* a template used to sit under this list and made the tab four
  * screens long; they are one tap away at `/workout/new` instead. Creating a
  * template is a thing you do once, at a desk. Starting one is a thing you do
@@ -97,9 +99,7 @@ export default async function TemplatesPage() {
            */}
           {rest.kind === 'offer' ? (
             <form action={logRestDay} className="start-empty rest-today">
-              <button type="submit" className="secondary">
-                Rest today
-              </button>
+              <RestTodayButton />
               <p className="muted small">
                 Keeps your streak, and pays what a session in its place would.
               </p>
@@ -112,9 +112,7 @@ export default async function TemplatesPage() {
               </Link>
             </div>
           ) : (
-            <p className="muted small rest-today">
-              You have a session today, so it is not a rest day.
-            </p>
+            <p className="muted small rest-today">You trained today, so it is not a rest day.</p>
           )}
         </>
       ) : (

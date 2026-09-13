@@ -1,5 +1,6 @@
 /**
- * The decisions behind the finish moment — the Quest Log redesign, ADR 0033.
+ * The decisions behind the finish moment — the Quest Log redesign, ADR 0033 —
+ * and, since ADR 0034, behind a rest day's receipt too.
  *
  * INVARIANT: every figure these take was written by `award_session_xp` or read
  *            from the metrics engine. They choose a sentence or a link; they
@@ -22,6 +23,23 @@ export interface Receipt {
  * unlock a badge on it, and the receipt is the screen a badge fires on. It has
  * no "Review the session": there is no session.
  */
+/**
+ * Where a kept workout lands: its receipt, carrying the first badge the award
+ * unlocked so the sheet fires there.
+ *
+ * WHY a query parameter is safe: it selects which badge to REVEAL, and the page
+ * renders it only after finding a matching row in this user's own unlocked
+ * achievements. A forged slug shows nothing, because the event has to exist.
+ *
+ * AI-NOTE: `finishWorkout` and `logRestDay` both land through this. Tested,
+ *          because the two used to build the URL separately.
+ */
+export function keptPath(workoutId: string, unlocked: readonly string[]): string {
+  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
+  const first = unlocked[0];
+  return first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`;
+}
+
 export function receiptFor(status: WorkoutStatus): Receipt | null {
   if (status === 'completed') return { title: 'Session kept', noun: 'session', reviewable: true };
   if (status === 'rest') return { title: 'Rest day kept', noun: 'rest day', reviewable: false };
@@ -33,8 +51,8 @@ export function receiptFor(status: WorkoutStatus): Receipt | null {
  *
  * WHY three cases and not two: nothing recorded can mean the week's ceiling was
  * already spent — a rule working — or that the award call failed, which
- * `finishWorkout` swallows on purpose so a saved session never shows an error
- * page. Only a spent ceiling is a claim this page can make; the other says only
+ * `finishWorkout` and `logRestDay` swallow on purpose so a saved workout never
+ * shows an error page. Only a spent ceiling is a claim this page can make; the other says only
  * what it knows. _It said "yet" until review pointed out nothing ever retries a
  * failed award, so "yet" promised a later that does not come._
  */

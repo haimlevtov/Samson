@@ -32,6 +32,11 @@ Every number it writes it derives from rows already in the database: it checks
 the workout belongs to `auth.uid()` and is `completed`, counts the week's kept
 sessions, and computes the award.
 
+_Amended 2026-09-13: "and is `completed`" has been "`completed` or `rest`"
+since migration `20260902100000`, and since
+[ADR 0034](0034-logging-a-rest-day.md) the app writes a rest day and pays it
+through this function too._
+
 **Nothing the caller sends becomes an amount.** There is no `p_amount`
 parameter, deliberately — an RPC that accepted one would move the trust boundary
 into the browser no matter how carefully the caller behaved.

@@ -15,6 +15,7 @@ import { activeWorkout, insertRestDay, loadWorkout, workoutsOn } from '@/src/db/
 import { awardSessionXp } from '@/src/db/gamification';
 import { logLine } from '@/src/llm/failure';
 import { restToday } from '@/src/ui/rest';
+import { keptPath } from '@/src/ui/finish';
 import { templateDraftSchema } from '@/src/templates/schema';
 import { templateFromSession } from '@/src/templates/derive';
 import { templateFromPlannedSession } from '@/src/templates/plan';
@@ -79,23 +80,35 @@ export async function logRestDay(): Promise<void> {
 
   const today = localDateFor(user.timezone);
   const decision = restToday(await workoutsOn(db, today));
-  if (decision.kind === 'rested') redirect(`/history/${decision.workoutId}/kept`);
-  // A day with a session in it is not a day off — ADR 0034 §4. The tab says so.
+  // A day with training in it is not a day off — ADR 0034 §4. The tab says so.
   if (decision.kind === 'trained') redirect('/workout');
+  if (decision.kind === 'rested') return payAndLand(db, decision.workoutId);
 
   const workoutId = await insertRestDay(db, user.id, today);
-  if (workoutId === null) {
-    // A second press won the race to the one rest day a day allows — §3. Land
-    // where the first press lands.
-    const again = restToday(await workoutsOn(db, today));
-    redirect(again.kind === 'rested' ? `/history/${again.workoutId}/kept` : '/workout');
-  }
+  if (workoutId !== null) return payAndLand(db, workoutId);
 
-  /*
-   * WHY a failed award is swallowed, as `finishWorkout` swallows it: the rest
-   * day is saved. An error page would read as if it were not, and a second
-   * press would only land on this day's receipt.
-   */
+  // A second press won the race to the one rest day a day allows — ADR 0034 §3.
+  const again = restToday(await workoutsOn(db, today));
+  if (again.kind === 'rested') return payAndLand(db, again.workoutId);
+  redirect('/workout');
+}
+
+/**
+ * Pays a rest day and lands on its receipt — every branch of `logRestDay` that
+ * finds one, not only the branch that wrote it. FOUND IN REVIEW.
+ *
+ * WHY the award runs again for a rest day that already existed: it is safe to —
+ * one adherence award per workout is an index, and a second call returns
+ * nothing — and it is what makes a repeated press correct. A press racing the
+ * first waits on the award's week lock, so the receipt it lands on reads rows
+ * the first press committed rather than printing "No XP" for a day that was
+ * paid. And an award that failed on the first press, or whose insert's response
+ * was lost, is paid by the next one.
+ *
+ * WHY a failed award is swallowed, as `finishWorkout` swallows it: the rest day
+ * is saved, and an error page would read as if it were not.
+ */
+async function payAndLand(db: Awaited<ReturnType<typeof createServerDb>>, workoutId: string) {
   let unlocked: string[] = [];
   try {
     unlocked = (await awardSessionXp(db, workoutId)).unlocked;
@@ -107,12 +120,10 @@ export async function logRestDay(): Promise<void> {
   revalidatePath('/history');
   revalidatePath('/hub');
   revalidatePath('/profile');
+  // The tenth rest day unlocks a badge the catalogue shows.
+  revalidatePath('/badges');
 
-  // To the day's receipt, where a badge fires — the same parameter and the same
-  // gate `finishWorkout` uses.
-  const first = unlocked[0];
-  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
-  redirect(first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`);
+  redirect(keptPath(workoutId, unlocked));
 }
 
 /** Build one by hand: the items come from the browser as JSON and are re-parsed. */
