@@ -80,7 +80,7 @@ against "how did last month go" and could only lose.
 
 **Hub — `/hub`** — ADR 0013 moved everything personal off this tab.
 
-**The board moved above the quests on 2026-09-13**, on the owner's decision with the redesign. It still degrades rather than throws: a failed leaderboard read renders its empty sentence and the quests below it load regardless.
+**The board moved above the quests on 2026-09-13**, on the owner's decision with the redesign. It still degrades rather than throws: a failed leaderboard read says so in its own sentence — not the empty board's, which tells the reader to set a display name they may already have — and the quests below it load regardless.
 
 | Rank                                                                                                                                                                                                                                                                                                             | What                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -257,16 +257,20 @@ cannot be made to fit 375 px, and horizontal page scroll is the single most
 common phone-layout failure. Each row becomes a card with its column name as a
 label.
 
-**Two things are exempt, and the test for an exemption is the same both times:**
+**The test for an exemption:**
 the table is narrow enough to fit 375 px, and it is read DOWN a column rather
-than across a row, so card-stacking would destroy the one property it has.
+than across a row, so card-stacking would destroy the one property it has. _One
+exemption now, and the list says why the other ended._
 
 - **The set grid** — five columns, sized to fit as a grid. Turning a set into a
   card destroys the alignment that makes a session readable at a glance.
-- **The leaderboard** — three columns, and a ranking is read down its rank and
-  level columns. Card-stacking turned five lifters into fifteen rows. (It was
-  the XP column until 2026-09-09; the argument is about reading a number down a
-  column, not about which number.)
+- **The leaderboard** was the second, as a three-column table read down its rank
+  and level columns, until the Quest Log redesign (ADR 0033) drew it as a podium
+  for the top three and a list below. It is no longer a table, so it no longer
+  needs the exemption: the podium's tiles wrap a name to two lines inside a
+  fixed third of the width, and each list row truncates the name and keeps the
+  rank and level in their own columns. The argument that made it an exemption —
+  a ranking is read down a column — is what the list rows still honour.
 
 Anything else becomes cards. A new exemption is argued here, in this list, not
 in a comment beside the table — a rule whose exceptions live in code comments
@@ -323,6 +327,8 @@ section exists to prevent.
 | **Nothing left on the list**        | "Every badge on the list is yours." — a state, not a blank section. "On the list" because badges above the humour setting are not on it; the row below says how many.                                                                                                                                        |
 | **Badges above the humour setting** | "3 more badges are above your humour setting." — counted, never named, and never silent: a list that drops rows without a word reads as complete. It names the setting because that is what the user can change.                                                                                             |
 | **Hidden badges left to find**      | "2 hidden badges left to find." and nothing about which. One is "1 hidden badge". When none are left and the user holds one, "You found every hidden badge." When none exist, nothing.                                                                                                                       |
+| **Nobody on the board**             | "Nobody is listed yet" and where to set a display name — the likeliest reason is the reader's own.                                                                                                                                                                                                           |
+| **The board could not load**        | "The board could not be loaded just now. Your quests below are unaffected." A different sentence from the empty board's, because that one gives advice for a problem this is not.                                                                                                                            |
 | **Offline / request fails**         | The inline error path above. There is no optimistic write: a set that did not save must never look saved.                                                                                                                                                                                                    |
 
 **The rule behind the table:** the app never says a number it has not computed,

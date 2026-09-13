@@ -5,7 +5,7 @@ import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
 import { loadChallenges, loadXpSummary } from '@/src/db/gamification';
 import { loadLeaderboard } from '@/src/db/leaderboard';
-import { evaluateChallenge } from '@/src/gamification/challenge';
+import { evaluateChallenge, type ChallengeSpec } from '@/src/gamification/challenge';
 import { levelProgress } from '@/src/gamification/level';
 import { isoWeek } from '@/src/metrics/dates';
 import { displayDate } from '@/src/ui/format';
@@ -23,8 +23,8 @@ export const dynamic = 'force-dynamic';
 /**
  * The Hub — ADR 0013.
  *
- * Other people, and the things they put in front of you: challenges now, a
- * leaderboard and collaboration later. ADR 0012 made this "XP, streak, badges,
+ * Other people, and the things they put in front of you: the leaderboard and
+ * challenges, and collaboration later. ADR 0012 made this "XP, streak, badges,
  * challenges, training load, bests", which was six things whose only shared
  * property was being numbers about you — and left nowhere to put anything
  * social. Everything personal moved to Profile.
@@ -34,8 +34,12 @@ export const dynamic = 'force-dynamic';
  * was the point of moving the boundary first.
  *
  * **And it is FIRST since the Quest Log redesign** — ADR 0033, on the owner's
- * decision. It still degrades rather than throws, so a failed view renders its
- * empty sentence and the quests below it load regardless.
+ * decision. It still degrades rather than throws, so a failed view says so in
+ * its own sentence and the quests below it load regardless.
+ *
+ * **One personal figure is on this tab now: your level, in the header.** An
+ * exception to ADR 0013's "Hub is other people", taken with the redesign and
+ * recorded there — it is the same number the board prints beside your name.
  *
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
@@ -77,10 +81,9 @@ export default async function HubPage() {
     }),
     /*
      * Degrades rather than throws, like the other cross-page reads added in
-     * this phase. The leaderboard is the least important thing on this tab —
-     * challenges are what the user came for — and a view that fails must not
-     * take the quests down with it. (It is drawn FIRST since the redesign; that
-     * changed where it sits, not how much a failure of it may cost.)
+     * this phase: a view that fails must not take the quests down with it. It
+     * is drawn first since the redesign, which changed where it sits and not
+     * what a failure of it may cost.
      */
     /*
      * WHY it logs rather than swallowing silently: an empty board and a REVOKED
@@ -91,7 +94,13 @@ export default async function HubPage() {
     loadLeaderboard(db).catch((cause: unknown) => {
       // ADR 0028: the name and a bounded message, never the object.
       console.error('leaderboard unavailable', logLine(cause));
-      return [];
+      /*
+       * null, not [] — FOUND IN REVIEW. An empty board tells the reader to go
+       * and set a display name, which is advice for an empty board and wrong
+       * for a failed read: it sends somebody who already has a name to fix a
+       * problem they do not have. The two now render different sentences.
+       */
+      return null;
     }),
   ]);
 
@@ -158,7 +167,7 @@ export default async function HubPage() {
         )}
       </header>
 
-      <h2 className="section with-hint">
+      <h2 className="section with-hint" id="board-heading">
         <Icon name="crown" size={14} />
         The board
         <FieldHint title="What other people can see">
@@ -168,8 +177,12 @@ export default async function HubPage() {
         </FieldHint>
       </h2>
 
-      {board.length === 0 ? (
-        // Never an empty table with headers — docs/specs/mobile-interface.md §4.
+      {board === null ? (
+        <p className="card muted small">
+          The board could not be loaded just now. Your quests below are unaffected.
+        </p>
+      ) : board.length === 0 ? (
+        // Never an empty board drawn with nobody on it — mobile-interface.md §4.
         // And the likeliest reason for an empty board is the reader's own
         // missing display name, so it says how to fix that rather than only
         // reporting the absence.
@@ -178,14 +191,14 @@ export default async function HubPage() {
           on <Link href="/settings">Settings</Link>.
         </p>
       ) : (
-        <Board rows={board} />
+        <Board rows={board} labelledBy="board-heading" />
       )}
 
       <h2 className="section with-hint">
         <Icon name="scroll-text" size={14} />
         Open to you
-        <FieldHint title="Accepting a challenge">
-          A challenge only earns XP once you accept it. That is the point of the button — until then
+        <FieldHint title="Taking a quest">
+          A challenge only earns XP once you take it. That is the point of the button — until then
           it is an invitation, and training that happens to satisfy it pays nothing. Your adherence
           XP, streak and badges are unaffected either way.
         </FieldHint>
@@ -209,9 +222,7 @@ export default async function HubPage() {
                   <h3>{title}</h3>
                   <p className="quest-meta">
                     <span className="chip">{c.kind}</span>
-                    {c.spec?.rpe_at_least != null ? (
-                      <span>RPE {c.spec.rpe_at_least} or above</span>
-                    ) : null}
+                    <RpeNote spec={c.spec} />
                     {c.spec === null ? (
                       <span>unreadable</span>
                     ) : (
@@ -231,7 +242,13 @@ export default async function HubPage() {
                     <input type="hidden" name="challengeId" value={c.id} />
                     {/* Every card has this button, so the accessible name has to
                         say which challenge it takes. */}
-                    <button type="submit" aria-label={`Take the quest: ${title}`}>
+                    {/* The reward is in the name too — FOUND IN REVIEW: two
+                        offers of one kind, target and window share a title, and
+                        the slug that used to tell them apart is gone. */}
+                    <button
+                      type="submit"
+                      aria-label={`Take the quest: ${title}${c.spec === null ? '' : `, ${c.spec.reward_xp} XP`}`}
+                    >
                       <Icon name="swords" size={18} />
                       Take the quest
                     </button>
@@ -259,6 +276,7 @@ export default async function HubPage() {
             // derives it — the same evaluateChallenge, so there is one
             // definition of how far along you are.
             const progress = progressOf(c);
+            const title = challengeTitle(c.spec, c.slug);
 
             return (
               <article key={c.id} className="card quest quest-playing">
@@ -266,13 +284,18 @@ export default async function HubPage() {
                   <Icon name={challengeIcon(c.spec)} size={26} />
                 </Hex>
                 <div>
-                  <h3>{challengeTitle(c.spec, c.slug)}</h3>
+                  <h3>{title}</h3>
                   <p className="quest-meta">
                     <span className="chip chip-on">{c.kind}</span>
+                    {/* The threshold on the card being worked toward, too —
+                        FOUND IN REVIEW: "hard sets" means nothing without it. */}
+                    <RpeNote spec={c.spec} />
                     {c.spec === null ? (
                       <span>unreadable</span>
                     ) : (
-                      <span className="quest-reward">+{c.spec.reward_xp} XP</span>
+                      <span className="quest-reward">
+                        <Icon name="sparkles" size={14} />+{c.spec.reward_xp} XP
+                      </span>
                     )}
                   </p>
                 </div>
@@ -288,10 +311,14 @@ export default async function HubPage() {
                         value={progress.progress}
                         total={progress.target}
                         count={progress.target}
-                        label={`${progress.progress} of ${progress.target}`}
+                        label={`${title}: ${progress.progress} of ${progress.target}`}
                       />
                     ) : (
-                      <div className="xp-meter">
+                      <div
+                        className="xp-meter"
+                        role="img"
+                        aria-label={`${title}: ${progress.progress} of ${progress.target}`}
+                      >
                         <span
                           style={{
                             width: `${Math.min(100, (progress.progress / progress.target) * 100)}%`,
@@ -331,7 +358,8 @@ export default async function HubPage() {
           <div className="card">
             {rejected.map((c) => (
               <div key={c.id} className="rejected-row">
-                <strong className="small">{c.slug.replace(/-/g, ' ')}</strong>
+                {/* The same title the cards above use, so one challenge has one name. */}
+                <strong className="small">{challengeTitle(c.spec, c.slug)}</strong>
                 <ul>
                   {c.validationReasons.map((r, i) => (
                     <li key={i} className="muted small">
@@ -354,4 +382,16 @@ export default async function HubPage() {
        */}
     </>
   );
+}
+
+/**
+ * "RPE 8 or above", only where the evaluator reads it.
+ *
+ * FOUND IN REVIEW: the first version printed the threshold whenever one was
+ * present, and the schema allows one on any kind — so a sessions challenge could
+ * carry a rule `evaluateChallenge` never checks.
+ */
+function RpeNote({ spec }: { spec: ChallengeSpec | null }) {
+  if (spec === null || spec.kind !== 'sets_at_rpe' || spec.rpe_at_least === null) return null;
+  return <span>RPE {spec.rpe_at_least} or above</span>;
 }

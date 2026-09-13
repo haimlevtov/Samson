@@ -11,6 +11,11 @@ rendering code branches on the generic columns (`tier`, `hidden`, and on
 `/badges` `humor_level`), never on a slug, so a new row needs nothing in `src/`
 or `app/`.
 
+**Two optional touches since the Quest Log redesign** (ADR 0033 §3), both in
+`src/ui/tiers.ts`: a badge draws a `medal` unless it has an icon there, keyed by
+slug — add one if the badge deserves it. A new **tier** is not optional: it needs
+a metal in the same file, and `src/ui/tiers.test.ts` fails until it has one.
+
 ## Steps
 
 ### 1. Write the row

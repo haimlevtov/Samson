@@ -18,24 +18,42 @@ const spec = (over: Partial<ChallengeSpec>): ChallengeSpec => ({
 
 describe('challengeTitle', () => {
   it('names what each kind measures, and over which window', () => {
-    expect(challengeTitle(spec({}), 'weekly-three-sessions')).toBe('Three sessions this week');
+    expect(challengeTitle(spec({}), 'weekly-three-sessions')).toBe('Three sessions in seven days');
     expect(
       challengeTitle(spec({ kind: 'distinct_exercises', window_days: 1 }), 'daily-three-movements')
     ).toBe('Three different exercises today');
     expect(challengeTitle(spec({ kind: 'sets_at_rpe', target: 8, rpe_at_least: 8 }), 'x')).toBe(
-      'Eight hard sets this week'
+      'Eight hard sets in seven days'
     );
     expect(challengeTitle(spec({ kind: 'streak_days', target: 5 }), 'x')).toBe('A five-day streak');
+    // An article that follows the sound, not the letter.
+    for (const [target, title] of [
+      [8, 'An eight-day streak'],
+      [11, 'An eleven-day streak'],
+      [14, 'A fourteen-day streak'],
+    ] as const) {
+      expect(challengeTitle(spec({ kind: 'streak_days', target, window_days: 14 }), 'x')).toBe(
+        title
+      );
+    }
   });
 
   it('keeps the singular singular', () => {
     expect(challengeTitle(spec({ target: 1, window_days: 1 }), 'x')).toBe('One session today');
     expect(challengeTitle(spec({ kind: 'sets_at_rpe', target: 1 }), 'x')).toBe(
-      'One hard set this week'
+      'One hard set in seven days'
     );
   });
 
-  it('says a window that is neither a day nor a week in days', () => {
+  it('never says "this week" for a rolling window', () => {
+    // evaluateChallenge counts the last N days ending today; Hub's header names
+    // the calendar week. The title must not borrow the calendar's word.
+    for (const kind of ['sessions', 'distinct_exercises', 'sets_at_rpe'] as const) {
+      expect(challengeTitle(spec({ kind }), 'x')).not.toMatch(/week/);
+    }
+  });
+
+  it('says a longer window in days', () => {
     expect(challengeTitle(spec({ window_days: 14, target: 6 }), 'x')).toBe(
       'Six sessions in fourteen days'
     );
@@ -43,7 +61,7 @@ describe('challengeTitle', () => {
 
   it('uses digits past twenty, which the spec allows up to fifty', () => {
     expect(challengeTitle(spec({ kind: 'sets_at_rpe', target: 25 }), 'x')).toBe(
-      '25 hard sets this week'
+      '25 hard sets in seven days'
     );
   });
 
@@ -69,18 +87,19 @@ describe('challengeIcon', () => {
 
 describe('remainingPhrase', () => {
   it('says what is left in the unit the challenge counts', () => {
-    expect(remainingPhrase(spec({}), 2)).toBe('one more session closes it');
+    expect(remainingPhrase(spec({}), 2)).toBe('one more session to go');
     expect(remainingPhrase(spec({ kind: 'sets_at_rpe', target: 8 }), 3)).toBe(
-      'five more hard sets closes it'
+      'five more hard sets to go'
     );
     expect(remainingPhrase(spec({ kind: 'streak_days', target: 5 }), 4)).toBe(
-      'one more kept day closes it'
+      'one more kept day to go'
     );
   });
 
   it('says a met challenge pays on the weekly run, never now', () => {
     expect(remainingPhrase(spec({}), 3)).toBe('complete · pays on the next weekly run');
-    // Progress past the target is still met — the streak can outrun its window.
+    // Progress past the target is still met — sessions can pass it; a streak
+    // cannot, because evaluateChallenge caps it at the window.
     expect(remainingPhrase(spec({}), 9)).toBe('complete · pays on the next weekly run');
   });
 });

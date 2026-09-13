@@ -205,15 +205,19 @@ that it happened.
 
 ### Who reads the curve
 
-Three surfaces, and none of them reimplements it. _An earlier version of this
+Four surfaces, and none of them reimplements it. _An earlier version of this
 section said two and missed the third — found in review, and a grep would have
-caught it._
+caught it. It said three until the Quest Log redesign added the fourth, and review
+caught that the same way._
 
 - **Profile** draws the level and its progress bar from `levelProgress`.
 - **The coach's fact payload** carries `level` and `xp_to_next_level` from the
   same function — `src/chat/facts.ts`, documented in `docs/specs/coach-chat.md`.
 - **The leaderboard** (2026-09-09) shows `levelForXp(lifetime_xp)`, mapped in
   `src/db/leaderboard.ts` from the XP `public.leaderboard` returns.
+- **Hub's header** (2026-09-13, ADR 0033) draws the reader's level emblem from
+  `levelProgress` over `loadXpSummary` — the same figure the board prints beside
+  their name.
 
 **The leaderboard's ordering depends on `Monotonic` above**, which is why that
 row is a stated property rather than an incidental one. The view ranks by XP; the
@@ -529,7 +533,8 @@ hand would be a state the app itself cannot produce.
 **Only `active` settles.** A challenge the user never accepted does not pay,
 however completely their training happens to satisfy it.
 
-**WHY, when the earlier behaviour paid out either way:** an Accept control that
+**WHY, when the earlier behaviour paid out either way:** an Accept control — the
+Hub's "Take the quest" button since the Quest Log redesign — that
 does not gate the reward is a control that does nothing, and this project does
 not ship those — it is the same reasoning that keeps the unit toggle off the
 profile until conversion exists. Accepting is the only place a user says _yes,
@@ -561,7 +566,7 @@ an extra day to anyone east of it.
 
 **An expired challenge is left `offered`.** Nothing marks it `failed`. That is a
 gap rather than a decision: it means the Hub accumulates challenges whose window
-has closed, and the surface has to say so rather than offer an Accept button
+has closed, and the surface has to say so rather than offer a Take the quest button
 that would put a dead challenge in play.
 
 **A known gap, wider than it looks.** `evaluateChallenge` derives a rolling

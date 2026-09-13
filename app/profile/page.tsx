@@ -265,7 +265,7 @@ export default async function ProfilePage() {
                  * nobody told you about is the point of the tier.
                  *
                  * .chip-found rather than a second .chip-on, for the reason
-                 * .you-chip gives in globals.css: two chips in one row that
+                 * .chip-found gives in globals.css: two chips in one row that
                  * look identical and mean different things read as one wrapped
                  * label.
                  */}

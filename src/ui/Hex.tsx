@@ -4,8 +4,8 @@ import type { Metal } from './tiers';
 /**
  * The hexagonal emblem the Quest Log draws everything in — ADR 0033.
  *
- * `tone` is the ground; a metal `rim` wraps it in a 4px band of that metal
- * around a dark core, which is how a podium place and the unlock sheet read.
+ * `tone` is the ground; a metal `rim` wraps it in a 4px band of that metal —
+ * on the podium around the `core` tone, which is what makes a rim read as metal.
  *
  * WHY `clip-path` rather than an SVG: the emblem holds text and icons that are
  * ordinary DOM, so it inherits colour and font like anything else, and the shape

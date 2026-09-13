@@ -13,14 +13,11 @@ export function SegmentMeter({
   total,
   count,
   label,
-  current,
 }: {
   value: number;
   total: number;
   count: number;
   label: string;
-  /** A segment to outline — the finish moment's "this session". */
-  current?: number;
 }) {
   const fills = segmentFills(value, total, count);
   return (
@@ -33,7 +30,7 @@ export function SegmentMeter({
       {fills.map((fill, i) => (
         <span
           key={i}
-          className={`${fill === 1 ? 'seg-full' : ''}${i === current ? ' seg-current' : ''}`}
+          className={fill === 1 ? 'seg-full' : undefined}
           style={{ '--fill': `${Math.round(fill * 100)}%` } as CSSProperties}
         />
       ))}

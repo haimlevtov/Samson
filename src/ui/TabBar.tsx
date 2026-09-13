@@ -25,6 +25,10 @@ interface Tab {
 }
 
 /*
+ * AI-NOTE: every OTHER icon in the app lives in `src/ui/icons.tsx` — ADR 0033 §1.
+ *          These five stay here, hand-drawn and tuned for the bar; the `Icon`
+ *          below is local and is not that module's export.
+ *
  * WHY inline SVG rather than an icon package: five icons is not a dependency,
  * and every icon set worth having ships a few hundred kilobytes to deliver
  * them. These are drawn on a 24-grid with a 2px stroke and inherit `currentColor`

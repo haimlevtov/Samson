@@ -10,7 +10,7 @@
  *   copyright notice and this permission notice appear in all copies.
  *
  * WHY a module of element data and not an icon package: the reasoning
- * `src/ui/TabBar.tsx` gives for its five holds for these forty — a set this size
+ * `src/ui/TabBar.tsx` gives for its five holds for this set — a few dozen glyphs
  * is not a dependency, and no page should ask a third party how to draw itself.
  *
  * INVARIANT: every glyph is on Lucide's 24-grid with a 2px round stroke, and
@@ -268,7 +268,7 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-/** For the test: every name, so it can prove each one draws something. */
+/** Every name, for tests that assert an icon a mapping names actually exists. */
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];
 
 /**

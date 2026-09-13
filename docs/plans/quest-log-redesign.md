@@ -44,7 +44,7 @@ they are listed so that no PR "follows the design" into deleting one:
 ### Leaderboard first
 
 The handoff puts the board above the quests, and the owner confirmed it: "leaderboard
-in hub will be on top by design". ADR 0016's reasoning that it was "the least
+in hub will be on top by design". The Hub page's own comment that it was "the least
 important thing on this tab" is superseded for ORDER only — it still degrades
 rather than throws, so a failed view never takes the quests down with it.
 

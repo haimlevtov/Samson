@@ -41,11 +41,17 @@ function capitalised(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The window as a lifter would say it. */
+/**
+ * The window as a lifter would say it.
+ *
+ * NOT "this week" for seven days — FOUND IN REVIEW. `evaluateChallenge` counts
+ * the last N days ending today, a rolling window, while Hub's header now names
+ * the ISO calendar week. "Three sessions this week · complete" under "WEEK 38"
+ * on a Monday, from last Friday to Sunday, would read as a different rule — the
+ * thing this module's INVARIANT forbids.
+ */
 function within(days: number): string {
-  if (days === 1) return 'today';
-  if (days === 7) return 'this week';
-  return `in ${counted(days)} days`;
+  return days === 1 ? 'today' : `in ${counted(days)} days`;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -72,9 +78,12 @@ export function challengeTitle(spec: ChallengeSpec | null, slug: string): string
       return capitalised(`${counted(n)} different ${plural(n, 'exercise', 'exercises')} ${when}`);
     case 'sets_at_rpe':
       return capitalised(`${counted(n)} hard ${plural(n, 'set', 'sets')} ${when}`);
-    case 'streak_days':
+    case 'streak_days': {
       // The streak is the run up to today, capped at the window — evaluateChallenge.
-      return `A ${counted(n)}-day streak`;
+      // "An" before a vowel sound: eight, eleven, eighteen — FOUND IN REVIEW.
+      const word = counted(n);
+      return `${/^(eight|eleven)/.test(word) ? 'An' : 'A'} ${word}-day streak`;
+    }
   }
 }
 
@@ -86,7 +95,7 @@ const UNIT: Record<ChallengeSpec['kind'], readonly [string, string]> = {
 };
 
 /**
- * The line under an In play meter: "one more session closes it", or, once met,
+ * The line under an In play meter: "one more session to go", or, once met,
  * that it pays on the next weekly run — ADR 0009 §4: payout is the batch's, never
  * immediate, and this sentence is where a user would otherwise assume it.
  */
@@ -94,7 +103,7 @@ export function remainingPhrase(spec: ChallengeSpec, progress: number): string {
   const left = spec.target - progress;
   if (left <= 0) return 'complete · pays on the next weekly run';
   const [one, many] = UNIT[spec.kind];
-  return `${counted(left)} more ${plural(left, one, many)} closes it`;
+  return `${counted(left)} more ${plural(left, one, many)} to go`;
 }
 
 /**

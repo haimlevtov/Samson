@@ -102,8 +102,10 @@
 /*
  * Dark.
  *
- * The palette above is the whole light theme; this is the whole dark one, and
- * nothing outside these two blocks names a colour. `--accent` goes *darker*
+ * The theme palette above is the whole light theme; this is the whole dark one,
+ * and nothing outside these blocks names a colour. (The Quest Log tokens at the
+ * end of :root are also colours, and deliberately the same in both themes —
+ * ADR 0033 §4 — which is why they appear once.) `--accent` goes *darker*
  * here rather than lighter: a button that glows on a near-black page is the
  * thing that makes a dark theme tiring, and darkening it raises the contrast of
  * the white lettering it carries rather than lowering it — 8.1:1 against white,
@@ -2047,7 +2049,7 @@ details.quick-log[open] > summary {
  *
  * `.chip` carries min-height/min-width of var(--tap) because most chips in this
  * app are pressed with a thumb between sets. The tier and kind markers on a
- * badge or challenge card are spans — nothing taps them — so the 44px floor
+ * badge card or a quest card are spans — nothing taps them — so the 44px floor
  * only makes them collide with the meter underneath.
  *
  * WHY this is not "shrinking a tap target": a non-interactive label has no tap
@@ -2055,7 +2057,7 @@ details.quick-log[open] > summary {
  */
 .badge-card .chip,
 .badge-card .chip-on,
-.you-chip {
+.quest-meta .chip {
   display: inline-block;
   min-height: 0;
   min-width: 0;
@@ -2069,10 +2071,6 @@ details.quick-log[open] > summary {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-
-.badge-card .xp-meter {
-  margin-top: 8px;
 }
 
 /*
@@ -2290,13 +2288,6 @@ details.quick-log[open] > summary {
   .plan-disclosure > summary::after {
     transition: none;
   }
-}
-
-/* The Accept control on an offered challenge. Its own row, because the meta
-   line above it is a flex row and a button dropped into that gap sits flush
-   against it — measured at 0px before this. */
-.badge-card form {
-  margin-top: 10px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2565,87 +2556,24 @@ details.quick-log[open] > summary {
 
 /* ---- the leaderboard ----------------------------------------------------
  *
- * ADR 0016. The only surface in the app showing another user's data, which is
- * why the row for the reader is marked: on a list of names, "which one is me"
- * is the first question and scanning for it is the whole cost.
+ * ADR 0016's table rules lived here until the Quest Log redesign drew the board
+ * as a podium and a list — see "Hub: the board" at the end of this file. What
+ * survives is the one rule both shapes need: a name another user controls must
+ * never widen the page.
  */
-/* Narrow, muted, and out of the way: the rank is scanned, not read. Tabular
-   figures come from the base `table` rule. */
-.leaderboard td:first-child {
-  color: var(--muted);
-  width: 1%;
-  white-space: nowrap;
-}
-
-.leaderboard th {
-  text-align: left;
-  /* Overridden for the numeric column below — a heading that does not sit over its own column
-     defeats the alignment this table stayed a table for. */
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  padding: 0 6px 8px;
-  font-weight: 700;
-}
-
-.leaderboard td {
-  padding: 9px 6px;
-  border-top: 1px solid var(--border);
-}
-
-/* The name takes whatever the two number columns do not, and truncates rather
-   than widening the table — a long display name is the one input here that
-   another user controls. */
 .lb-name {
-  width: 100%;
-  max-width: 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.leaderboard th:last-child {
-  text-align: right;
-}
-
-.lb-xp {
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* Background rather than a border: a border on a <tr> draws through the cells
-   in a collapsed table. The chip beside the name is what carries the meaning
-   where colour cannot — mobile-interface.md §3. */
-.leaderboard tr.you td {
-  background: var(--accent-soft);
-  font-weight: 700;
-}
-
-/*
- * Not colour alone — the chip is what a screen reader and a colourblind reader
- * both get. mobile-interface.md §3, "State is never carried by colour alone".
- *
- * Sizing comes from the label-chip reset above, which this joins rather than
- * copies: .chip carries a 44px floor because most chips in this app are pressed
- * with a thumb, and a span inside a 9px-padded table cell is not.
- */
-.you-chip {
-  margin-left: 8px;
-  /* Its own ground: .chip-on's background is the same --accent-soft the .you
-     row already has, so without this the chip has no edge to be seen against. */
-  background: var(--surface);
-  color: var(--accent-text);
-  border-color: var(--accent-text);
 }
 
 /*
  * The marker on a hidden badge you have earned — ADR 0017.
  *
  * WHY it is not a second .chip-on: it sits immediately beside the tier chip,
- * and two chips in a row with identical fills read as one label that wrapped.
- * Same reasoning as .you-chip directly above, and the same solution — an
- * outline against the card rather than a second filled block.
+ * and two chips in a row with identical fills read as one label that wrapped —
+ * so it is an outline against the card rather than a second filled block.
  */
 .chip-found {
   background: var(--surface);
@@ -2723,8 +2651,7 @@ label.choice-row input {
 /* The rung the user is working on. Border only, and the word "next" beside it
    is what actually carries the state — so this is emphasis rather than the
    signal, and docs/specs/mobile-interface.md §3's "never colour alone" holds
-   without it. An earlier comment here claimed it used ".you-chip's device",
-   which changes a background; this changes a border. */
+   without it. */
 .tree-rung.is-next {
   border-color: var(--accent-text);
 }
@@ -3126,6 +3053,9 @@ label.choice-row input {
 }
 .welcome-head h1 {
   margin: 0;
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 /* The progress bar reuses `.xp-meter`'s shape rather than hand-rolling a second
    one — FOUND IN REVIEW, where the first version defined no rule at all, so the
@@ -3348,10 +3278,6 @@ label.coach-choice {
 .seg-meter > span.seg-full {
   border-color: var(--accent);
 }
-.seg-meter > span.seg-current {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 1px;
-}
 
 /* ---- Hub: the header's level ------------------------------------------- */
 
@@ -3412,8 +3338,9 @@ label.coach-choice {
   gap: 6px;
 }
 /*
- * Fewer than three lifters: the tiles that exist, centred — the handoff. The
- * grid keeps three tracks so a lone first place still sits in the middle one.
+ * Fewer than three lifters: the tiles that exist, centred — the handoff. One
+ * lifter keeps the three tracks and takes the middle one; two take two tracks
+ * at seventy percent width, second on the left as on the full podium.
  */
 .podium-2 {
   order: 1;
@@ -3495,16 +3422,32 @@ label.coach-choice {
 }
 .podium-1 .board-level strong {
   font-size: 28px;
+}
+/* Gold digits for first place by RANK — a tie for first is two golds. */
+.is-first .board-level strong {
   color: var(--board-gold-text);
 }
 .podium-3 .board-level strong {
   font-size: 20px;
 }
 
+/* Upper-cased here, not in the markup, so a screen reader says "1st". */
 .podium-place {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/*
+ * The reader's own tile — FOUND IN REVIEW. Another user can NAME themselves
+ * "YOU", and on the podium the chip was the only mark. An inset outline is
+ * something a display name cannot produce; aria-current carries it for a
+ * screen reader.
+ */
+.podium-tile[aria-current='true'] {
+  outline: 2px solid var(--board-text);
+  outline-offset: -2px;
 }
 .place-gold {
   color: var(--board-gold-text);
@@ -3549,32 +3492,32 @@ label.coach-choice {
 .board-rows li.you + li {
   border-top-color: transparent;
 }
-.board-rows .lb-name {
-  width: auto;
-  max-width: none;
-  min-width: 0;
-}
 
+/* A border as well as a fill: the fill is one of the board ground's own stops,
+   and without an edge the chip read as plain text a name could imitate. */
 .board-you {
   display: inline-block;
-  margin-left: 8px;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 6px;
+  border: 1px solid var(--board-text);
   background: var(--board-you);
   color: var(--board-text);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   vertical-align: middle;
+}
+.board-row-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .board-foot {
   margin: 8px 8px 0;
   font-size: 12px;
   color: var(--board-faint);
-}
-.board a {
-  color: var(--board-gold-text);
 }
 
 /* ---- Hub: quests -------------------------------------------------------- */
@@ -3590,7 +3533,9 @@ label.coach-choice {
   gap: 12px;
   align-items: center;
 }
-.quest + .quest {
+/* The list's gap is the spacing — `.card + .card` would add 12px on top of it,
+   the stacking the "two blocks meet" rule near the top of this file exists for. */
+.quest-list > .card + .card {
   margin-top: 0;
 }
 .quest h3 {
@@ -3610,13 +3555,9 @@ label.coach-choice {
   font-size: 13px;
   color: var(--muted);
 }
-/* A label chip, not a control — the same exemption .badge-card .chip has. */
+/* The label-chip reset above sizes it; the Quest Log's label chips are squarer. */
 .quest-meta .chip {
-  min-height: 0;
-  min-width: 0;
-  padding: 2px 8px;
   border-radius: 6px;
-  font-size: 12px;
 }
 .quest-reward {
   display: inline-flex;

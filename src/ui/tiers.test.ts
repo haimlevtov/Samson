@@ -15,10 +15,21 @@ const MIGRATIONS = join(__dirname, '..', '..', 'supabase', 'migrations');
 
 describe('the tier map', () => {
   it('covers exactly the tiers the database allows', () => {
-    const sql = readFileSync(join(MIGRATIONS, '20260824150248_gamification.sql'), 'utf8');
-    const check = sql.match(/check \(tier in \(([^)]*)\)\)/);
-    expect(check, 'the tier CHECK moved; point this test at it').not.toBeNull();
-    const allowed = [...check![1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+    /*
+     * The LATEST definition of the CHECK, across every migration — FOUND IN
+     * REVIEW. The first version read only the migration that created the
+     * table, so a ninth tier added by a later migration (they are never edited)
+     * would have passed. Filenames sort in the order they apply.
+     */
+    const checks = readdirSync(MIGRATIONS)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .flatMap((f) => [
+        ...readFileSync(join(MIGRATIONS, f), 'utf8').matchAll(/check \(tier in \(([^)]*)\)\)/g),
+      ]);
+    const latest = checks.at(-1);
+    expect(latest, 'no tier CHECK found in any migration').toBeDefined();
+    const allowed = [...latest![1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
 
     expect([...TIERS].sort()).toEqual(allowed);
     expect(Object.keys(METAL_BY_TIER).sort()).toEqual(allowed);

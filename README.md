@@ -204,6 +204,11 @@ on your machine.
 Vercel applies environment variables at build time, so **redeploy after adding
 them** — an existing deployment will not pick them up.
 
+**A build fetches one font.** `next/font/google` downloads Bricolage Grotesque
+during `next build` and serves it from the app's own origin — no user's browser
+asks Google for anything — but a build with no route to Google Fonts fails. ADR
+0033 says why it is accepted and what removes it.
+
 The `keepalive` workflow needs GitHub Actions secrets: `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, and `APP_HEALTH_URL` set to
 `https://samson-fit.vercel.app/api/health`.
