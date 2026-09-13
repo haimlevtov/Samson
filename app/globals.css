@@ -326,7 +326,8 @@ h2.section.with-hint > svg:first-child {
  *
  * WHY this is needed at all: almost every pair of siblings on a page is
  * separated by an `h2.section`, which carries `margin: 22px 0 10px`. Where one
- * is absent — Profile's level card sitting straight on top of the stat tiles —
+ * is absent — Profile's level card sitting straight on top of the stat tiles, as
+ * it did when this was written —
  * the gap is exactly 0, and `.card` has a `box-shadow` reaching 10px down with
  * a 30px blur. The shadow then falls on the card below and reads as the two
  * overlapping.
@@ -340,15 +341,16 @@ h2.section.with-hint > svg:first-child {
  * rhythm as the tiles inside it.
  *
  * `.badge-shelf` is a grid without the class, so it is named here too — FOUND
- * IN REVIEW of coach-memory PR 7, where Profile's link into /badges put a card
- * directly above a shelf, and the hidden count on /badges sits directly below
- * one. Both met at 0.
+ * IN REVIEW of coach-memory PR 7, where Profile's link into /badges sat directly
+ * above a shelf and the hidden count on /badges sits directly below one. Both
+ * met at 0. Profile's shelf is `.medal-shelf` since the Quest Log redesign, and
+ * it joins this list rather than copying it.
  */
 .card + .card,
 .card + .grid,
 .grid + .card,
 .grid + .grid,
-.card + .badge-shelf,
+.card + .medal-shelf,
 .badge-shelf + .card {
   margin-top: 12px;
 }
@@ -359,7 +361,8 @@ h2.section.with-hint > svg:first-child {
  * between cards on a phone, and the second card of a two-column row sitting
  * 12px lower than the first. The grid gap is the spacing there.
  */
-.badge-shelf > .card + .card {
+.badge-shelf > .card + .card,
+.medal-shelf > .card + .card {
   margin-top: 0;
 }
 
@@ -1492,10 +1495,10 @@ code {
    * "growing rightwards always has room". At 375px the max-width below resolves
    * to 260px, so any hint whose button sits past x=115 overflows. What pushes a
    * button that far right is the LABEL beside it: "Adherence · 4 wks" put its
-   * hint at x=158, in a tile that spans the full width. (An earlier draft blamed
-   * the right-hand column of a four-up grid. There is no such column at this
-   * width — `.grid.cols-4` is two columns here and the first two children span
-   * both — and the tiles that do sit right carry no hint.)
+   * hint at x=158, in a tile that spanned the full width when this was measured.
+   * Since the Quest Log redesign the tiles are two equal columns and Adherence,
+   * which has a hint, sits in the right one — so the measured clamp below is now
+   * the only thing keeping its bubble on screen, rather than a margin of safety.
    *
    * `--hint-shift` is the pull back inside, measured by src/ui/FieldHint.tsx
    * because CSS cannot know how far this element is from the viewport edge —
@@ -1895,7 +1898,8 @@ details.quick-log[open] > summary {
  * the only breakpoints are min-width. See docs/specs/mobile-interface.md.
  * ------------------------------------------------------------------------- */
 
-/* The XP meter, reused for challenge progress. */
+/* A continuous meter — Hub's challenge progress past ten, since the Quest Log's
+   segmented meter took the weekly XP bar and the level bar. */
 .xp-meter {
   display: block;
   height: 10px;
@@ -1910,8 +1914,8 @@ details.quick-log[open] > summary {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  /* WHY a min-width: a 1% week would otherwise render as nothing at all, which
-     reads as "you earned no XP" rather than "you earned a little". */
+  /* WHY a min-width: 1% progress would otherwise render as nothing at all, which
+     reads as "nothing counted yet" rather than "a little". */
   min-width: 3px;
 }
 
@@ -2033,8 +2037,9 @@ details.quick-log[open] > summary {
  *
  * `.chip` carries min-height/min-width of var(--tap) because most chips in this
  * app are pressed with a thumb between sets. The tier and kind markers on a
- * badge card or a quest card are spans — nothing taps them — so the 44px floor
- * only makes them collide with the meter underneath.
+ * badge card or a quest card, and the XP chips on Profile's level card, are
+ * spans — nothing taps them — so the 44px floor only makes them collide with
+ * what sits under them.
  *
  * WHY this is not "shrinking a tap target": a non-interactive label has no tap
  * target to shrink. The 44px rule applies to things you press.
@@ -2104,7 +2109,8 @@ details.quick-log[open] > summary {
 /* A badge still to get. Dashed rather than faded: the text on it is the
    instruction, and fading it would make the most useful words on the page the
    hardest to read. */
-.badge-locked {
+.badge-locked,
+.medal-locked {
   border-style: dashed;
 }
 
@@ -2112,14 +2118,6 @@ details.quick-log[open] > summary {
 .badge-card[id] {
   scroll-margin-top: 16px;
 }
-
-/* ---------------------------------------------------------------------------
- * ADR 0013 — the level card, and settings behind a cog.
- * Phone-first: base rules are the narrow layout, min-width only.
- * ------------------------------------------------------------------------- */
-
-/* The level card became the Quest Log's hero ring — see "Profile" in the
-   Quest Log section at the end of this file. */
 
 /* The diet advisor's figures — ADR 0024.
 
@@ -3607,15 +3605,6 @@ label.coach-choice {
 
 /* ---- Profile: stat tiles ------------------------------------------------ */
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.card + .stat-grid,
-.stat-grid + .card {
-  margin-top: 12px;
-}
 .stat-head {
   display: flex;
   justify-content: space-between;
@@ -3674,15 +3663,6 @@ label.coach-choice {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
-.card + .medal-shelf,
-.medal-shelf + .card,
-.medal-shelf + .medal-foot {
-  margin-top: 10px;
-}
-/* The grid gap is the spacing inside a shelf, as it is in .badge-shelf. */
-.medal-shelf > .card + .card {
-  margin-top: 0;
-}
 
 .medal {
   display: grid;
@@ -3715,7 +3695,6 @@ label.coach-choice {
 .medal-locked {
   background: transparent;
   box-shadow: none;
-  border-style: dashed;
   border-color: var(--border-strong);
 }
 .medal-locked h3 a {

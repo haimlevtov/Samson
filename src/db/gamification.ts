@@ -124,14 +124,14 @@ export async function loadUnlockedAchievements(db: Db): Promise<UnlockedAchievem
 }
 
 /**
- * Every badge this user may see, shaped for `/badges` — ADR 0017's 2026-09-12
- * amendment.
+ * Every badge this user may see, shaped for `/badges` and Profile's locked slots
+ * — ADR 0017's 2026-09-12 amendment, ADR 0033 §5.
  *
  * Four reads, and none of them relaxes anything:
  *
  * - the SHARED visible rows, through `achievements_read_visible` — which is what
  *   keeps a locked hidden badge out of the response;
- * - what the user holds, through `unlocked_achievements()`, as Profile reads it;
+ * - what the user holds, through `unlocked_achievements()`;
  * - how many hidden badges are left, as one integer;
  * - the user's humour setting, read HERE rather than taken from `currentUser`.
  *

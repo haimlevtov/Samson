@@ -64,6 +64,10 @@ least prominent, because an unknown tier drawn gold would be a claim.
 _This said the test caught a ninth tier "rather than rendering unstyled", while
 it read only the migration that created the table; review caught both halves._
 
+**A HELD hidden badge is obsidian whatever its tier**, on Profile — the finding is
+the reward, and obsidian is how the shelf says it. Both shipped hidden badges have
+tier `hidden` today, so the rule and the table agree.
+
 A badge's icon is keyed by slug with `medal` as the default, for the same reason:
 a new achievement row needs no application change to render, which is what the
 `add-achievement` skill promises.
@@ -94,7 +98,8 @@ Stated because a redesign is the easiest place to change behaviour by accident:
 - **No new read that widens what a page may see.** Hub loads the XP summary it
   shows in its header. Profile's locked badge slots come through
   `loadBadgeCatalogue`, so ADR 0017 and the humour ceiling apply exactly as on
-  `/badges`. Nothing reads another user's row except the leaderboard view it
+  `/badges` — including the count of what the ceiling held back, which Profile's
+  first version dropped. Nothing reads another user's row except the leaderboard view it
   already reads.
 - **No feature removed.** Where the handoff omits something that ships, it stays —
   the plan lists each one.

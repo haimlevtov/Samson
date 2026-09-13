@@ -210,7 +210,9 @@ section said two and missed the third — found in review, and a grep would have
 caught it. It said three until the Quest Log redesign added the fourth, and review
 caught that the same way._
 
-- **Profile** draws the level and its progress bar from `levelProgress`.
+- **Profile** draws the level and its ring from `levelProgress`, and the "Level
+  n+1 at X" chip from `xpForLevel(level + 1)` — the same boundary `levelProgress`
+  measures to, so the two cannot disagree.
 - **The coach's fact payload** carries `level` and `xp_to_next_level` from the
   same function — `src/chat/facts.ts`, documented in `docs/specs/coach-chat.md`.
 - **The leaderboard** (2026-09-09) shows `levelForXp(lifetime_xp)`, mapped in

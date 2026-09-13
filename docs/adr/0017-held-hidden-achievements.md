@@ -103,7 +103,9 @@ was being kept from, which is not who it was being kept from.
 **Never mark hidden badges as hidden in the UI.** Rejected because the tier then
 buys nothing: a badge whose definition was withheld arrives looking like every
 other badge, and the fact that you found something unannounced — the whole
-reward — is invisible. Profile marks a held hidden badge with a `found` chip.
+reward — is invisible. `/badges` marks a held hidden badge with a `found` chip,
+and Profile, since the Quest Log redesign, draws it in obsidian and says "hidden ·
+found" in words.
 
 ## Consequences
 
@@ -260,7 +262,9 @@ list it.
 **It is as secret as the rest of the definition.** A hidden badge's `how_to_earn`
 is withheld by the same policy that withholds its name — it is a column on a row
 the client never receives. `unlocked_achievements()` does not return it, so a
-held hidden badge shows its description, which is what Profile already shows.
+held hidden badge shows its description, which is what Profile showed when this
+was written and what `/badges` shows now — Profile's Quest Log shelf shows a name
+and a metal, and links to that card.
 
 ### Where the catalogue lives
 

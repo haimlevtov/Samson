@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
-import { loadBadgeCatalogue, loadXpSummary } from '@/src/db/gamification';
+import { loadBadgeCatalogue, loadUnlockedAchievements, loadXpSummary } from '@/src/db/gamification';
 import { loadComparisonObjects } from '@/src/db/comparisons';
 import { acwr, acwrBand } from '@/src/metrics/acwr';
 import { adherence, currentStreak } from '@/src/metrics/adherence';
@@ -19,6 +19,8 @@ import { Hex } from '@/src/ui/Hex';
 import { Icon } from '@/src/ui/icons';
 import { SegmentMeter } from '@/src/ui/SegmentMeter';
 import { badgeIcon, metalFor } from '@/src/ui/tiers';
+import { aboveCeilingLine } from '@/src/gamification/catalogue';
+import { logLine } from '@/src/llm/failure';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,26 +49,40 @@ export default async function ProfilePage() {
   if (!user) redirect('/sign-in');
 
   const today = localDateFor(user.timezone);
-  const [history, xp, catalogue, comparisonObjects] = await Promise.all([
+  const [history, xp, badges, catalogue, comparisonObjects] = await Promise.all([
     loadHistory(db),
     loadXpSummary(db, today),
+    // What the user holds, read as Profile has always read it — and it still
+    // throws, because a page about what you have earned without it is not one.
+    loadUnlockedAchievements(db),
     /*
-     * The catalogue rather than only what is held — the Quest Log's locked
-     * slots. ADR 0033 §5: through the SAME reader `/badges` uses, so a locked
-     * hidden badge never reaches this page and the humour ceiling applies to an
-     * unearned name here exactly as it does there.
+     * The catalogue, for the Quest Log's locked slots only. ADR 0033 §5:
+     * through the SAME reader `/badges` uses, so a locked hidden badge never
+     * reaches this page and the humour ceiling applies to an unearned name here
+     * exactly as it does there.
+     *
+     * It DEGRADES — FOUND IN REVIEW. It is four reads, one of which throws on an
+     * empty result by design, and letting any of them take the page down would
+     * cost somebody their level, their streak and the only reliable way into
+     * Settings for the sake of a row of padlocks. On failure the shelf shows what
+     * is held and says the rest is on /badges, which fails closed: no unearned
+     * name is shown that the ceiling did not pass.
      */
-    loadBadgeCatalogue(db, user.id),
+    loadBadgeCatalogue(db, user.id).catch((cause: unknown) => {
+      // ADR 0028: the name and a bounded message, never the object.
+      console.error('badge catalogue unavailable', logLine(cause));
+      return null;
+    }),
     loadComparisonObjects(db),
   ]);
-  const badges = catalogue.earned;
+  const toGet = catalogue?.toGet ?? [];
   const hiddenHeld = badges.filter((b) => b.hidden).length;
 
   const first = history.workouts[0];
   const completed = history.workouts.filter((w) => w.status === 'completed').length;
 
-  // Every figure the level bar prints comes from this one call, so the bar and
-  // the label beside it cannot disagree — the spec's agreement property.
+  // The ring and the words beside it come from this call and from
+  // `xpForLevel` — the curve's own two functions — so they cannot disagree.
   const level = levelProgress(xp.lifetime);
   const levelPct = Math.round((level.intoLevel / level.span) * 100);
 
@@ -115,9 +131,10 @@ export default async function ProfilePage() {
       </header>
 
       {/*
-       * The hero — the Quest Log. Every figure here comes from `levelProgress`
-       * and `xpForLevel`, the curve's own functions, so the ring and the words
-       * beside it cannot disagree — the spec's agreement property.
+       * The hero — the Quest Log. The level, the ring and "XP to Level n+1" come
+       * from `levelProgress` and `xpForLevel`, the curve's own functions, so they
+       * cannot disagree — the spec's agreement property. The lifetime chip is
+       * `loadXpSummary`'s total, the figure the curve was given.
        */}
       <div className="card level-hero">
         <div
@@ -151,7 +168,7 @@ export default async function ProfilePage() {
           <p className="label-chips">
             <span className="chip">{xp.lifetime.toLocaleString()} XP lifetime</span>
             <span className="chip">
-              Level {level.level + 1} at {xpForLevel(level.level + 1).toLocaleString()}
+              Level {level.level + 1} at {xpForLevel(level.level + 1).toLocaleString()} XP
             </span>
           </p>
         </div>
@@ -164,7 +181,7 @@ export default async function ProfilePage() {
        * is vanity and sorts below them. What changed is that they no longer
        * differ in size.
        */}
-      <div className="stat-grid">
+      <div className="grid cols-2">
         <div className="stat">
           <div className="stat-head">
             <div className="label with-hint">
@@ -291,7 +308,7 @@ export default async function ProfilePage() {
           <Icon name="route" size={20} />
         </Hex>
         <span className="row-link-words">
-          <strong>Progression trees</strong>
+          <strong>Progression trees</strong>{' '}
           <span className="muted small">push · pull · legs · core</span>
         </span>
         <Icon name="chevron-right" size={18} />
@@ -315,7 +332,7 @@ export default async function ProfilePage() {
           Nothing unlocked yet. Achievements come from consistency, not from a single heavy day.
         </p>
       ) : null}
-      {badges.length + catalogue.toGet.length > 0 ? (
+      {badges.length + toGet.length > 0 ? (
         <div className="medal-shelf">
           {badges.map((b) => {
             const metal = b.hidden ? 'obsidian' : metalFor(b.tier);
@@ -352,7 +369,7 @@ export default async function ProfilePage() {
            * Dashed and muted, with a lock as well as the missing colour, so the
            * state is not colour alone.
            */}
-          {catalogue.toGet.map((badge) => (
+          {toGet.map((badge) => (
             <article key={badge.slug} className="card medal medal-locked badge-linked">
               <Hex size={64} tone="plain">
                 <Icon name="lock" size={24} />
@@ -360,17 +377,35 @@ export default async function ProfilePage() {
               <h3>
                 <Link href={`/badges#${badge.slug}`}>{badge.name}</Link>
               </h3>
-              <p className="medal-tier">
-                {badge.tier} · {metalFor(badge.tier)}
-              </p>
+              {/*
+               * "locked" in words — FOUND IN REVIEW. The lock is an aria-hidden
+               * icon, so to a screen reader a locked card and an earned one read
+               * the same. And no metal: a plain hex does not draw one.
+               */}
+              <p className="medal-tier">locked · {badge.tier}</p>
             </article>
           ))}
         </div>
       ) : null}
-      <p className="muted small medal-foot">
-        Hidden badges are not listed until you find one. Metal is a reading of the tier, not a new
-        number.
-      </p>
+      {catalogue === null ? (
+        // mobile-interface.md §4: a state, not a silent gap in the shelf.
+        <p className="muted small medal-foot">
+          The badges still to earn did not load just now — every one is on the badges page.
+        </p>
+      ) : catalogue.aboveCeiling > 0 ? (
+        /*
+         * Counted, not dropped — ADR 0017's amendment, and FOUND IN REVIEW: this
+         * shelf is a second list of unearned badges, and it silently left out
+         * the ones above the humour setting that /badges counts.
+         */
+        <p className="muted small medal-foot">{aboveCeilingLine(catalogue.aboveCeiling)}</p>
+      ) : null}
+      {badges.length + toGet.length > 0 ? (
+        <p className="muted small medal-foot">
+          Hidden badges are not listed until you find one. Metal is a reading of the tier, not a new
+          number.
+        </p>
+      ) : null}
 
       <h2 className="section with-hint">
         Training load
