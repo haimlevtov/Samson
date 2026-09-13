@@ -7,6 +7,7 @@
  *            a set.
  */
 import type { UnlockState } from '../gamification/unlocks';
+import type { HexTone } from './Hex';
 import type { IconName } from './icons';
 
 export type RungState = 'unlocked' | 'next' | 'cleared' | 'locked';
@@ -22,6 +23,14 @@ export function rungState(state: Pick<UnlockState, 'unlocked' | 'next' | 'met'>)
   if (state.met) return 'cleared';
   return 'locked';
 }
+
+/** The hex ground per state — beside the icon, so a state is drawn in one place. */
+export const RUNG_TONE: Readonly<Record<RungState, HexTone>> = {
+  unlocked: 'emblem',
+  next: 'soft',
+  cleared: 'warn',
+  locked: 'plain',
+};
 
 export const RUNG_ICON: Readonly<Record<RungState, IconName>> = {
   unlocked: 'check',

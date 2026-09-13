@@ -112,4 +112,5 @@ with each other; the only thing they share is that neither is training.
   already on are not navigation.
 - `BadgeReveal` and the session screen's chart icon pointed at `/progress` and
   now point at `/hub`. (`BadgeReveal` moved again with ADR 0013, which took the
-  badge shelf to Profile.)
+  badge shelf to Profile, and again with the Quest Log redesign, whose sheet links
+  to the badge's card on `/badges`.)

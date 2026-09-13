@@ -373,7 +373,8 @@ h2.section.with-hint > svg:first-child {
  * 12px lower than the first. The grid gap is the spacing there.
  */
 .badge-shelf > .card + .card,
-.medal-shelf > .card + .card {
+.medal-shelf > .card + .card,
+.tree-tiles > .card + .card {
   margin-top: 0;
 }
 
@@ -1975,17 +1976,14 @@ details.quick-log[open] > summary {
   font-size: 0.85em;
 }
 
-/* The badge unlock is the Quest Log's sheet now — "History: the unlock sheet" at
-   the end of this file. */
-
 /*
  * Chips used as LABELS rather than controls.
  *
  * `.chip` carries min-height/min-width of var(--tap) because most chips in this
  * app are pressed with a thumb between sets. The tier and kind markers on a
- * badge card or a quest card, and the XP chips on Profile's level card, are
- * spans — nothing taps them — so the 44px floor only makes them collide with
- * what sits under them.
+ * badge card or a quest card, the XP chips on Profile's level card and a rung's
+ * state on the progression trees are spans — nothing taps them — so the 44px
+ * floor only makes them collide with what sits under them.
  *
  * WHY this is not "shrinking a tap target": a non-interactive label has no tap
  * target to shrink. The 44px rule applies to things you press.
@@ -2482,7 +2480,8 @@ details.quick-log[open] > summary {
  * and two chips in a row with identical fills read as one label that wrapped —
  * so it is an outline against the card rather than a second filled block.
  */
-.chip-found {
+.chip-found,
+.chip-next {
   background: var(--surface);
   color: var(--accent-text);
   border-color: var(--accent-text);
@@ -2522,32 +2521,6 @@ label.choice-row input {
   font-weight: 600;
 }
 
-/*
- * The progression trees — ADR 0020.
- *
- * An ordered list rather than a drawn graph: every tree in this project is a
- * single chain, so a list IS the shape, and it stays readable at 375px where a
- * node-and-edge diagram would need horizontal scroll — the thing
- * docs/specs/mobile-interface.md exists to prevent.
- *
- * A rung IS a `.card`, with this class adding only the row layout. FOUND IN
- * REVIEW: it used to hand-roll four of that primitive's five declarations and
- * got one of them wrong — `var(--line)` is not a token in this sheet, so the
- * whole `border` shorthand was invalid at computed-value time, `border-style`
- * fell back to `none`, and `.is-next` had no border left to colour. The "what
- * to work on next" affordance never drew, and a browser check that read classes
- * and text rather than computed styles did not see it. Reusing the primitive
- * makes that class of mistake unavailable.
- */
-.tree {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* The rungs are the Quest Log's climb now — "Progression trees" at the end of
-   this file. */
-
 /* A whole card that is one link. Profile uses it to reach the progression
    trees; the chevron is the affordance, and the tap target is the card itself,
    which clears 44px from its own padding — docs/specs/mobile-interface.md. */
@@ -2560,7 +2533,8 @@ label.choice-row input {
   color: inherit;
 }
 
-.row-link:hover {
+.row-link:hover,
+.tree-tile:hover {
   border-color: var(--accent-text);
 }
 
@@ -3608,12 +3582,19 @@ label.coach-choice {
 
 /* ---- History: the unlock sheet ------------------------------------------ */
 
+/*
+ * Scrolls rather than clipping — FOUND IN REVIEW: in landscape, or with larger
+ * text, the sheet is taller than the screen, and a centred grid clipped Continue
+ * with no way to reach it. `margin: auto` on the sheet centres it when it fits;
+ * `overscroll-behavior` keeps a swipe from scrolling History behind it.
+ */
 .unlock-backdrop {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
+  display: flex;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px 20px;
   background: var(--sheet-backdrop);
 }
@@ -3621,6 +3602,7 @@ label.coach-choice {
 .unlock-sheet {
   width: 100%;
   max-width: 360px;
+  margin: auto;
   display: grid;
   justify-items: center;
   gap: 8px;
@@ -3689,7 +3671,22 @@ label.coach-choice {
 .unlock-actions > * {
   min-height: 48px;
 }
-/* A link that looks like the secondary button beside Continue. */
+/* Both actions are links — Continue so it still leaves without JavaScript. */
+.unlock-continue {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 2px 0 var(--accent-strong);
+  color: var(--on-emblem);
+  font-weight: 700;
+  text-decoration: none;
+}
+.unlock-continue:hover {
+  background: var(--accent-strong);
+  text-decoration: none;
+}
 .unlock-secondary {
   display: grid;
   place-items: center;
@@ -3706,9 +3703,9 @@ label.coach-choice {
 }
 
 /*
- * WHY the motion is a fade and gated: a badge that only announces itself by
- * moving is invisible to anyone who has asked the system to stop moving things.
- * The sheet is legible with no motion at all; the rise is a bonus.
+ * WHY the motion is gated: a badge that only announces itself by moving is
+ * invisible to anyone who has asked the system to stop moving things. The sheet
+ * is legible with no motion at all; the short rise and fade are a bonus.
  */
 @media (prefers-reduced-motion: no-preference) {
   .unlock-sheet {
@@ -3729,10 +3726,8 @@ label.coach-choice {
 
 /* ---- Progression trees --------------------------------------------------- */
 
-/* The back chip carries its chevron; its 44px floor is .chip's own. */
+/* A chip carrying an icon beside its word; its flex and 44px floor are .chip's. */
 .chip-back {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
 }
 
@@ -3746,22 +3741,19 @@ label.coach-choice {
   justify-items: center;
   gap: 4px;
   padding: 10px 4px;
-  margin: 0;
   text-align: center;
   color: inherit;
   text-decoration: none;
 }
 .tree-tile:hover {
   text-decoration: none;
-  border-color: var(--accent-text);
-}
-.tree-tiles > .card + .card {
-  margin-top: 0;
 }
 .tree-tile-name {
+  max-width: 100%;
   font-size: 12px;
   font-weight: 700;
   text-transform: capitalize;
+  overflow-wrap: anywhere;
 }
 .tree-tile-count {
   font-size: 11px;
@@ -3778,10 +3770,13 @@ label.coach-choice {
 }
 
 /*
- * The climb. A rung is a row — hex, then words — and the one to work on is a
- * raised card. FOUND IN REVIEW before the redesign: rungs that hand-rolled the
- * .card primitive got a token wrong and lost the "next" border entirely, so the
- * next rung uses the primitive itself.
+ * The climb — ADR 0020. An ordered list rather than a drawn graph: every tree in
+ * this project is a single chain, so a list IS the shape, and it stays readable
+ * at 375px where a node-and-edge diagram would need horizontal scroll.
+ *
+ * A rung is a row — hex, then words — and the one to work on is a raised card
+ * using the `.card` primitive itself. FOUND IN REVIEW before the redesign: rungs
+ * that hand-rolled the primitive got a token wrong and lost the "next" border.
  */
 .tree {
   list-style: none;
@@ -3814,7 +3809,8 @@ label.coach-choice {
   width: 2px;
   background: var(--border-strong);
 }
-.tree-rung.card + .tree-rung::before,
+/* Only the raised card is shifted by its own -10px margin and 10px padding —
+   FOUND IN REVIEW: the rung after it was nudged too, off its hex column. */
 .tree-rung + .tree-rung.card::before {
   left: 31px;
 }
@@ -3847,14 +3843,6 @@ label.coach-choice {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.tree-chips:empty {
-  display: none;
-}
-.chip-next {
-  background: transparent;
-  color: var(--accent-text);
-  border-color: var(--accent-text);
 }
 .chip-warn {
   background: var(--warn-soft);

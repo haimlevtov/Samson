@@ -6,7 +6,7 @@ import { unlockStates, type UnlockState } from '@/src/gamification/unlocks';
 import { FieldHint } from '@/src/ui/FieldHint';
 import { Hex } from '@/src/ui/Hex';
 import { Icon } from '@/src/ui/icons';
-import { RUNG_ICON, rungState, treeIcon } from '@/src/ui/trees';
+import { RUNG_ICON, RUNG_TONE, rungState, treeIcon } from '@/src/ui/trees';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +65,10 @@ export default async function ProgressionTreesPage() {
       <header className="top">
         <div>
           <span className="kicker">Skill trees</span>
-          <h1>Progression</h1>
+          {/* "Progression trees", not the handoff's "Progression" — ADR 0020's
+              Naming section keeps the two words together, because ADR 0014 owns
+              "progression" for the e1RM chart. */}
+          <h1>Progression trees</h1>
           <span className="muted small">
             {unlockedCount} of {states.length} rungs open
           </span>
@@ -92,8 +95,12 @@ export default async function ProgressionTreesPage() {
                 <Icon name={treeIcon(tree)} size={20} />
               </Hex>
               <span className="tree-tile-name">{tree}</span>
-              <span className="muted tree-tile-count">
+              {/* "2 / 4" to the eye; "2 of 4 rungs open" to a screen reader. */}
+              <span className="muted tree-tile-count" aria-hidden="true">
                 {open} / {rungs.length}
+              </span>
+              <span className="sr-only">
+                {open} of {rungs.length} rungs open
               </span>
             </a>
           );
@@ -113,9 +120,16 @@ export default async function ProgressionTreesPage() {
         </p>
       )}
 
+      {trees.length === 0 ? (
+        // mobile-interface.md §4: a state, not an empty row of tiles.
+        <p className="card muted">No progression trees to show yet.</p>
+      ) : null}
+
+      {/* The explainer the page has always carried, now under the tiles. */}
       <p className="muted tree-explainer">
-        Each rung opens when you have done the one below it —{' '}
-        <strong>sets in a single session</strong>, not a total. Warm-ups never count.
+        Each rung opens when you have done the one below it. The requirement is{' '}
+        <strong>sets in a single session</strong>, not a total — three sets of ten across three
+        months does not say whether the next step is reachable.
       </p>
 
       {trees.map((tree) => {
@@ -133,11 +147,12 @@ export default async function ProgressionTreesPage() {
             </h2>
 
             {/*
-             * Top rung first, read as a climb — the handoff. `reversed` keeps the
-             * list's own numbering honest: the item a screen reader hears first
-             * is the highest rung, numbered as such, in the order it is drawn.
+             * Top rung first, read as a climb — the handoff — so the order a screen
+             * reader hears is the order drawn. No numbers are drawn or spoken; the
+             * words on each rung carry its state. `role="list"` because WebKit
+             * drops list semantics from a list with its markers removed.
              */}
-            <ol className="tree" reversed>
+            <ol className="tree" role="list">
               {[...rungs].reverse().map((state) => (
                 <Rung key={state.node.slug} state={state} />
               ))}
@@ -163,18 +178,7 @@ function Rung({ state }: { state: UnlockState }) {
   return (
     <li className={`tree-rung is-${drawn}${state.next ? ' card' : ''}`}>
       <span className="tree-mark">
-        <Hex
-          size={36}
-          tone={
-            drawn === 'unlocked'
-              ? 'emblem'
-              : drawn === 'next'
-                ? 'soft'
-                : drawn === 'cleared'
-                  ? 'warn'
-                  : 'plain'
-          }
-        >
+        <Hex size={36} tone={RUNG_TONE[drawn]}>
           <Icon name={RUNG_ICON[drawn]} size={18} />
         </Hex>
       </span>
@@ -206,11 +210,11 @@ function Rung({ state }: { state: UnlockState }) {
         )}
 
         {/*
-         * The state in words, always — the hex is a ground and a glyph, and
-         * mobile-interface.md §3 says neither is the signal on its own.
-         * `cleared` is the interesting case and worth saying out loud: the
-         * criteria are met but a rung below is not, so the tree is telling the
-         * user to go back rather than refusing silently.
+         * The state in words — shown for the three a user acts on, and for
+         * "locked" read by a screen reader only, where the glyph is the visible
+         * signal (mobile-interface.md §3: a word or an icon). `cleared` is the
+         * interesting case: the criteria are met but a rung below is not, so the
+         * tree is telling the user to go back rather than refusing silently.
          */}
         <p className="tree-chips">
           {drawn === 'unlocked' && <span className="chip chip-on">unlocked</span>}

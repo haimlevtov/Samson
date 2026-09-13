@@ -45,11 +45,16 @@ export default async function WorkoutsPage({
    */
   const active = await activeWorkout(db).catch(() => null);
 
-  const [workouts, badges, { unlocked }] = await Promise.all([
+  const [workouts, { unlocked }] = await Promise.all([
     listWorkouts(db, 40, active?.id ?? null),
-    loadUnlockedAchievements(db),
     searchParams,
   ]);
+  /*
+   * Only when a badge might fire, and degrading like the active-session read
+   * above — FOUND IN REVIEW. This was read on every visit and could take the
+   * whole list down for the sake of a sheet that shows once.
+   */
+  const badges = unlocked === undefined ? [] : await loadUnlockedAchievements(db).catch(() => []);
   const logged = workouts.filter((w) => w.setCount > 0).length;
 
   return (

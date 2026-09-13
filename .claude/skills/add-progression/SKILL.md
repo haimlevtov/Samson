@@ -29,6 +29,7 @@ A node you add is read, evaluated and rendered:
 | The reader       | `src/db/progression.ts`                                       |
 | The evaluator    | `src/gamification/unlocks.ts` — pure, unit-tested             |
 | The surface      | `app/progression-trees/page.tsx`, reached from Profile        |
+| How it is drawn  | `src/ui/trees.ts` — each rung state's hex and icon, each tree's icon (a fifth tree draws `route` and sorts last) |
 | The row tests    | `tests/db/progression.test.ts`                                |
 
 **So a node with a typo'd slug is now a user-visible bug rather than a dormant
