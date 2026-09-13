@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import type { UnlockedAchievement } from '@/src/db/gamification';
+import { badgeIcon, metalFor } from '@/src/ui/tiers';
+import { UnlockSheet } from './UnlockSheet';
 
 /**
  * The badge reveal — PLAN.md phase 4's "a badge visibly fires in the UI on
@@ -27,32 +28,22 @@ export function BadgeReveal({
   const badge = badges.find((b) => b.slug === slug);
   if (badge === undefined) return null;
 
+  /*
+   * Only what the sheet renders crosses to the client — the holder's own badge,
+   * already visible to them on /badges. The metal and icon are chosen here so
+   * the client bundle carries no mapping.
+   *
+   * A held hidden badge is obsidian whatever its tier — ADR 0033 §3.
+   */
   return (
-    <div className="badge-reveal" role="status" aria-live="polite">
-      <div className="badge-reveal-mark" aria-hidden="true">
-        ★
-      </div>
-      <div className="badge-reveal-body">
-        {/*
-         * A hidden badge reaches this component for the first time now that the
-         * reader returns held ones — ADR 0017. Before, it was filtered out and
-         * the reveal rendered nothing at all after a secret unlock.
-         *
-         * The kicker changes because the reveal IS the reward for that tier:
-         * there was no announcement, no progress bar and no name in the list
-         * beforehand, so "you found something" is the whole difference between
-         * this badge and every other one.
-         */}
-        <p className="badge-reveal-kicker">
-          {badge.hidden ? 'Something hidden, found' : 'Achievement unlocked'}
-        </p>
-        <h2>{badge.name}</h2>
-        <p className="muted small">{badge.description}</p>
-      </div>
-      {/* Badges live on Profile since ADR 0013. This link followed them. */}
-      <Link href="/profile" className="chip">
-        All badges
-      </Link>
-    </div>
+    <UnlockSheet
+      slug={badge.slug}
+      name={badge.name}
+      description={badge.description}
+      sourceHint={badge.sourceHint}
+      hidden={badge.hidden}
+      metal={badge.hidden ? 'obsidian' : metalFor(badge.tier)}
+      icon={badgeIcon(badge.slug)}
+    />
   );
 }

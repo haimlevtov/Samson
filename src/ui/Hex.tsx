@@ -26,7 +26,8 @@ export function Hex({
 }: {
   size: number;
   tone?: HexTone;
-  rim?: Metal;
+  /** A metal band, or the unlock sheet's violet one. */
+  rim?: Metal | 'reveal';
   label?: string;
   className?: string;
   children?: ReactNode;
