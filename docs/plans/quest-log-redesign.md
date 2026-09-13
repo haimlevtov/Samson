@@ -15,7 +15,7 @@ The instruction that came with it:
 | PR  | What                                                                           | Branch                   | State                                                              |
 | --- | ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------ |
 | 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13) |
-| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | planned                                                            |
+| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                      |
 | 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | planned                                                            |
 | 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned                                                            |
 | 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                            |
@@ -236,3 +236,28 @@ now. It is the one place this PR departs from the handoff's words on purpose.
 
 **Verified in a browser at 375px against hosted**, dark and light, as the
 beginner fixture. No paid calls.
+
+### PR 2 — Profile, 2026-09-13
+
+Shipped as [#70](https://github.com/haimlevtov/Samson/pull/70). The hero level
+ring, four equal stat tiles, the week's XP in ten segments, the progression
+row-link with an emblem, and a medal shelf: earned badges in their tier's metal,
+held hidden ones in obsidian with "hidden · found" in words, and locked slots for
+visible badges not yet earned. Three reviewers.
+
+**The locked slots nearly cost the page.** They come from —
+four reads, one of which throws on an empty result by design, for 's
+sake. On Profile that would have replaced the level, the streak and the only
+reliable way into Settings with an error page for the sake of a row of padlocks.
+Held badges are read as before and still throw; the catalogue degrades to a
+sentence pointing at .
+
+**A second list of unearned badges owed the first list's honesty.** counts the badges above the humour setting; the new shelf dropped them without a
+word, which ADR 0017 and spec §4 both forbid. It counts them now.
+
+**A padlock is not a word.** The lock icon is hidden from screen readers, so a
+locked card and an earned card read identically. Locked cards say "locked".
+
+**Changed on purpose, and said in the PR:** a Profile badge card no longer shows
+its description or earned date; both are one tap away on . The stat
+tiles are equal in size now, so order alone carries their rank — spec §2 says so.
