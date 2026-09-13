@@ -6,7 +6,12 @@ import { availableExercises } from '@/src/db/exercises';
 import { loadTemplate } from '@/src/db/templates';
 import { pendingTargets, templateProgress } from '@/src/templates/progress';
 import { totalTonnage } from '@/src/metrics/tonnage';
+import { loadChallenges } from '@/src/db/gamification';
+import { logLine } from '@/src/llm/failure';
 import { displayDate } from '@/src/ui/format';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
+import { challengeTitle } from '@/src/ui/quests';
 import { FinishForm } from './FinishForm';
 import { SessionCoach } from './SessionCoach';
 import { SessionConsole, type Candidate } from './SessionConsole';
@@ -64,6 +69,30 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const targets = editable ? pendingTargets(groups, workout.sets) : [];
   const progress = template === null ? null : templateProgress(groups, workout.sets);
 
+  /*
+   * The quest this session counts toward, for the hint card under the bar — the
+   * Quest Log's light coat. Only an ACCEPTED `sessions` challenge: it is the one
+   * kind a finished session moves by itself.
+   *
+   * Only while editable, and it DEGRADES: this is the screen somebody has open
+   * mid-set, and a hint about a quest is not worth an error page there. No
+   * progress figure either — that would need the whole history on the hottest
+   * page in the app; Hub and the finish moment carry it.
+   */
+  const quest = editable
+    ? await loadChallenges(db)
+        .then(
+          (all) =>
+            all.find(
+              (c) => c.status === 'active' && c.spec !== null && c.spec.kind === 'sessions'
+            ) ?? null
+        )
+        .catch((cause: unknown) => {
+          console.error('challenges unavailable', logLine(cause));
+          return null;
+        })
+    : null;
+
   const working = workout.sets.filter((s) => !s.isWarmup);
   const tonnage = totalTonnage(
     workout.sets.map((s) => ({
@@ -81,9 +110,13 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           grid scrolls under it. */}
       <div className="session-bar">
         <Link href="/history" className="bar-back" aria-label="All sessions">
-          ←
+          <Icon name="chevron-left" size={22} />
         </Link>
-        <SessionTimer startedAt={workout.startedAt} endedAt={workout.endedAt} />
+        {/* The clock over what this session is — its template, or its date. */}
+        <span className="bar-center">
+          <SessionTimer startedAt={workout.startedAt} endedAt={workout.endedAt} />
+          <span className="bar-label">{template?.name ?? displayDate(workout.localDate)}</span>
+        </span>
         {editable ? (
           <button type="submit" form="finish-session" className="bar-finish">
             Finish
@@ -92,6 +125,23 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           <span className={`badge ${workout.status}`}>{workout.status.replace('_', ' ')}</span>
         )}
       </div>
+
+      {editable ? (
+        <p className="card quest-hint">
+          <Hex size={34} tone="soft">
+            <Icon name="dumbbell" size={17} />
+          </Hex>
+          <span>
+            <strong>A kept session pays XP when you finish.</strong>
+            {quest === null ? null : (
+              <>
+                {' '}
+                Counts toward <em>{challengeTitle(quest.spec, quest.slug)}</em>.
+              </>
+            )}
+          </span>
+        </p>
+      ) : null}
 
       <header className="top">
         <div>

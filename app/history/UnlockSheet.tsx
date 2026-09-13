@@ -150,7 +150,7 @@ export function UnlockSheet({
           <Link
             href="/history"
             ref={continueRef}
-            className="unlock-continue"
+            className="button-link"
             onClick={(event) => {
               event.preventDefault();
               close();

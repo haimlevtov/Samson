@@ -179,8 +179,15 @@ export async function finishWorkout(formData: FormData): Promise<void> {
    * achievement_events (scoped by RLS). A forged slug shows nothing, because
    * the event has to exist. No schema change and no "seen" column.
    */
+  /*
+   * To the finish moment first — the Quest Log redesign — carrying the same
+   * `?unlocked=` it always carried. That page's Done goes on to History with it,
+   * so a badge still fires where it fired before; the finish moment only reads
+   * what was just written and shows it.
+   */
   const first = unlocked[0];
-  redirect(first === undefined ? '/history' : `/history?unlocked=${encodeURIComponent(first)}`);
+  const kept = `/history/${encodeURIComponent(workoutId)}/kept`;
+  redirect(first === undefined ? kept : `${kept}?unlocked=${encodeURIComponent(first)}`);
 }
 
 /**
