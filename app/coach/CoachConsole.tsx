@@ -7,6 +7,9 @@ import { canHear as hearable, whyShown } from '@/src/speech/player';
 import type { ListedPersona } from '@/src/db/personas';
 import { openingCoach } from '@/src/persona/choice';
 import { CoachTryButton, SHOWN_TEXT, useCoachVoice } from './CoachTry';
+import { deliveredBy } from '@/src/ui/coach';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
 
 /**
  * The plan and the voice, side by side.
@@ -104,6 +107,27 @@ export function CoachConsole({
           picker and the delivery, which is what a voice is. */}
       <h2 className="section">Voice</h2>
       <div className="card">
+        {/*
+         * The coach at the head of the card — the Quest Log. The menu below it
+         * is still how the coach is chosen; the handoff's "Change" chip would
+         * have hidden a control that ships (docs/plans/quest-log-redesign.md).
+         */}
+        <div className="voice-head">
+          <Hex size={52}>
+            <Icon name="message-circle" size={26} />
+          </Hex>
+          {/*
+           * "Explains", not the handoff's "speaks" — FOUND IN REVIEW. On a card
+           * with a Try button, "speaks" means audio, and the delivered plan is not
+           * read aloud (ADR 0025 §4).
+           */}
+          <span className="voice-words">
+            <strong className="display voice-name">{chosen?.name ?? 'No coach available'}</strong>
+            <span className="muted small">
+              Explains the plan in its own words; never changes a number in it.
+            </span>
+          </span>
+        </div>
         {/*
          * A menu, not five chips — this plan's PR 1. Five chips spent a whole
          * line of a 375px screen on a choice made once, and every one of them
@@ -207,6 +231,9 @@ export function CoachConsole({
 
         {state.delivered ? (
           <div className="delivered">
+            <span className="label delivered-by">
+              What {deliveredBy(personas, state.personaSlug)} says
+            </span>
             <p>{state.delivered.opening}</p>
             {state.delivered.week_notes.map((note, i) => (
               <p key={weekLabels[i] ?? i}>

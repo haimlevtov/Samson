@@ -1677,7 +1677,9 @@ code {
      FOUND IN REVIEW, 2026-09-07: without the :not(), header.top a beats
      .icon-btn on specificity and the Profile cog collapsed to about 18px
      above this width. */
-  header.top a:not(.icon-btn) {
+  /* …and neither can a chip that carries an icon: `.chip` is a flex row, and
+     going inline dropped the gap between its icon and its word. */
+  header.top a:not(.icon-btn):not(.chip) {
     display: inline;
     min-height: 0;
   }
@@ -2131,7 +2133,7 @@ details.quick-log[open] > summary {
 .plan-disclosure > summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-height: var(--tap);
   font-weight: 700;
   cursor: pointer;
@@ -2149,6 +2151,13 @@ details.quick-log[open] > summary {
   transition: transform 150ms ease;
 }
 
+/* The Quest Log's row-link look for a disclosure: an emblem, then the words —
+   the same words column as .row-link-words, whose rule it joins. The line under
+   the title is ordinary weight, as on Profile's row links. */
+.summary-words .muted {
+  font-weight: 400;
+}
+
 .plan-disclosure[open] > summary::after {
   transform: rotate(180deg);
 }
@@ -2163,13 +2172,6 @@ details.quick-log[open] > summary {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-}
-
-/* .label is a block with a bottom margin of its own, which pushes the summary
-   text off centre against the chevron. details.quick-log resets it for the same
-   reason. */
-.plan-disclosure > summary .label {
-  margin-bottom: 0;
 }
 
 /*
@@ -3432,12 +3434,16 @@ label.coach-choice {
 .quest-span {
   grid-column: 1 / -1;
 }
-.quest form button {
-  width: 100%;
+/* A button carrying an icon beside its word — a quest's, and the coach's Send. */
+.quest form button,
+button.send {
   display: inline-flex;
-  justify-content: center;
   align-items: center;
   gap: 8px;
+}
+.quest form button {
+  width: 100%;
+  justify-content: center;
 }
 .quest-playing {
   border-color: var(--accent);
@@ -3549,7 +3555,8 @@ label.coach-choice {
 /* ---- row links with an emblem ------------------------------------------- */
 
 /* A row-link's middle takes the width; the emblem and the chevron keep theirs. */
-.row-link-words {
+.row-link-words,
+.summary-words {
   flex: 1;
   min-width: 0;
   display: grid;
@@ -3741,8 +3748,9 @@ label.coach-choice {
 
 /* ---- Progression trees --------------------------------------------------- */
 
-/* A chip carrying an icon beside its word; its flex and 44px floor are .chip's. */
-.chip-back {
+/* A chip carrying an icon beside its word — Progression's back chip, Coach's
+   Supplements. Its flex and 44px floor are .chip's. */
+.chip-icon {
   gap: 4px;
 }
 
@@ -3969,4 +3977,24 @@ label.coach-choice {
 }
 .button-link:hover {
   text-decoration: none;
+}
+/* ---- Coach -------------------------------------------------------------- */
+
+.voice-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.voice-words {
+  display: grid;
+  min-width: 0;
+}
+/* A coach's name can be a user's own row, with no length limit. */
+.voice-name,
+.delivered-by {
+  overflow-wrap: anywhere;
+}
+.voice-name {
+  font-size: 18px;
 }

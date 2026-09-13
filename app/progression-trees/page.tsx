@@ -73,7 +73,7 @@ export default async function ProgressionTreesPage() {
             {unlockedCount} of {states.length} rungs open
           </span>
         </div>
-        <Link href="/profile" className="chip chip-back">
+        <Link href="/profile" className="chip chip-icon">
           <Icon name="chevron-left" size={16} />
           Profile
         </Link>

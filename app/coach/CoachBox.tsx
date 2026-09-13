@@ -8,6 +8,8 @@ import { askTheCoach } from './actions';
 import { EMPTY_COACH, type CoachState } from './coach-state';
 import { BLOCKED_TEXT, SILENT_TEXT, useReplyVoice } from '@/src/ui/reply-voice';
 import { SpeakSwitch } from '@/src/ui/SpeakSwitch';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
 
 /**
  * What each goal means, in the user's words rather than the schema's.
@@ -268,9 +270,14 @@ export function CoachBox({ goal, voiceName }: { goal: DietGoal; voiceName: strin
        */}
       <details className="plan-disclosure card">
         <summary>
-          <span className="label">Daily calories</span>
-          <span className="muted small">
-            {target ? `${target.targetKcal} kcal` : 'Worked out from your training'}
+          <Hex size={40} tone="soft">
+            <Icon name="target" size={20} />
+          </Hex>
+          <span className="summary-words">
+            <strong>Daily calories</strong>{' '}
+            <span className="muted small">
+              {target ? `${target.targetKcal} kcal` : 'Worked out from your training'}
+            </span>
           </span>
         </summary>
 
@@ -372,6 +379,10 @@ export function CoachBox({ goal, voiceName }: { goal: DietGoal; voiceName: strin
         </div>
       </details>
 
+      <h2 className="section">
+        <Icon name="message-circle-question-mark" size={14} />
+        Ask the coach
+      </h2>
       <div className="card chat">
         {state.turns.length === 0 ? (
           /*
@@ -515,11 +526,12 @@ export function CoachBox({ goal, voiceName }: { goal: DietGoal; voiceName: strin
             // The server rejects anything longer and says so; this stops most
             // people reaching that error at all.
             maxLength={MAX_CHAT_MESSAGE_CHARS}
-            placeholder="How is my squat going?"
+            placeholder="Ask about training, food or a supplement…"
             disabled={pending}
           />
           <div className="row chat-actions">
-            <button type="submit" name="intent" value="ask" disabled={pending}>
+            <button type="submit" name="intent" value="ask" disabled={pending} className="send">
+              <Icon name="send-horizontal" size={18} />
               {pending ? 'Asking…' : 'Send'}
             </button>
             {state.turns.length > 0 ? (
