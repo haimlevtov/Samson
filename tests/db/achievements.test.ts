@@ -822,7 +822,7 @@ describe('the boundary of each remaining tier', () => {
 
 // ---------------------------------------------------------------------------
 // The badge catalogue — ADR 0017's 2026-09-12 amendment, and PR 7 of
-// docs/plans/coach-memory-voice-onboarding.md
+// docs/plans/rework-3.md
 //
 // The header's "every assertion runs through a user-scoped client" has one
 // exception here, and it is deliberate: whether every SHARED row carries

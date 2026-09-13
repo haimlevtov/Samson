@@ -6,7 +6,7 @@ per content item, in the order given.
 > **Phase 5 is three documents, and this is the live one** — the longest Outcome
 > in the repo, one entry per PR. The other two are
 > [`phase-5.md`](phase-5.md), the record of what the phase became before this
-> plan existed, and [`rework-profile-hub-coach.md`](rework-profile-hub-coach.md),
+> plan existed, and [`rework-1.md`](rework-1.md),
 > the plan that governed its middle. [`README.md`](README.md) has the whole phase
 > in one PR table.
 

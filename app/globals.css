@@ -3096,7 +3096,7 @@ label.coach-choice {
 }
 
 /* ===========================================================================
- * The Quest Log — ADR 0033, docs/plans/quest-log-redesign.md.
+ * The Quest Log — ADR 0033, docs/plans/rework-4.md.
  * Phone-first: base rules are the 375px layout, min-width queries only.
  * ========================================================================= */
 
@@ -3905,7 +3905,7 @@ button.send {
 }
 
 /* ---- The session's light coat --------------------------------------------
- * docs/plans/quest-log-redesign.md PR 4. The set grid is untouched — ADR 0011.
+ * docs/plans/rework-4.md PR 4. The set grid is untouched — ADR 0011.
  */
 
 /* The quest this session counts toward, under the bar. A line of words beside

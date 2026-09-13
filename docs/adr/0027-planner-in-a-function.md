@@ -17,7 +17,7 @@ the argument was not wrong:
 > from instead of offering a control that would dead-end.
 
 Every clause of that is still true. What changed is a stakeholder decision —
-recorded in `docs/plans/rework-hub-history-coach.md` PR 8 — to build it anyway,
+recorded in `docs/plans/rework-2.md` PR 8 — to build it anyway,
 **with the limits named rather than discovered.** This ADR is where they are
 named, because a decision taken against a written argument should leave a record
 that answers the argument rather than quietly deleting it.

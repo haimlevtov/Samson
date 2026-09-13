@@ -1,6 +1,6 @@
 -- Samson 0058 — a coach can be heard before it is chosen
 --
--- Plan: docs/plans/rework-hub-history-coach.md, PR 6, committed first.
+-- Plan: docs/plans/rework-2.md, PR 6, committed first.
 -- Skill: .claude/skills/add-persona/SKILL.md.
 --
 -- INVARIANT: content lives in the database, not in code — CLAUDE.md #7. A

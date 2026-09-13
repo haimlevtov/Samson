@@ -1,6 +1,6 @@
 -- Samson 0071 — a sixth coach, a bio for each of them, and two recast voices
 --
--- Plan: docs/plans/coach-memory-voice-onboarding.md, PR 5.
+-- Plan: docs/plans/rework-3.md, PR 5.
 -- Skill: .claude/skills/add-persona/SKILL.md — the row, the voice, the banned
 --        phrases and the tests, together.
 --

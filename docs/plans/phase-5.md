@@ -4,7 +4,7 @@ Branch: many. 2026-09-05 to 2026-09-07, PRs #7 to #19.
 
 > **Phase 5 is three documents.** This is the first — the record of what the
 > phase became. The other two are
-> [`rework-profile-hub-coach.md`](rework-profile-hub-coach.md), the plan that
+> [`rework-1.md`](rework-1.md), the plan that
 > governed PRs #11–#17, and
 > [`phase-5-content-fill.md`](phase-5-content-fill.md), the plan for the content
 > the brief actually asked for, built afterwards.
@@ -99,7 +99,7 @@ phase had changed. That did not happen until this document.
 | #19 | Two cards that met with no space between them                         | —                                          |
 
 PRs #11 to #17 were planned together in
-[`rework-profile-hub-coach.md`](rework-profile-hub-coach.md), whose Outcome
+[`rework-1.md`](rework-1.md), whose Outcome
 records what they turned into and which of them this table lists as follow-ups
 that no plan anticipated.
 

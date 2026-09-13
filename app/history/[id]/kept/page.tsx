@@ -24,7 +24,7 @@ import { BadgeReveal } from '../../BadgeReveal';
 export const dynamic = 'force-dynamic';
 
 /**
- * The finish moment — the Quest Log redesign, docs/plans/quest-log-redesign.md PR 4.
+ * The finish moment — the Quest Log redesign, docs/plans/rework-4.md PR 4.
  *
  * `finishWorkout` redirects here, once, with the `?unlocked=` it has always
  * carried, and a badge fires HERE — on the screen the user lands on, as it always
