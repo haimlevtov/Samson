@@ -12,13 +12,13 @@ The instruction that came with it:
 > apply the redesign while making sure nothing breaks, all features stays where
 > they are, leaderboard in hub will be on top by design
 
-| PR  | What                                                                           | Branch                   | State                                                                |
-| --- | ------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------- |
-| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13)   |
-| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                        |
-| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | shipped 09-13, [↓](#pr-3--the-unlock-sheet-and-the-trees-2026-09-13) |
-| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | planned                                                              |
-| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                              |
+| PR  | What                                                                           | Branch                   | State                                                                   |
+| --- | ------------------------------------------------------------------------------ | ------------------------ | ----------------------------------------------------------------------- |
+| 1   | [The visual layer, and the Hub](#pr-1--the-visual-layer-and-the-hub)           | `quest-log-hub`          | shipped 09-13, [↓](#pr-1--the-visual-layer-and-the-hub-2026-09-13)      |
+| 2   | [Profile](#pr-2--profile)                                                      | `quest-log-profile`      | shipped 09-13, [↓](#pr-2--profile-2026-09-13)                           |
+| 3   | [The unlock sheet and the trees](#pr-3--the-unlock-sheet-and-the-trees)        | `quest-log-unlock-trees` | shipped 09-13, [↓](#pr-3--the-unlock-sheet-and-the-trees-2026-09-13)    |
+| 4   | [The session, and the finish moment](#pr-4--the-session-and-the-finish-moment) | `quest-log-session`      | shipped 09-13, [↓](#pr-4--the-session-and-the-finish-moment-2026-09-13) |
+| 5   | [Coach](#pr-5--coach)                                                          | `quest-log-coach`        | planned                                                                 |
 
 Ordered so the primitives land with their first consumer, then one surface per
 PR. Each is presentation: **no migration, no RPC, no policy and no new number.**
@@ -299,3 +299,37 @@ arrives.
 in components, and nothing under `app/` is in the unit suite; `src/ui/unlock.ts`
 holds the ownership check, the field list and the URL cleanup. History also stopped
 reading held badges on every visit — only when one might fire, and degrading.
+
+### PR 4 — the session, and the finish moment, 2026-09-13
+
+Shipped as [#72](https://github.com/haimlevtov/Samson/pull/72). The session screen
+got its light coat — the set grid untouched — and finishing lands on a receipt,
+`/history/[id]/kept`, before History. Two reviewers, and the receipt changed
+shape three times because of them.
+
+**The badge had moved without anyone deciding it should.** The first version kept
+firing badges on History and passed `?unlocked=` through the receipt's Done —
+so "Review the session", a tab, or Back lost a badge for good, on the path this PR
+itself added. A badge now fires on the receipt, the screen finishing lands on,
+which is where it has always fired.
+
+**"This week" was today's week.** A receipt read as of today redirected any
+session from an earlier week to its own page — dropping the badge — which happens
+to a session begun at 23:40 on a Sunday and finished after midnight, and to a loose
+end finished days later. The award pays a session into its own week, and the
+receipt now reads that week.
+
+**The handoff's "Third kept session this week" is not shipped.** The award counts
+completed and rest days at the moment it runs; a count read later, or of
+completed sessions only, disagreed with it and printed "First session" over a
+third-session payout. The number the award used is not stored, so the receipt
+says "Session kept".
+
+**What else shipped differently from this entry and the handoff:** quest rows use
+Hub's phrase with no amount, because the weekly run caps and re-checks; "No XP is
+recorded" promises no later, because nothing retries a failed award; the bar's
+label is the template name or the date, with no session count; the remove button
+is still "×"; this session's segment on the meter is not outlined. The finish
+redirect was not exercised by finishing a new session, to keep the fixture account
+unwritten; the receipt was checked against a completed session this week, with a
+badge.
