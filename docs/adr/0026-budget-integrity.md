@@ -1,6 +1,6 @@
 # ADR 0026 — The weekly LLM budget cannot be moved by its owner
 
-**Status:** accepted, rework plan PR 6c
+**Status:** accepted, rework plan PR 6c — amended 2026-09-13 (one account at $2.00)
 **Date:** 2026-09-12
 
 > Written before the code it governs, in its own commit.
@@ -117,3 +117,42 @@ limit.**
   The app has no sign-up page; with sign-up off, decision 3 guards a path
   nobody can reach.
 - ADR 0025's addendum listed these holes as closing here; they are.
+
+## Amendment, 2026-09-13 — the account the sign-in page fills in gets $2.00
+
+**On the owner's instruction**, so the lecturer can evaluate the app without
+running into the weekly ceiling. `beginner@samson.test` — Noa, the account the
+sign-in form is filled in with — has a ceiling of **$2.00** a week. Every other
+account, seeded or not, keeps the column's $0.50.
+
+- **How it is set is unchanged.** The service role sets it: the seeder when it
+  creates the account, and one migration for the hosted row that already exists.
+  The trigger in decision 1 still refuses the owner's own change, so the $2.00
+  cannot be raised further from a session, and a user can still not give
+  themselves it.
+- **The migration names the account by its address, and this is not the gate
+  that 20260912200000 retired.** That migration moved the demo reset off
+  `auth.users.email` because an address is chosen by whoever signs up with it,
+  and a check that runs on every call can be satisfied by registering one. This
+  update runs once, against a row the seeder created; nothing later reads the
+  address to decide a budget. On a fresh stack it matches nothing, because
+  migrations run before the seed — which is why the seeder carries the figure
+  too.
+- **The risk, accepted by the owner:** the account's password is printed on
+  the public sign-in page (the fixtures are published by design), so **anyone
+  with the URL can spend up to $2.00 a week** of the project's credit through
+  it — four times what any single account could before. The other ceilings are
+  unchanged, so the most the seeded accounts together can spend in a week goes
+  from $3.00 to $4.50. Decision 4 still holds: the key's own credit limit is
+  the backstop, and a burst in parallel can overshoot the $2.00 as it could the
+  $0.50.
+- **Why this account and not a new one:** it is already the default, its twelve
+  weeks of clean linear progression exercise every surface — "everything works",
+  in the seeder's own words — and a new account would add a published
+  password without removing one.
+
+AI-NOTE: the figure lives in `src/seed/archetypes.ts` (the seeder's copy) and
+in migration `20260913090000` (the hosted row). Changing it means a new
+migration as well as the archetype; `tests/db/budget.test.ts` checks the seeded
+row and `tests/unit/invariants.test.ts` that the sign-in page fills in the same
+account.
