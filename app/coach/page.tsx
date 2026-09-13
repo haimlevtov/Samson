@@ -7,6 +7,8 @@ import { hasApiKey } from '@/src/llm/config';
 import { normaliseGoal } from '@/src/diet/energy';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
 import { planSessionOptions } from '@/src/templates/plan';
 import { PlanImportForm } from '../workout/ImportForms';
 import { CoachConsole } from './CoachConsole';
@@ -47,6 +49,7 @@ export default async function CoachPage() {
     <>
       <header className="top">
         <div>
+          <span className="kicker">Your corner</span>
           {/* The tab is Coach, and the plan is one of two things on it now. */}
           <h1>Coach</h1>
           <span className="muted small">
@@ -67,7 +70,8 @@ export default async function CoachPage() {
          * than a control. The link is somewhere better to send the user, not a
          * guarantee about what the model will say.
          */}
-        <Link href="/evidence" className="chip">
+        <Link href="/evidence" className="chip chip-icon">
+          <Icon name="pill" size={16} />
           Supplements
         </Link>
       </header>
@@ -113,9 +117,15 @@ export default async function CoachPage() {
            */}
           <details className="plan-disclosure card">
             <summary>
-              <span className="label">Show my plan</span>
-              <span className="muted small">
-                {plan.block.weeks.length} {plan.block.weeks.length === 1 ? 'week' : 'weeks'}
+              <Hex size={40} tone="soft">
+                <Icon name="scroll-text" size={20} />
+              </Hex>
+              <span className="summary-words">
+                <strong>Show my plan</strong>{' '}
+                <span className="muted small">
+                  {plan.block.weeks.length} {plan.block.weeks.length === 1 ? 'week' : 'weeks'} ·
+                  checked by rules before the coach saw it · save a session as a template
+                </span>
               </span>
             </summary>
 
