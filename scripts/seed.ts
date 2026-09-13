@@ -284,6 +284,11 @@ async function seedArchetype(
     height_cm: archetype.heightCm,
     birth_date: archetype.birthDate,
     sex: archetype.sex,
+    // ADR 0026's amendment: the service role may set a ceiling, and this is the
+    // only writer that does. Absent, the column's default applies.
+    ...(archetype.weeklyBudgetUsd === undefined
+      ? {}
+      : { llm_weekly_budget_usd: archetype.weeklyBudgetUsd }),
   });
   if (profileError) throw new Error(`profile for ${archetype.key}: ${profileError.message}`);
 

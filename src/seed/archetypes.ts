@@ -98,6 +98,12 @@ export interface Archetype {
   adherence: number;
   equipment: EquipmentGrant[];
   programme: ProgrammeEntry[];
+  /**
+   * A weekly LLM ceiling other than the column's default, written by the seeder
+   * with the service role — ADR 0026's 2026-09-13 amendment. Set on the one
+   * archetype the sign-in page fills in, and nowhere else.
+   */
+  weeklyBudgetUsd?: number;
   /** Inclusive, 1-indexed week range with no training at all. */
   layoff?: [number, number];
   /** Weeks after which load stops climbing. */
@@ -370,10 +376,26 @@ export const FRESH_ACCOUNT = {
   summary: 'Nobody yet — the empty account a new user meets',
 } as const;
 
+/**
+ * The account the sign-in form is filled in with, and its weekly ceiling —
+ * ADR 0026's 2026-09-13 amendment, so the lecturer can evaluate the app without
+ * meeting the default one.
+ *
+ * WHY the password stays the published one: every fixture's is, by design
+ * (app/sign-in/page.tsx). So anyone with the URL can spend this much a week
+ * through it — the risk the amendment records and the owner accepted.
+ *
+ * AI-NOTE: migration 20260913090000 wrote the same address and figure to the
+ *          hosted row. Changing either means a new migration as well;
+ *          tests/unit/invariants.test.ts fails while they disagree.
+ */
+export const EVALUATOR_EMAIL = 'beginner@samson.test';
+export const EVALUATOR_WEEKLY_BUDGET_USD = 2;
+
 export const ARCHETYPES: Archetype[] = [
   {
     key: 'beginner',
-    email: 'beginner@samson.test',
+    email: EVALUATOR_EMAIL,
     displayName: 'Noa (beginner)',
     timezone: 'Asia/Jerusalem',
     bodyweightKg: 62,
@@ -392,6 +414,7 @@ export const ARCHETYPES: Archetype[] = [
       { slug: 'cable-machine' },
     ],
     programme: BARBELL_PROGRAMME,
+    weeklyBudgetUsd: EVALUATOR_WEEKLY_BUDGET_USD,
   },
   {
     key: 'plateaued',

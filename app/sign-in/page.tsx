@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createServerDb } from '@/src/db/server';
 import { DEMO_ACCOUNT_EMAIL, DEMO_FIXTURE_PASSWORD } from '@/src/db/demo-reset';
+import { EVALUATOR_EMAIL, EVALUATOR_WEEKLY_BUDGET_USD } from '@/src/seed/archetypes';
 import { resetDemoAccount, signIn } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
  *          it behind an env flag — the fixtures should not exist in that build.
  */
 const FIXTURES = [
-  { email: 'beginner@samson.test', label: 'Noa — beginner, clean linear progression' },
+  { email: EVALUATOR_EMAIL, label: 'Noa — beginner, clean linear progression' },
   { email: 'plateaued@samson.test', label: 'Dan — plateaued for six weeks' },
   { email: 'returning@samson.test', label: 'Maya — returning after a five-week layoff' },
   { email: 'homegym@samson.test', label: 'Yossi — dumbbells capped at 30 kg' },
@@ -48,7 +49,7 @@ export default async function SignInPage({
         <form action={signIn} className="grid">
           <label className="grid" style={{ gap: 4 }}>
             <span className="label">Email</span>
-            <input name="email" type="email" required defaultValue="beginner@samson.test" />
+            <input name="email" type="email" required defaultValue={EVALUATOR_EMAIL} />
           </label>
           <label className="grid" style={{ gap: 4 }}>
             <span className="label">Password</span>
@@ -62,7 +63,11 @@ export default async function SignInPage({
       <h2 className="section">Seeded accounts</h2>
       <p className="muted small" style={{ marginTop: -8 }}>
         All use the password <code>{DEMO_FIXTURE_PASSWORD}</code>. Run{' '}
-        <code>npm run migrate &amp;&amp; npm run seed</code> if they are missing.
+        <code>npm run migrate &amp;&amp; npm run seed</code> if they are missing.{' '}
+        {/* ADR 0026's amendment: say which account can spend more, so an
+            evaluator who meets the ceiling on another knows where to go. */}
+        <code>{EVALUATOR_EMAIL}</code>, filled in above, can spend $
+        {EVALUATOR_WEEKLY_BUDGET_USD.toFixed(2)} a week on the coach; the others have the default.
       </p>
       <div className="card">
         {/*
