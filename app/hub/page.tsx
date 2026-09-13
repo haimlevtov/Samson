@@ -3,12 +3,20 @@ import Link from 'next/link';
 import { logLine } from '@/src/llm/failure';
 import { createServerDb, currentUser, localDateFor } from '@/src/db/server';
 import { loadHistory } from '@/src/db/training';
-import { loadChallenges } from '@/src/db/gamification';
+import { loadChallenges, loadXpSummary } from '@/src/db/gamification';
 import { loadLeaderboard } from '@/src/db/leaderboard';
 import { evaluateChallenge } from '@/src/gamification/challenge';
+import { levelProgress } from '@/src/gamification/level';
+import { isoWeek } from '@/src/metrics/dates';
 import { displayDate } from '@/src/ui/format';
 import { FieldHint } from '@/src/ui/FieldHint';
+import { Hex } from '@/src/ui/Hex';
+import { Icon } from '@/src/ui/icons';
+import { challengeIcon, challengeTitle, remainingPhrase } from '@/src/ui/quests';
+import { MAX_SEGMENTS } from '@/src/ui/segments';
+import { SegmentMeter } from '@/src/ui/SegmentMeter';
 import { acceptChallengeAction } from './actions';
+import { Board } from './Board';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +32,10 @@ export const dynamic = 'force-dynamic';
  * The leaderboard is here now — ADR 0016 — and it arrived into a tab that
  * already meant "other people" rather than as one more item in a pile, which
  * was the point of moving the boundary first.
+ *
+ * **And it is FIRST since the Quest Log redesign** — ADR 0033, on the owner's
+ * decision. It still degrades rather than throws, so a failed view renders its
+ * empty sentence and the quests below it load regardless.
  *
  * INVARIANT: every number below is computed by src/gamification, never by a
  *            model — CLAUDE.md #1. This page only formats them.
@@ -51,14 +63,24 @@ export default async function HubPage() {
   if (user.onboardedAt === null) redirect('/welcome');
 
   const today = localDateFor(user.timezone);
-  const [history, challenges, board] = await Promise.all([
+  const [history, challenges, xp, board] = await Promise.all([
     loadHistory(db),
     loadChallenges(db),
+    /*
+     * For the level in the header — the redesign's one new read here, and the
+     * same one Profile makes. It degrades like the board: a missing emblem is a
+     * cosmetic loss, and the quests are what this tab is for.
+     */
+    loadXpSummary(db, today).catch((cause: unknown) => {
+      console.error('xp summary unavailable', logLine(cause));
+      return null;
+    }),
     /*
      * Degrades rather than throws, like the other cross-page reads added in
      * this phase. The leaderboard is the least important thing on this tab —
      * challenges are what the user came for — and a view that fails must not
-     * take the quests down with it.
+     * take the quests down with it. (It is drawn FIRST since the redesign; that
+     * changed where it sits, not how much a failure of it may cost.)
      */
     /*
      * WHY it logs rather than swallowing silently: an empty board and a REVOKED
@@ -114,18 +136,53 @@ export default async function HubPage() {
           availableExerciseIds: [...history.exercises.keys()],
         });
 
+  const level = xp === null ? null : levelProgress(xp.lifetime).level;
+
   return (
     <>
       <header className="top">
         <div>
+          <span className="kicker">Quest board · week {isoWeek(today)}</span>
           <h1>Hub</h1>
           <span className="muted small">
             {user.displayName ?? user.email} · {displayDate(today)}
           </span>
         </div>
+        {level === null ? null : (
+          <Hex size={48} label={`Level ${level}`}>
+            <span className="hex-level-stack">
+              <small>LVL</small>
+              <strong>{level}</strong>
+            </span>
+          </Hex>
+        )}
       </header>
 
       <h2 className="section with-hint">
+        <Icon name="crown" size={14} />
+        The board
+        <FieldHint title="What other people can see">
+          Your display name and your level. Your XP total is what decides the order, and anyone
+          signed in can read it — not your email and not your sessions. You are listed only if you
+          have set a display name, and you can leave at any time from Settings.
+        </FieldHint>
+      </h2>
+
+      {board.length === 0 ? (
+        // Never an empty table with headers — docs/specs/mobile-interface.md §4.
+        // And the likeliest reason for an empty board is the reader's own
+        // missing display name, so it says how to fix that rather than only
+        // reporting the absence.
+        <p className="card muted small">
+          Nobody is listed yet. A lifter appears here once they have set a display name — yours is
+          on <Link href="/settings">Settings</Link>.
+        </p>
+      ) : (
+        <Board rows={board} />
+      )}
+
+      <h2 className="section with-hint">
+        <Icon name="scroll-text" size={14} />
         Open to you
         <FieldHint title="Accepting a challenge">
           A challenge only earns XP once you accept it. That is the point of the button — until then
@@ -139,40 +196,64 @@ export default async function HubPage() {
           first, so one you already meet without changing anything is never offered.
         </p>
       ) : (
-        <div className="badge-shelf">
-          {offered.map((c) => (
-            <article key={c.id} className="card badge-card">
-              <h3>{c.slug.replace(/-/g, ' ')}</h3>
-              <p className="muted small">
-                <span className="chip">{c.kind}</span>
-                {c.spec === null ? 'unreadable' : `${c.spec.reward_xp} XP`}
-              </p>
-              {closedOn(c) !== null ? (
-                // Says why rather than showing a button that would refuse.
-                <p className="muted small">Its window closed on {displayDate(closedOn(c)!)}.</p>
-              ) : (
-                <form action={acceptChallengeAction}>
-                  <input type="hidden" name="challengeId" value={c.id} />
-                  {/* Every card has an Accept button, so the accessible name has
-                      to say which one it accepts. */}
-                  <button type="submit" aria-label={`Accept ${c.slug.replace(/-/g, ' ')}`}>
-                    Accept
-                  </button>
-                </form>
-              )}
-            </article>
-          ))}
+        <div className="quest-list">
+          {offered.map((c) => {
+            const title = challengeTitle(c.spec, c.slug);
+            const closed = closedOn(c);
+            return (
+              <article key={c.id} className="card quest">
+                <Hex size={56} tone="soft">
+                  <Icon name={challengeIcon(c.spec)} size={26} />
+                </Hex>
+                <div>
+                  <h3>{title}</h3>
+                  <p className="quest-meta">
+                    <span className="chip">{c.kind}</span>
+                    {c.spec?.rpe_at_least != null ? (
+                      <span>RPE {c.spec.rpe_at_least} or above</span>
+                    ) : null}
+                    {c.spec === null ? (
+                      <span>unreadable</span>
+                    ) : (
+                      <span className="quest-reward">
+                        <Icon name="sparkles" size={14} />+{c.spec.reward_xp} XP
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {closed !== null ? (
+                  // Says why rather than showing a button that would refuse.
+                  <p className="muted small quest-span">
+                    Its window closed on {displayDate(closed)}.
+                  </p>
+                ) : (
+                  <form action={acceptChallengeAction} className="quest-span">
+                    <input type="hidden" name="challengeId" value={c.id} />
+                    {/* Every card has this button, so the accessible name has to
+                        say which challenge it takes. */}
+                    <button type="submit" aria-label={`Take the quest: ${title}`}>
+                      <Icon name="swords" size={18} />
+                      Take the quest
+                    </button>
+                  </form>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
 
-      <h2 className="section">In play</h2>
+      <h2 className="section">
+        <Icon name="hourglass" size={14} />
+        In play
+      </h2>
       {accepted.length === 0 ? (
         <p className="card muted">
           Nothing accepted yet. Take one above and it starts counting from what you have already
           logged this window.
         </p>
       ) : (
-        <div className="badge-shelf">
+        <div className="quest-list">
           {accepted.map((c) => {
             // Progress is derived from logged rows here exactly as the batch
             // derives it — the same evaluateChallenge, so there is one
@@ -180,26 +261,51 @@ export default async function HubPage() {
             const progress = progressOf(c);
 
             return (
-              <article key={c.id} className="card badge-card">
-                <h3>{c.slug.replace(/-/g, ' ')}</h3>
-                <p className="muted small">
-                  <span className="chip chip-on">{c.kind}</span>
-                  {c.spec === null ? 'unreadable' : `${c.spec.reward_xp} XP`}
-                </p>
-                {progress !== null && (
-                  <>
-                    <div className="xp-meter">
-                      <span
-                        style={{
-                          width: `${Math.min(100, (progress.progress / progress.target) * 100)}%`,
-                        }}
+              <article key={c.id} className="card quest quest-playing">
+                <Hex size={56}>
+                  <Icon name={challengeIcon(c.spec)} size={26} />
+                </Hex>
+                <div>
+                  <h3>{challengeTitle(c.spec, c.slug)}</h3>
+                  <p className="quest-meta">
+                    <span className="chip chip-on">{c.kind}</span>
+                    {c.spec === null ? (
+                      <span>unreadable</span>
+                    ) : (
+                      <span className="quest-reward">+{c.spec.reward_xp} XP</span>
+                    )}
+                  </p>
+                </div>
+                {progress !== null && c.spec !== null && (
+                  <div className="quest-span">
+                    {/*
+                     * Segments only while they can be counted at a glance — past
+                     * ten the continuous meter reads better, and it is the one
+                     * this page drew before.
+                     */}
+                    {progress.target <= MAX_SEGMENTS ? (
+                      <SegmentMeter
+                        value={progress.progress}
+                        total={progress.target}
+                        count={progress.target}
+                        label={`${progress.progress} of ${progress.target}`}
                       />
-                    </div>
-                    <p className="muted small">
-                      {progress.progress} of {progress.target}
-                      {progress.met ? ' · complete, pays on the next weekly run' : ''}
+                    ) : (
+                      <div className="xp-meter">
+                        <span
+                          style={{
+                            width: `${Math.min(100, (progress.progress / progress.target) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="quest-progress">
+                      <strong>
+                        {progress.progress} of {progress.target}
+                      </strong>{' '}
+                      · {remainingPhrase(c.spec, progress.progress)}
                     </p>
-                  </>
+                  </div>
                 )}
               </article>
             );
@@ -239,66 +345,6 @@ export default async function HubPage() {
         </>
       )}
 
-      <h2 className="section with-hint">
-        Leaderboard
-        <FieldHint title="What other people can see">
-          Your display name and your level. Your XP total is what decides the order, and anyone
-          signed in can read it — not your email and not your sessions. You are listed only if you
-          have set a display name, and you can leave at any time from Settings.
-        </FieldHint>
-      </h2>
-
-      {board.length === 0 ? (
-        // Never an empty table with headers — docs/specs/mobile-interface.md §4.
-        // And the likeliest reason for an empty board is the reader's own
-        // missing display name, so it says how to fix that rather than only
-        // reporting the absence.
-        <p className="card muted small">
-          Nobody is listed yet. A lifter appears here once they have set a display name — yours is
-          on <Link href="/settings">Settings</Link>.
-        </p>
-      ) : (
-        <div className="card">
-          {/*
-           * NOT a .table-cards table, for the reason globals.css already gives
-           * for the set grid: three narrow columns fit 375px, and a ranking is
-           * read DOWN the rank and level columns. Breaking each lifter onto their
-           * own card turns five rows into fifteen and destroys the alignment a
-           * leaderboard exists for.
-           */}
-          <table className="leaderboard">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Lifter</th>
-                {/* Level, not XP — ADR 0016's amendment, and the reasoning is
-                    in src/db/leaderboard.ts where the mapping lives. */}
-                <th>Level</th>
-              </tr>
-            </thead>
-            <tbody>
-              {board.map((row) => (
-                /*
-                 * Keyed by rank, not by name: two lifters may share a display
-                 * name — nothing makes it unique — and a duplicate React key
-                 * drops a row silently. Rank is unique within one response.
-                 */
-                <tr key={row.rank} className={row.isYou ? 'you' : undefined}>
-                  <td>{row.rank}</td>
-                  <td className="lb-name">
-                    {row.displayName}
-                    {row.isYou ? <span className="chip chip-on you-chip">you</span> : null}
-                  </td>
-                  {/* `.lb-xp` is the numeric column's alignment; globals.css
-                      describes it as such since this change. No toLocaleString:
-                      a level is one or two digits and grouping never applies. */}
-                  <td className="lb-xp">{row.level}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
       {/*
        * The demo reset WAS HERE, and is now one button on `/sign-in` — ADR 0032
        * §4 as amended twice. It could not be reached from this page by the only

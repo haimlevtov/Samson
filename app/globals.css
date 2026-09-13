@@ -58,6 +58,45 @@
    * 0012 — so there is one number to change rather than four.
    */
   --tabbar: 58px;
+
+  /*
+   * The Quest Log layer — ADR 0033. Declared HERE ONLY, and deliberately absent
+   * from both dark blocks below: the metals and the board are the same in either
+   * theme, because a metal rim needs a dark ground to read as metal. That keeps
+   * this file's rule — nothing outside the token blocks names a colour — and
+   * makes "always dark" something a reader can find.
+   *
+   * AI-NOTE: `--emblem` is built from the accent tokens, so it DOES follow the
+   *          theme. Everything else in this block does not.
+   */
+  --display: var(--font-display, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+  --hex: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  --emblem: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  --on-emblem: #ffffff;
+
+  --gold: linear-gradient(145deg, #f7e3a1 0%, #d9a93a 48%, #a8741c 100%);
+  --gold-ink: #3d2a05;
+  --silver: linear-gradient(145deg, #f4f5f9 0%, #b9bfd0 48%, #7d849a 100%);
+  --silver-ink: #262b38;
+  --bronze: linear-gradient(145deg, #f0c49a 0%, #c07a3f 48%, #7d4a22 100%);
+  --bronze-ink: #3a1f0a;
+  --obsidian: linear-gradient(145deg, #5a48a0 0%, #1c1530 50%, #0b0810 100%);
+  --obsidian-ink: #d6c8ff;
+
+  --board-ground: radial-gradient(120% 80% at 50% -10%, #6c4df6 0%, #3b2599 38%, #14111f 78%);
+  --board-border: #3b3853;
+  --board-core: #1c1530;
+  --board-text: #edebf5;
+  --board-muted: #c9c3de;
+  --board-faint: #a29fbd;
+  --board-line: rgba(255, 255, 255, 0.14);
+  --board-tile: rgba(255, 255, 255, 0.06);
+  --board-tile-first: rgba(255, 255, 255, 0.12);
+  --board-tile-third: rgba(255, 255, 255, 0.04);
+  --board-you: #3b2599;
+  --board-gold-text: #f3d27a;
+  --board-silver-text: #b9bfd0;
+  --board-bronze-text: #e0a473;
 }
 
 /*
@@ -199,9 +238,34 @@ header.top {
   flex-wrap: wrap;
   margin-bottom: 18px;
 }
+/*
+ * The display face on every page's title at once — ADR 0033 §2, and its
+ * Consequences say so on purpose: one face is the point.
+ */
 header.top h1 {
-  font-size: 21px;
-  margin: 0 0 2px;
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0 0 4px;
+  letter-spacing: -0.03em;
+}
+
+/* The line above a title — "QUEST BOARD · WEEK 37". A label, never a control. */
+.kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-text);
+  margin-bottom: 2px;
+}
+
+/* A figure or a card title in the display face. */
+.display {
+  font-family: var(--display);
+  font-weight: 800;
   letter-spacing: -0.02em;
 }
 /* Measured at 23px tall before this — the only way back out of a session. */
@@ -217,6 +281,17 @@ h2.section {
   letter-spacing: 0.08em;
   color: var(--muted);
   margin: 22px 0 10px;
+}
+
+/* The Quest Log's leading icon on a section heading. Works whether the heading
+   is a flex row (.with-hint) or a block. */
+h2.section > svg:first-child {
+  flex: none;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+h2.section.with-hint > svg:first-child {
+  margin-right: 0;
 }
 
 .muted {
@@ -3192,4 +3267,382 @@ label.coach-choice {
    Settings surface, which was the stated reason for the scope. Unscoped now. */
 .birth-date label {
   min-width: 0;
+}
+
+/* ===========================================================================
+ * The Quest Log — ADR 0033, docs/plans/quest-log-redesign.md.
+ * Phone-first: base rules are the 375px layout, min-width queries only.
+ * ========================================================================= */
+
+/* ---- the emblem -------------------------------------------------------- */
+
+.hex {
+  --hex-size: 40px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--hex-size);
+  height: var(--hex-size);
+  clip-path: var(--hex);
+  background: var(--emblem);
+  color: var(--on-emblem);
+  line-height: 1;
+  text-align: center;
+}
+.hex-soft {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.hex-plain {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.hex-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.hex-good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.hex-core {
+  background: var(--board-core);
+  color: var(--board-text);
+}
+.hex-gold {
+  background: var(--gold);
+  color: var(--gold-ink);
+}
+.hex-silver {
+  background: var(--silver);
+  color: var(--silver-ink);
+}
+.hex-bronze {
+  background: var(--bronze);
+  color: var(--bronze-ink);
+}
+.hex-obsidian {
+  background: var(--obsidian);
+  color: var(--obsidian-ink);
+}
+
+/* ---- the segmented meter ----------------------------------------------- */
+
+/*
+ * Each segment paints its own fill as a two-stop gradient, so a partial segment
+ * — the weekly meter at 42% — needs no second element. The border is what keeps
+ * an empty segment visible against a card in both themes.
+ */
+.seg-meter {
+  display: grid;
+  grid-template-columns: repeat(var(--segments), 1fr);
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+.seg-meter > span {
+  height: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: linear-gradient(90deg, var(--accent) var(--fill), var(--surface-2) var(--fill));
+}
+.seg-meter > span.seg-full {
+  border-color: var(--accent);
+}
+.seg-meter > span.seg-current {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
+}
+
+/* ---- Hub: the header's level ------------------------------------------- */
+
+.hex-level-stack {
+  display: grid;
+  gap: 1px;
+}
+.hex-level-stack small {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+}
+.hex-level-stack strong {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+/* ---- Hub: the board ----------------------------------------------------
+ *
+ * ADR 0016's leaderboard, drawn as the handoff's podium. Dark in both themes —
+ * ADR 0033 §4 — so every colour here is a --board token, never a theme one.
+ */
+.board {
+  border-radius: 20px;
+  padding: 18px 16px 12px;
+  background: var(--board-ground);
+  border: 1px solid var(--board-border);
+  color: var(--board-text);
+  box-shadow: var(--shadow);
+}
+
+.board-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--board-muted);
+}
+.board-top > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.podium {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  align-items: end;
+  gap: 6px;
+}
+/*
+ * Fewer than three lifters: the tiles that exist, centred — the handoff. The
+ * grid keeps three tracks so a lone first place still sits in the middle one.
+ */
+.podium-2 {
+  order: 1;
+}
+.podium-1 {
+  order: 2;
+}
+.podium-3 {
+  order: 3;
+}
+.podium.only-one .podium-1 {
+  grid-column: 2;
+}
+.podium.only-two {
+  grid-template-columns: 1fr 1.15fr;
+  width: 70%;
+  margin-inline: auto;
+}
+
+.podium-tile {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: 12px 12px 0 0;
+  background: var(--board-tile);
+  text-align: center;
+  min-width: 0;
+}
+.podium-1 {
+  background: var(--board-tile-first);
+}
+.podium-3 {
+  background: var(--board-tile-third);
+}
+.podium-tile .hex-core {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 18px;
+}
+.podium-1 .hex-core {
+  font-size: 22px;
+}
+.podium-3 .hex-core {
+  font-size: 16px;
+}
+
+/* A long name wraps inside its tile, two lines at most, rather than widening
+   the podium — mobile-interface.md §3, no horizontal scroll. */
+.podium-name {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.board-level {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.board-level small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--board-muted);
+}
+.board-level strong {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.podium-1 .board-level strong {
+  font-size: 28px;
+  color: var(--board-gold-text);
+}
+.podium-3 .board-level strong {
+  font-size: 20px;
+}
+
+.podium-place {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.place-gold {
+  color: var(--board-gold-text);
+}
+.place-silver {
+  color: var(--board-silver-text);
+}
+.place-bronze {
+  color: var(--board-bronze-text);
+}
+
+.board-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.board-rows li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-top: 1px solid var(--board-line);
+}
+.board-rows .board-rank {
+  font-weight: 700;
+  color: var(--board-muted);
+}
+.board-rows .board-level strong {
+  font-size: 18px;
+}
+/*
+ * The reader's row. The ground is a courtesy; the YOU chip and aria-current are
+ * what carry it — mobile-interface.md §3, state never by colour alone.
+ */
+.board-rows li.you {
+  background: var(--board-line);
+  border-radius: 10px;
+  border-top-color: transparent;
+  font-weight: 700;
+}
+.board-rows li.you + li {
+  border-top-color: transparent;
+}
+.board-rows .lb-name {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.board-you {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--board-you);
+  color: var(--board-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
+.board-foot {
+  margin: 8px 8px 0;
+  font-size: 12px;
+  color: var(--board-faint);
+}
+.board a {
+  color: var(--board-gold-text);
+}
+
+/* ---- Hub: quests -------------------------------------------------------- */
+
+.quest-list {
+  display: grid;
+  gap: 12px;
+}
+
+.quest {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.quest + .quest {
+  margin-top: 0;
+}
+.quest h3 {
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+  line-height: 1.2;
+}
+.quest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* A label chip, not a control — the same exemption .badge-card .chip has. */
+.quest-meta .chip {
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.quest-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.quest-span {
+  grid-column: 1 / -1;
+}
+.quest form button {
+  width: 100%;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.quest-playing {
+  border-color: var(--accent);
+}
+.quest-progress {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.quest-progress strong {
+  color: var(--text);
 }
