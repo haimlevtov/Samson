@@ -1,6 +1,6 @@
 # ADR 0033 — The Quest Log visual layer
 
-**Status:** accepted, quest-log redesign
+**Status:** accepted, quest-log redesign — §2 amended 2026-09-13 (the face is committed)
 **Date:** 2026-09-13
 
 ## Context
@@ -35,11 +35,45 @@ rhythm the tab bar and the new emblems share.
 
 ### 2. One display font, self-hosted
 
-Bricolage Grotesque (OFL), through `next/font/google`. That downloads the font
-**at build time** and serves it from this app's origin, so a user's browser never
-asks Google for anything, and it adds no npm package. It is used for `h1`, card
-titles and big numerals; body text stays the system stack, so a slow font costs
-headings a swap rather than costing the page its text.
+Bricolage Grotesque (OFL). It is used for `h1`, card titles and big numerals;
+body text stays the system stack, so a slow font costs headings a swap rather than
+costing the page its text.
+
+> **Amended 2026-09-13, on the owner's instruction: the font files are committed.**
+> This section first chose `next/font/google`, which downloads the face during
+> `next build` — so no browser ever asked Google, but every BUILD did, and a build
+> with no route to Google Fonts failed. "What this does not guarantee" recorded
+> that as the cost; the owner asked for it removed.
+>
+> The three files are Google's own `latin`, `latin-ext` and `vietnamese` subsets —
+> every file `next/font/google` fetched, not only the two it preloaded; FOUND IN
+> REVIEW, the first version of this left Vietnamese out and drew its accented
+> letters in Arial. They are variable woff2s covering the weight and optical-size
+> axes, in `app/fonts/` beside the SIL Open Font License text the licence requires
+> them to travel with, and `app/fonts/SOURCE.md` records the URL and SHA-256 of
+> each. `next/font/local` serves them from this origin with immutable caching and
+> preloads only the Latin one, where `next/font/google` had preloaded both subsets
+> it was given; the build fetches nothing.
+>
+> **Why three `localFont` faces and a hand-written fallback**, rather than one
+> call: `next/font/local` cannot give each file its own `unicode-range`, and
+> without ranges one file shadows the others. Separate calls can — but each would
+> also generate its own metric-adjusted Arial fallback, and the first fallback
+> would catch every extended glyph before the next face was reached, rendering
+> "Łukasz" in Arial. So every call sets `adjustFontFallback: false`, and one
+> fallback face follows them in `--display`, with the metrics `next/font/google`
+> had computed for Arial against this family from Next's `capsize-font-metrics.json`
+> (88.21% ascent, 25.61% descent, 105.43% size), so a heading does not jump when the
+> face arrives and lays out as it did before. `next/font/local` would read slightly
+> different figures from the subset files (91.48%, 26.56%, 101.66%); keeping the old
+> ones is the choice, and a replacement font takes its figures from the same table.
+>
+> AI-NOTE: replacing the font means replacing the files, their rows in
+> `app/fonts/SOURCE.md`, their `unicode-range`s in `app/layout.tsx`, and the
+> fallback's metrics in `app/globals.css` together. `tests/unit/invariants.test.ts`
+> pins each file's hash and checks it is a whole woff2, and fails if
+> `next/font/google` or Google's font hosts come back anywhere a build or a browser
+> would reach.
 
 ### 3. Metal is a reading of the tier, not a new fact
 
@@ -112,13 +146,19 @@ Stated because a redesign is the easiest place to change behaviour by accident:
 in a 390px phone frame; the verification is 375px in both themes, which is the
 spec's width and not every width.
 
-**That a build survives Google Fonts being down.** `next/font/google` downloads
-the face during `next build` and fails the build if it cannot — it never falls
-back to a runtime request. At RUNTIME a missing face costs headings their face and
-never their text; at build time it costs the deploy. `verify.yml` does not run a
-build, so the Vercel deploy is where this would first show. Committing the woff2
-through `next/font/local` (the OFL allows it) removes the dependency, and is the
-change to make if it ever bites.
+_This section listed "that a build survives Google Fonts being down" until §2's
+amendment committed the files. A build now needs no network for the font. The
+amendment brings two limits of its own, below._
+
+**That the display face stays current.** The committed files are the version
+Google served on 2026-09-13. `next/font/google` picked up a new release at the
+next build; these do not change until someone replaces them as `app/fonts/SOURCE.md`
+describes.
+
+**That a heading never jumps on Android.** The fallback is `local('Arial')`, and
+Android ships no Arial, so there the fallback face does not load and a heading is
+drawn in the system face, unadjusted, until Bricolage arrives. It was the same
+under `next/font/google`; the phone-first platform is the one it misses.
 
 **That a future tier or badge looks designed.** It renders — a medal on the
 default metal for its tier — but a good icon for a new badge is still a choice
