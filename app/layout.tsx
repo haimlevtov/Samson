@@ -1,8 +1,24 @@
 import type { ReactNode } from 'react';
+import { Bricolage_Grotesque } from 'next/font/google';
 import { createServerDb, currentUser } from '@/src/db/server';
 import { TabBar } from '@/src/ui/TabBar';
 import { themeAttribute } from '@/src/ui/theme';
 import './globals.css';
+
+/**
+ * The one display face — ADR 0033 §2.
+ *
+ * `next/font` downloads it at BUILD time and serves it from this origin, so no
+ * user's browser asks Google for anything. It sets `--font-display` on <html>;
+ * `app/globals.css` names it with a system fallback, so a font that has not
+ * arrived costs a heading its face and never its text.
+ */
+const display = Bricolage_Grotesque({
+  subsets: ['latin', 'latin-ext'],
+  axes: ['opsz'],
+  variable: '--font-display',
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'Samson',
@@ -40,7 +56,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const theme = themeAttribute(user?.theme ?? 'system');
 
   return (
-    <html lang="en" data-theme={theme}>
+    <html lang="en" data-theme={theme} className={display.variable}>
       <body>
         <div className="shell">{children}</div>
         {/* Outside the shell: it is fixed to the viewport, not to the page. */}

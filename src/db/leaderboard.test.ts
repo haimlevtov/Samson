@@ -132,8 +132,9 @@ describe('clampDisplayName — combining marks, which stack vertically', () => {
   it('drops the rest of a stack, keeping the base character', () => {
     /*
      * The attack: 59 marks on one base is a legal 60-character name that grows
-     * one row of the table on EVERY other user's screen. The horizontal axis is
-     * defended by .lb-name's overflow; nothing defended this one.
+     * one row of the board on EVERY other user's screen. The page is defended
+     * by .lb-name's overflow and .podium-name's two-line clip; nothing
+     * defended the name itself.
      */
     const attack = `A${ACUTE.repeat(59)}`;
     expect(clampDisplayName(attack)).toBe(`A${ACUTE}${ACUTE}`);

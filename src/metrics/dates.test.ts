@@ -6,6 +6,7 @@ import {
   eachDay,
   isLocalDate,
   isWithin,
+  isoWeek,
   startOfWeek,
 } from './dates';
 
@@ -108,5 +109,35 @@ describe('eachDay', () => {
 
   it('produces the expected length across a month boundary', () => {
     expect(eachDay('2026-01-28', '2026-02-03')).toHaveLength(7);
+  });
+});
+
+describe('isoWeek', () => {
+  it('reads the week the handoff was drawn in', () => {
+    // Hub's mock says "WEEK 37" beside 12/09/2026.
+    expect(isoWeek('2026-09-12')).toBe(37);
+    expect(isoWeek('2026-09-13')).toBe(37);
+    expect(isoWeek('2026-09-14')).toBe(38);
+  });
+
+  it('gives a week to the year that holds its Thursday', () => {
+    expect(isoWeek('2026-01-01')).toBe(1); // a Thursday
+    expect(isoWeek('2027-01-01')).toBe(53); // a Friday, still 2026's last week
+    expect(isoWeek('2024-12-30')).toBe(1); // a Monday, already 2025's first
+    expect(isoWeek('2021-01-03')).toBe(53); // a Sunday, still 2020's
+  });
+
+  it('is the same number for every day from Monday to Sunday', () => {
+    const monday = '2026-03-23';
+    const weeks = eachDay(monday, addDays(monday, 6)).map(isoWeek);
+    expect(new Set(weeks).size).toBe(1);
+  });
+
+  it('never leaves 1 to 53 across a decade', () => {
+    for (const day of eachDay('2020-01-01', '2030-12-31')) {
+      const week = isoWeek(day);
+      expect(week).toBeGreaterThanOrEqual(1);
+      expect(week).toBeLessThanOrEqual(53);
+    }
   });
 });

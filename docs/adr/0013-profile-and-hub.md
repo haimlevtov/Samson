@@ -153,6 +153,15 @@ it is the classic failure here, and it is a test rather than a hope.
 > `docs/specs/mobile-interface.md` §4 says an exception argued in a comment has
 > stopped being an exception — and one silently un-recorded is no better.
 
+> **Amended 2026-09-13 by [ADR 0033](0033-quest-log-visual-layer.md): one
+> personal figure on Hub.** The Quest Log redesign puts the reader's level in
+> Hub's header as an emblem. It is an exception to "Profile is you" and it is
+> recorded rather than left for a reader to notice: the level is the one number
+> that belongs to both tabs, because it is the figure the leaderboard prints
+> beside the reader's name — Hub shows where you stand among other people, and a
+> level is how the board says it. Everything else in the table stands, and
+> Profile still owns the level card, its progress and the XP behind it.
+
 **Hub is briefly emptier than before.** Between this change and the challenge
 and leaderboard work that follows, Hub holds challenges and a placeholder. That
 is a deliberate ordering: moving the ownership boundary first means the

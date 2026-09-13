@@ -76,6 +76,21 @@ export function startOfWeek(date: LocalDate): LocalDate {
   return fromEpochDay(day - weekday);
 }
 
+/**
+ * The ISO 8601 week number of `date`, 1 to 53 — the "WEEK 37" on Hub's header.
+ *
+ * WHY the Thursday: an ISO week belongs to the year that holds its Thursday, so
+ * 2027-01-01, a Friday, is in week 53 of 2026, and 2024-12-30, a Monday, is in
+ * week 1 of 2025. Counting from 1 January of the date's own year gets both wrong.
+ * It uses `startOfWeek`, so the label and the weekly XP ceiling agree on where
+ * a week starts.
+ */
+export function isoWeek(date: LocalDate): number {
+  const thursday = addDays(startOfWeek(date), 3);
+  const firstOfYear = `${thursday.slice(0, 4)}-01-01`;
+  return Math.floor(daysBetween(thursday, firstOfYear) / 7) + 1;
+}
+
 /** Every date from `start` to `end` inclusive, ascending. */
 export function eachDay(start: LocalDate, end: LocalDate): LocalDate[] {
   const from = requireEpochDay(start);

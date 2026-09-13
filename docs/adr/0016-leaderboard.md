@@ -148,7 +148,10 @@ happens more often than a level-up, not less.
 
 **So the copy was corrected rather than the claim defended.** The Hub's hint and
 the settings opt-out now say the board shows a level, that XP decides the order,
-and that anyone signed in can read it.
+and that anyone signed in can read it. _Since the Quest Log redesign (ADR 0033)
+there is a third surface: the board's own footer says it is ordered by XP and
+shown as levels, and — only to a reader who is on it — that anyone signed in can
+see their row._
 
 **What would actually close the exposure, and why none of it is in this change.**
 Two options exist — project the level in SQL and drop `lifetime_xp` from the

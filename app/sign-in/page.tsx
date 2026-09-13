@@ -74,7 +74,7 @@ export default async function SignInPage({
          * column for the reset took it to 631 and put the button off-screen,
          * which is how it was noticed.
          *
-         * A real table is right where alignment is the point — the leaderboard
+         * A real table is right where alignment is the point — the set grid
          * argues for one — and it is not the point here: this is six unrelated
          * accounts read one at a time.
          */}

@@ -42,7 +42,7 @@ export interface LeaderboardRow {
    * A load-bearing WHY naming a reason that does not exist is how a field
    * survives the next cleanup — and this one is the field that would serialise
    * every listed user's exact XP into the page HTML the day somebody makes the
-   * table sortable and passes a row into a client component.
+   * board sortable and passes a row into a client component.
    *
    * AI-NOTE: the view still EXPOSES `lifetime_xp` and `authenticated` may still
    *          read it directly — dropping it here changes what this app renders,
@@ -77,9 +77,9 @@ export const MAX_DISPLAY_NAME = 60;
  * WHY there is a cap at all — FOUND IN REVIEW, 2026-09-07: combining marks are
  * legal, ordinary characters in many scripts, so they cannot simply be
  * stripped. But they stack VERTICALLY, and 59 of them on one base character is
- * a legal 60-character name that grows one row of the table on every other
- * user's screen. `.lb-name` defends the horizontal axis; nothing defended this
- * one.
+ * a legal 60-character name that grows one row of the board on every other
+ * user's screen. `.lb-name` truncates a row's name and `.podium-name` clips a
+ * tile's to two lines, which defend the page; nothing defended the name itself.
  *
  * Two is enough for the real cases this has to keep working — a Vietnamese
  * vowel with tone, a Hebrew letter with niqqud and a cantillation mark.
